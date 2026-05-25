@@ -1168,7 +1168,17 @@ function _applyPauseItemUse(item, rosterTargets) {
     if (pauseSt.invAllyTarget >= 0) {
       const rp = rosterTargets[pauseSt.invAllyTarget];
       if (!rp) { playSFX(SFX.ERROR); return; }
-      if (flag && rp.status) applyMagicCureStatus(rp, flag);
+      // Local cure path: fake-pool entries carry a `status` object (battle
+      // shape); real wire roster entries carry `statusMask` (a number,
+      // flattened in main.js's profile builder for the wire). Clear the
+      // appropriate one so the curer's roster bubble disappears instantly
+      // instead of waiting up to 500 ms for the cured peer's next diff-poll
+      // tick to round-trip back. The wire send below is still what actually
+      // clears the status on the receiver's local `ps.status`. v1.7.717.
+      if (flag) {
+        if (rp.status) applyMagicCureStatus(rp, flag);
+        if (typeof rp.statusMask === 'number') rp.statusMask &= ~flag;
+      }
       removeItem(itemId); playSFX(SFX.CURE);
       if (rp.isReal && rp.userId) sendNetGiveItem(rp.userId, itemId);
       pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };

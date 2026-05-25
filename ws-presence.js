@@ -516,6 +516,11 @@ function _handleMessage(entry, msg) {
         maxHP:    _normalizeProfileField('maxHP',    profile.maxHP) ?? 1,
         agi:      _normalizeProfileField('agi',      profile.agi) ?? 5,
         inBattle: _normalizeProfileField('inBattle', profile.inBattle) ?? 0,
+        // statusMask in the hello whitelist (v1.7.717) — without this, a fresh
+        // connection's snapshot for an already-poisoned peer wouldn't carry the
+        // mask until that peer's next ≤500ms diff-poll. Self-corrects fast but
+        // showed up as "join → blank → bubble appears" flicker.
+        statusMask: _normalizeProfileField('statusMask', profile.statusMask) ?? 0,
         weaponR:  _normalizeProfileField('weaponR',  profile.weaponR) ?? 0,
         weaponL:  _normalizeProfileField('weaponL',  profile.weaponL),
         armorId:  _normalizeProfileField('armorId',  profile.armorId) ?? 0,

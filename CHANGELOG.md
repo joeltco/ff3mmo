@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.717 — 2026-05-25
+
+### Status sprite — close two byproduct gaps from the v1.7.715-716 audit
+
+Two small fixes surfaced during a full audit of the roster status-sprite wire chain (sender `ps.status.mask` → diff poll → server normalize → broadcast → receiver merge → render). Wire was clean end-to-end; these close cosmetic edge cases.
+
+1. **`hello` whitelist now includes `statusMask`** (`ws-presence.js`). Previously the hello-time profile shape enumerated 14 fields and omitted `statusMask`, so a fresh client connecting to a session where a peer was already poisoned would receive a snapshot without the mask — the bubble only appeared after the poisoned peer's next ≤500 ms diff-poll tick. Server now normalizes + stores `statusMask` at hello time, so snapshots carry it for already-afflicted peers immediately.
+
+2. **Cure-item local clear in `_applyPauseItemUse`** (`src/pause-menu.js`). When curing a real partymate from the pause menu, the prior code read `rp.status` (the object shape used by fake-pool entries) — but live wire entries carry `statusMask` (a flat number, the wire shape). Local `applyMagicCureStatus(rp, flag)` was a silent no-op for real targets, so the curer's roster bubble lingered for up to 500 ms (until the cured peer's next diff-poll round-tripped a `statusMask:0` update). Now also clears `rp.statusMask &= ~flag` optimistically so the curer's view updates instantly. Receiver still does the authoritative clear via `setNetGiveItemHandler` on their own `ps.status` — wire is unchanged.
+
+Neither fix changes the render path; v1.7.716's always-on `if (p.statusMask)` render gate is unchanged.
+
 ## 1.7.716 — 2026-05-25
 
 ### Roster status sprite — always visible (drop fade gate) + battle-spec y offset
