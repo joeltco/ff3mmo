@@ -444,8 +444,8 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
   resetIndoorWaterCache();
   playSFX(SFX.DOOR);
   if (trigger.source === 'dynamic' && trigger.type === 1 &&
-      mapSt.dungeonDestinations && mapSt.dungeonDestinations.has(trigger.trigId)) {
-    const dest = mapSt.dungeonDestinations.get(trigger.trigId);
+      mapSt.dungeonDestinations && mapSt.dungeonDestinations.has(`${trigger.type}:${trigger.trigId}`)) {
+    const dest = mapSt.dungeonDestinations.get(`${trigger.type}:${trigger.trigId}`);
     const savedX = mapSt.worldX, savedY = mapSt.worldY;
     transSt.pendingAction = () => {
       mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY });
@@ -504,8 +504,8 @@ function _triggerMapTransition(tileX, tileY, dest) {
 
 function _checkDynType1(trigger, tileX, tileY) {
   if (!(trigger.source === 'dynamic' && trigger.type === 1)) return false;
-  if (mapSt.dungeonDestinations && mapSt.dungeonDestinations.has(trigger.trigId)) {
-    const dest = mapSt.dungeonDestinations.get(trigger.trigId);
+  if (mapSt.dungeonDestinations && mapSt.dungeonDestinations.has(`${trigger.type}:${trigger.trigId}`)) {
+    const dest = mapSt.dungeonDestinations.get(`${trigger.type}:${trigger.trigId}`);
     if (dest.goBack) {
       const prevMapId = mapSt.mapStack.length > 0 ? mapSt.mapStack[mapSt.mapStack.length - 1].mapId : null;
       triggerWipe(() => {
@@ -529,8 +529,8 @@ function _checkDynType1(trigger, tileX, tileY) {
 
 function _checkDynType4(trigger, tileX, tileY) {
   if (!(trigger.source === 'dynamic' && trigger.type === 4)) return false;
-  if (!mapSt.dungeonDestinations || !mapSt.dungeonDestinations.has(trigger.trigId)) return false;
-  const dest = mapSt.dungeonDestinations.get(trigger.trigId);
+  if (!mapSt.dungeonDestinations || !mapSt.dungeonDestinations.has(`${trigger.type}:${trigger.trigId}`)) return false;
+  const dest = mapSt.dungeonDestinations.get(`${trigger.type}:${trigger.trigId}`);
   const savedX = mapSt.worldX, savedY = mapSt.worldY;
   triggerWipe(() => {
     mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY });

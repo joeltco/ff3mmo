@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.691 — 2026-05-25
+
+### Altar Cave floor 2 exit warped to locked room (trigId collision)
+
+Floor 2 (UI floor 3) places both a `PASSAGE_ENTRY` exit (type 4) and — when
+the 50/50 locked-room roll hits — a chamber door (type 1). `processTriggerTiles`
+assigns trigIds **per type independently**, so both got `trigId 0`. But
+`mapSt.dungeonDestinations` was a `Map<trigId, dest>` keyed by `trigId` alone:
+the chamber-door write (line 2962 of `dungeon-generator.js`) ran AFTER the
+passage-entry write (line 2952), so `dungeonDestinations[0]` ended up as
+`{ mapId: 1011 }` (locked room) — and stepping on the EXIT routed the player
+into the locked room instead of floor 3 / 4.
+
+Same collision class would bite any floor that mixes a type-4 trigger with
+a type-1 trigger sharing the same per-type index.
+
+Switched the key to a composite `${type}:${trigId}` everywhere. Both writes
+now land in distinct slots; consumers (`_checkDynType1` / `_checkDynType4`
+in `map-triggers.js`) read with the matching composite.
+
+Files:
+- `src/map-state.js` — comment updated to document the new key shape.
+- `src/map-triggers.js` — three reads switched (`_checkHiddenTrap`,
+  `_checkDynType1`, `_checkDynType4`).
+- `src/dungeon-generator.js` — every `dungeonDestinations.set(trigId, ...)`
+  now stamps the type-prefixed key (5 sites incl. the floor-3 hardcoded
+  `'1:0'`/`'1:1'` for the boss-room door + return stairs).
+- `src/dungeon-locked-room.js` — south-door registration uses the same
+  composite key.
+
 ## 1.7.690 — 2026-05-24
 
 ### Altar Cave secret rooms — left-corridor entry was always rendering right-side

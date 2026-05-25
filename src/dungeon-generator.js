@@ -2461,9 +2461,11 @@ function _generateFloor(romData, floorIndex, seed) {
     placeDeepExit(tilemap, entranceX, stairY);
     entranceY = stairY + 1; // STAIRS_DOWN row — player spawns here
 
-    // Door ($70) scans before stairs ($73) → door=trigId 0, stairs=trigId 1
-    dungeonDestinations.set(0, { mapId: 1004 }); // door → boss room
-    dungeonDestinations.set(1, { goBack: true }); // stairs → back to floor 3
+    // Door ($70) scans before stairs ($73) → door=trigId 0, stairs=trigId 1.
+    // Composite key `${type}:${trigId}` so trigId 0 of type 1 doesn't collide
+    // with any trigId 0 of type 4 elsewhere on this floor (v1.7.691).
+    dungeonDestinations.set('1:0', { mapId: 1004 }); // door → boss room
+    dungeonDestinations.set('1:1', { goBack: true }); // stairs → back to floor 3
 
     // BFS seal unreachable floor
     const reachable = new Set();
@@ -2937,21 +2939,27 @@ function _generateFloor(romData, floorIndex, seed) {
     triggerMap.set(`${rockExitX},${rockExitY}`, { type: 4, trigId: 0 });
   }
 
-  // Wire dungeonDestinations from the freshly-built triggerMap (replaces the
-  // old `for (let i = 0; i < totalType1; i++)` loop which assumed trigIds
-  // 0..N-1 were stair/trap; the v1.7.649 locked-room doors insert another
-  // type-1 trigger between them in scan order, shifting all later trigIds).
-  // v1.7.657.
+  // Wire dungeonDestinations from the freshly-built triggerMap. Composite
+  // key `${type}:${trigId}` (v1.7.691): processTriggerTiles assigns trigIds
+  // per type, so type-1 trigId 0 (a chamber door) and type-4 trigId 0 (a
+  // passage-entry exit) can both exist. Before the composite key, the
+  // chamber-door write below overwrote the passage-entry write and routed
+  // the floor exit into the locked room on floor 2 (UI floor 3).
+  //
+  // Replaces the old `for (let i = 0; i < totalType1; i++)` loop which
+  // assumed trigIds 0..N-1 were stair/trap; the v1.7.649 locked-room doors
+  // insert another type-1 trigger between them in scan order, shifting all
+  // later trigIds (v1.7.657).
   const _nextMapId = 1000 + floorIndex + 1;
   for (const [coord, trig] of triggerMap) {
     if (trig.type !== 1) continue;
     if (lockedRoomDoors.has(coord)) continue;  // wired below to locked-room mapId
-    dungeonDestinations.set(trig.trigId, { mapId: _nextMapId });
+    dungeonDestinations.set(`${trig.type}:${trig.trigId}`, { mapId: _nextMapId });
   }
   // Rock puzzle exit (type 4)
   if (typeof rockExitX !== 'undefined') {
     const rockTrig = triggerMap.get(`${rockExitX},${rockExitY}`);
-    if (rockTrig) dungeonDestinations.set(rockTrig.trigId, { mapId: _nextMapId });
+    if (rockTrig) dungeonDestinations.set(`${rockTrig.type}:${rockTrig.trigId}`, { mapId: _nextMapId });
   }
   // Locked-room chamber doors → standalone locked-room maps. Engine's
   // standard type-1 door transition handles door-open animation +
@@ -2961,7 +2969,7 @@ function _generateFloor(romData, floorIndex, seed) {
   // back to the chamber map at the saved position). v1.7.677.
   for (const [coord, dest] of lockedRoomDoors) {
     const trig = triggerMap.get(coord);
-    if (trig) dungeonDestinations.set(trig.trigId, dest);
+    if (trig) dungeonDestinations.set(`${trig.type}:${trig.trigId}`, dest);
   }
 
   // Hide traps: swap $74 → $30 after triggers are registered

@@ -301,7 +301,9 @@ export function generateLockedRoomMap(rom, seed) {
   const dungeonDestinations = new Map();
   const doorTrig = triggerMap.get(`${doorX},${doorY}`);
   if (doorTrig) {
-    dungeonDestinations.set(doorTrig.trigId, { goBack: true });
+    // Composite key `${type}:${trigId}` matches the engine consumer in
+    // map-triggers.js (v1.7.691 — type-trigId collision fix).
+    dungeonDestinations.set(`${doorTrig.type}:${doorTrig.trigId}`, { goBack: true });
   }
 
   return {

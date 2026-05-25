@@ -23,7 +23,7 @@ export const mapSt = {
   // ── Dungeon ───────────────────────────────────────────────────────
   dungeonSeed: null,
   dungeonFloor: -1,
-  dungeonDestinations: null, // Map<trigId, {mapId, destX, destY}>
+  dungeonDestinations: null, // Map<`${type}:${trigId}`, {mapId, destX, destY}> — composite key required because processTriggerTiles assigns trigIds per type independently (a type-1 trigId 0 and a type-4 trigId 0 are distinct triggers; before v1.7.691 the chamber-door / passage-entry collision on floor 2 routed the exit stairs into the locked room).
 
   // ── Map interaction state ─────────────────────────────────────────
   disabledTrigger: null,  // {x, y} — spawn exit_prev, disabled so player can't immediately exit
