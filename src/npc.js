@@ -65,7 +65,6 @@ const PAUSE_MAX_MS     = 4000;
 const WALK_RUN_MIN     = 1;     // tiles per wander burst
 const WALK_RUN_MAX     = 3;
 const MOOGLE_LEASH     = 2;     // max Chebyshev tiles the cave moogle wanders from its spawn
-const FLOOR            = 0x30;
 const IDLE_MARCH_MS    = 480;   // walk-cycle period for stationary NPCs
 
 let _npcs = [];
@@ -218,17 +217,29 @@ export function removeBossNpc() {
 }
 
 // Scene NPC — backed by the player Sprite class with `gfxBase` overridden
-// to a raw FF3 ROM walk bundle (see data/opening-scene.js). `spec.animate`
-// cycles walk frames; otherwise stays on frame 0 (no fabricated motion —
-// see [[never-add-fake-content-user-didnt-ask-for]]).
+// to a raw FF3 ROM walk bundle (see data/opening-scene.js). Behavior modes
+// (mutually exclusive, priority top→down):
+//   spec.wander === true → FF-style burst-and-pause wander (1–3 tile runs,
+//     1.5–4 s pauses). Uses `spec.leash` (default 3 tiles Chebyshev) to keep
+//     the NPC near their spawn so they don't migrate across the map. v1.7.694.
+//   spec.animate === true → idle-march (walk-cycle in place, no movement).
+//   otherwise → static (frame 0, no animation — no fabricated motion, see
+//     [[never-add-fake-content-user-didnt-ask-for]]).
 export function addSceneNpc(key, tileX, tileY, spec) {
-  _npcs.push(_makeNpc(key, tileX, tileY, {
+  const mode = spec.wander ? 'pause' : (spec.animate ? 'idle-march' : 'static');
+  const npc = _makeNpc(key, tileX, tileY, {
     spriteKey: 'scene',
     scene:     spec,
     dialogue:  spec.dialogue || null,
-    mode:      spec.animate ? 'idle-march' : 'static',
+    mode,
     dir:       spec.dir,
-  }));
+  });
+  if (spec.wander) {
+    npc.homeX = tileX;
+    npc.homeY = tileY;
+    npc.leash = spec.leash != null ? spec.leash : 3;
+  }
+  _npcs.push(npc);
 }
 
 export function placeMoogleAtCaveCenter(mapData) {
@@ -241,7 +252,7 @@ export function placeMoogleAtCaveCenter(mapData) {
       for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const tx = cx + dx, ty = cy + dy;
-        if (!_isOpenAreaTile(mapData.tilemap, tx, ty)) continue;
+        if (!_isOpenAreaTile(mapData, tx, ty)) continue;
         addMoogle(tx, ty);
         return true;
       }
@@ -358,7 +369,7 @@ function _trySameDir(npc) {
   if (!mapSt.mapData) return false;
   const dx = npc.walkDX, dy = npc.walkDY;
   const tx = npc.tileX + dx, ty = npc.tileY + dy;
-  if (!_isOpenAreaTile(mapSt.mapData.tilemap, tx, ty)) return false;
+  if (!_isOpenAreaTile(mapSt.mapData, tx, ty)) return false;
   if (_tileOccupied(tx, ty, npc)) return false;
   if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) return false;
   npc.mode = 'walk';
@@ -378,7 +389,7 @@ function _startWalk(npc) {
   const dirs = _shuffledDirs();
   for (const [dx, dy] of dirs) {
     const tx = npc.tileX + dx, ty = npc.tileY + dy;
-    if (!_isOpenAreaTile(mapSt.mapData.tilemap, tx, ty)) continue;
+    if (!_isOpenAreaTile(mapSt.mapData, tx, ty)) continue;
     if (_tileOccupied(tx, ty, npc)) continue;
     if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) continue;
     npc.mode = 'walk';
@@ -422,11 +433,10 @@ export function tryYieldToPlayer(npc, playerDir) {
   const perp = (pdy === 0) ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]];
   if (Math.random() < 0.5) perp.reverse();
   const candidates = [perp[0], perp[1], [pdx, pdy]];
-  const tilemap = mapSt.mapData.tilemap;
   for (const [dx, dy] of candidates) {
     const tx = npc.tileX + dx, ty = npc.tileY + dy;
     if (tx < 1 || tx > 30 || ty < 1 || ty > 30) continue;
-    if (tilemap[ty * 32 + tx] !== FLOOR) continue;
+    if (!_isWalkableForNpc(mapSt.mapData, tx, ty)) continue;
     if (_tileOccupied(tx, ty, npc)) continue;
     if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) continue;
     npc.mode = 'walk';
@@ -455,14 +465,30 @@ function _dxDyToDir(dx, dy) {
   return DIR_DOWN;
 }
 
-function _isOpenAreaTile(tilemap, x, y) {
+// Collision-based walkability for any tileset — the cave-floor 0x30 hardcode
+// only worked for tileset 0 (caves). Now reads cb1: low 3 bits === 3 = solid
+// wall, bit 7 = trigger (door/chest/etc — not wander floor). v1.7.694 — town
+// NPCs on Ur (tileset 4, floor tile 0x00 / 0x21) need this. Cave NPCs still
+// pass since cave 0x30 has cb1 walkable.
+function _isWalkableForNpc(mapData, x, y) {
+  if (x < 0 || x > 31 || y < 0 || y > 31) return false;
+  const t = mapData.tilemap[y * 32 + x];
+  const m = t < 128 ? t : t & 0x7F;
+  const cb1 = mapData.collision[m];
+  if ((cb1 & 0x07) === 3) return false;   // solid wall
+  if (cb1 & 0x80) return false;           // trigger — keep NPCs off doors/chests/passage tiles
+  return true;
+}
+
+function _isOpenAreaTile(mapData, x, y) {
+  if (!mapData) return false;
   if (x < 1 || x > 30 || y < 1 || y > 30) return false;
-  if (tilemap[y * 32 + x] !== FLOOR) return false;
+  if (!_isWalkableForNpc(mapData, x, y)) return false;
   let nbrs = 0;
-  if (x + 1 < 32 && tilemap[y * 32 + (x + 1)] === FLOOR) nbrs++;
-  if (x - 1 >= 0 && tilemap[y * 32 + (x - 1)] === FLOOR) nbrs++;
-  if (y + 1 < 32 && tilemap[(y + 1) * 32 + x] === FLOOR) nbrs++;
-  if (y - 1 >= 0 && tilemap[(y - 1) * 32 + x] === FLOOR) nbrs++;
+  if (_isWalkableForNpc(mapData, x + 1, y)) nbrs++;
+  if (_isWalkableForNpc(mapData, x - 1, y)) nbrs++;
+  if (_isWalkableForNpc(mapData, x, y + 1)) nbrs++;
+  if (_isWalkableForNpc(mapData, x, y - 1)) nbrs++;
   return nbrs >= 3;
 }
 

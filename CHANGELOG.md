@@ -18,6 +18,45 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.694 — 2026-05-25
+
+### NPC sweep + wandering Ur villager (with town-tileset wander support)
+
+**Sweep findings.** `INN_ITEM_KEEPER`, `WEAPON_KEEPER`, and `INN_KEEPER` all
+repeated the same `[0x1A, 0x0F, 0x15, 0x36]` / `[0x1A, 0x0F, 0x12, 0x36]`
+palette pair inline — extracted to shared `TOWN_KEEPER_PAL_TOP` /
+`TOWN_KEEPER_PAL_BTM` consts in `town-npcs.js`. Armor keeper map 4 was
+already correctly reusing `WEAPON_KEEPER`. ROM bundles `0x01E010` and
+`0x01E210` are reused across `OPENING_*_ATTENDANT` + town keepers but in
+different palettes — those are intentional recolors, not duplicates.
+
+**Wander on any tileset (collision-based check).** `_isOpenAreaTile` used
+to hardcode `FLOOR = 0x30` (cave tileset). Refactored to read cb1 collision
+bits — low 3 bits === 3 = solid wall, bit 7 = trigger. Now works on town
+tilesets (Ur tileset 4 uses `0x00` as walkable instead of `0x30`); the cave
+floor still passes via its walkable cb1. `_isWalkableForNpc(mapData, x, y)`
+is the new shared helper used by the wander destination check, the
+3-neighbor open-area rule, and `tryYieldToPlayer`'s yield-destination check
+(replaces the inline `FLOOR` literal I added in v1.7.693).
+
+**New NPC: `UR_VILLAGER_PEACH`** at map 114 (Ur overworld) spawn (15, 25),
+leash 4. Wandering townsfolk — bundle `0x01DF10` (verified-canonical
+"common villager" body, the same sprite the FF3 ROM places twice in the Ur
+scene at canonical tiles (7,19) + (8,27) — see the captured OAM snap),
+peach-hair SP3 palette `[0x1A, 0x0F, 0x26, 0x36]` distinct from the
+magenta-hair shopkeepers, shared `TOWN_KEEPER_PAL_BTM` blue tunic. Talks
+on Z (turns to face player). Uses the v1.7.693 yield-to-player behavior so
+they'll step aside if you press against them.
+
+Files:
+- `src/data/town-npcs.js` — `TOWN_KEEPER_PAL_TOP/BTM` consts +
+  `UR_VILLAGER_PEACH` spec + `TOWN_NPCS` entry for map 114.
+- `src/npc.js` — `_isWalkableForNpc(mapData, x, y)` (new), `_isOpenAreaTile`
+  rewritten to use it (now takes `mapData` not `mapData.tilemap`); three
+  caller signatures updated (`_startWalk`, `_trySameDir`,
+  `placeMoogleAtCaveCenter`); `tryYieldToPlayer` switched to the new
+  collision check; dropped the unused `FLOOR = 0x30` const.
+
 ## 1.7.693 — 2026-05-25
 
 ### NPCs yield to the player when blocked
