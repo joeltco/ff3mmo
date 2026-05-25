@@ -44,7 +44,20 @@ const HUD_VIEW_Y = 32;
 const HUD_BOT_H  = 64;
 
 // ── Chat tabs ─────────────────────────────────────────────────────────────
+// `CHAT_TABS` is the static IDENTITY array — code that branches on
+// "which tab is this?" (e.g. `CHAT_TABS[activeTab] === 'Private'`) keeps
+// using these literals. For VISUAL labels go through `getTabLabel(idx)`
+// — the Private tab renders the focused PM partner's name instead of the
+// literal "Private" (v1.7.703). Falls back to "Private" when no
+// conversation is focused so the tab is never blank.
 export const CHAT_TABS = ['World', 'Party', 'Private', 'System'];
+export function getTabLabel(tabIdx) {
+  if (CHAT_TABS[tabIdx] === 'Private') {
+    const partner = _pmTarget();
+    return partner || 'Private';
+  }
+  return CHAT_TABS[tabIdx];
+}
 export let activeTab = 0;  // index into CHAT_TABS
 export let tabSelectMode = false;
 let _tabBlinkStart = 0;
@@ -810,7 +823,9 @@ const TAB_SCROLL_SPEED = 0.4; // px per ms
 function _getTabWidths() {
   // Each tab: 8px border left + 4px pad + text + 4px pad + 8px border right = text + 24px
   // But with shared borders between tabs, middle borders overlap
-  return CHAT_TABS.map(name => measureText(_nameToBytes(name)) + 16);
+  // Width uses the displayed label so the Private tab grows / shrinks with
+  // the focused PM partner's name length. v1.7.703.
+  return CHAT_TABS.map((_, i) => measureText(_nameToBytes(getTabLabel(i))) + 16);
 }
 
 export function updateChatTabs(dt) {
@@ -875,7 +890,7 @@ export function drawChatTabs(ctx, fadeStep, drawHudBox) {
     if (!selectBlink && !unreadBlink) {
       let pal = [...TEXT_WHITE];
       for (let s = 0; s < tabFade; s++) pal = pal.map(c => nesColorFade(c));
-      const label = _nameToBytes(CHAT_TABS[tabIdx]);
+      const label = _nameToBytes(getTabLabel(tabIdx));
       const lw = measureText(label);
       drawText(ctx, tx + Math.floor((w - lw) / 2), TAB_BAR_Y + 8, label, pal);
     }
@@ -986,10 +1001,11 @@ function _wrapInputText(ctx, text, lineW, promptW) {
 }
 
 function _inputPromptStr() {
-  // On the Private tab the prompt shows the PM recipient ("→Name") so the user
-  // always sees who they're about to message; elsewhere it's the plain "> ".
-  const pmTarget = (CHAT_TABS[activeTab] === 'Private') ? _pmTarget() : null;
-  return pmTarget ? ('→' + pmTarget + ' ') : '> ';
+  // Universal "> " — the Private tab used to show "→Name " to identify the PM
+  // recipient, but as of v1.7.703 the recipient name IS the tab label
+  // (`getTabLabel('Private') → partner name`), so the prompt no longer needs
+  // to repeat it. Cleaner and matches every other tab.
+  return '> ';
 }
 
 function _drawChatInput(ctx, lineW, startX, inputBottomY, lines) {
