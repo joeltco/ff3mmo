@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.696 — 2026-05-25
+
+### Ur quest NPC placeholder at (10, 28)
+
+Converted the v1.7.695 `UR_VILLAGER_TRADER` slot into `UR_QUEST_NPC` —
+static NPC at the canonical FF3 spot (10, 28), facing RIGHT, peach hair,
+bundle `0x01E210` (adult-villager body, distinct from the existing PEACH /
+RED villagers' bundle `0x01DF10`). Quest system isn't built yet — the
+placement + rendering are stable now; when the quest trigger lands, hook
+it in here without moving the NPC.
+
+`(10, 28)` isn't openArea by the wander rule (lacks ≥3 walkable neighbors)
+but that doesn't matter for `mode: 'static'` — the openArea check only
+gates `_startWalk` / `_trySameDir` / `placeMoogleAtCaveCenter`, none of
+which run for static NPCs. Player can't pass through (tile is solid, like
+every NPC); the v1.7.693 yield-to-player behavior is gated off `static` so
+quest NPCs intentionally block the player.
+
+Placeholder dialogue makes the WIP status visible in-game: "I have a task
+for the brave..." / "...but not yet. Return soon." / "The crystal will
+guide you."
+
+The south-west `UR_VILLAGER_TRADER` (wandering, was at (10, 27)) is gone —
+the canonical FF3 spot for that body was (10, 28), so converting that NPC
+to the quest giver keeps the layout faithful without stacking two
+peach-haired villagers a tile apart.
+
+Files:
+- `src/data/town-npcs.js` — `UR_VILLAGER_TRADER` → `UR_QUEST_NPC` rename +
+  static + `dir: DIR_RIGHT` + placeholder dialogue; `TOWN_NPCS[114]` row
+  swapped to point at the new key + coord. `DIR_RIGHT` added to the import.
+
 ## 1.7.695 — 2026-05-25
 
 ### Ur populated — 4 more wandering villagers

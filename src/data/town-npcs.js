@@ -4,7 +4,7 @@
 // `romRaw` (header-inclusive). Located by byte-searching the captured OAM
 // tiles against the AWJ-patched ROM (see tools/npc-sprite-tool.mjs).
 
-import { DIR_DOWN } from '../sprite.js';
+import { DIR_DOWN, DIR_RIGHT } from '../sprite.js';
 
 // Shared town-keeper palette (magenta hair / blue tunic). Every counter-bound
 // keeper in Ur uses this same SP3/SP2 pair — the only thing that differs
@@ -94,21 +94,32 @@ export const UR_VILLAGER_PEACH = {
   ],
 };
 
-// South-west plaza, spawn (10, 27). Bundle 0x01E210 — same body as the
-// item-shop keeper but the outdoor palette + wander mode reads as a
-// completely different villager. Snap canonical was (10, 28); shifted one
-// row north to land on an openArea tile.
-export const UR_VILLAGER_TRADER = {
+// South-west plaza quest giver, spawn (10, 28) facing RIGHT. STATIC — does
+// not wander (`wander: false`, `animate: false` → `mode: 'static'`); the
+// canonical FF3 spot for this NPC. Placeholder dialogue until the quest
+// system lands; when it does, wire the trigger here (the placement +
+// rendering are stable). v1.7.696.
+//
+// (10, 28) isn't openArea by the wander rule (lacks ≥3 walkable neighbors
+// for safe wandering), but that doesn't matter for a static NPC — the
+// openArea check only gates _startWalk / _trySameDir / placeMoogleAtCaveCenter,
+// none of which run for `mode: 'static'`.
+//
+// Bundle 0x01E210 (item-shop-keeper body) + peach hair gives the "adult
+// villager" silhouette distinct from the existing PEACH and RED villagers
+// (both bundle 0x01DF10, shorter common-villager body). Faces RIGHT so the
+// player approaches from the south or west and the NPC reads as facing into
+// the plaza. Talk-facing override (turns to face player on Z) still applies.
+export const UR_QUEST_NPC = {
   romOffset: 0x01E210,
   palTop: VILLAGER_HAIR_PEACH,
   palBtm: TOWN_KEEPER_PAL_BTM,
-  dir: DIR_DOWN,
-  wander: true,
-  leash: 3,
+  dir: DIR_RIGHT,
+  // wander + animate both omitted → mode === 'static' (see addSceneNpc).
   dialogue: [
-    'I trade messages for the elder.',
-    'Folks come from far for the crystal.',
-    'Mind the bees in the tall grass.',
+    'I have a task for the brave...',
+    "...but not yet. Return soon.",
+    'The crystal will guide you.',
   ],
 };
 
@@ -185,7 +196,7 @@ export const TOWN_NPCS = new Map([
   // v1.7.694 (1 NPC) → v1.7.695 (5 NPCs).
   [114, [
     { key: 'ur_villager_peach',  x: 15, y: 25, spec: UR_VILLAGER_PEACH },
-    { key: 'ur_villager_trader', x: 10, y: 27, spec: UR_VILLAGER_TRADER },
+    { key: 'ur_quest_npc',       x: 10, y: 28, spec: UR_QUEST_NPC },
     { key: 'ur_villager_maiden', x:  7, y: 19, spec: UR_VILLAGER_MAIDEN },
     { key: 'ur_hooded_sage',     x: 16, y: 24, spec: UR_HOODED_SAGE },
     { key: 'ur_villager_red',    x: 11, y: 28, spec: UR_VILLAGER_RED },
