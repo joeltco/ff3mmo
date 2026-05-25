@@ -23,6 +23,7 @@ import { inputSt } from './input-handler.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
 import { drawCursorFaded, drawBorderedBox } from './hud-drawing.js';
+import { isMonsterStillVisible } from './battle-draw-encounter.js';
 
 // ── Layout constants (match battle-drawing.js) ────────────────────────────
 const HUD_BOT_Y = 176, HUD_BOT_H = 64;
@@ -274,15 +275,27 @@ export function drawBattleMenu() {
   if (isFade) fadeStep = BATTLE_TEXT_STEPS - Math.min(Math.floor(battleSt.battleTimer / BATTLE_TEXT_STEP_MS), BATTLE_TEXT_STEPS);
   const fadedPal = _makeFadedPal(fadeStep);
   if (!isVictory && !isRunBox) {
+    // v1.7.726 — narrow the clip to JUST the name panel. The outer save/clip
+    // (line ~263) spans the full HUD width so the action-menu column on the
+    // right shares the same context; without a tighter inner clip a long enemy
+    // name + " x2" suffix could spill rightward into Fight/Magic/Item/Run.
+    ui.ctx.save();
+    ui.ctx.beginPath();
+    ui.ctx.rect(0, HUD_BOT_Y, boxW, boxH);
+    ui.ctx.clip();
     if (pvpSt.isPVPBattle) {
-      // Collect all living PVP enemy names and stack them
+      // v1.7.726 — stack ALL living PVP enemies regardless of which is
+      // targeted. Pre-fix the main opp was gated on `pvpPlayerTargetIdx < 0`
+      // and allies were filtered by `i >= pvpPlayerTargetIdx`, so targeting
+      // ally idx 2 would hide the main opp + allies 0/1 from the list. Name
+      // box should always reflect the full living roster; the CURSOR is what
+      // tracks the target, not the name list.
       const names = [];
-      if (!battleSt.enemyDefeated && pvpSt.pvpPlayerTargetIdx < 0 && pvpSt.pvpOpponentStats)
+      if (!battleSt.enemyDefeated && pvpSt.pvpOpponentStats && (pvpSt.pvpOpponentStats.hp == null || pvpSt.pvpOpponentStats.hp > 0))
         names.push(_nameToBytes(pvpSt.pvpOpponentStats.name));
       for (let i = 0; i < pvpSt.pvpEnemyAllies.length; i++) {
         const a = pvpSt.pvpEnemyAllies[i];
-        if (a && a.hp > 0 && i >= pvpSt.pvpPlayerTargetIdx)
-          names.push(_nameToBytes(a.name));
+        if (a && a.hp > 0) names.push(_nameToBytes(a.name));
       }
       const rowH = 10;
       const startY = HUD_BOT_Y + Math.floor((boxH - names.length * rowH) / 2);
@@ -300,6 +313,7 @@ export function drawBattleMenu() {
       const enemyName = _battleEnemyName();
       drawText(ui.ctx, Math.floor((boxW - measureText(enemyName)) / 2), HUD_BOT_Y + Math.floor((boxH - 8) / 2), enemyName, fadedPal);
     }
+    ui.ctx.restore();
   }
   const menuX = boxW + 8;
   const positions = [[menuX, HUD_BOT_Y+16], [menuX+56, HUD_BOT_Y+16], [menuX, HUD_BOT_Y+32], [menuX+56, HUD_BOT_Y+32]];
@@ -351,11 +365,21 @@ function _drawBattleMenuCursor(positions, isFade, fadeStep) {
 function _battleEnemyNames() {
   const names = [];
   const seen = new Set();
-  for (const m of battleSt.encounterMonsters) {
-    if (m.hp <= 0 || seen.has(m.monsterId)) continue;
-    seen.add(m.monsterId);
-    const baseName = getMonsterNameShrines(m.monsterId) || BATTLE_GOBLIN_NAME;
-    const count = battleSt.encounterMonsters.filter(e => e.hp > 0 && e.monsterId === m.monsterId).length;
+  const mons = battleSt.encounterMonsters;
+  // v1.7.726 — "still visible on screen" predicate (shared with the encounter
+  // sprite renderer in battle-draw-encounter.js) drives both the name
+  // inclusion and the xN count. A monster with hp=0 that's mid-death-anim or
+  // mid-spell-impact is still drawn, so it still appears in the name list.
+  // This prevents "Goblin x3 → x2" from snapping the instant hp is zeroed —
+  // the count now decrements when the sprite actually leaves the screen.
+  for (let i = 0; i < mons.length; i++) {
+    if (!isMonsterStillVisible(i) || seen.has(mons[i].monsterId)) continue;
+    seen.add(mons[i].monsterId);
+    const baseName = getMonsterNameShrines(mons[i].monsterId) || BATTLE_GOBLIN_NAME;
+    let count = 0;
+    for (let j = 0; j < mons.length; j++) {
+      if (isMonsterStillVisible(j) && mons[j].monsterId === mons[i].monsterId) count++;
+    }
     if (count > 1) {
       const arr = Array.from(baseName);
       // v1.7.449 — 0xBB is lowercase 'x' in the AWJ font atlas

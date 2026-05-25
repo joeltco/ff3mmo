@@ -38,6 +38,35 @@ function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 // Module-local cache for the boss-dissolve pixel-shift block buffer.
 let _shiftBlockCanvas = null;
 
+// ── Visibility predicate (shared with battle-draw-menu name counter) ───────
+// "Is this encounter monster still visually on screen right now?" True when
+// alive, mid-death-animation, or held visible by an in-flight hit / spell
+// resolution state. Sprite renderer below uses this for skip-render; the name
+// HUD uses it for the xN count so we don't decrement before the death anim
+// plays out (v1.7.726).
+export function isMonsterStillVisible(i) {
+  const m = battleSt.encounterMonsters && battleSt.encounterMonsters[i];
+  if (!m) return false;
+  if (m.hp > 0) return true;
+  if (battleSt.dyingMonsterIndices.has(i) && battleSt.battleState === 'monster-death') return true;
+  const isMagicHitTarget = battleSt.battleState === 'magic-hit' &&
+    getSpellTargets().some(t => t.type === 'enemy' && t.index === i);
+  if (isMagicHitTarget) return true;
+  const isAllyMagicHitTarget = battleSt.battleState === 'ally-magic-hit' &&
+    battleSt.allyMagicTargetType === 'enemy' &&
+    battleSt.allyMagicTargetIdx === i;
+  if (isAllyMagicHitTarget) return true;
+  const isPlayerHit = i === inputSt.targetIndex &&
+    (battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
+     battleSt.battleState === 'player-damage-show' ||
+     battleSt.battleState === 'pre-monster-death');
+  if (isPlayerHit) return true;
+  const isAllyHit = i === battleSt.allyTargetIndex &&
+    (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show');
+  if (isAllyHit) return true;
+  return false;
+}
+
 // ── Encounter grid (random encounter, 1-4 monsters) ───────────────────────
 
 function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn, fullW, slotCenterY, row0H, row1H) {
@@ -53,7 +82,11 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
 
   const count = battleSt.encounterMonsters.length;
   for (let i = 0; i < count; i++) {
-    const alive = battleSt.encounterMonsters[i].hp > 0;
+    if (!isMonsterStillVisible(i)) continue;
+    // Visual branches below still need to know which "kind" of present this is —
+    // dying drives the dissolve animation, being-hit drives the slash-blink
+    // gate. Recompute the sub-flags locally; isMonsterStillVisible() already
+    // confirmed at least one of them is true.
     const isDying = battleSt.dyingMonsterIndices.has(i) && battleSt.battleState === 'monster-death';
     // Spell targets must keep rendering during magic-hit even after HP hits 0 —
     // damage applies mid-state for thrown spells, then the state runs another
@@ -75,7 +108,6 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
        battleSt.battleState === 'pre-monster-death')) ||
       (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show')) ||
       isMagicHitTarget || isAllyMagicHitTarget;
-    if (!alive && !isDying && !isBeingHit) continue;
 
     const pos = gridPos[i];
     if (!pos) continue;  // gridPos / encounterMonsters length mismatch — skip rather than crash the rest of drawBattle
