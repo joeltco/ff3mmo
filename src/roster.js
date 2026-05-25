@@ -96,43 +96,45 @@ export function getPlayerLocation() {
 
 // Party members get a permanent roster slot regardless of room or online
 // state — partymates should always be visible at a glance ("if we're
-// partied, I can see them"). Online mates pull their live profile; offline
-// mates fall back to the cached profile (`partyInviteSt.partyMemberProfiles`)
-// set when they were last seen. v1.7.709.
-function _partyRosterEntries(excludeNames) {
+// partied, I can see them"). v1.7.709. Returns ALL party entries (both
+// same-loc and remote) in `partyMembers` order so they can be pinned to
+// the top of the visible window ahead of any strangers. Online mates
+// pull their live profile; offline mates fall back to the cached profile
+// (`partyInviteSt.partyMemberProfiles`) set when they were last seen.
+function _partyRosterEntries() {
   const out = [];
   for (const name of partyInviteSt.partyMembers) {
-    if (excludeNames.has(name)) continue;       // already shown via same-loc real list
     const live = getOnlinePlayerByName(name);
-    if (live) { out.push(live); excludeNames.add(name); continue; }
+    if (live) { out.push(live); continue; }
     const cached = partyInviteSt.partyMemberProfiles.get(name);
-    if (cached) { out.push({ ...cached, isReal: true }); excludeNames.add(name); }
+    if (cached) out.push({ ...cached, isReal: true });
   }
   return out;
 }
 
-export function getRosterPlayers() {
-  const loc = getPlayerLocation();
-  // Real online players (multiplayer Step 1) appear above the fake pool.
-  // Pre-MP they're always [] so the existing single-player flow is unchanged.
-  const real = getOnlineAtLocation(loc);
-  const seen = new Set(real.map(p => p.name));
-  const party = _partyRosterEntries(seen);
-  const fake = PLAYER_POOL.filter(p => p.loc === loc);
-  return [...real, ...party, ...fake];
+// Same-loc real players minus any partymates already in the party list
+// (avoids the double-render of "your partymate is here").
+function _strangersAtLoc(loc, partyNames) {
+  return getOnlineAtLocation(loc).filter(p => !partyNames.has(p.name));
 }
 
-// ── Visible roster (at loc + fading out), sorted by arrival ───────────────
+export function getRosterPlayers() {
+  const loc = getPlayerLocation();
+  const party = _partyRosterEntries();
+  const partyNames = new Set(party.map(p => p.name));
+  const strangers = _strangersAtLoc(loc, partyNames);
+  const fake = PLAYER_POOL.filter(p => p.loc === loc);
+  // Party first — pin to the top of the roster regardless of whether
+  // strangers walk in. v1.7.710 (was party-after-strangers in v1.7.709).
+  return [...party, ...strangers, ...fake];
+}
+
+// ── Visible roster (party first, then same-loc strangers, then fading out) ─
 export function getRosterVisible() {
   const loc = getPlayerLocation();
-  // Real players first — they don't participate in the fake-pool fade/slide
-  // animation (presence is driven by WebSocket join/leave/move events).
-  const real = getOnlineAtLocation(loc);
-  const seen = new Set(real.map(p => p.name));
-  // Party members always-visible (v1.7.709) — slot in right after same-loc
-  // real players, before the fake pool. Stable identity: dedupe against
-  // `seen` so a partymate who IS at the same loc doesn't appear twice.
-  const party = _partyRosterEntries(seen);
+  const party = _partyRosterEntries();
+  const partyNames = new Set(party.map(p => p.name));
+  const strangers = _strangersAtLoc(loc, partyNames);
   const atLoc = PLAYER_POOL.filter(p => p.loc === loc);
   const fadingOut = PLAYER_POOL.filter(p =>
     p.loc !== loc && rosterFadeDir[p.name] === 'out' && rosterFadeMap[p.name] < ROSTER_FADE_STEPS
@@ -145,7 +147,11 @@ export function getRosterVisible() {
     if (bi === -1) return -1;
     return ai - bi;
   });
-  return [...real, ...party, ...atLoc, ...fadingOut];
+  // Party pinned to the top (full 3 if you have a full party) → strangers
+  // below → fake pool → fading out. When the bag overflows ROSTER_VISIBLE,
+  // the scroll arrows render and strangers get scroll-bumped first, never
+  // partymates. v1.7.710.
+  return [...party, ...strangers, ...atLoc, ...fadingOut];
 }
 
 function _clampRosterCursor() {
