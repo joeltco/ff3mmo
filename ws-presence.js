@@ -1031,7 +1031,13 @@ function _handleMessage(entry, msg) {
     }
     case 'chat': {
       // Relay world / party / pm chat to other clients.
-      //   - world: location-scoped (everyone at the same `loc`).
+      //   - world: GLOBAL — broadcast to every helloed client (v1.7.700).
+      //            Was location-scoped through v1.7.699 (`target.loc !==
+      //            entry.loc → skip`), which meant Ur visitors and cave
+      //            divers couldn't see each other's "world" chat — felt
+      //            broken for an MMO. Per-IP / per-kind rate limits +
+      //            cleanChatText profanity mask + name sanitization still
+      //            apply; nothing else changes.
       //   - party: by party-membership lookup (`_inSameParty`), not by loc.
       //            See docs/MULTIPLAYER-AUDIT-2026-05-15.md #22.
       //   - pm:    targeted by `toUserId` (preferred) or `to` display name
@@ -1083,12 +1089,12 @@ function _handleMessage(entry, msg) {
         }
         return;
       }
-      // World — broadcast to others at the same location. Sender's own
-      // client already added the message locally, so exclude them.
+      // World — broadcast to every helloed client. Sender's own client
+      // already added the message locally, so exclude them. Global as of
+      // v1.7.700 (was per-loc; see header comment above).
       for (const [uid, target] of _connected) {
         if (uid === entry.userId) continue;
         if (!target.helloed) continue;
-        if (target.loc !== entry.loc) continue;
         _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
                            channel, text });
       }

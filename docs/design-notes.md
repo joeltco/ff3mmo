@@ -295,7 +295,7 @@ Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed a
 
 ## Chat & PM
 
-- **Channels:** world (location-scoped), party (membership-scoped), pm (targeted by `toUserId`, name fallback). Server relay = `ws-presence.js` `case 'chat'`; client receive + send = `src/chat.js`.
+- **Channels:** world (global — every helloed client; v1.7.700, was loc-scoped through v1.7.699 but felt broken for an MMO), party (membership-scoped via `_inSameParty`), pm (targeted by `toUserId`, name fallback). Server relay = `ws-presence.js` `case 'chat'`; client receive + send = `src/chat.js`.
 - **@-mentions:** typing `@` + Tab autocompletes from the online roster (`getOnlinePlayers`). An incoming message that `@`-mentions you (`_mentions` vs `localPlayerName()`) renders gold and plays a chime; PMs chime too unless you're already on the Private tab.
 - **Mention chime = FF2 NSF track 8** (`FF2_TRACKS.MENTION_CHIME`). `music.js#playMentionChime` plays it on a dedicated 5th emulator so it never disturbs map music; one-shot (auto-stops at track end or 2.2 s).
 - **PM commands:** `/pm` `/w` `/tell` `/msg <name> <message>`, `/r <message>` (reply to last). `_sendPm` is the shared send path (also used by the roster "Message" action via `focusPmSession`).

@@ -59,7 +59,7 @@ Messages are JSON over text frames. `actor` / `target` are sender's-perspective 
 | C→S | `chat` | `channel ('world'|'party'|'pm'), text, to?, toUserId?` |
 | S→C | `chat` | `userId, name, channel, text, to?` |
 
-- **`world`** = location-scoped (only same-loc clients receive).
+- **`world`** = global (every helloed client; v1.7.700). Pre-v1.7.700 was location-scoped (`target.loc !== entry.loc → skip`), which broke the MMO feel — Ur visitors and cave divers couldn't see each other. Per-IP / per-kind rate limits + profanity mask + name sanitization still apply.
 - **`party`** = membership-scoped via the server's `_partyMemberships` map (inviter + their members). Does **not** leak to other parties or to bystanders at the same location. (v1.7.388 — was location-scoped pre-fix.)
 - **`pm`** = userId-targeted when the client sends `toUserId`; falls back to first-match-by-name when only `to` is set. The name path stops at the first match so a player can't intercept PMs by renaming to "Joel" anymore. (v1.7.388.)
 
