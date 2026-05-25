@@ -368,7 +368,13 @@ function _battleEnemyNames() {
       names.push(baseName);
     }
   }
-  return names.length > 0 ? names : [BATTLE_GOBLIN_NAME];
+  // v1.7.725 — no Goblin fallback. On the final-kill frame every monster has
+  // hp=0 but the battleState is still in `isMenu` (e.g. monster-death /
+  // enemy-flash) for a beat before victory states take over. The old
+  // `[BATTLE_GOBLIN_NAME]` fallback would FLASH "Goblin" in the middle of a
+  // non-goblin encounter's death animation. Empty-list → caller's forEach is a
+  // no-op and the bordered box rides empty into the victory transition.
+  return names;
 }
 
 function _battleEnemyName() {
