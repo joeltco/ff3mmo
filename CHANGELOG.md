@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.695 — 2026-05-25
+
+### Ur populated — 4 more wandering villagers
+
+Added 4 more wandering NPCs to Ur (map 114), each at a verified-openArea
+tile mirroring the FF3 ROM's canonical Ur layout from the OAM snap:
+
+- `UR_VILLAGER_TRADER` at (10, 27) — bundle `0x01E210`, peach hair
+- `UR_VILLAGER_MAIDEN` at (7, 19) — bundle `0x01E010`, yellow hair
+- `UR_HOODED_SAGE` at (16, 24) — bundle `0x01E310` (the new hooded
+  silhouette from the snap), magenta hair
+- `UR_VILLAGER_RED` at (11, 28) — bundle `0x01DF10` reused with magenta
+  hair (distinct from the existing `UR_VILLAGER_PEACH`)
+
+All 5 Ur NPCs share `TOWN_KEEPER_PAL_BTM` (blue tunic) — only SP3 hair
+color + sprite bundle vary per NPC. Each gets 3 lines of generic flavor
+dialogue (talk-faces the player, ≤45 chars/page for the message box).
+Wander leash 3-4 keeps them in their plazas without overlapping.
+
+Snap canonical tiles `(10, 28)` and `(8, 27)` shifted slightly to
+`(10, 27)` / `(11, 28)` so they pass the wander `openArea` rule (the
+canonical spots are walkable but lack 3 walkable neighbors and would
+strand the NPC).
+
+Hair palettes broken out into `VILLAGER_HAIR_PEACH/YELLOW/MAGENTA`
+consts at the top of the wandering-townsfolk block — adding another
+recolor is one new const + a `palTop:` field.
+
+Files:
+- `src/data/town-npcs.js` — 4 new villager specs + 4 new TOWN_NPCS
+  rows for map 114; 3 hair palette consts.
+
 ## 1.7.694 — 2026-05-25
 
 ### NPC sweep + wandering Ur villager (with town-tileset wander support)
