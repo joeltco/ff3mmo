@@ -432,6 +432,12 @@ function _drawRewardText(boxX, boxY) {
 
   if (bs.startsWith('item-')) {
     if (battleSt.encounterDropItem === null) return;
+    if (battleSt.encounterDropItemRejected) {
+      // Bag-full at drop time — drop is forfeit (post-battle has no retry),
+      // but the player sees a real message instead of a silent zero. v1.7.689.
+      drawCentered(_nameToBytes('Bag is full!'), midY - 4);
+      return;
+    }
     drawCentered(BATTLE_FOUND, midY - 10);
     drawCentered(makeItemDropText(battleSt.encounterDropItem), midY + 2);
     return;

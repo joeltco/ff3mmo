@@ -20,7 +20,7 @@ import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
-import { addItem } from './inventory.js';
+import { addItem, canAddItem } from './inventory.js';
 import { saveSlotsToDB } from './save-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN } from './sprite.js';
@@ -224,6 +224,20 @@ export function expireResettableChests(mapId) {
 }
 
 export function handleChest(facedX, facedY) {
+  // Roll loot FIRST so we can pre-check inventory capacity. If the roll is
+  // an item and the bag is full, refuse the open: chest stays closed, no
+  // consume, no save, no cooldown stamp — player deletes something and
+  // retries (v1.7.689). Gil never fails. Mimic rolls always proceed (no
+  // inventory required). canAddItem returns true for ids already in the bag
+  // (stack grows), so most "full" cases are still resolvable for repeats.
+  const entry = rollLootEntry(mapSt.currentMapId);
+  const isItem = entry != null && !(typeof entry === 'object' && (entry.gil || entry.monster));
+  if (isItem && !canAddItem(entry)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes('Bag is full!'));
+    return;
+  }
+
   _consumeTile(facedX, facedY, OPENED_CHEST);
   _stampChestTime(facedX, facedY);
   // v1.7.454 — patch the one changed metatile instead of rebuilding the
@@ -232,8 +246,6 @@ export function handleChest(facedX, facedY) {
   if (mapSt.mapRenderer) mapSt.mapRenderer.redrawMetatileAt(facedX, facedY);
   resetIndoorWaterCache();
   saveSlotsToDB();   // chest is consumed regardless of outcome
-
-  const entry = rollLootEntry(mapSt.currentMapId);
 
   // Chest mimic — "Monster appeared!", then (on dismiss) the normal battle
   // flash + one random monster from this floor's pool.
@@ -273,11 +285,21 @@ export function handleHiddenTreasure(facedX, facedY) {
   // is sometimes rewarded.
   if (Math.random() >= HIDDEN_TREASURE_HIT_CHANCE) return false;
 
+  // Hit — but check bag capacity BEFORE stamping the cooldown. Full bag on
+  // an item roll: show "Bag is full!" and don't burn the cooldown, so the
+  // player can retry after freeing a slot. Gil never fails. v1.7.689.
+  const entry = rollHiddenTreasureLoot(mapId);
+  if (entry == null) return false;
+  const isItem = !(typeof entry === 'object' && entry.gil);
+  if (isItem && !canAddItem(entry)) {
+    playSFX(SFX.ERROR);
+    showMsgBox(_nameToBytes('Bag is full!'));
+    return true;   // consumed the Z, but didn't stamp cooldown — retry-able
+  }
+
   _stampChestTime(facedX, facedY);  // cooldown only — no _consumeTile, tile stays as-is
   saveSlotsToDB();
 
-  const entry = rollHiddenTreasureLoot(mapId);
-  if (entry == null) return false;
   let msg;
   if (typeof entry === 'object' && entry.gil) {
     const [min, max] = entry.gil;

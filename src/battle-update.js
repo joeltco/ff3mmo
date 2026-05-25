@@ -84,7 +84,7 @@ const POISON_END_HOLD_MS       = 700;
 export function resetBattleVars() {
   inputSt.battleCursor = 0;
   resetAllDmgNums();
-  battleSt.encounterDropItem = null; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
+  battleSt.encounterDropItem = null; battleSt.encounterDropItemRejected = false; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1;
@@ -770,7 +770,14 @@ function _updateMonsterDeath() {
           break;
         }
       }
-      if (battleSt.encounterDropItem !== null) addItem(battleSt.encounterDropItem, 1);
+      // Capture the bag-full case so the celebration screen can swap "Found X"
+      // for "Bag is full!" — drop is forfeit (no post-battle retry), but the
+      // player at least sees what happened instead of a silent zero. v1.7.689.
+      battleSt.encounterDropItemRejected = false;
+      if (battleSt.encounterDropItem !== null) {
+        const added = addItem(battleSt.encounterDropItem, 1);
+        if (added === 0) battleSt.encounterDropItemRejected = true;
+      }
       saveSlotsToDB();
       _queueVictoryRewards();
       battleSt.isDefending = false;

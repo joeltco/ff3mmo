@@ -52,6 +52,11 @@ const PAUSE_TEXT_STEP_MS = 100;
 const PAUSE_TEXT_STEPS   = 4;
 const PAUSE_MENU_W       = 96;
 const PAUSE_MENU_H       = 128;
+// Inventory viewport: 7 rows fit cleanly between top edge and the trash slot
+// at bottom-right (trash sits at finalY + 124, last row ends at finalY + 104,
+// leaving 20 px for the down scroll arrow). Beyond 7 the list scrolls.
+// v1.7.689 (was an implicit min(INV_SLOTS, 9) → always-fit when cap was 8).
+const PAUSE_INV_VISIBLE_ROWS = 7;
 const BATTLE_DMG_SHOW_MS        = 550;
 const DEFEND_SPARKLE_TOTAL_MS   = 533;
 
@@ -283,6 +288,20 @@ function _drawPauseMenuText(ctx) {
   drawCursorFaded(px + 8, startY + pauseSt.cursor * 16 - 4, fadeStep);
 }
 
+// Derived viewport-top for the inventory list — pure function of cursor +
+// max-visible. Matches the battle spell list's `_spellScrollTop` pattern so
+// no extra state is needed; cursor moves freely within the visible window
+// until it hits an edge, then the window follows. When the cursor is on the
+// trash slot (`invScroll === INV_CAP`), we derive as if the cursor were on
+// the last row so the trash always sits visually adjacent to the bottom of
+// the list. v1.7.689.
+function _invViewTop(maxVisible) {
+  if (INV_SLOTS <= maxVisible) return 0;
+  const cursor = pauseSt.invScroll === INV_CAP ? INV_SLOTS - 1 : pauseSt.invScroll;
+  const half = Math.floor(maxVisible / 2);
+  return Math.max(0, Math.min(INV_SLOTS - maxVisible, cursor - half));
+}
+
 function _drawPauseInventory(ctx) {
   const px = HUD_VIEW_X, finalY = HUD_VIEW_Y;
   const showInvItems = pauseSt.state === 'inv-items-in' || pauseSt.state === 'inventory' || pauseSt.state === 'inv-items-out' ||
@@ -294,8 +313,12 @@ function _drawPauseInventory(ctx) {
   // Position-ordered list — buildItemSelectList pads with nulls to INV_SLOTS
   // so empty slots are reachable as drag/swap targets. v1.7.600.
   const slots = buildItemSelectList();
-  const maxVisible = Math.min(INV_SLOTS, Math.floor((HUD_VIEW_H - 16) / 14));
-  const startIdx = Math.max(0, Math.min(pauseSt.invScroll, Math.max(0, INV_SLOTS - maxVisible)));
+  // 7 rows max — leaves vertical room for the bottom scroll arrow (between
+  // last row and trash slot) without overlapping either. With INV_CAP = 16
+  // (v1.7.689), the viewport scrolls within the 16 slots; ≤7 items behave
+  // exactly like before (no scroll, no arrows).
+  const maxVisible = Math.min(INV_SLOTS, PAUSE_INV_VISIBLE_ROWS);
+  const startIdx = _invViewTop(maxVisible);
   const countRx = px + HUD_VIEW_W - 16;
   for (let i = 0; i < maxVisible && startIdx + i < INV_SLOTS; i++) {
     const slot = slots[startIdx + i];
@@ -311,6 +334,20 @@ function _drawPauseInventory(ctx) {
     if (startIdx + i === pauseSt.invScroll && pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal') {
       const activeX = pauseSt.heldItem >= 0 ? px + 4 : px + 8;
       drawCursorFaded(activeX, iy - 4, fadeStep);
+    }
+  }
+
+  // Scroll arrows — same primitives as the battle spell list + shop list
+  // (`ui.scrollArrowUp/Down`, 8×8 PPU tiles, 250ms blink). Only render when
+  // there's actually content above or below the viewport. v1.7.689.
+  if (pauseSt.state !== 'inv-target' && pauseSt.state !== 'inv-heal' && INV_SLOTS > maxVisible) {
+    const arrowX = px + HUD_VIEW_W - 12;
+    const blink = (Math.floor(Date.now() / 250) & 1) === 0;
+    if (startIdx > 0 && ui.scrollArrowUp && blink) {
+      ctx.drawImage(ui.scrollArrowUp, arrowX, finalY + 4);
+    }
+    if (startIdx + maxVisible < INV_SLOTS && ui.scrollArrowDown && blink) {
+      ctx.drawImage(ui.scrollArrowDown, arrowX, finalY + 12 + maxVisible * 14 - 4);
     }
   }
 

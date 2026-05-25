@@ -4,8 +4,8 @@
 // (v1.7.219): all reads and writes route through the helpers below so
 // the future websocket layer has one place to hook delta emission.
 
-export const INV_CAP = 8;   // max distinct item slots (v1.7.599)
-export const INV_SLOTS = 8; // visible rows in pick panels — matches cap
+export const INV_CAP = 16;  // max distinct item slots (v1.7.689 — was 8 v1.7.599→v1.7.688)
+export const INV_SLOTS = 16; // total navigable slots — matches cap; pause panel scrolls within it
 
 export const playerInventory = {};
 // Slot order — array of itemIds (numeric, NOT strings) at each visible

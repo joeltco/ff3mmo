@@ -29,6 +29,7 @@ export const battleSt = {
   isRandomEncounter: false,
   encounterMonsters: null,  // [{ hp, maxHP, atk, def, exp }]
   encounterDropItem: null,
+  encounterDropItemRejected: false, // true when the drop rolled but the bag was full at addItem time — switches the victory popup from "Found X" to "Bag is full!" (v1.7.689)
   encounterJobLevelUp: null,
   encounterExpGained: 0,
   encounterGilGained: 0,

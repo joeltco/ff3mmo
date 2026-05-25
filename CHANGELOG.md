@@ -18,6 +18,54 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.689 — 2026-05-24
+
+### Inventory cap 8 → 16, pause scroll arrows, full-bag chest fix
+
+**Capacity 8 → 16.** `INV_CAP` / `INV_SLOTS` bumped in `src/inventory.js`.
+Battle Item menu auto-adapts (pages = `ceil(list.length / 3)` already).
+Save validator (`api.js#parseSaveSlots`) bumped its `inventoryOrder`
+cap from 8 → 16 in lockstep — both halves are required or saves silently
+truncate on the server round-trip ([[ff3mmo-save-whitelist-lockstep]]).
+
+**Pause inventory scroll.** Panel now renders 7 visible rows out of 16
+with cursor-derived viewport scroll (no extra state; mirrors the battle
+spell list's `_spellScrollTop` pattern). 8×8 `ui.scrollArrowUp/Down`
+sprites blink at 250 ms in the right margin when there's content
+off-screen above/below. ≤7 items behave exactly like before. The trash
+slot keeps its bottom-right anchor and is reached by pressing down past
+the last item (cursor jumps to trash; viewport snaps to bottom page).
+
+**Full-bag bug fixes.** `addItem` silently returns 0 when the bag is
+full and the item is new — but `handleChest`, `handleHiddenTreasure`,
+and the post-battle drop weren't checking. Result: chest consumed +
+"Found X!" shown + nothing in the bag. Three fixes, all behind the
+existing `canAddItem(id)` precheck:
+
+- **Chest** — roll loot FIRST. If the roll is an item and the bag is
+  full, refuse the open: chest stays closed, no consume, no save, no
+  cooldown stamp. Player deletes something and retries. Gil rolls always
+  proceed; mimic rolls always proceed (no inventory required).
+- **Vase (hidden treasure)** — same pre-check on hit. Bag full → "Bag is
+  full!" + no cooldown stamp, so the vase is retry-able.
+- **Post-battle drop** — drop is forfeit (no battle backtrack), but the
+  victory popup now reads "Bag is full!" instead of "Found <ItemName>"
+  via the new `encounterDropItemRejected` flag on `battleSt`.
+
+`canAddItem` returns true for ids already in the bag (stack grows), so
+duplicate-of-existing pickups still work at any bag fill level.
+
+Files:
+- `src/inventory.js` — cap bump.
+- `api.js` — save validator cap.
+- `src/pause-menu.js` — `PAUSE_INV_VISIBLE_ROWS = 7`, `_invViewTop`
+  helper, scroll arrow draws in `_drawPauseInventory`.
+- `src/map-triggers.js` — `canAddItem` precheck in `handleChest` +
+  `handleHiddenTreasure`.
+- `src/battle-update.js` + `src/battle-state.js` +
+  `src/battle-draw-menu.js` — `encounterDropItemRejected` flag + popup
+  swap.
+
 ## 1.7.688 — 2026-05-24
 
 ### Yes/no prompt cue text — single source via `yesNoLabels()`
