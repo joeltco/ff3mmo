@@ -363,9 +363,12 @@ function _drawRosterRow(p, i, panelTop) {
   // Status-effect sprite above the portrait — reuses the same battle
   // animations (`drawStatusSpriteAbove`, 2-frame 133ms cycle) so the
   // visual matches what shows in combat. statusMask is server-broadcast
-  // via the player profile (v1.7.715). Fade with the row.
-  if (p.statusMask && fadeStep < ROSTER_FADE_STEPS) {
-    drawStatusSpriteAbove(ui.ctx, { mask: p.statusMask | 0 }, HUD_RIGHT_X + 8, rowY + 8 - 3);
+  // via the player profile (v1.7.715). Always renders when statusMask is
+  // non-zero (v1.7.716 — was gated on fadeStep; user wanted unconditional
+  // visibility). Same `portrait y - 4` convention battle uses
+  // (battle-draw-allies.js:264).
+  if (p.statusMask) {
+    drawStatusSpriteAbove(ui.ctx, { mask: p.statusMask | 0 }, HUD_RIGHT_X + 8, rowY + 8 - 4);
   }
 
   // Name. For a real player currently in combat, blink the name to a red
