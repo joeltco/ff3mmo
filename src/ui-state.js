@@ -21,18 +21,22 @@ export const ui = {
   scrollArrowDownFade: null,      // [step1..step4] faded down arrows
 };
 
-// Touch detection. `ontouchstart` and `maxTouchPoints` cover most browsers,
-// but Amazon Silk on Fire (Kids) tablets sometimes report `maxTouchPoints=0`
-// AND omits `ontouchstart` — falling through to PC controls on a literal
-// kids' tablet. `matchMedia('(pointer: coarse)')` reports whether the
-// PRIMARY pointer is a touch input — accurate on every modern engine. The
-// `hover: none` fallback catches devices that can't hover (touch-only).
-// v1.7.682 (Fire HD Kids tablet showing PC controls).
+// Touch detection — four signals OR'd together so a locked-down browser
+// can't slip through to PC controls:
+//   1. `ontouchstart` in window (legacy, universal)
+//   2. `navigator.maxTouchPoints > 0` (modern, but Silk on Fire Kids reports 0)
+//   3. `matchMedia('(pointer: coarse)' | '(hover: none)')` (modern accurate)
+//   4. UA contains a known mobile platform marker
+// The UA fallback (#4) catches the Fire HD Kids case where Silk's parental
+// controls / managed-profile layer suppresses #1-3 but the device IS clearly
+// a touchscreen. v1.7.682 / 1.7.684.
+const _UA = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
 export const isMobile = ('ontouchstart' in window)
   || navigator.maxTouchPoints > 0
   || (typeof window.matchMedia === 'function' && (
        window.matchMedia('(pointer: coarse)').matches ||
-       window.matchMedia('(hover: none)').matches));
+       window.matchMedia('(hover: none)').matches))
+  || /Android|iPhone|iPad|iPod|Mobile|Silk|KFRAWI|Tablet/i.test(_UA);
 
 // Generic box-draw using a 9-tile border set. Used by HUD init + loading screen.
 export function drawBoxOnCtx(pctx, tileCanvases, x, y, w, h, fill = true) {
