@@ -384,7 +384,7 @@ Roster → Trade is a real-MP item transfer (v1.7.598). The original v1.7.237 im
 
 ## Inventory delete mode
 
-The pause-menu Items tab supports deleting items via a fixed **trash slot** in the panel's bottom-right corner. The trash is always visible and behaves as a navigable inventory slot — `invScroll === INV_CAP` (= 8, one past the last item row).
+The pause-menu Items tab supports deleting items via a fixed **trash slot** in the panel's bottom-right corner. The trash is always visible and behaves as a navigable inventory slot — `invScroll === INV_CAP` (= 16 as of v1.7.689; was 8 v1.7.599–v1.7.688), one past the last item row. Pause panel scrolls to fit (7 rows visible with up/down arrows; battle Item menu paginates horizontally with L/R arrows).
 
 - **Trash sprite** is the real FF3 discard-menu trash can — a 2×2 cluster of BG tiles `$58`/`$59`/`$5A`/`$5B` from the FF3J item-discard menu (BG snap @ frame 1905, cols 7-8 / rows 19-20, BG3 palette). Composited into a 16×16 silhouette in `src/data/inventory-icons.js#getTrashCanvas`. Only color index 3 (white) renders; indices 0/1/2 stay transparent so the BG-blue field doesn't bleed onto the HUD. The same file exports `getUpArrowCanvas` (tile `$E8`, OAM, vflipped — the discard-menu up-arrow, originally mis-shipped as the trash in v1.7.599). See `[[ff3mmo-snap-bg-for-menu-icons]]` for the lesson.
 - **Two delete paths**, both share the same `showMsgBoxPrompt` confirm and `_yesNoLabels()` helper (mobile A/B, desktop Z/X):
