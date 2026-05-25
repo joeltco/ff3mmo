@@ -222,12 +222,22 @@ process.on('SIGTERM', () => { _gracefulShutdown = true; });
   const cutoff = Math.floor(Date.now() / 1000) - PRESENCE_TTL_SEC;
   for (const row of presenceLoadRecent(cutoff)) {
     try {
+      const profile = JSON.parse(row.profileJson || '{}');
       _shadows.set(row.userId, {
         userId: row.userId,
-        profile: JSON.parse(row.profileJson || '{}'),
+        profile,
         loc: row.loc || 'ur',
         lastSeen: row.lastSeen,
       });
+      // v1.7.723: seed _lastSeenProfiles too. Pre-fix the cache was
+      // populated only by live hello/update during this server's
+      // lifetime — after restart it was empty, so offline-mate
+      // party-snapshot entries fell back to skeleton {name:'Player'}
+      // and rendered as anonymous "Player" rows in the partymate's
+      // roster. Now any recently-online user (within PRESENCE_TTL)
+      // has their full profile available for the offline-mate
+      // snapshot path.
+      _lastSeenProfiles.set(row.userId, profile);
     } catch { /* corrupt JSON — skip */ }
   }
   if (_shadows.size > 0) console.log(`Presence: restored ${_shadows.size} shadows`);
@@ -614,18 +624,26 @@ function _handleMessage(entry, msg) {
         // party state.
         const mateIds = _getPartyMates(entry.userId);
         if (mateIds.length > 0) {
-          const members = mateIds.map(uid => {
+          // v1.7.723: only include mates we have real profile data for.
+          // Skeleton fallback `{name:'Player'}` was rendering as anonymous
+          // "Player" entries in the partymate's roster — looked like fake
+          // players to the user. Skipped mates can still recover later
+          // when they come back online (the reconnect fanout will send
+          // a fresh `party-member-joined`); for mates that NEVER come
+          // back, /disband cleans up the server side.
+          const members = [];
+          for (const uid of mateIds) {
             const live = _connected.get(uid);
             if (live && live.helloed) {
-              return { userId: uid, ...live.profile, loc: live.loc, online: 1 };
+              members.push({ userId: uid, ...live.profile, loc: live.loc, online: 1 });
+              continue;
             }
             const cached = _lastSeenProfiles.get(uid);
-            return {
-              userId: uid,
-              ...(cached || { name: 'Player' }),
-              online: 0,
-            };
-          });
+            if (cached) {
+              members.push({ userId: uid, ...cached, online: 0 });
+            }
+            // No data — skip (don't render a 'Player' phantom)
+          }
           _send(entry.ws, { type: 'party-snapshot', members });
           // Tell each online mate this user is back via party-member-joined.
           const selfMember = { userId: entry.userId, ...entry.profile, loc: entry.loc };
@@ -1147,17 +1165,20 @@ function _handleMessage(entry, msg) {
       // to repair any client-server drift, and as a defensive resync from
       // anywhere the client suspects its local `partyMembers` is stale.
       // Same payload shape as the hello-time party-snapshot, including
-      // offline mates from `_lastSeenProfiles`. v1.7.720.
+      // offline mates from `_lastSeenProfiles`. v1.7.720; v1.7.723 stops
+      // emitting skeleton entries for mates without profile data.
       if (!entry.helloed) return;
       const mateIds = _getPartyMates(entry.userId);
-      const members = mateIds.map(uid => {
+      const members = [];
+      for (const uid of mateIds) {
         const live = _connected.get(uid);
         if (live && live.helloed) {
-          return { userId: uid, ...live.profile, loc: live.loc, online: 1 };
+          members.push({ userId: uid, ...live.profile, loc: live.loc, online: 1 });
+          continue;
         }
         const cached = _lastSeenProfiles.get(uid);
-        return { userId: uid, ...(cached || { name: 'Player' }), online: 0 };
-      });
+        if (cached) members.push({ userId: uid, ...cached, online: 0 });
+      }
       _send(entry.ws, { type: 'party-snapshot', members });
       return;
     }

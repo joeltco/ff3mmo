@@ -629,6 +629,26 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.723 party-resync omits mates with no cached profile ──────────
+  // Pre-fix the server emitted a skeleton `{name:'Player'}` for mates
+  // without profile data; clients rendered them as anonymous "Player"
+  // entries in the partymate's roster. Now skipped entirely; user can
+  // `/disband` to clean up persistent-but-recoverable-nowhere mates.
+  await asyncTest('v1.7.723 party-resync skips mates without cached profile', async () => {
+    _testHooks.resetState();
+    // Mate is in partyMemberships but has NO _lastSeenProfiles entry
+    // and is NOT connected. Pre-v1.7.723 the snapshot would include
+    // {userId: 9999, name: 'Player', online: 0}.
+    _testHooks.state.partyMemberships.set(9999, 7790);
+    const A = await connectClient(port, 7790, { ...baseProfile, name: 'NoDataA' });
+    const got = once(A, m => m.type === 'party-snapshot', 800);
+    A.send(JSON.stringify({ type: 'party-resync' }));
+    const snap = await got;
+    assertEqual(snap.members.length, 0, 'no skeleton entry for unrecoverable mate');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── v1.7.720 party-resync flags online mate with online=1 ──────────────
   await asyncTest('v1.7.720 party-resync flags live mate online=1', async () => {
     _testHooks.resetState();

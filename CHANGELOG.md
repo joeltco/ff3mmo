@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.723 — 2026-05-25
+
+### Fix v1.7.720 skeleton "Player" entries in offline-mate snapshots
+
+The v1.7.720 offline-mate snapshot path had two defects that caused real but offline partymates to render as anonymous "Player" entries:
+
+1. **`_lastSeenProfiles` wasn't seeded at boot.** Cache was populated only by live `hello` + `update` during the server's lifetime; every restart wiped it. The snapshot fallback emitted `{userId, name: 'Player', online: 0}` for any mate whose profile wasn't currently in the cache. Now seeded from `presence_shadows` at the same boot step that loads `_shadows` — any user who was online within the 10-minute PRESENCE_TTL of the last shutdown is recoverable. Tiny code change in the boot block; same memory bound as `_shadows`.
+
+2. **Skeleton fallback rendered phantom rows.** Even after the seed fix, mates with no shadow AND no live connection still got the skeleton. Now omitted entirely from the snapshot. The user can `/disband` to clean up server-side memberships that have become unrecoverable (the v1.7.720 unconditional-send `/disband` works even when the local list shows nothing).
+
+Also cleared three stale `parties` rows for user 2 (JoeltCo) that had accumulated across testing sessions: members 4 (lucas@gmail.com), 9 (jointc), 13 (sevillejr1@gmail.com). The deploy's pm2 restart re-loads `_partyMemberships` from the now-clean SQLite mirror.
+
+New wire-sim test (`tools/pvp-wire-sim.js`): "v1.7.723 party-resync skips mates without cached profile" — asserts `snap.members.length === 0` when the mate exists in `_partyMemberships` but has no `_lastSeenProfiles` entry and no live connection. 44 wire-sim tests now (was 43, +1).
+
 ## 1.7.722 — 2026-05-25
 
 ### Party-join celebration jingle + 5s "Joined" hold
