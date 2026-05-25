@@ -97,6 +97,12 @@ export function init() {
         //  fed was removed — this flag is the foundation the assist/party-
         //  battle rebuild reattaches to. See the ff3mmo-coop-rebuild memory.)
         inBattle: battleSt.battleState && battleSt.battleState !== 'none' ? 1 : 0,
+        // Status mask for the roster row to display status icons + for the
+        // pause-menu item-use to know when a partymate is poisoned /
+        // blinded / etc. Server-validated in ws-presence.js#`statusMask`
+        // case. The net.js diff-poll picks up the change automatically.
+        // v1.7.715.
+        statusMask: (ps.status && (ps.status.mask | 0)) | 0,
         // PvP hook chance is AGI-differential + Thief/Ranger bonus (see
         // `pvp-search.js#getHookChance`). Server uses the same formula on
         // `pvp-encounter` rolls, so AGI has to travel with the profile.

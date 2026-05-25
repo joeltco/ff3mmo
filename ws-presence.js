@@ -263,6 +263,7 @@ function _normalizeProfileField(key, value) {
     case 'maxHP':    return _clamp(value, 1, 9999);
     case 'agi':      return _clamp(value, 1, 99);
     case 'inBattle': return _clamp(value, 0, 1);
+    case 'statusMask': return _clamp(value, 0, 0x3FF);   // 10-bit mask (STATUS.* up to CONFUSE 0x200)
     case 'weaponR':
     case 'armorId':
     case 'helmId':   return _clamp(value, 0, 255);
@@ -618,7 +619,7 @@ function _handleMessage(entry, msg) {
       const fields = {};
       for (const k of ['name', 'jobIdx', 'level', 'palIdx', 'hp', 'maxHP', 'agi',
                        'weaponR', 'weaponL', 'armorId', 'helmId', 'shieldId',
-                       'allies', 'inBattle']) {
+                       'allies', 'inBattle', 'statusMask']) {
         if (parsed[k] == null) continue;
         const v = _normalizeProfileField(k, parsed[k]);
         if (v === undefined) continue;

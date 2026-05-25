@@ -1144,6 +1144,21 @@ function _applyPauseItemUse(item, rosterTargets) {
   if (!item) { playSFX(SFX.ERROR); return; }
   const eff = item.effect || (item.type === 'consumable' ? 'heal' : null);
 
+  // Block any roster-targeted use when the target is currently in battle —
+  // their `ps` is mid-flight on their own client and applying our cure to a
+  // wire-snapshot of their stats here would just go stale the moment their
+  // next battle action lands. UX: refuse with a soft "<Name> in battle"
+  // message so the player understands why. Self-target ignores this gate.
+  // v1.7.715.
+  if (pauseSt.invAllyTarget >= 0) {
+    const rp = rosterTargets[pauseSt.invAllyTarget];
+    if (rp && rp.isReal && rp.inBattle) {
+      playSFX(SFX.ERROR);
+      showMsgBox(_nameToBytes((rp.name || 'Player') + ' in battle'));
+      return;
+    }
+  }
+
   // Cure status items (Antidote, Eye Drops, etc.) — applies to self OR roster
   // target if one is picked. Routes through `applyMagicCureStatus` so this
   // matches the in-battle path. Real-player target also wire-relays the cure.

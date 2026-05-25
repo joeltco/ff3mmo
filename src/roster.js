@@ -12,6 +12,7 @@ import { isInvitingTarget, isInParty } from './party-invite.js';
 import { isTradingWith } from './trade.js';
 import { fakePlayerPortraits, fakePlayerKneelPortraits } from './fake-player-sprites.js';
 import { bsc } from './battle-sprite-cache.js';
+import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { ui } from './ui-state.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
 import { battleSt } from './battle-state.js';
@@ -358,6 +359,13 @@ function _drawRosterRow(p, i, panelTop) {
   if (isNearFatal && fadeStep < ROSTER_FADE_STEPS && bsc.sweatFrames && bsc.sweatFrames.length === 2) {
     const sweat = bsc.sweatFrames[Math.floor(Date.now() / 133) & 1];
     ui.ctx.drawImage(sweat, HUD_RIGHT_X + 8, rowY + 8 - 3);
+  }
+  // Status-effect sprite above the portrait — reuses the same battle
+  // animations (`drawStatusSpriteAbove`, 2-frame 133ms cycle) so the
+  // visual matches what shows in combat. statusMask is server-broadcast
+  // via the player profile (v1.7.715). Fade with the row.
+  if (p.statusMask && fadeStep < ROSTER_FADE_STEPS) {
+    drawStatusSpriteAbove(ui.ctx, { mask: p.statusMask | 0 }, HUD_RIGHT_X + 8, rowY + 8 - 3);
   }
 
   // Name. For a real player currently in combat, blink the name to a red

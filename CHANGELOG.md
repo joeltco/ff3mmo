@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.715 — 2026-05-25
+
+### Status sprite on roster + in-battle gate for cure-item targeting
+
+**Status sprite on roster.** `p.statusMask` now flows through the
+profile (server-validated, wire-broadcast). `_drawRosterRow` calls the
+existing `drawStatusSpriteAbove(ctx, {mask}, x, y)` from
+`battle-drawing.js` — same 2-frame 133 ms cycle, same priority order
+(`_STATUS_PRIO`) as in-battle — positioned 3 px above the portrait
+(matches the sweat overlay convention). Reuses every status-sprite
+asset already in `bsc.statusSpriteMap`; no new art.
+
+**Cure-item gate.** `_applyPauseItemUse` now refuses a roster-targeted
+use when `rp.isReal && rp.inBattle`. Their `ps` is mid-flight on their
+own client; applying our cure to a wire-snapshot would just go stale
+the moment their next battle action lands. Soft refusal: "<Name> in
+battle" message + error SFX. Self-target ignores the gate. Healing
+items (Potion, HiPotion, etc.) and cure-status items (Antidote, Eye
+Drops, etc.) both pass through the same `_applyPauseItemUse` so this
+gate covers both.
+
+Files:
+- `src/main.js` — `statusMask` in the profile builder (reads
+  `ps.status.mask`).
+- `ws-presence.js` — `statusMask` case in `_normalizeProfileField`
+  (clamp `0..0x3FF`, the 10-bit STATUS mask); added to the `update`
+  field whitelist.
+- `src/roster.js` — import `drawStatusSpriteAbove`; call after the
+  sweat overlay block when `p.statusMask` non-zero and row not fully
+  faded.
+- `src/pause-menu.js` — early refuse-with-message in
+  `_applyPauseItemUse` when target is a real player and `inBattle`.
+
 ## 1.7.714 — 2026-05-25
 
 ### Spread Ur NPCs across more zones (magenta RED was crowding quest NPC)
