@@ -582,16 +582,31 @@
       <p class="pitch-tag">— OPEN BETA —</p>
     </div>
     <div id="rom-picker">
+      <!-- NO `accept` filter — iOS Safari uses UTI-based filtering and `.nes`
+           has no registered UTI, so an `accept=".nes,..."` attribute hid all
+           .nes files from the picker on iPhone/iPad and made the game
+           literally un-loadable on iOS. Desktop users see an unfiltered
+           picker now but their .nes file is still right there by name.
+           v1.7.697. -->
       <label for="rom-file">Load FF3 ROM (.nes / .zip)</label>
-      <input type="file" id="rom-file" accept=".nes,.zip,application/zip">
+      <input type="file" id="rom-file">
       <br><br>
       <label for="rom-file-ff1">Load FF1 ROM (.nes / .zip)</label>
-      <input type="file" id="rom-file-ff1" accept=".nes,.zip,application/zip">
+      <input type="file" id="rom-file-ff1">
       <br><br>
       <label for="rom-file-ff2">Load FF2 ROM (.nes / .zip)</label>
-      <input type="file" id="rom-file-ff2" accept=".nes,.zip,application/zip">
+      <input type="file" id="rom-file-ff2">
     </div>
     <p id="rom-hint">You supply your own ROMs — nothing is uploaded.</p>
+    <!-- iOS Safari needs Add-to-Home-Screen for durable IndexedDB; without
+         it the storage-persist API returns DENIED (verified via
+         /api/storage-beacon telemetry — 14/17 iOS sessions denied). The hint
+         is hidden by default and revealed by the inline script below only
+         when we detect iOS, so we don't add noise for non-iOS visitors. -->
+    <p id="rom-hint-ios" style="display:none; color:#c8a832; font-size:13px; max-width:480px; margin:8px auto;">
+      iPhone/iPad tip: tap <strong>Share → Add to Home Screen</strong> and open from
+      that icon — otherwise iOS clears the ROM cache between visits.
+    </p>
     <div id="rom-info"></div>
   </div>
 
@@ -961,6 +976,18 @@
 
     function showROMPicker() {
       document.getElementById('rom-picker-wrap').style.display = 'block';
+      // iOS Safari (non-PWA) denies persistent storage — see telemetry in
+      // storage_beacons + design-notes#tap-to-enter-splash. Reveal the
+      // Add-to-Home-Screen hint only when we detect iOS AND we're not
+      // already running as standalone (PWA, in which case storage is
+      // already durable). v1.7.697.
+      const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+      const isStandalone = navigator.standalone === true ||
+        (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
+      if (isIOS && !isStandalone) {
+        const hint = document.getElementById('rom-hint-ios');
+        if (hint) hint.style.display = 'block';
+      }
       loadCachedROMs();
     }
 
