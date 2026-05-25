@@ -55,8 +55,12 @@ export function initSpriteAssets(rom) {
   const sa = initScrollArrows(rom);
   ui.scrollArrowDown = sa.scrollArrowDown;
   ui.scrollArrowUp = sa.scrollArrowUp;
+  ui.scrollArrowLeft = sa.scrollArrowLeft;
+  ui.scrollArrowRight = sa.scrollArrowRight;
   ui.scrollArrowDownFade = sa.scrollArrowDownFade;
   ui.scrollArrowUpFade = sa.scrollArrowUpFade;
+  ui.scrollArrowLeftFade = sa.scrollArrowLeftFade;
+  ui.scrollArrowRightFade = sa.scrollArrowRightFade;
 
   // Battle sprite cache — per-job poses + init-once slash/SW/status
   loadJobBattleSprites(rom, ps.jobIdx);

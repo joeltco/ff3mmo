@@ -17,8 +17,12 @@ export const ui = {
   titleHudFadeCanvases: null,     // [fadeLevel 1..4] faded title HUD
   scrollArrowUp: null,            // 8×8 up arrow
   scrollArrowDown: null,          // 8×8 down arrow
+  scrollArrowLeft: null,          // 8×8 left arrow (down-arrow rotated 90° CW)
+  scrollArrowRight: null,         // 8×8 right arrow (down-arrow rotated 90° CCW)
   scrollArrowUpFade: null,        // [step1..step4] faded up arrows
   scrollArrowDownFade: null,      // [step1..step4] faded down arrows
+  scrollArrowLeftFade: null,      // [step1..step4] faded left arrows
+  scrollArrowRightFade: null,     // [step1..step4] faded right arrows
 };
 
 // Touch detection — four signals OR'd together so a locked-down browser

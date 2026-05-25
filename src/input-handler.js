@@ -24,7 +24,19 @@ import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } f
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
 import { openInspect } from './inspect.js';
-import { playerInventory, addItem, removeItem, INV_SLOTS } from './inventory.js';
+import { playerInventory, addItem, removeItem } from './inventory.js';
+
+// Battle Item menu rows-per-page. The pause inventory uses a single
+// scrollable list of bag-cap slots (16); the battle menu uses horizontal
+// pagination with 3 rows per page so it fits in the narrower bottom-HUD
+// panel. MUST match `INV_SLOTS` in `battle-draw-menu.js` (kept literal
+// rather than imported so neither file can drift accidentally).
+// Pre-v1.7.704 these sites imported the bag-cap `INV_SLOTS` (16) by
+// mistake — the draw side rendered 3 rows but the input math indexed by
+// 16, so pressing right past page 1 navigated to slot 16+ instead of 3+.
+// Effectively bricked every item past the first page once INV_CAP was
+// bumped to 16 in v1.7.689.
+const BATTLE_INV_ROWS = 3;
 
 // Keyboard poll map — mutated by window listeners, read throughout the codebase.
 export const keys = {};
@@ -292,7 +304,7 @@ function _itemSelectNav(isEquipPage, totalPages, pageRows) {
   if (k['ArrowUp']) {
     k['ArrowUp'] = false;
     if (inputSt.itemPageCursor > 0) inputSt.itemPageCursor--;
-    else if (inputSt.itemPage > 0) { inputSt.itemSlideDir = 1; inputSt.itemSlideCursor = (inputSt.itemPage - 1) === 0 ? 1 : INV_SLOTS - 1; battleSt.battleState = 'item-slide'; battleSt.battleTimer = 0; }
+    else if (inputSt.itemPage > 0) { inputSt.itemSlideDir = 1; inputSt.itemSlideCursor = (inputSt.itemPage - 1) === 0 ? 1 : BATTLE_INV_ROWS - 1; battleSt.battleState = 'item-slide'; battleSt.battleTimer = 0; }
     playSFX(SFX.CURSOR);
   }
   if (k['ArrowLeft'] && inputSt.itemPage > 0) {
@@ -313,7 +325,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
   // weapon swaps mid-battle didn't persist across restart.
   let equipChanged = false;
   if (!srcEquip && !dstEquip) {
-    const dstIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
+    const dstIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
     const tmp = inputSt.itemSelectList[inputSt.itemHeldIdx];
     inputSt.itemSelectList[inputSt.itemHeldIdx] = inputSt.itemSelectList[dstIdx];
     inputSt.itemSelectList[dstIdx] = tmp;
@@ -333,7 +345,7 @@ function _itemSelectSwap(isEquipPage, gIdx) {
   } else if (srcEquip && !dstEquip) {
     const srcHand = -(inputSt.itemHeldIdx + 100);
     const handWeaponId = srcHand === 0 ? ps.weaponR : ps.weaponL;
-    const dstIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
+    const dstIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
     const invItem = inputSt.itemSelectList[dstIdx];
     if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
@@ -362,12 +374,12 @@ function _itemSelectZ(isEquipPage, gIdx) {
       const weaponId = inputSt.itemPageCursor === 0 ? ps.weaponR : ps.weaponL;
       if (weaponId !== 0) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     } else {
-      const invIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
+      const invIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
       if (inputSt.itemSelectList[invIdx] !== null) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     }
   } else if (inputSt.itemHeldIdx === gIdx) {
     if (!isEquipPage) {
-      const invIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
+      const invIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
       const item = inputSt.itemSelectList[invIdx];
       const itemDat = ITEMS.get(item.id);
       if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
@@ -417,11 +429,11 @@ function _itemSelectZ(isEquipPage, gIdx) {
 function _battleInputItemSelect() {
   if (inputSt.menuMode === 'magic') { _battleInputMagicSelect(); return; }
   const isEquipPage = inputSt.itemPage === 0;
-  const pageRows = isEquipPage ? 2 : INV_SLOTS;
-  const totalPages = 1 + Math.max(1, Math.ceil(inputSt.itemSelectList.length / INV_SLOTS));
+  const pageRows = isEquipPage ? 2 : BATTLE_INV_ROWS;
+  const totalPages = 1 + Math.max(1, Math.ceil(inputSt.itemSelectList.length / BATTLE_INV_ROWS));
   _itemSelectNav(isEquipPage, totalPages, pageRows);
   if (_zPressed()) {
-    const gIdx = isEquipPage ? -100 - inputSt.itemPageCursor : (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
+    const gIdx = isEquipPage ? -100 - inputSt.itemPageCursor : (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
     _itemSelectZ(isEquipPage, gIdx);
   }
   if (_xPressed()) {

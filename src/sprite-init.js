@@ -351,19 +351,53 @@ function _vflip8(src) {
   return c;
 }
 
+// Rotate an 8×8 canvas in place. Canvas Y is down, so:
+//   -90°  → tip of down arrow lands on the right edge → RIGHT arrow.
+//   +90°  → tip of down arrow lands on the left edge  → LEFT arrow.
+// v1.7.704 — for the battle item menu's horizontal page arrows.
+function _rotCCW8(src) {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 8;
+  const cx = c.getContext('2d');
+  cx.translate(0, 8);
+  cx.rotate(-Math.PI / 2);
+  cx.drawImage(src, 0, 0);
+  return c;
+}
+function _rotCW8(src) {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 8;
+  const cx = c.getContext('2d');
+  cx.translate(8, 0);
+  cx.rotate(Math.PI / 2);
+  cx.drawImage(src, 0, 0);
+  return c;
+}
+
 export function initScrollArrows(romData) {
   const palette = [0x0F, 0x00, 0x10, 0x30];
   const downArrow = _buildSingleTile(romData, SCROLL_ARROW_ROM, palette);
   const upArrow = _vflip8(downArrow);
-  const downFade = [], upFade = [];
+  // Right + Left arrows derived from the same ROM tile rotated 90°. Same
+  // blink + fade convention as up/down. v1.7.704.
+  const rightArrow = _rotCCW8(downArrow);
+  const leftArrow  = _rotCW8(downArrow);
+  const downFade = [], upFade = [], rightFade = [], leftFade = [];
   for (let step = 1; step <= 4; step++) {
     let fp = [...palette];
     for (let s = 0; s < step; s++) fp = fp.map(c => nesColorFade(c));
     const df = _buildSingleTile(romData, SCROLL_ARROW_ROM, fp);
     downFade.push(df);
     upFade.push(_vflip8(df));
+    rightFade.push(_rotCCW8(df));
+    leftFade.push(_rotCW8(df));
   }
-  return { scrollArrowDown: downArrow, scrollArrowUp: upArrow, scrollArrowDownFade: downFade, scrollArrowUpFade: upFade };
+  return {
+    scrollArrowDown: downArrow, scrollArrowUp: upArrow,
+    scrollArrowRight: rightArrow, scrollArrowLeft: leftArrow,
+    scrollArrowDownFade: downFade, scrollArrowUpFade: upFade,
+    scrollArrowRightFade: rightFade, scrollArrowLeftFade: leftFade,
+  };
 }
 
 function _initBattleIdleSprites(romData, palette) {

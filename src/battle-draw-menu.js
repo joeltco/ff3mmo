@@ -119,6 +119,20 @@ function _drawBattleItemPanel(menuX) {
   if (battleSt.battleState === 'item-slide') slidePixel = inputSt.itemSlideDir * Math.min(battleSt.battleTimer / ITEM_SLIDE_MS, 1) * rightAreaW;
   _drawBattleItemList(menuX, rightAreaW, invPal, slidePixel, totalInvPages);
   _drawBattleItemCursors(menuX);
+  // Horizontal page indicators — same primitives + 250ms blink as the
+  // vertical scroll arrows on the pause inv / spell list. Left appears
+  // when there's a page behind the current, right when there's one
+  // ahead. Equip page (0) counts as a page so the left arrow shows on
+  // inv page 1 too — "L = back to weapons". v1.7.704.
+  const totalPages = 1 + totalInvPages;
+  const blink = (Math.floor(Date.now() / 250) & 1) === 0;
+  const arrowY = HUD_BOT_Y + 12 + Math.floor((3 * 14 - 8) / 2);
+  if (blink && inputSt.itemPage > 0 && ui.scrollArrowLeft) {
+    ui.ctx.drawImage(ui.scrollArrowLeft, menuX, arrowY);
+  }
+  if (blink && inputSt.itemPage < totalPages - 1 && ui.scrollArrowRight) {
+    ui.ctx.drawImage(ui.scrollArrowRight, menuX + rightAreaW - 8, arrowY);
+  }
 }
 
 // ── Spell panel ───────────────────────────────────────────────────────────

@@ -18,6 +18,47 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.704 — 2026-05-25
+
+### Battle item menu — fix off-by-13 paging + add page arrows
+
+**Bug.** Pre-fix, `input-handler.js` imported `INV_SLOTS` from
+`inventory.js` (= 16, the bag cap) and used it for the battle item
+menu's navigation + swap math:
+```
+const dstIdx = (inputSt.itemPage - 1) * INV_SLOTS + inputSt.itemPageCursor;
+```
+But `battle-draw-menu.js` uses a LOCAL `INV_SLOTS = 3` (rows per page).
+So the draw side rendered pages of 3 items but the input math indexed
+slot 16+ on page 2, 32+ on page 3, etc. — totally divorced from the
+visible rows. Effectively bricked every item past the first page once
+v1.7.689 bumped `INV_CAP` to 16. (Pre-v1.7.689 with `INV_CAP = 8` it
+was still wrong but masked because users rarely had >3 items.)
+
+Fix: introduce a `BATTLE_INV_ROWS = 3` literal at the top of
+`input-handler.js` (matches the draw-side const) and replace every
+`INV_SLOTS` use in the battle-item path. The bag-cap import was
+otherwise unused in this file — dropped.
+
+**Page arrows.** Horizontal page indicator arrows now blink at the
+left + right edges of the battle item panel when more pages exist —
+mirrors the existing vertical `scrollArrowUp/Down` blink convention
+(250 ms cadence). New `ui.scrollArrowLeft` / `scrollArrowRight` derive
+from the same ROM tile as the up/down arrows via 90° canvas rotation
+(`_rotCW8` / `_rotCCW8` in `sprite-init.js`) — one ROM extraction, four
+orientations. Fade variants generated to match.
+
+Files:
+- `src/input-handler.js` — drop `INV_SLOTS` import; new `BATTLE_INV_ROWS`
+  literal; replace 5 sites in the battle item / equip nav + swap math.
+- `src/sprite-init.js` — `_rotCW8` / `_rotCCW8` helpers; `initScrollArrows`
+  returns `scrollArrowLeft`/`Right` + fade arrays alongside up/down.
+- `src/ui-state.js` — new `ui.scrollArrowLeft` / `Right` (+Fade) slots.
+- `src/boot.js` — wire the new arrows from `initScrollArrows`.
+- `src/battle-draw-menu.js` — draw the left/right arrows in
+  `_drawBattleItemPanel`, blink-gated, conditional on
+  `itemPage > 0` / `itemPage < totalPages - 1`.
+
 ## 1.7.703 — 2026-05-25
 
 ### Private chat tab label becomes the partner's name
