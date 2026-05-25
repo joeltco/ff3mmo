@@ -124,6 +124,13 @@ export function startBattle() {
   resetBattleVars();
   battleSt.enemyHP = BOSS_MAX_HP;
   playSFX(SFX.EARTHQUAKE);
+  // Seed party + room allies AT battle inception so they're on the field
+  // during the intro instead of fading in after the player's first action.
+  // `initial: true` keeps the state machine on 'roar-hold' and pushes
+  // allies with `fadeStep = 0` (instantly visible). Round-boundary
+  // reconcile + late-joiners still run at confirm-pause via the no-arg
+  // call. v1.7.686 (party-system audit).
+  tryJoinPlayerAlly({ initial: true });
 }
 
 export function executeBattleCommand(index) {
@@ -274,7 +281,15 @@ function _updateBattleOpening() {
 
 // ── Ally join ──────────────────────────────────────────────────────────────
 
-export function tryJoinPlayerAlly() {
+// `opts.initial = true` — called from `startBattle()` instead of from a
+// round-boundary. Allies are pushed visible (`fadeStep = 0`) so they show
+// up DURING the battle intro instead of fading in after the first turn.
+// State machine is NOT touched (the intro keeps playing) and the turn
+// queue isn't rebuilt (it gets built naturally when the first action
+// confirms). Round-boundary calls (no opts) keep the existing fade-in
+// animation + state transition. v1.7.686.
+export function tryJoinPlayerAlly(opts) {
+  const initial = !!(opts && opts.initial);
   const loc = getPlayerLocation();
   const pvpNames = new Set([
     pvpSt.pvpOpponent && pvpSt.pvpOpponent.name,
@@ -304,6 +319,15 @@ export function tryJoinPlayerAlly() {
       }
     }
   }
+  // Local helper — push an ally and, when called at battle inception,
+  // mark them fully-visible so they don't pop in through the fade after
+  // the intro finishes.
+  const pushAlly = (src) => {
+    const a = generateAllyStats(src);
+    if (initial) a.fadeStep = 0;
+    battleSt.battleAllies.push(a);
+    return a;
+  };
 
   if (battleSt.battleAllies.length >= 3) return false;
 
@@ -317,15 +341,15 @@ export function tryJoinPlayerAlly() {
     if (battleSt.battleAllies.some(a => a.name === name)) continue;
     const member = getOnlinePlayerByName(name);   // live profile only — room-agnostic
     if (!member) continue;
-    battleSt.battleAllies.push(generateAllyStats(member));
+    pushAlly(member);
     partyJoined = true;
     // Wire-PvP parity — mirror this party member onto the opponent's roster
     // (see docs/MULTIPLAYER-AUDIT-2026-05-15.md #28).
     if (pvpSt.isWirePVP && pvpSt.isPVPBattle) sendNetPVPAllyJoin(_wireAllyProfile(member));
   }
   if (battleSt.battleAllies.length >= 3) {
-    if (partyJoined) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
-    return false;
+    if (partyJoined && !initial) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; return true; }
+    return partyJoined;
   }
   // ── Wire-PvP ally fill (unchanged — lockstep-critical) ───────────────
   // Both clients must roll identically, so this stays a deterministic
@@ -345,14 +369,14 @@ export function tryJoinPlayerAlly() {
     }
     const pickIdx = Math.floor(rand() * eligible.length);
     const picked = eligible[pickIdx];
-    battleSt.battleAllies.push(generateAllyStats(picked));
+    pushAlly(picked);
     // Relay the raw ally profile so the partner runs their own
     // generateAllyStats and adds a matching `pvpEnemyAllies` cell.
     // See docs/MULTIPLAYER-AUDIT-2026-05-15.md #18.
     if (pvpSt.isPVPBattle && picked && picked.name) {
       sendNetPVPAllyJoin(_wireAllyProfile(picked));
     }
-    battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
+    if (!initial) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; }
     return true;
   }
 
@@ -371,11 +395,11 @@ export function tryJoinPlayerAlly() {
     if (!p || !p.name) continue;
     if (battleSt.battleAllies.some(a => a.name === p.name)) continue;
     if (pvpNames.has(p.name)) continue;
-    battleSt.battleAllies.push(generateAllyStats(p));
+    pushAlly(p);
     roomJoined = true;
   }
   if (partyJoined || roomJoined) {
-    battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0;
+    if (!initial) { battleSt.battleState = 'ally-fade-in'; battleSt.battleTimer = 0; }
     return true;
   }
   return false;

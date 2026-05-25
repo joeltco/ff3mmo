@@ -17,7 +17,11 @@ const TILE_SIZE = 16;
 
 // Injected at boot
 let _resetBattleVars = () => {};
-export function initBattleEncounter({ resetBattleVars }) { _resetBattleVars = resetBattleVars; }
+let _tryJoinPlayerAlly = () => false;
+export function initBattleEncounter({ resetBattleVars, tryJoinPlayerAlly }) {
+  _resetBattleVars = resetBattleVars;
+  _tryJoinPlayerAlly = tryJoinPlayerAlly;
+}
 
 // Resolve the encounter zone for the player's current position. Single source
 // for both the step-threshold (zone.rate) in tickRandomEncounter and the
@@ -147,6 +151,9 @@ export function startChestMimic() {
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
+  // Seed party + room allies AT battle inception — see startBattle()
+  // in battle-update.js for the rationale. v1.7.686.
+  _tryJoinPlayerAlly({ initial: true });
 }
 
 export function startRandomEncounter() {
@@ -191,5 +198,9 @@ export function startRandomEncounter() {
   battleSt.battleState = 'flash-strobe';
   battleSt.battleTimer = 0;
   playSFX(SFX.BATTLE_SWIPE);
+  // Same as startChestMimic — seed party + room allies at inception so they
+  // appear on-field during the intro instead of fading in after the first
+  // action. v1.7.686 (party-system audit).
+  _tryJoinPlayerAlly({ initial: true });
 }
 

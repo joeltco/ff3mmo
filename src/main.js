@@ -37,7 +37,7 @@ import { initSpellCast } from './spell-cast.js';
 import { addItem, setPlayerInventory } from './inventory.js';
 import { saveSlots } from './save-state.js';
 import { _nesNameToString } from './text-utils.js';
-import { resetBattleVars, isTeamWiped, executeBattleCommand } from './battle-update.js';
+import { resetBattleVars, isTeamWiped, executeBattleCommand, tryJoinPlayerAlly } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
 import { connectNet } from './net.js';
 import { ps, getEffectiveStats, getShieldEvade, getJobLevel } from './player-stats.js';
@@ -244,7 +244,7 @@ export async function loadROM(arrayBuffer) {
   initTitleAssets(rawBytes);
   initMapLoading(rawBytes);
   initSpellCast({ processNextTurn });
-  initBattleEncounter({ resetBattleVars });
+  initBattleEncounter({ resetBattleVars, tryJoinPlayerAlly });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
   initInputHandler({ executeBattleCommand, startPVPBattle });

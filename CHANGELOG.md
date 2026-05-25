@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.686 — 2026-05-24
+
+### Party + room allies seed AT battle start (not after turn 1)
+
+Pre-fix: `tryJoinPlayerAlly()` only ran from `_updateBattleMenuConfirm`
+(the confirm-pause state right after the player picked their first
+action). Allies didn't show up on the field until the player had
+already taken a turn alone. Felt wrong — party members are supposed to
+be with you from the jump.
+
+`tryJoinPlayerAlly(opts)` now takes an `{ initial: true }` flag:
+- Pushed allies start at `fadeStep = 0` (instantly visible, no fade-in)
+- State machine is NOT touched (battle intro `roar-hold` /
+  `flash-strobe` keeps playing without interruption)
+- Turn queue isn't rebuilt (gets built naturally on first action)
+
+Called from:
+- `startBattle()` (`src/battle-update.js`) — story / scripted battles
+- `startRandomEncounter()` (`src/battle-encounter.js`) — overworld /
+  dungeon random encounters
+- `startChestMimic()` (`src/battle-encounter.js`) — chest-tier monster
+  loot
+
+Round-boundary reconcile + late-joiner fill (no opts) is unchanged —
+new allies still fade in on subsequent rounds as before.
+
+`tryJoinPlayerAlly` injected into `battle-encounter.js` via the
+existing `initBattleEncounter({...})` DI seam (avoids circular import).
+
 ## 1.7.685 — 2026-05-24
 
 ### Roster party badge — move into box interior
