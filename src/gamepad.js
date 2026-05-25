@@ -43,15 +43,30 @@ const DIR_TO_KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right:
 const _prevBtn = {};
 // Per-direction repeat timer. value = ms remaining until next pulse; -1 = not held.
 const _dirRepeat = { up: -1, down: -1, left: -1, right: -1 };
-// Did the user touch a gamepad yet this session? Used by a future HUD chip.
+// Did a gamepad ever connect this session? Skipping `navigator.getGamepads()`
+// when false saves 60 syscalls/sec on devices that don't have a pad — the
+// API does an IPC round-trip on some engines (Silk on Fire tablets stalled
+// in a tight poll loop pre-v1.7.683 freeze report). Chrome's lazy-enable
+// also means `getGamepads()` returns all-null until first input fires
+// `gamepadconnected` anyway — there's nothing to find until the listener
+// has fired at least once.
 let _gamepadEverSeen = false;
+// Hard-disable the poll if `navigator.getGamepads()` ever throws (Silk
+// parental-controls / permissions-policy denial). Set once, never reset.
+let _gamepadPollDisabled = false;
 
 export function isGamepadActive() { return _gamepadEverSeen; }
 
 function _activeGamepad() {
+  if (_gamepadPollDisabled) return null;
   // navigator.getGamepads() returns a sparse array — some slots null. First
   // connected pad wins. (Multi-pad would be a separate routing decision.)
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  // Wrapped in try/catch — Silk on Fire HD Kids tablets can throw if the
+  // permissions policy blocks the API.
+  let pads;
+  try { pads = navigator.getGamepads ? navigator.getGamepads() : []; }
+  catch { _gamepadPollDisabled = true; return null; }
+  if (!pads) return null;
   for (let i = 0; i < pads.length; i++) {
     const p = pads[i];
     if (p && p.connected) return p;
@@ -80,6 +95,14 @@ function _dirState(pad) {
 }
 
 export function pollGamepad(dt) {
+  // Fast path: if no gamepad has ever connected this session, skip the
+  // `navigator.getGamepads()` syscall entirely. The `gamepadconnected`
+  // listener flips `_gamepadEverSeen` to true on first input — at that
+  // point we start polling. This keeps the per-tick hot path empty for
+  // the ~95% of players without a controller (Fire HD Kids freeze
+  // report — Silk's getGamepads round-trips through an IPC permission
+  // check that stalled the tick worker).
+  if (!_gamepadEverSeen) return;
   const pad = _activeGamepad();
   if (!pad) {
     // No pad — clear any sticky direction repeats so a disconnect mid-hold
@@ -90,7 +113,6 @@ export function pollGamepad(dt) {
     }
     return;
   }
-  _gamepadEverSeen = true;
 
   // ── Action buttons: edge-detect press, write into keys map ──────────────
   // We don't clear on release — match keyboard semantics where the consumer

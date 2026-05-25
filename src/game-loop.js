@@ -259,7 +259,10 @@ function gameLoop() {
 
   // Poll gamepad → keys map (input-handler.js). Runs even on title/chat so
   // the player can navigate the title screen with a controller. v1.7.681.
-  pollGamepad(dt);
+  // Wrapped in try/catch — pollGamepad self-disables on the first throw,
+  // but the catch here protects the loop from any other failure mode that
+  // would otherwise freeze the engine (v1.7.683 Fire HD Kids freeze).
+  try { pollGamepad(dt); } catch { /* gamepad layer self-heals */ }
 
   if (titleSt.state !== 'done') {
     updateTitle(dt); drawTitle(ctx, waterSt.tick); drawHUD();

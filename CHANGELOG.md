@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.683 — 2026-05-24
+
+### Gamepad poll fast-path + freeze guard (Fire HD Kids)
+
+Lucas's Fire HD Kids tablet (Silk 146 / Android 11 / KFRAWI) was
+freezing after the v1.7.681 gamepad deploy with NO `CLIENT ERROR`
+posts — i.e. main thread blocking, not throwing. Most likely culprit:
+`navigator.getGamepads()` called 60x/sec in `pollGamepad`. On Silk
+that API can round-trip through an IPC permission check on each call,
+and with parental-controls overlay layered on top, the syscall stalls.
+
+Three guards:
+- **`pollGamepad` no-ops until `gamepadconnected` ever fires** — saves
+  60 syscalls/sec for the ~95% of players without a controller.
+  Matches Chrome's lazy-enable behavior anyway.
+- **`navigator.getGamepads()` wrapped in try/catch + hard-disable on
+  throw** — if Silk's permission policy denies it, the module
+  self-deactivates instead of throwing every tick.
+- **`pollGamepad(dt)` call site in `gameLoop()` wrapped in
+  try/catch** — so any other gamepad-related failure can't kill the
+  loop.
+
+Behavior for players WITH a gamepad: identical to v1.7.681 — first
+button press fires `gamepadconnected`, poll starts, all input routes
+through the keys map as before.
+
 ## 1.7.682 — 2026-05-24
 
 ### Fire HD Kids tablet playability triage
