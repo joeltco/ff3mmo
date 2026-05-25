@@ -534,7 +534,25 @@
       caret-color: transparent;
       pointer-events: none;
     }
+    /* v1.7.730 — pre-hide rule for returning-this-tab visitors. The tiny
+       inline script below adds `gate-passed` to <html> before body parse if
+       sessionStorage proves the user already tapped the splash this session.
+       Without this, the gate flashes visible on reload before the module's
+       unlockGate() runs. */
+    html.gate-passed #pw-gate { display: none !important; }
   </style>
+  <script>
+    // v1.7.730 — fires synchronously during head parse, before any module
+    // loads. Hides the splash for returning-this-tab visitors so they don't
+    // re-see it on every reload. Fresh visitors and new tabs still see the
+    // tap-to-enter gate, which is required for the user-gesture storage rule
+    // (see [[ff3mmo-storage-gesture-rule]]).
+    try {
+      if (sessionStorage.getItem('ff3_auth') === '1') {
+        document.documentElement.classList.add('gate-passed');
+      }
+    } catch (_) { /* sessionStorage blocked → safer to show the gate */ }
+  </script>
 </head>
 <body>
   <!-- Auth screen (login / register) -->

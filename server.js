@@ -24,9 +24,16 @@ const GATE_PASSWORD = (() => {
 })();
 // Escape for safe embedding inside a single-quoted JS string literal.
 const GATE_PASSWORD_JS = GATE_PASSWORD.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-// Hide the gate from the first paint when disabled — the unlock script is a
-// deferred module, so without this an open server would flash the gate.
-const GATE_DISPLAY = GATE_PASSWORD ? '' : 'display:none';
+// v1.7.730 — gate is now ALWAYS visible from first paint (`{{GATE_DISPLAY}}`
+// always empty). Pre-fix this was the OPPOSITE: open-beta servers (GATE off)
+// pre-hid the gate via inline `display:none` and relied on the deferred
+// `<script type="module">` to un-hide it. The module's imports take real time
+// to fetch, so users saw a few seconds of the underlying body content (h1,
+// mobile controls deck) before the splash overlay finally appeared. Now the
+// HTML renders the gate visible and `index.html`'s tiny inline head script
+// pre-hides it ONLY for returning visitors (sessionStorage flag set this
+// tab), which is sync and runs before the body parses.
+const GATE_DISPLAY = '';
 console.log('Gate: ' + (GATE_PASSWORD ? 'ON' : 'OFF (open)'));
 
 const MIME = {
