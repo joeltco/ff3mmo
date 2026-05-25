@@ -24,7 +24,7 @@ import { ps } from './player-stats.js';
 import { hudSt } from './hud-state.js';
 import { hasItem, removeItem } from './inventory.js';
 import { queueBattleMsg } from './battle-msg.js';
-import { showMsgBox, forceCloseMsgBox } from './message-box.js';
+import { showMsgBoxPrompt, forceCloseMsgBox } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { playSFX, SFX } from './music.js';
 import { clearAll as clearAllStatus } from './status-effects.js';
@@ -39,7 +39,11 @@ export const FENIX_RISE_MS  = 450;   // death pose fades + live portrait rises
 const ANGEL_FLAP_MS         = 133;   // per-flap-frame cadence (8 NES frames)
 
 // "Use FenixDown? A:Yes B:No" — wraps to 2 lines at 16 chars (drawMsgBox). A/B
-// match the mobile deck (A→z, B→x; index.html) and keyboard (Z/X).
+// match the mobile deck (A→z, B→x; index.html) and keyboard (Z/X). Routed via
+// `showMsgBoxPrompt` (v1.7.687) so the universal modal msgbox handler in
+// movement.js#handleInput drives Yes/No → fenixConfirmYes/No directly — the
+// older path through `_battleInputHoldStates` stopped reaching us in v1.7.643
+// when the msgbox handler was promoted above handleBattleInput.
 const CONFIRM_TEXT = _nameToBytes('Use FenixDown? A:Yes B:No');
 
 // null = not reviving. Phases: 'dmg-hold' | 'death-anim' | 'confirm' | 'angel' | 'rise' | 'healnum'.
@@ -137,7 +141,11 @@ export function updateFenixRevive(dt) {
     if (hudSt.playerDeathTimer != null && hudSt.playerDeathTimer >= DEATH_TOTAL_MS) {
       _phase = 'confirm';
       _t = 0;
-      showMsgBox(CONFIRM_TEXT);   // A:Yes / B:No — handled in battle input
+      // Modal msgbox handler (movement.js#handleInput) routes Z → fenixConfirmYes
+      // and X → fenixConfirmNo once the prompt is in 'hold'. Single source for
+      // every yes/no prompt in the game — matches party-invite / trade /
+      // inventory-delete / locked-door.
+      showMsgBoxPrompt(CONFIRM_TEXT, fenixConfirmYes, fenixConfirmNo);
     }
   } else if (_phase === 'confirm') {
     // Idle — waits for fenixConfirmYes() / fenixConfirmNo() from input.

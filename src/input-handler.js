@@ -5,7 +5,6 @@ import { playSFX, SFX } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
 import { msgState, showMsgBox, dismissMsgBox } from './message-box.js';
-import { fenixRevivePhase, fenixConfirmYes, fenixConfirmNo } from './battle-fenix-revive.js';
 import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSelectMode, setChatScrollOffset, onChatKeyDown, pmSessionStep, focusPmSession } from './chat.js';
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, getHitWeapon, getJobLevelStatBonus } from './player-stats.js';
@@ -662,12 +661,12 @@ function _battleInputHoldStates() {
   const z = k['z'] || k['Z'];
   const clearZ = () => { k['z'] = false; k['Z'] = false; };
   if (battleSt.battleState === 'fenix-revive') {
-    // "Use FenixDown?" prompt — A (z) = Yes, B (x) = No. Only acts during the
-    // confirm phase; consumes input for the whole revive so nothing leaks.
-    if (fenixRevivePhase() === 'confirm' && msgState.state === 'hold') {
-      if (z) { clearZ(); fenixConfirmYes(); }
-      else if (k['x'] || k['X']) { k['x'] = false; k['X'] = false; fenixConfirmNo(); }
-    }
+    // Revive sub-FSM owns the battle. The "Use FenixDown?" Yes/No prompt is
+    // now a `showMsgBoxPrompt` (v1.7.687) — its Z/X are driven by the universal
+    // modal msgbox handler in movement.js#handleInput, which runs before this
+    // and returns early when a prompt is up, so we never see those keys here.
+    // For every other phase (dmg-hold / death-anim / angel / rise / healnum)
+    // we still swallow input so a stray Z/X can't pop a battle menu mid-revive.
     return true;
   }
   if (battleSt.battleState === 'roar-hold') {

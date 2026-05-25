@@ -18,6 +18,37 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.687 — 2026-05-24
+
+### FenixDown confirm prompt — freeze on YES (regression from v1.7.643)
+
+Player on-death auto-revive ("Use FenixDown? A:Yes B:No") froze the
+instant Z was pressed. Battle locked, no angel, no rise, no recovery.
+
+**Cause.** v1.7.643 promoted the universal msgbox handler in
+`movement.js#handleInput` to run BEFORE `handleBattleInput` with an
+early-return, so any modal msgbox owns Z/X. That handler dispatches
+yes/no prompts via `msgState.isPrompt` (set by `showMsgBoxPrompt`). The
+FenixDown confirm was a plain `showMsgBox` + a bespoke Z/X branch in
+`_battleInputHoldStates` (input-handler.js) — that branch is now
+unreachable, so `fenixConfirmYes()` never fired. The msgbox dismissed
+on Z but `_phase` stayed `'confirm'` forever; `updateFenixRevive`
+returns `true` every frame and seizes the FSM — total freeze.
+
+**Fix.** Switched the prompt to `showMsgBoxPrompt(CONFIRM_TEXT,
+fenixConfirmYes, fenixConfirmNo)`. The modal handler now drives Yes/No
+to the callbacks the same way it does for party-invite, trade,
+inventory-delete, and locked-door prompts. Dropped the dead bespoke
+branch in `_battleInputHoldStates`; kept the
+`battleState === 'fenix-revive' → return true` gate so stray Z/X during
+dmg-hold / death-anim / angel / rise / healnum can't pop a menu.
+
+Files:
+- `src/battle-fenix-revive.js` — `showMsgBox` → `showMsgBoxPrompt` at
+  the `death-anim → confirm` transition; import swap.
+- `src/input-handler.js` — removed dead confirm sub-block + the
+  now-unused fenix imports.
+
 ## 1.7.686 — 2026-05-24
 
 ### Party + room allies seed AT battle start (not after turn 1)
