@@ -131,6 +131,17 @@ function _resetPerMapState() {
 }
 
 function _loadDungeonFloor(mapId, returnX, returnY) {
+  // Capture the chamber-side `goLeft` for secret rooms BEFORE _resetPerMapState
+  // wipes `mapSt.falseWalls`. Pre-v1.7.690 the lookup ran after the reset, so
+  // `prevDest` was always null → secret rooms always rendered right-side even
+  // when entered from the left corridor. (`placeSecretPath` stashes
+  // `{mapId, goLeft}` in the chamber map's falseWalls; the data is correct,
+  // we just have to read it before clearing.)
+  let secretGoLeft = false;
+  if ((mapId === 1020 || mapId === 1021) && mapSt.falseWalls) {
+    const prevDest = [...mapSt.falseWalls.values()].find(d => d && d.mapId === mapId);
+    if (prevDest) secretGoLeft = !!prevDest.goLeft;
+  }
   _resetPerMapState();
   let result;
   // Inside a side-room map (locked / secret), keep `floorIndex` at whatever
@@ -144,15 +155,11 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
     floorIndex = mapSt.dungeonFloor;
     result = generateLockedRoomMap(romRaw, ((mapSt.dungeonSeed | 0) ^ mapId) | 0);
   } else if (mapId === 1020 || mapId === 1021) {
-    // Secret rooms — side flag encoded in the chamber-side falseWalls dest
-    // (stashed there by placeSecretPath). Default to right-side (goLeft=false)
-    // when re-loading the map without the corridor context.
+    // Secret rooms — `secretGoLeft` was captured above. Re-loading without
+    // chamber context (shouldn't happen — overworld-only saves + chamber is
+    // always the parent) falls back to right-side.
     floorIndex = mapSt.dungeonFloor;
-    const prevDest = mapSt.falseWalls
-      ? [...mapSt.falseWalls.values()].find(d => d && d.mapId === mapId)
-      : null;
-    const goLeft = prevDest ? !!prevDest.goLeft : false;
-    result = generateSecretRoomMap(romRaw, goLeft);
+    result = generateSecretRoomMap(romRaw, secretGoLeft);
   } else {
     floorIndex = mapId - 1000;
     mapSt.dungeonFloor = floorIndex;
