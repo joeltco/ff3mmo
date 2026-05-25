@@ -582,11 +582,15 @@
   </div>
 
   <!-- Password gate; server injects an inline display style to hide when disabled -->
+  <!-- Gate content arrives in the right mode at first paint. `{{GATE_SUB_TEXT}}`
+       and `{{GATE_INPUT_DISPLAY}}` are server-injected (server.js#GATE_*); the
+       module below still rewrites them for safety when the HTML is served
+       statically (no template substitution). v1.7.731. -->
   <div id="pw-gate" style="{{GATE_DISPLAY}}">
     <h2>FF3 MMO</h2>
     <p id="pw-tagline">&#9670; Beta &#9670;</p>
-    <p id="pw-sub">Beta password required.</p>
-    <input type="password" id="pw-input" placeholder="beta password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <p id="pw-sub">{{GATE_SUB_TEXT}}</p>
+    <input type="password" id="pw-input" style="{{GATE_INPUT_DISPLAY}}" placeholder="beta password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <button id="pw-submit">Enter</button>
     <div class="pw-err" id="pw-err"></div>
   </div>

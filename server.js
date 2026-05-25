@@ -34,6 +34,13 @@ const GATE_PASSWORD_JS = GATE_PASSWORD.replace(/\\/g, '\\\\').replace(/'/g, "\\'
 // pre-hides it ONLY for returning visitors (sessionStorage flag set this
 // tab), which is sync and runs before the body parses.
 const GATE_DISPLAY = '';
+// v1.7.731 — render the gate's content already in the right mode so an
+// open-beta server's first paint doesn't flash the closed-beta "Beta
+// password required." text + visible input box before the module rewrites
+// them. Each side is a template token resolved at request time, so the HTML
+// arrives at the browser already correct.
+const GATE_SUB_TEXT = GATE_PASSWORD ? 'Beta password required.' : 'Tap to enter.';
+const GATE_INPUT_DISPLAY = GATE_PASSWORD ? '' : 'display:none';
 console.log('Gate: ' + (GATE_PASSWORD ? 'ON' : 'OFF (open)'));
 
 const MIME = {
@@ -94,7 +101,9 @@ const httpServer = createServer(async (req, res) => {
       // payload as `[v{{VERSION}}]`. v1.7.627.
       .replaceAll('{{VERSION}}', version)
       .replaceAll('{{GATE_PASSWORD}}', GATE_PASSWORD_JS)
-      .replaceAll('{{GATE_DISPLAY}}', GATE_DISPLAY));
+      .replaceAll('{{GATE_DISPLAY}}', GATE_DISPLAY)
+      .replaceAll('{{GATE_SUB_TEXT}}', GATE_SUB_TEXT)
+      .replaceAll('{{GATE_INPUT_DISPLAY}}', GATE_INPUT_DISPLAY));
     // Cache-busting handshake — when the client's version-gate detects a
     // stale build it reloads with `?_v=<build>`. We respond with
     // `Clear-Site-Data: "cache"` so the browser drops every cached resource
