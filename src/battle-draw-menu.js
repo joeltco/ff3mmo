@@ -120,14 +120,20 @@ function _drawBattleItemPanel(menuX) {
   _drawBattleItemList(menuX, rightAreaW, invPal, slidePixel, totalInvPages);
   _drawBattleItemCursors(menuX);
   // Horizontal page indicators — same primitives + 250ms blink as the
-  // vertical scroll arrows on the pause inv / spell list. Left appears
-  // when there's a page behind the current, right when there's one
-  // ahead. Equip page (0) counts as a page so the left arrow shows on
-  // inv page 1 too — "L = back to weapons". v1.7.704.
+  // vertical scroll arrows on the pause inv / spell list. Arrows mean
+  // "more ITEMS in that direction" — the equip page (0) is NOT an item
+  // page, so:
+  //   - Right arrow: more pages ahead (itemPage < totalPages - 1).
+  //     Includes the equip→item1 transition (intuitive: "items live to
+  //     the right of weapons").
+  //   - Left arrow: more ITEM pages behind. Only shows from itemPage 2+
+  //     (item-to-item nav). On item page 1 there's nothing to the left
+  //     except the equip page, which doesn't count as "more items".
+  // v1.7.705.
   const totalPages = 1 + totalInvPages;
   const blink = (Math.floor(Date.now() / 250) & 1) === 0;
   const arrowY = HUD_BOT_Y + 12 + Math.floor((3 * 14 - 8) / 2);
-  if (blink && inputSt.itemPage > 0 && ui.scrollArrowLeft) {
+  if (blink && inputSt.itemPage >= 2 && ui.scrollArrowLeft) {
     ui.ctx.drawImage(ui.scrollArrowLeft, menuX, arrowY);
   }
   if (blink && inputSt.itemPage < totalPages - 1 && ui.scrollArrowRight) {
