@@ -348,12 +348,14 @@ function _drawRosterRow(p, i, panelTop) {
   }
 
   // Party badge — the black-magic school icon ($75 font glyph), recolored to a
-  // green theme, at the left of the name line for any roster player in your
-  // party. (AWJ font: color 1 = icon body, color 3 = highlight.)
+  // green theme, at the very top-left of the name box's INTERIOR (past the
+  // 8-px HUD chrome border) for any roster player in your party. v1.7.685 —
+  // pre-fix was at `+32 + 2` which painted on top of the box border. (AWJ
+  // font: color 1 = icon body, color 3 = highlight.)
   if (isInParty(p) && fadeStep < ROSTER_FADE_STEPS) {
     const partyPal = [0x0F, 0x1A, 0x0F, 0x2A];  // dark + bright green
     for (let s = 0; s < fadeStep; s++) { partyPal[1] = nesColorFade(partyPal[1]); partyPal[3] = nesColorFade(partyPal[3]); }
-    drawText(ui.ctx, HUD_RIGHT_X + 32 + 2, rowY + 8, new Uint8Array([0x75]), partyPal);
+    drawText(ui.ctx, HUD_RIGHT_X + 32 + 8, rowY + 8, new Uint8Array([0x75]), partyPal);
   }
 
   const panelLeft = HUD_RIGHT_X + 32 + 8;
