@@ -231,22 +231,30 @@ function _drawBattleSpellCursor(baseX) {
 
 // ── Battle menu (action selection + enemy name box) ───────────────────────
 
+// v1.7.729 — battle-menu visibility is now hide-list-driven, not allow-list.
+// Pre-fix `isMenu` was a huge per-state OR (`menu-open || target-select ||
+// player-slash || ...`); any newly-introduced battleState that wasn't patched
+// in silently blanked the menu (the [[ff3mmo-predicate-coverage]] pattern,
+// burned at v1.7.231 + v1.7.431 + several unreported gaps the audit found:
+// fenix-revive, pvp-dissolve). New default: menu is ON during every battle
+// state except the explicit pre-battle hide list. Newly added FSM states
+// inherit menu visibility for free.
+const _HIDE_MENU_STATES = new Set([
+  'none',          // not in battle
+  'roar-hold',     // BATTLE_ROAR intro message — menu hasn't appeared yet
+  'flash-strobe',  // post-roar swipe — menu still hidden
+]);
+
 function _battleMenuStates() {
   const bs = battleSt.battleState;
   const isSlide   = bs === 'enemy-box-expand' || bs === 'encounter-box-expand';
   const isAppear  = bs === 'boss-appear' || bs === 'monster-slide-in';
   const isFade    = bs === 'battle-fade-in';
-  const isMenu    = isFade || bs === 'menu-open' || bs === 'target-select' || bs === 'confirm-pause' ||
-    bs === 'attack-back' || bs === 'attack-fwd' || bs === 'player-slash' || bs === 'player-hit-show' ||
-    bs === 'player-damage-show' || bs === 'pre-monster-death' || bs === 'monster-death' || bs === 'defend-anim' ||
-    bs.startsWith('item-') ||
-    bs === 'magic-cast' || bs === 'magic-hit' ||
-    bs === 'run-success' || bs === 'run-fail' || bs === 'enemy-flash' ||
-    bs === 'enemy-attack' || bs === 'enemy-damage-show' || bs === 'poison-tick' || bs === 'poison-end-tick' || bs === 'pvp-second-windup' ||
-    bs === 'pvp-ally-appear' || bs === 'pvp-defend-anim' || bs === 'pvp-enemy-slash' ||
-    bs === 'pvp-enemy-magic-cast' || bs === 'pvp-enemy-magic-hit' ||
-    bs === 'pvp-opp-potion' || bs === 'pvp-opp-sw-throw' || bs === 'pvp-opp-sw-hit' ||
-    bs.startsWith('ally-') || bs === 'boss-dissolve';
+  // Menu is visible by default during ANY in-battle state — the only exclusions
+  // are the pre-menu intro states above, and the slide/appear states that are
+  // handled by their own draw branches (isSlide / isAppear render the sliding
+  // border without the menu contents).
+  const isMenu    = !_HIDE_MENU_STATES.has(bs) && !isSlide && !isAppear;
   const isVictory = isVictoryBattleState() || bs === 'victory-name-out' || bs === 'encounter-box-close' || bs === 'enemy-box-close';
   const isRunBox  = bs.startsWith('run-');
   const isClose   = bs === 'victory-box-close' || bs === 'encounter-box-close' || bs === 'enemy-box-close';
