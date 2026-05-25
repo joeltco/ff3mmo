@@ -462,18 +462,21 @@ registerCommand('party', 'Show your party + each member\'s online state', () => 
 registerCommand('disband', 'Dismiss your entire party (inviter only)', () => {
   // v1.7.720: always sends `party-disband` even if local list is empty —
   // server is authoritative. Pre-fix, a phantom server-side party with
-  // an empty client list was unreachable from this command.
+  // an empty client list was unreachable from this command. v1.7.724
+  // restored the original affirmative wording — local state is cleared
+  // and the send fired, so from the user's POV the party IS disbanded.
   disbandMyParty();
-  addChatMessage('* Disband sent to server', 'system');
+  addChatMessage('* You disbanded the party', 'system');
 });
 
 registerCommand('leave', 'Leave the party you\'re currently in', () => {
   // v1.7.720: always sends `party-leave` even if local list is empty —
-  // same drift-fix as /disband.
+  // same drift-fix as /disband. v1.7.724 restored the affirmative
+  // wording for the same reason.
   partyInviteSt.partyMembers.length = 0;
   partyInviteSt.partyMemberProfiles.clear();
   sendNetPartyLeave();
-  addChatMessage('* Leave sent to server', 'system');
+  addChatMessage('* You left the party', 'system');
 });
 
 registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (args) => {
