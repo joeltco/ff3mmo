@@ -28,6 +28,7 @@ import { _nameToBytes, drawLvHpRow } from './text-utils.js';
 import { pvpSt } from './pvp.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
+import { isInParty } from './party-invite.js';
 import { isFenixReviving, fenixReviveAllyIndex, fenixRevivePhase, fenixAngelFrame, fenixAngelProgress, fenixRiseProgress } from './battle-fenix-revive.js';
 import { getReviveAngelFrames } from './data/revive-angel-sprite.js';
 import { drawHudBox } from './hud-drawing.js';
@@ -278,6 +279,20 @@ function _drawAllyTexts(i, ally, rowY, healSparkleSet, ppx, ppy, weaponDraws) {
   for (let s = 0; s < ally.fadeStep; s++) namePal[3] = nesColorFade(namePal[3]);
   const nameBytes = _nameToBytes(ally.name);
   drawText(ui.ctx, HUD_RIGHT_X + HUD_RIGHT_W - 8 - measureText(nameBytes), rowY + 8, nameBytes, namePal);
+  // Green party badge ($75 glyph) — mirrors the roster row indicator so a
+  // partymate fighting alongside you carries the same identifier you saw
+  // on their roster row. v1.7.708. Same palette as roster.js#L356 — keep
+  // the two in sync. `isInParty` matches by name (the only fingerprint we
+  // have in `battleAllies`); fades with the ally's portrait fadeStep so
+  // late-joiners + ally-fade-in transitions look right.
+  if (isInParty(ally)) {
+    const partyPal = [0x0F, 0x1A, 0x0F, 0x2A];   // dark + bright green
+    for (let s = 0; s < ally.fadeStep; s++) {
+      partyPal[1] = nesColorFade(partyPal[1]);
+      partyPal[3] = nesColorFade(partyPal[3]);
+    }
+    drawText(ui.ctx, HUD_RIGHT_X + 32 + 8, rowY + 8, new Uint8Array([0x75]), partyPal);
+  }
   const panelLeft = HUD_RIGHT_X + 32 + 8;
   drawLvHpRow(ui.ctx, panelLeft, HUD_RIGHT_X + HUD_RIGHT_W - 8, rowY + 16, ally.level || 1, ally.hp, ally.maxHP, ally.fadeStep);
   const dn = getAllyDamageNums()[i];
