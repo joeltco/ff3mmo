@@ -451,6 +451,23 @@ export async function handleAPI(req, res) {
 
   // POST /api/client-error — log client-side errors to pm2 logs. Unauthed;
   // rate-limited so a malicious client can't flood pm2 storage.
+  //
+  // Stale-cache rescue (v1.7.719): when the incoming error is a [BOOT ...]
+  // class — fired from the early `window.addEventListener('error')` reporter
+  // that runs before any module evaluates — it almost always means the
+  // browser is serving a cached `index.html` from an obsolete version (the
+  // smoke test would have caught a true new-code boot error before deploy).
+  // The version-bust gate in current `index.html` can't help because the
+  // cached HTML's `BUILD` literal matches the cached `ff3_build` localStorage
+  // value (both stale), so no reload fires. We respond with
+  // `Clear-Site-Data: "cache"` to purge the browser's HTTP cache for this
+  // origin — on the next page load the browser hits the server, gets fresh
+  // HTML with the new `BUILD`, the version-bust gate sees the mismatch
+  // (cached localStorage vs fresh HTML BUILD), and the user is unstuck.
+  // Scope = "cache" only, NOT "storage" — we never want to clear the
+  // user's IndexedDB ROM cache or localStorage save slots. Mobile Firefox
+  // (the browser that ignores `Cache-Control: no-store`) does honor
+  // `Clear-Site-Data` on POST responses.
   if (path === '/api/client-error' && req.method === 'POST') {
     if (!_bucketAllow(_errorBuckets, ip, ERROR_CAPACITY, ERROR_REFILL_PS)) {
       res.writeHead(429); res.end(); return true;
@@ -458,7 +475,9 @@ export async function handleAPI(req, res) {
     const body = await readBody(req);
     const ctxStr = body.ctx ? '\n  ctx: ' + JSON.stringify(body.ctx) : '';
     console.error('[CLIENT ERROR]', body.msg, ctxStr, body.stack ? '\n' + body.stack : '');
-    res.writeHead(204); res.end();
+    const isBootError = typeof body.msg === 'string' && body.msg.indexOf('[BOOT') === 0;
+    const headers = isBootError ? { 'Clear-Site-Data': '"cache"' } : undefined;
+    res.writeHead(204, headers); res.end();
     return true;
   }
 

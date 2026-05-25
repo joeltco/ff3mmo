@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.719 — 2026-05-25
+
+### Stale-cache rescue via `Clear-Site-Data` on BOOT ERROR reports
+
+Prod was logging repeated `[BOOT ERROR] can't access lexical declaration '_firstGestureSeen' before initialization` from a mobile Firefox client. That symbol was added in v1.7.622 and removed in v1.7.624 — the error is firing from cached HTML that's three weeks stale. Mobile Firefox ignores `Cache-Control: no-store, no-cache, must-revalidate` (it has its own offline / strict-tracking heuristics), so the browser keeps serving the obsolete `index.html` out of its own cache forever. The version-bust gate inside that obsolete HTML can't help — it reads its own embedded `BUILD = 'v1.7.622'` literal and compares to localStorage `ff3_build = 'v1.7.622'`. **Match. No reload.** The user is stuck on three-week-old code with no path back to current.
+
+The early error reporter (also in the stale HTML, also from v1.7.622) does fire `POST /api/client-error` when the TDZ throws. We hijack that signal: when `body.msg` starts with `[BOOT`, the response carries `Clear-Site-Data: "cache"`. Browsers (including mobile Firefox) purge their HTTP cache for the origin on that header, even from a POST response. Next page load fetches fresh `index.html`, the cache-bust gate sees the new `BUILD` literal, and the user is unstuck on a single round-trip.
+
+Scope is `"cache"` only — never `"storage"`. We never want to nuke the IndexedDB ROM cache or localStorage save slots. Just HTTP cache.
+
+Non-boot client errors (runtime errors, freeze-watchdog reports) keep the previous behavior: 204 with no Clear-Site-Data, so a transient runtime hiccup doesn't force the user to re-download megabytes.
+
 ## 1.7.718 — 2026-05-25
 
 ### Status sprite — diagnostic logging on roster row
