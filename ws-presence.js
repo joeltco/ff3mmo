@@ -113,6 +113,30 @@ for (const row of partyLoadAll()) {
   _partyMemberships.set(row.memberUserId, row.inviterUserId);
 }
 
+// "Is this user in any party right now?" — member of someone's party OR
+// inviter with members. Used to derive the `inParty` profile flag that
+// goes in every wire-shaped profile (hello snapshot, player-join,
+// player-update) so partymate clients can disable the roster "Party"
+// menu BEFORE the user tries to invite a partied target (server still
+// enforces with `self-busy` / `busy` rejects as defense). v1.7.711.
+function _isUserInParty(userId) {
+  if (_partyMemberships.has(userId)) return true;
+  for (const inviterId of _partyMemberships.values()) {
+    if (inviterId === userId) return true;
+  }
+  return false;
+}
+
+// Broadcast a player-update with the user's current `inParty` flag.
+// Call after every `_partyMemberships.set/.delete` so peers' roster
+// menus refresh in real time. Reuses the existing player-update wire
+// shape — no new handler needed on the client (`_onlinePlayers` merges
+// `msg.fields` already).
+function _broadcastInPartyChange(userId) {
+  const inParty = _isUserInParty(userId) ? 1 : 0;
+  _broadcast({ type: 'player-update', userId, fields: { inParty } });
+}
+
 // Returns every userId in the same party as `userId` — the inviter (if
 // `userId` is a member), every peer member under the same inviter, and any
 // members `userId` themselves invited. Excludes `userId`. Used by the hello
@@ -443,7 +467,13 @@ function _snapshotPayload(excludeUserId) {
   for (const [uid, entry] of _connected) {
     if (uid === excludeUserId) continue;
     if (!entry.helloed) continue;
-    players.push({ userId: uid, ...entry.profile, loc: entry.loc });
+    // `inParty` is server-derived so clients can't fake it (and so the
+    // roster menu can disable "Party" for partied targets before the user
+    // even tries — server enforces with self-busy / busy fallback). v1.7.711.
+    players.push({
+      userId: uid, ...entry.profile, loc: entry.loc,
+      inParty: _isUserInParty(uid) ? 1 : 0,
+    });
     seen.add(uid);
   }
   // Shadow entries — users who were online before the last server restart
@@ -453,7 +483,10 @@ function _snapshotPayload(excludeUserId) {
   for (const [uid, shadow] of _shadows) {
     if (uid === excludeUserId) continue;
     if (seen.has(uid)) continue;
-    players.push({ userId: uid, ...shadow.profile, loc: shadow.loc });
+    players.push({
+      userId: uid, ...shadow.profile, loc: shadow.loc,
+      inParty: _isUserInParty(uid) ? 1 : 0,
+    });
   }
   return { type: 'snapshot', players };
 }
@@ -508,7 +541,10 @@ function _handleMessage(entry, msg) {
       if (!wasHelloed) {
         _broadcast({
           type: 'player-join',
-          player: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+          player: {
+            userId: entry.userId, ...entry.profile, loc: entry.loc,
+            inParty: _isUserInParty(entry.userId) ? 1 : 0,
+          },
         }, entry.userId);
         // Re-establish persistent party relationships (v1.7.595). If this
         // user has any party-mates in `_partyMemberships` (either as a
@@ -822,9 +858,17 @@ function _handleMessage(entry, msg) {
         _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'offline' });
         return;
       }
-      // One-party-per-player — reject immediately if B is already a member.
-      // B's client never sees the prompt; A gets a 'busy' reason back so
-      // the standard cooldown applies + the user knows why it failed.
+      // One-party-per-player — reject if either side is already a member of
+      // someone's party. Target check protects B from double-membership;
+      // INVITER check (added v1.7.711) prevents the cascading-party bug
+      // where Bob (member of Alice's party) invites Carol → Bob ends up
+      // both Alice's member AND Carol's inviter, leaving the topology
+      // inconsistent. A gets `self-busy` so the client can surface
+      // "You're already in a party" specifically.
+      if (_partyMemberships.has(entry.userId)) {
+        _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'self-busy' });
+        return;
+      }
       if (_partyMemberships.has(targetUserId)) {
         _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'busy' });
         return;
@@ -859,6 +903,10 @@ function _handleMessage(entry, msg) {
       if (accept) {
         _partyMemberships.set(entry.userId, challengerId);
         partyAddMember(entry.userId, challengerId);    // persist (v1.7.595)
+        // Broadcast inParty=1 for both joiner and inviter so peer rosters
+        // disable their "Party" menu against either of them. v1.7.711.
+        _broadcastInPartyChange(entry.userId);
+        _broadcastInPartyChange(challengerId);
       }
       _send(challenger.ws, {
         type:    'party-invite-result',
@@ -918,6 +966,9 @@ function _handleMessage(entry, msg) {
       const dismissedName = dismissedPeer?.profile?.name || '';
       _partyMemberships.delete(memberUserId);
       partyRemoveMember(memberUserId);    // persist (v1.7.595)
+      _broadcastInPartyChange(memberUserId);
+      // Inviter's `inParty` may flip off if that was their last member.
+      _broadcastInPartyChange(entry.userId);
       // Tell remaining party-mates (inviter + other members) the dismissed
       // member is gone so their local rosters stay in sync.
       _broadcastPartyMemberLeft(entry.userId, memberUserId, dismissedName);
@@ -947,6 +998,8 @@ function _handleMessage(entry, msg) {
       const inviterName = entry.profile?.name || '';
       for (const memberId of memberIds) _partyMemberships.delete(memberId);
       partyRemoveByInviter(entry.userId);   // persist (v1.7.595)
+      _broadcastInPartyChange(entry.userId);          // inviter no longer in party
+      for (const memberId of memberIds) _broadcastInPartyChange(memberId);
       for (const memberId of memberIds) {
         const peer = _connected.get(memberId);
         if (!peer || !peer.helloed) continue;
@@ -968,6 +1021,8 @@ function _handleMessage(entry, msg) {
       if (inviterId == null) return;
       _partyMemberships.delete(entry.userId);
       partyRemoveMember(entry.userId);    // persist (v1.7.595)
+      _broadcastInPartyChange(entry.userId);
+      _broadcastInPartyChange(inviterId);   // may have been the last member
       _broadcastPartyMemberLeft(inviterId, entry.userId, entry.profile?.name || '');
       return;
     }

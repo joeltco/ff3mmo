@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.711 — 2026-05-25
+
+### One-party-per-player — enforced both sides + visible in roster menu
+
+**Server.** `case 'party-invite'` was only rejecting if the TARGET was
+already in a party — never the INVITER. So a member could chain new
+parties: Alice → Bob accepts (Bob is Alice's member), Bob → Carol
+accepts (Bob is now Carol's inviter AND Alice's member). Cascading
+broken topology. Added an inviter-side check that returns the new
+`self-busy` reason; client surfaces "Already in a party" instead of
+generic `busy`.
+
+**Profile field.** New server-derived `inParty: 0|1` flag in every
+profile-shape payload (snapshot, player-join, dedicated
+`_broadcastInPartyChange` after every `_partyMemberships.set/.delete`).
+Server is the source of truth — clients can't fake it (not in
+`_normalizeProfileField`). `_isUserInParty(uid)` checks both member
+(`_partyMemberships.has`) and inviter (any value in
+`_partyMemberships.values()`).
+
+**Client.** Roster menu now shows a dimmed "InParty" label (NES `$10`
+gray) for any target whose `inParty=1` AND who isn't in YOUR party.
+Selecting it prints "<Name> in another party" instead of attempting
+the invite. Existing "Cancel" / "Dismiss" labels still take precedence
+when applicable.
+
+**Defense in depth.** Server's invite-time rejects (`busy` for target,
+`self-busy` for inviter) remain so a misbehaving / stale client can't
+slip an invite through.
+
+Files:
+- `ws-presence.js` — `_isUserInParty(uid)` +
+  `_broadcastInPartyChange(uid)` helpers; `inParty` field on every
+  profile broadcast (`_snapshotPayload`, `player-join`); inviter check
+  in `case 'party-invite'`; broadcast calls in `party-invite-response`
+  accept / `party-dismiss` / `party-disband` / `party-leave`.
+- `src/party-invite.js` — `setNetPartyResultHandler` handles
+  `self-busy`; `cancelPartyInvite('self-busy')` → "Already in a
+  party".
+- `src/input-handler.js` — `_rosterMenuPartyAction` refuses with
+  "<Name> in another party" if `target.inParty` and not in my party.
+- `src/roster.js` — `drawRosterMenu` derives `targetInOtherParty`,
+  dim-renders the "InParty" label with NES `$10` palette.
+
 ## 1.7.710 — 2026-05-25
 
 ### Party members pin to top of roster — strangers scroll-bumped first

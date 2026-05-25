@@ -526,17 +526,27 @@ export function drawRosterMenu() {
     const inviting  = isInvitingTarget(inputSt.rosterMenuTarget);
     const inParty   = isInParty(inputSt.rosterMenuTarget);
     const trading   = isTradingWith(inputSt.rosterMenuTarget);
+    // Target already in someone else's party? Server-derived `inParty=1`
+    // (v1.7.711). Distinct from MY-party-membership: `inParty` (line above)
+    // = "in MY party", `targetInOtherParty` = "in ANY party, not mine".
+    // Surface as a dimmed "InParty" label so users see WHY the option is
+    // unselectable, rather than getting a server-side "busy" rejection
+    // after the attempt.
+    const tgt = inputSt.rosterMenuTarget;
+    const targetInOtherParty = !!(tgt && tgt.inParty && !inParty);
     for (let i = 0; i < ROSTER_MENU_ITEMS.length; i++) {
       let label = ROSTER_MENU_ITEMS[i];
+      let pal = textPal;
       if (label === 'Battle' && searching) label = 'Cancel';
       // Party: 'Cancel' mid-invite, 'Dismiss' once they're a member,
-      // 'Party' otherwise. Single source — stashed target carries through
-      // the menu fade-out, same as Battle. v1.7.235.
+      // 'InParty' (dimmed) if they're already in someone else's party,
+      // 'Party' otherwise.
       else if (label === 'Party' && inviting) label = 'Cancel';
       else if (label === 'Party' && inParty)  label = 'Dismiss';
+      else if (label === 'Party' && targetInOtherParty) { label = 'InParty'; pal = [0x0F, 0x10, 0x0F, 0x10]; }
       else if (label === 'Trade' && trading)  label = 'Cancel';
       const labelBytes = _nameToBytes(label);
-      drawText(ui.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, textPal);
+      drawText(ui.ctx, menuX + 16, menuY + 8 + i * 14, labelBytes, pal);
     }
     if (ui.cursorTileCanvas) {
       ui.ctx.drawImage(ui.cursorTileCanvas, menuX + 2, menuY + 4 + inputSt.rosterMenuCursor * 14);

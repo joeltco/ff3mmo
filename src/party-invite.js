@@ -201,6 +201,8 @@ export function cancelPartyInvite(reason = 'user') {
     showMsgBox(_nameToBytes('Target offline'));
   } else if (reason === 'busy') {
     showMsgBox(_nameToBytes('In a party'));
+  } else if (reason === 'self-busy') {
+    showMsgBox(_nameToBytes('Already in a party'));
   }
 }
 
@@ -357,6 +359,14 @@ setNetPartyResultHandler((msg) => {
   }
   if (msg && msg.reason === 'busy') {
     cancelPartyInvite('busy');
+    return;
+  }
+  // v1.7.711 — server rejected because the INVITER (us) is already in a
+  // party. Different from `busy` (which means the TARGET is). Distinct
+  // cancel reason so the message reads "You're already in a party"
+  // instead of "<Name> is busy".
+  if (msg && msg.reason === 'self-busy') {
+    cancelPartyInvite('self-busy');
     return;
   }
   // Server reported a rejection — show the "Declined" message and apply

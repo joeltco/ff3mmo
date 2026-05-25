@@ -832,6 +832,14 @@ function _rosterMenuPartyAction(target) {
     showMsgBox(_nameToBytes(target.name + ' left party'));
     return;
   }
+  // Target already in someone else's party (server-derived `inParty=1`,
+  // v1.7.711). Match the dimmed "InParty" label in the menu — refuse the
+  // invite upfront with a clear message instead of letting the server
+  // bounce it as `busy`.
+  if (target && target.inParty) {
+    showMsgBox(_nameToBytes(target.name + ' in another party'));
+    return;
+  }
   if (isPartyFull()) {
     showMsgBox(_nameToBytes('Party full'));
     return;
