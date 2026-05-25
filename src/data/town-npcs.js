@@ -141,11 +141,14 @@ export const UR_VILLAGER_MAIDEN = {
   ],
 };
 
-// East plaza, spawn (16, 24). Bundle 0x01E310 is NEW — the taller hooded
+// East plaza, spawn (20, 18). Bundle 0x01E310 is NEW — the taller hooded
 // silhouette captured in the v1.7.694 OAM snap (group 2). Magenta hair
 // keeps the visual link to the shopkeeper palette. This is the only NPC
 // using this bundle so far — distinct silhouette helps it stand out as a
-// "scholar / sage" rather than a generic villager.
+// "scholar / sage" rather than a generic villager. Spawn moved east from
+// (16, 24) in v1.7.714 — was crowding the south plaza next to PEACH +
+// QUEST + RED; the east plaza row 18 has its own open area away from the
+// crowd.
 export const UR_HOODED_SAGE = {
   romOffset: 0x01E310,
   palTop: VILLAGER_HAIR_MAGENTA,
@@ -160,10 +163,12 @@ export const UR_HOODED_SAGE = {
   ],
 };
 
-// South-east plaza, spawn (11, 28). Same body as UR_VILLAGER_PEACH but
-// magenta hair — so it reads as a different person despite sharing the
-// bundle. Snap canonical was (8, 27); shifted because (8, 27) sits in a
-// pinched area without enough open-area neighbors to wander from.
+// NW corner, spawn (3, 13). Same body as UR_VILLAGER_PEACH but magenta
+// hair — so it reads as a different person despite sharing the bundle.
+// Spawn moved in v1.7.714 from (11, 28) — was one tile east of
+// UR_QUEST_NPC (10, 28), and both had similar-tone hair, so it read as a
+// duplicate. NW corner puts them in a completely separate zone for
+// visual breathing room.
 export const UR_VILLAGER_RED = {
   romOffset: 0x01DF10,
   palTop: VILLAGER_HAIR_MAGENTA,
@@ -199,7 +204,7 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_villager_peach',  x: 15, y: 25, spec: UR_VILLAGER_PEACH },
     { key: 'ur_quest_npc',       x: 10, y: 28, spec: UR_QUEST_NPC },
     { key: 'ur_villager_maiden', x:  7, y: 19, spec: UR_VILLAGER_MAIDEN },
-    { key: 'ur_hooded_sage',     x: 16, y: 24, spec: UR_HOODED_SAGE },
-    { key: 'ur_villager_red',    x: 11, y: 28, spec: UR_VILLAGER_RED },
+    { key: 'ur_hooded_sage',     x: 20, y: 18, spec: UR_HOODED_SAGE },
+    { key: 'ur_villager_red',    x:  3, y: 13, spec: UR_VILLAGER_RED },
   ]],
 ]);

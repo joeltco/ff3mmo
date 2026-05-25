@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.714 — 2026-05-25
+
+### Spread Ur NPCs across more zones (magenta RED was crowding quest NPC)
+
+`UR_VILLAGER_RED` (magenta hair, bundle 0x01DF10) spawned at (11, 28) —
+one tile east of `UR_QUEST_NPC` (peach hair, bundle 0x01E210) at
+(10, 28). Two adjacent NPCs with similar-tone hair read as a duplicate
+cluster.
+
+Moved 2 spawns:
+- `UR_VILLAGER_RED`: (11, 28) → (3, 13) — NW corner, far from the
+  south plaza
+- `UR_HOODED_SAGE`: (16, 24) → (20, 18) — east plaza, away from PEACH
+  + QUEST cluster
+
+New 5-NPC distribution:
+
+| Zone | NPC | Spawn |
+|---|---|---|
+| NW | UR_VILLAGER_RED (magenta) | (3, 13) |
+| W  | UR_VILLAGER_MAIDEN (yellow) | (7, 19) |
+| S center | UR_VILLAGER_PEACH (peach) | (15, 25) |
+| S (static) | UR_QUEST_NPC (peach, adult body) | (10, 28) |
+| E plaza | UR_HOODED_SAGE (magenta, hooded) | (20, 18) |
+
+Verified each new spawn passes the wander `openArea` rule (walkable +
+≥3 walkable neighbors).
+
+Files:
+- `src/data/town-npcs.js` — updated `TOWN_NPCS[114]` rows for
+  `ur_hooded_sage` and `ur_villager_red`; comment updates on their
+  specs.
+
 ## 1.7.713 — 2026-05-25
 
 ### NPC bump-counter: edge-detect via `isNewPress`, not time gap
