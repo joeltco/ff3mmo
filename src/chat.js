@@ -419,6 +419,24 @@ registerCommand('r', 'Reply to the last player who PM\'d you: /r <message>', (ar
   _sendPm(_lastPmFrom, args);
 });
 
+// Diagnostic: print the client-side party state (what
+// `tryJoinPlayerAlly` actually iterates when battle starts). Useful when
+// "party help isn't appearing in battle" — confirms whether the local
+// mirror has the expected names AND whether each is currently online (the
+// fill loop drops anyone `getOnlinePlayerByName` can't find). v1.7.701.
+registerCommand('party', 'Show your party + each member\'s online state', () => {
+  const names = partyInviteSt.partyMembers || [];
+  if (names.length === 0) {
+    addChatMessage('You are not in a party.', 'console');
+    return;
+  }
+  addChatMessage('Party (' + names.length + '):', 'console');
+  for (const n of names) {
+    const online = !!getOnlinePlayerByName(n);
+    addChatMessage('  ' + n + (online ? '  ONLINE' : '  offline'), 'console');
+  }
+});
+
 registerCommand('disband', 'Dismiss your entire party (inviter only)', () => {
   if (disbandMyParty()) {
     addChatMessage('* You disbanded the party', 'system');

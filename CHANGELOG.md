@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.701 — 2026-05-25
+
+### `/party` diagnostic — list your local party + online state
+
+Added a `/party` slash command in `src/chat.js`. Prints
+`partyInviteSt.partyMembers` (the exact list `tryJoinPlayerAlly`
+iterates when battle starts) along with each member's current online
+status via `getOnlinePlayerByName`.
+
+Use when a party member who should be available as a battle ally isn't
+showing up — the output will say either "name offline" (server / local
+mirror missing them from `_onlinePlayers`) or "You are not in a party."
+(party-snapshot / party-member-joined never reached this client). Both
+flow through `tryJoinPlayerAlly` so the symptom maps directly:
+
+- not in list  → snapshot / member-joined fanout missed this client
+- `offline`    → mate's hello hasn't completed (or they disconnected)
+- `ONLINE`     → mate IS eligible; the bug is elsewhere
+
+Files:
+- `src/chat.js` — `registerCommand('party', ...)` near the other party
+  commands (`/disband`, `/leave`).
+
 ## 1.7.700 — 2026-05-25
 
 ### World chat is global (was location-scoped)
