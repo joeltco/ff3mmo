@@ -29,7 +29,7 @@ import { tickRandomEncounter, isEncounterCheckPending } from './battle-encounter
 import { startBattle } from './battle-update.js';
 import { MapRenderer } from './map-renderer.js';
 import { resetIndoorWaterCache } from './water-animation.js';
-import { findNpcAt, talkToNpc } from './npc.js';
+import { findNpcAt, talkToNpc, tryYieldToPlayer } from './npc.js';
 
 const TILE_SIZE = 16;
 const WALK_DURATION = 16 * (1000 / 60);  // 16 NES frames at 60fps ≈ 267ms per tile
@@ -62,11 +62,19 @@ export function startMove(dir) {
     return;
   }
 
-  // Block walking onto an NPC tile (overworld map only — NPCs are solid)
-  if (!mapSt.onWorldMap && findNpcAt(tileX, tileY)) {
-    sprite.setDirection(dir);
-    sprite.resetFrame();
-    return;
+  // Block walking onto an NPC tile (overworld map only — NPCs are solid).
+  // When blocked, ask the NPC to yield: it hops one tile out of the way at
+  // half walk duration, prefers a perpendicular sidestep, falls back to
+  // continuing along the player's heading. Single-tile hop, then resumes
+  // its normal pause cycle. v1.7.693.
+  if (!mapSt.onWorldMap) {
+    const blocker = findNpcAt(tileX, tileY);
+    if (blocker) {
+      sprite.setDirection(dir);
+      sprite.resetFrame();
+      tryYieldToPlayer(blocker, dir);
+      return;
+    }
   }
 
   // Locked doors — solid like NPCs (silent block). "Locked." message only

@@ -55,6 +55,11 @@ const CRYSTAL_REVISIT = [
 const TILE_SIZE = 16;
 
 const WALK_DURATION_MS = 480;
+// Yield-to-player walk: half the normal duration so the NPC visibly hops out
+// of the player's way without making them wait. Triggered from
+// movement.js#startMove when the player tries to step onto an NPC tile.
+// v1.7.693.
+const YIELD_DURATION_MS = 240;
 const PAUSE_MIN_MS     = 1500;
 const PAUSE_MAX_MS     = 4000;
 const WALK_RUN_MIN     = 1;     // tiles per wander burst
@@ -160,6 +165,7 @@ function _makeNpc(key, tileX, tileY, opts) {
     walkDY:     0,
     walkFromX:  tileX,
     walkFromY:  tileY,
+    walkDur:    WALK_DURATION_MS,   // per-walk duration override (yield uses faster)
     dir:        opts.dir != null ? opts.dir : DIR_DOWN,
     talkFacing: null,
     runRemaining: 0,
@@ -342,7 +348,7 @@ function _tickNpc(npc, dt) {
     npc.timer = _randPauseMs();
     return;
   }
-  const progress = 1 - (npc.timer / WALK_DURATION_MS);
+  const progress = 1 - (npc.timer / npc.walkDur);
   npc.pixelOffX = Math.round(npc.walkDX * TILE_SIZE * progress) - npc.walkDX * TILE_SIZE;
   npc.pixelOffY = Math.round(npc.walkDY * TILE_SIZE * progress) - npc.walkDY * TILE_SIZE;
 }
@@ -356,6 +362,7 @@ function _trySameDir(npc) {
   if (_tileOccupied(tx, ty, npc)) return false;
   if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) return false;
   npc.mode = 'walk';
+  npc.walkDur = WALK_DURATION_MS;
   npc.timer = WALK_DURATION_MS;
   npc.walkFromX = npc.tileX;
   npc.walkFromY = npc.tileY;
@@ -375,6 +382,7 @@ function _startWalk(npc) {
     if (_tileOccupied(tx, ty, npc)) continue;
     if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) continue;
     npc.mode = 'walk';
+    npc.walkDur = WALK_DURATION_MS;
     npc.timer = WALK_DURATION_MS;
     npc.walkFromX = npc.tileX;
     npc.walkFromY = npc.tileY;
@@ -389,6 +397,54 @@ function _startWalk(npc) {
   }
   npc.runRemaining = 0;
   npc.timer = _randPauseMs();
+}
+
+// Player tried to step onto this NPC's tile and got blocked (movement.js#
+// startMove). Hop the NPC quickly to a neighboring tile so the player can
+// pass. Prefers perpendicular sidesteps; falls back to "further in the
+// direction the player was heading"; never picks the tile the player is
+// standing on. Relaxes the wander's open-area requirement (FLOOR only —
+// the NPC can step into a corridor temporarily; their next wander will
+// route them back to open space once the player walks past).
+// Returns true on a successful yield. v1.7.693.
+export function tryYieldToPlayer(npc, playerDir) {
+  if (!mapSt.mapData) return false;
+  if (npc.mode === 'walk') return false;       // already moving — let the current step finish, the player can press again next frame
+  if (npc.mode === 'static' || npc.mode === 'idle-march') return false;
+  if (npc.reveal) return false;                // crystal reveal etc.
+  if (npc.talkFacing != null) return false;    // in dialogue
+  const pdx = playerDir === DIR_RIGHT ? 1 : playerDir === DIR_LEFT ? -1 : 0;
+  const pdy = playerDir === DIR_DOWN  ? 1 : playerDir === DIR_UP   ? -1 : 0;
+  // Candidate priority:
+  //   perpendicular to the player's facing (both sides, random order)
+  //   then "away" — same direction the player was heading, lets the NPC
+  //   continue down the path instead of stepping back into the player.
+  const perp = (pdy === 0) ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]];
+  if (Math.random() < 0.5) perp.reverse();
+  const candidates = [perp[0], perp[1], [pdx, pdy]];
+  const tilemap = mapSt.mapData.tilemap;
+  for (const [dx, dy] of candidates) {
+    const tx = npc.tileX + dx, ty = npc.tileY + dy;
+    if (tx < 1 || tx > 30 || ty < 1 || ty > 30) continue;
+    if (tilemap[ty * 32 + tx] !== FLOOR) continue;
+    if (_tileOccupied(tx, ty, npc)) continue;
+    if (npc.leash != null && (Math.abs(tx - npc.homeX) > npc.leash || Math.abs(ty - npc.homeY) > npc.leash)) continue;
+    npc.mode = 'walk';
+    npc.walkDur = YIELD_DURATION_MS;
+    npc.timer = YIELD_DURATION_MS;
+    npc.walkFromX = npc.tileX;
+    npc.walkFromY = npc.tileY;
+    npc.walkDX = dx;
+    npc.walkDY = dy;
+    npc.tileX = tx;
+    npc.tileY = ty;
+    npc.pixelOffX = -dx * TILE_SIZE;
+    npc.pixelOffY = -dy * TILE_SIZE;
+    npc.dir = _dxDyToDir(dx, dy);
+    npc.runRemaining = 0;   // single-tile hop; pause cycle resumes after
+    return true;
+  }
+  return false;
 }
 
 function _dxDyToDir(dx, dy) {
@@ -447,7 +503,7 @@ function _randPauseMs() {
 // timing; in-place "idle-march" uses its own period.
 function _walkPhase(npc) {
   if (npc.talkFacing != null) return null; // hold pose while talking
-  if (npc.mode === 'walk')       return 1 - (npc.timer / WALK_DURATION_MS);
+  if (npc.mode === 'walk')       return 1 - (npc.timer / npc.walkDur);
   if (npc.mode === 'idle-march') return (npc.timer / IDLE_MARCH_MS) % 1;
   return null;
 }

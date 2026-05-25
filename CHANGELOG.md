@@ -18,6 +18,47 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.693 — 2026-05-25
+
+### NPCs yield to the player when blocked
+
+Walking into an NPC's tile used to silently bounce the player off — the
+NPC just stood there until its own wander cycle moved it. Now when the
+player presses against an NPC, the NPC takes a single-tile hop out of
+the way at half walk duration (240 ms vs 480 ms normal), then resumes
+its normal pause cycle.
+
+**Yield direction** prefers a perpendicular sidestep (relative to the
+player's heading), randomized left vs right; falls back to continuing
+in the player's heading direction. Never yields TOWARD the player —
+worst case the NPC can't move (corner / leashed) and the player stays
+blocked, same as before.
+
+**Yield destination** relaxes the wander loop's open-area requirement
+(FLOOR + ≥3 walkable neighbors) down to just FLOOR — the NPC can step
+into a corridor temporarily. Their next wander tick routes them back
+to open space once the player walks past. Leash (moogle's 2-tile
+Chebyshev) and existing collision (player tile + other NPCs) are still
+respected.
+
+Excluded from yielding: bosses (`mode: 'static'`), idle-march scene
+NPCs, NPCs in dialogue (`talkFacing != null`), NPCs already mid-walk
+(player retries the press next frame).
+
+**Implementation.** Each NPC now carries a per-walk `walkDur` field
+(default `WALK_DURATION_MS`); `tryYieldToPlayer(npc, dir)` sets it to
+`YIELD_DURATION_MS` for the hop. Lerp + walk-frame phase both read
+`npc.walkDur` instead of the module constant. `movement.js#startMove`
+calls `tryYieldToPlayer` immediately after the existing block-by-NPC
+guard.
+
+Files:
+- `src/npc.js` — new `YIELD_DURATION_MS`, `walkDur` field on every NPC,
+  `tryYieldToPlayer(npc, playerDir)` export; lerp + `_walkPhase` use
+  the per-NPC duration.
+- `src/movement.js` — `startMove`'s NPC-block branch now calls
+  `tryYieldToPlayer` before returning.
+
 ## 1.7.692 — 2026-05-25
 
 ### Locked room — spawn player above the door, not on it
