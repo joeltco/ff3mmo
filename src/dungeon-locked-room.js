@@ -310,10 +310,17 @@ export function generateLockedRoomMap(rom, seed) {
     tileset: 0,
     fillTile: VOID_TILE,
     skipRoomClip: true,
-    // Player spawns ON the door (matches magic-shop arrival — door animates
-    // open via _openReturnDoor when returnX/Y is passed to loadMapById).
+    // Spawn the player TWO ROWS ABOVE the door (on the 0x44 false-ceiling
+    // at the top of the door spine), matching the magic shop's ROM entrance
+    // shape: shop entranceX=4, entranceY=8 → 0x44 false-ceiling, with the
+    // 0x68 door icon two rows below at row 10. Every other indoor map works
+    // the same way — the door icon reads as visually closed behind/below
+    // the player because they've already "walked through" it on entry.
+    // Pre-v1.7.692 we set entranceY = doorY, leaving the player standing
+    // ON the closed-door 0x70 tile inside the locked room (no other indoor
+    // does this — the door looked permanently closed under their feet).
     entranceX: doorX,
-    entranceY: doorY,
+    entranceY: doorY - 2,
     mapExit: 0,
     tilemap,
     chrTiles: assets.chrTiles,

@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.692 — 2026-05-25
+
+### Locked room — spawn player above the door, not on it
+
+Inside the locked room the south cave door (0x70) rendered as a closed
+door tile permanently under the player's feet. The v1.7.668
+`_openReturnDoor` plumbing was correct (and the cb2 nibble check passes
+for 0x70 in cave tileset), but the symptom was a different bug entirely:
+**we were spawning the player on the wrong tile.**
+
+The magic shop ROM's entrance points to a 0x44 false-ceiling at row 8 —
+TWO ROWS ABOVE the actual 0x68 door tile at row 10. Every other indoor
+map works the same way: you "walk through" the door icon visually as
+you enter, and the door tile reads as closed BEHIND/BELOW you. Nothing
+else needs to swap to 0x7E because the player isn't standing on the
+door.
+
+`generateLockedRoomMap` had `entranceX/Y = doorX/Y` which spawned the
+player directly on the cave door tile — no other indoor does this. The
+result was a "permanently closed door under your feet" visual that
+broke the indoor mental model.
+
+Set `entranceY = doorY - 2` so the player spawns on the false-ceiling
+at the top of the door spine, mirroring the magic shop ROM exactly.
+The spine `0x44 → 0x45 → 0x70` is all walkable; walking down onto the
+door fires `_triggerMapTransition`'s normal door-open animation +
+goBack pop, identical to every other indoor exit.
+
+Files:
+- `src/dungeon-locked-room.js` — `entranceY: doorY` → `doorY - 2` in
+  `generateLockedRoomMap`.
+
 ## 1.7.691 — 2026-05-25
 
 ### Altar Cave floor 2 exit warped to locked room (trigId collision)
