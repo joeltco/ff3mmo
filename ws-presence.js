@@ -1276,28 +1276,19 @@ export function attachWebSocketPresence(httpServer) {
         }
         // Party memberships are PRESERVED across disconnect (v1.7.595) —
         // SQLite + `_partyMemberships` rows survive until an explicit
-        // leave/dismiss. Peers still get the live "left" notification so
-        // their visible (online-only) party list updates; the underlying
-        // relationship is restored when the user reconnects, via the hello
-        // fan-out (party-snapshot + party-member-joined).
-        const wasInPartyOf = _partyMemberships.get(userId);
-        if (wasInPartyOf) {
-          _broadcastPartyMemberLeft(wasInPartyOf, userId, entry.profile?.name || '');
-        }
-        for (const [memberId, inviterId] of _partyMemberships) {
-          if (inviterId !== userId) continue;
-          // This user was the inviter; from each member's POV the inviter
-          // just dropped offline. Symmetric with the member-disconnect case
-          // — was `party-disbanded` pre-v1.7.595 when parties were
-          // session-scoped.
-          const member = _connected.get(memberId);
-          if (!member || !member.helloed) continue;
-          _send(member.ws, {
-            type:  'party-member-left',
-            userId,
-            name:  entry.profile?.name || '',
-          });
-        }
+        // leave/dismiss. Pre-v1.7.707 we ALSO broadcast `party-member-left`
+        // on every disconnect, which made peer clients prune the leaver
+        // from their local partyMembers + battleAllies — so a phone going
+        // into a pocket (mobile Safari suspends the WS) caused the partied
+        // player to pop in and out of every active battle on the peer's
+        // screen as the connection cycled. The peer still gets
+        // `player-leave` (their `_onlinePlayers` updates), and on
+        // reconnect the hello fanout sends a fresh party-snapshot /
+        // party-member-joined so any pruned state recovers — but the
+        // intermediate "left the party" hop was lossy and felt broken.
+        // No party-member-left broadcast on disconnect; it now fires
+        // ONLY from explicit `party-leave` / `party-dismiss` server
+        // handlers. v1.7.707.
         if (entry.helloed) {
           _broadcast({ type: 'player-leave', userId }, userId);
         }

@@ -304,17 +304,29 @@ export function tryJoinPlayerAlly(opts) {
 
   // Round-boundary reconcile (solo / co-op-AI only; the wire-PvP path below
   // is lockstep-deterministic and must not gain nondeterministic removals).
-  // Drop allies who logged off. Non-party allies also drop if they left the
-  // battle's room. Party allies stay as long as they're online — they're
-  // here-for-this-fight no matter where their character is on the map.
+  // Drop allies who logged off — EXCEPT party members, who keep their slot
+  // through brief offline blips (phone-in-pocket on mobile Safari suspends
+  // the WS for tens of seconds at a time; pre-v1.7.707 those blips made
+  // the partied ally pop in and out of the active battle every round).
+  // Their stats are already snapshotted in `battleAllies` so they keep
+  // acting on local AI until either (a) they reconnect and stay, or (b)
+  // they leave the party explicitly (server `party-leave` / `party-dismiss`
+  // → `partyMembers.includes(name)` becomes false and the splice fires).
+  // Non-party allies still drop on offline OR room change.
   // Runs before the fill + before buildTurnOrder, so the turn queue rebuilds
   // clean. The fill below is the "join battle" half.
   if (!pvpSt.isWirePVP) {
     for (let i = battleSt.battleAllies.length - 1; i >= 0; i--) {
       const ally = battleSt.battleAllies[i];
+      const isPartyAlly = partyNames.has(ally.name);
       const online = getOnlinePlayerByName(ally.name);
-      if (!online) { battleSt.battleAllies.splice(i, 1); continue; }
-      if (!partyNames.has(ally.name) && online.loc !== loc) {
+      if (!online) {
+        if (!isPartyAlly) { battleSt.battleAllies.splice(i, 1); continue; }
+        // Party member temporarily offline — keep them. They'll show as the
+        // ally pose they had at their last update (no live state to refresh).
+        continue;
+      }
+      if (!isPartyAlly && online.loc !== loc) {
         battleSt.battleAllies.splice(i, 1);
       }
     }
