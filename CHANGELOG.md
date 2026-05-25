@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.718 — 2026-05-25
+
+### Status sprite — diagnostic logging on roster row
+
+Temporary diagnostic to confirm whether `p.statusMask` is reaching the receiver and whether the sprite map is populated at draw time. `roster.js#_diagStatus(p)` logs one line per (player, mask) transition (deduped, no per-frame spam) to BOTH the local console AND `/api/client-error` — the latter so the line lands in pm2 logs server-side and we can grep for `STATUS-DIAG` instead of needing devtools on a phone.
+
+Format: `[STATUS-DIAG] name=<peer> mask=0x<hex> isReal=<bool> spriteMapSize=<n> hasPoisonFrames=<bool>`
+
+To verify: get one phone poisoned, then on the **receiving** phone, the next time the poisoned peer's row renders, the line fires once. Grep prod with `pm2 logs server | grep STATUS-DIAG`.
+
+Delete `_diagStatus` helper + call site once verified.
+
 ## 1.7.717 — 2026-05-25
 
 ### Status sprite — close two byproduct gaps from the v1.7.715-716 audit

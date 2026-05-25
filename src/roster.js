@@ -22,6 +22,36 @@ import { drawHudBox, drawBorderedBox, clipToViewport, drawRosterSparkle } from '
 import { getOnlineAtLocation, getOnlinePlayerByName } from './net.js';
 import { partyInviteSt } from './party-invite.js';
 
+// DIAG v1.7.718 — track last-logged statusMask per player name so we only
+// emit one diag line per transition (otherwise we'd spam at ~60 fps).
+// Logs to BOTH the local console AND `/api/client-error` so we can grep
+// pm2 logs server-side instead of needing devtools on the phone. Delete
+// this block + the `_diagStatus(p)` call below once the status sprite is
+// verified to render on receivers.
+const _lastLoggedStatus = new Map();
+function _diagStatus(p) {
+  const name = p && p.name;
+  if (!name) return;
+  const m = p.statusMask | 0;
+  if (_lastLoggedStatus.get(name) === m) return;
+  _lastLoggedStatus.set(name, m);
+  const mapSize = (bsc && bsc.statusSpriteMap) ? bsc.statusSpriteMap.size : -1;
+  const hasPoison = !!(bsc && bsc.statusSpriteMap && bsc.statusSpriteMap.get(0x02));
+  const msg = '[STATUS-DIAG] name=' + name +
+              ' mask=0x' + m.toString(16) +
+              ' isReal=' + (!!p.isReal) +
+              ' spriteMapSize=' + mapSize +
+              ' hasPoisonFrames=' + hasPoison;
+  // eslint-disable-next-line no-console
+  console.log(msg);
+  try {
+    fetch('/api/client-error', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg: msg, ctx: { ua: navigator.userAgent.slice(0, 80) } }),
+      keepalive: true });
+  } catch (_) { /* diag only; never throw */ }
+}
+
 // ── HUD layout constants (must match game.js) ────────────────────────────
 const CANVAS_W   = 256;
 const HUD_VIEW_X = 0;
@@ -368,6 +398,11 @@ function _drawRosterRow(p, i, panelTop) {
   // visibility). Same `portrait y - 4` convention battle uses
   // (battle-draw-allies.js:264).
   if (p.statusMask) {
+    // DIAG v1.7.718 — log once per (player, mask) transition so we can
+    // confirm whether `statusMask` is reaching the receiver vs whether
+    // the sprite map is populated at draw time. Delete this block once
+    // verified.
+    _diagStatus(p);
     drawStatusSpriteAbove(ui.ctx, { mask: p.statusMask | 0 }, HUD_RIGHT_X + 8, rowY + 8 - 4);
   }
 
