@@ -1043,9 +1043,15 @@ function _handleMessage(entry, msg) {
           const m = _connected.get(memberId);
           if (!m || !m.helloed) continue;
           partyPool.push({ userId: memberId, ...m.profile, loc: m.loc });
+          // v1.7.722 — reason:'accepted' tells the client to play the
+          // celebration jingle. The reconnect-fanout `party-member-joined`
+          // (in `case 'hello'` above) deliberately omits the reason so
+          // mates' clients don't re-jingle every time a partymate's
+          // phone wakes from pocket.
           _send(m.ws, {
             type:   'party-member-joined',
             member: { userId: entry.userId, ...entry.profile, loc: entry.loc },
+            reason: 'accepted',
           });
         }
         _send(entry.ws, { type: 'party-snapshot', members: partyPool });

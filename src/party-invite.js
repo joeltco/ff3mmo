@@ -24,7 +24,7 @@ import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
 import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, yesNoLabels, msgState } from './message-box.js';
 import { battleSt as _battleSt } from './battle-state.js';
-import { playSFX, SFX } from './music.js';
+import { playSFX, SFX, playPartyJoinJingle } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
          sendNetPartyDismiss, sendNetPartyDisband, sendNetPartyResync,
          setNetPartyInviteHandler, setNetPartyResultHandler,
@@ -51,7 +51,7 @@ const MAX_MISSED_ROLLS   = 3;
 const TARGET_ROLL_MIN_MS = 5000;
 const TARGET_ROLL_MAX_MS = 12000;
 const COOLDOWN_MS        = 60 * 1000;
-const JOINED_HOLD_MS     = 1000;
+const JOINED_HOLD_MS     = 5000;   // bumped from 1000 in v1.7.722 — matches the FF3 NSF track 44 party-join jingle length so the "Joined" message and the jingle ring out together
 
 export const PARTY_MAX = 3;
 
@@ -244,6 +244,12 @@ function _resolveAsJoin(remotePartner) {
   const target = remotePartner || partyInviteSt.target;
   partyInviteSt.resolving = true;
   partyInviteSt.joinedHoldMs = JOINED_HOLD_MS;
+  // v1.7.722 — party-join celebration jingle (FF3 NSF track 44) on every
+  // accepted invite, both inviter side (here) and acceptor side (in the
+  // setNetPartyInviteHandler accept callback) and existing-member side
+  // (setNetPartyMemberJoinedHandler). The jingle helper guards against
+  // concurrent triggers so rapid joins don't double-stash the map music.
+  playPartyJoinJingle();
   replaceMsgBoxText(_nameToBytes('Joined'), () => {
     if (target && target.name) {
       if (!partyInviteSt.partyMembers.includes(target.name) && !isPartyFull()) {
@@ -290,6 +296,9 @@ setNetPartyInviteHandler((msg) => {
         partyInviteSt.partyMembers.push(challenger.name);
         partyInviteSt.partyMemberProfiles.set(challenger.name, challenger);
       }
+      // v1.7.722 — accepter-side celebration jingle. Mirrors the inviter
+      // side (`_resolveAsJoin`) so both ends of the new pair hear it.
+      playPartyJoinJingle();
       sendNetPartyResponse(true);
     },
     () => {
@@ -325,10 +334,20 @@ setNetPartyMemberLeftHandler((msg) => {
 setNetPartyMemberJoinedHandler((msg) => {
   const m = msg && msg.member;
   if (!m || !m.name) return;
-  if (!partyInviteSt.partyMembers.includes(m.name) && !isPartyFull()) {
+  const wasNew = !partyInviteSt.partyMembers.includes(m.name);
+  if (wasNew && !isPartyFull()) {
     partyInviteSt.partyMembers.push(m.name);
     partyInviteSt.partyMemberProfiles.set(m.name, m);
     addChatMessage('* ' + m.name + ' joined the party', 'system');
+  }
+  // v1.7.722 — celebration jingle ONLY when the server marks this as a
+  // freshly accepted invite (`reason: 'accepted'`). The reconnect-fanout
+  // `party-member-joined` (in ws-presence.js `case 'hello'`) deliberately
+  // omits the reason so we don't re-jingle every time a partymate's phone
+  // wakes from pocket. Also gated on `wasNew` so a duplicate accepted
+  // event (defensive resync race) doesn't double-fire.
+  if (wasNew && msg.reason === 'accepted') {
+    playPartyJoinJingle();
   }
 });
 

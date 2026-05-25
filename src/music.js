@@ -625,3 +625,23 @@ export function resumeMusic() {
   stashedTrack = -1;
 }
 
+// Party-join celebration jingle (v1.7.722). Pauses the current map music,
+// plays FF3 NSF track 44, then resumes after 5 s. Guarded so concurrent
+// joins (rapid invite accepts during a party recovery) don't pile up
+// pause/resume calls (the second pauseMusic would stash over the first,
+// losing the original map music when resume fires). Once the jingle is
+// already playing, additional triggers are ignored until the timer
+// completes.
+const PARTY_JOIN_TRACK = 44;             // FF3 NSF track 44
+const PARTY_JOIN_HOLD_MS = 5000;
+let _partyJoinTimer = null;
+export function playPartyJoinJingle() {
+  if (!nsfData) return;                  // ROM not loaded yet (boot)
+  if (_partyJoinTimer) return;           // already playing
+  pauseMusic();
+  playTrack(PARTY_JOIN_TRACK);
+  _partyJoinTimer = setTimeout(() => {
+    _partyJoinTimer = null;
+    resumeMusic();
+  }, PARTY_JOIN_HOLD_MS);
+}
