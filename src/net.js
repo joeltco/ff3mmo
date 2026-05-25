@@ -227,6 +227,38 @@ function _scheduleReconnect() {
 }
 
 let _retryScheduled = false;
+// Tracks "did this open attempt close before the WS handshake completed?"
+// Pre-handshake 401/429/network-reject all surface to the browser WS API as
+// a `close` event with no useful code (1006). We infer auth failure from
+// the close firing very soon after construction (no `open` event seen).
+// Triggers a one-shot `/api/refresh` to fix the stale-JWT failure mode that
+// otherwise produces a 401-storm of retries with the same dead token.
+// v1.7.682 (Fire HD Kids tablet 7-401 storm seen in nginx access log).
+let _openSawConnect = false;
+let _openStartedAt = 0;
+let _refreshInFlight = false;
+const FAST_CLOSE_MS = 1500;  // close within this window = likely auth/server reject
+
+async function _tryRefreshToken() {
+  if (_refreshInFlight) return false;
+  _refreshInFlight = true;
+  try {
+    const token = _getToken();
+    if (!token) return false;
+    const r = await fetch('/api/refresh', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (!r.ok) return false;
+    const body = await r.json();
+    if (!body || !body.token) return false;
+    try { localStorage.setItem('ff3_token', body.token); }
+    catch { /* private mode — refresh still useful for this session */ }
+    return true;
+  } catch { return false; }
+  finally { _refreshInFlight = false; }
+}
+
 function _open() {
   if (_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) return;
   const token = _getToken();
@@ -243,18 +275,36 @@ function _open() {
   }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${proto}//${location.host}/api/ws?token=${encodeURIComponent(token)}`;
+  _openSawConnect = false;
+  _openStartedAt = Date.now();
   try { _ws = new WebSocket(url); }
   catch { _scheduleReconnect(); return; }
 
   _ws.addEventListener('open', () => {
+    _openSawConnect = true;
     _reconnectDelay = 1000;  // reset backoff
     _startLocPoll();
   });
   _ws.addEventListener('message', (ev) => _handleMessage(ev.data));
-  _ws.addEventListener('close', () => {
+  _ws.addEventListener('close', async () => {
     _ready = false;
     _helloed = false;
     _onlinePlayers.clear();
+    // Fast-close before the WS handshake completed → almost certainly a
+    // pre-handshake 401 (stale JWT) or 429 (per-IP cap). Try refreshing
+    // the token ONCE before falling through to plain backoff retries. If
+    // the refresh succeeds, retry immediately; if it fails, the user is
+    // truly logged out — let the boot index.html refresh flow handle it
+    // on next page load.
+    const elapsed = Date.now() - _openStartedAt;
+    if (!_openSawConnect && elapsed < FAST_CLOSE_MS) {
+      const refreshed = await _tryRefreshToken();
+      if (refreshed) {
+        _reconnectDelay = 1000;
+        setTimeout(() => _open(), 250);
+        return;
+      }
+    }
     _scheduleReconnect();
   });
   _ws.addEventListener('error', () => { /* close fires next */ });
