@@ -7,7 +7,7 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
-import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt } from './message-box.js';
+import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt, yesNoLabels } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { hasItem, removeItem } from './inventory.js';
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
@@ -287,7 +287,7 @@ function handleAction() {
     const doorKey = `${facedX},${facedY}`;
     if (hasItem(0x98)) {
       showMsgBoxPrompt(
-        _nameToBytes('Use MagicKey?'),
+        _nameToBytes('Use MagicKey? ' + yesNoLabels()),
         () => {
           removeItem(0x98, 1);
           mapSt.lockedDoors.delete(doorKey);

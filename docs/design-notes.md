@@ -422,9 +422,13 @@ FenixDown (item `0xA9`, `effect: 'revive'`) — rare Altar Cave chest loot (F2/F
 - `dmg-hold` (player only): hold on the hit (shake + damage number) — the portrait
   does NOT fall until the number finishes, so it reads hit → number → fall.
 - `death-anim`: the death pose plays out (~1s).
-- `confirm` (player only): "Use FenixDown? A:Yes B:No" via `showMsgBox`; input in
-  `input-handler.js#_battleInputHoldStates` (A→z/B→x; the overworld Z/X prompt
-  dispatch in movement.js doesn't run mid-battle). Item consumed only on YES.
+- `confirm` (player only): "Use FenixDown? A:Yes B:No" via `showMsgBoxPrompt`
+  (v1.7.687 — was `showMsgBox` + a bespoke Z/X branch in `_battleInputHoldStates`
+  until v1.7.643 promoted the universal modal msgbox handler in
+  `movement.js#handleInput` above `handleBattleInput`, stranding the branch and
+  freezing the FSM on YES). The modal handler now routes Z → `fenixConfirmYes`
+  and X → `fenixConfirmNo` the same way it drives party-invite, trade,
+  inventory-delete, and locked-door prompts. Item consumed only on YES.
 - `angel`: the FF3 party-death spirit (`src/data/revive-angel-sprite.js` — 2×2
   tiles, SP3 palette, 3-frame flap, captured OAM) appears beside the body and
   drifts up; `SFX.REVIVE` (NSF track `0x92`) plays.

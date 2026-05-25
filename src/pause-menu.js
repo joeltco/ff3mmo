@@ -12,7 +12,7 @@ import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, paus
 import { getSetting, setSetting, VOL_MAX, BATTLE_SPEED_LABELS } from './settings.js';
 import { PAUSE_ITEMS } from './data/strings.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
-import { ui, isMobile } from './ui-state.js';
+import { ui } from './ui-state.js';
 import { inputSt, keys } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
 import {
@@ -20,7 +20,7 @@ import {
   buildItemSelectList, swapInventorySlots, INV_SLOTS, INV_CAP,
 } from './inventory.js';
 import { getTrashCanvas } from './data/inventory-icons.js';
-import { showMsgBoxPrompt } from './message-box.js';
+import { showMsgBoxPrompt, yesNoLabels } from './message-box.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
@@ -1025,7 +1025,7 @@ function _pauseInvDeleteHeld() {
   const itemName = _nesNameToString(getItemNameClean(itemId));
   playSFX(SFX.CONFIRM);
   showMsgBoxPrompt(
-    _nameToBytes('Delete ' + itemName + '? ' + _yesNoLabels()),
+    _nameToBytes('Delete ' + itemName + '? ' + yesNoLabels()),
     () => {
       removeItem(itemId, getItemCount(itemId));
       pauseSt.heldItem = -1;
@@ -1036,13 +1036,6 @@ function _pauseInvDeleteHeld() {
     },
     () => { /* keep heldItem on cancel — user can retry or drop with X/B */ },
   );
-}
-
-// Mobile labels A/B when touch is detected, desktop labels Z/X
-// otherwise. The keys themselves stay z/x — mobile buttons map A→z,
-// B→x via `data-key` in index.html. v1.7.605.
-function _yesNoLabels() {
-  return isMobile ? 'A=ok B=no' : 'Z=ok X=no';
 }
 
 // Delete-mode Z press — confirm box, then drop ALL of the held stack at
@@ -1056,7 +1049,7 @@ function _pauseInvDeletePress() {
   const itemName = _nesNameToString(getItemNameClean(itemId));
   playSFX(SFX.CONFIRM);
   showMsgBoxPrompt(
-    _nameToBytes('Delete ' + itemName + '? ' + _yesNoLabels()),
+    _nameToBytes('Delete ' + itemName + '? ' + yesNoLabels()),
     () => {
       removeItem(itemId, getItemCount(itemId));
       pauseSt.invScroll = 0;       // v1.7.611: jump back to top of list after deletion

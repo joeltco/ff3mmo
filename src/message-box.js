@@ -1,6 +1,7 @@
 // message-box.js — slide-in/hold/slide-out message box overlay (draws inside map viewport)
 
 import { drawText, measureText } from './font-renderer.js';
+import { isMobile } from './ui-state.js';
 
 // NES layout constants — must match game.js
 const CANVAS_W   = 256;
@@ -39,10 +40,18 @@ export function showMsgBox(bytes, onClose) {
   msgState.onDecline = null;
 }
 
+// Mobile-aware key-cue label for yes/no prompts. Mobile deck maps A→z, B→x
+// (index.html `data-key`), so the visible letter changes but the actual key
+// codes don't. Single source for every `showMsgBoxPrompt` caller — append it
+// to your question text so players see the right keys. v1.7.688.
+export function yesNoLabels() {
+  return isMobile ? 'A=ok B=no' : 'Z=ok X=no';
+}
+
 // Yes/no prompt. Z fires `onAccept` then dismisses; X fires `onDecline` then
 // dismisses. Caller is responsible for putting the y/n cue in the message
-// text (e.g., "Z=ok X=no") — keeps this primitive UI-free so any future
-// prompt can render whatever style fits the context.
+// text (use `yesNoLabels()` above) — the primitive itself stays UI-free so
+// future prompts can render whatever style fits the context.
 export function showMsgBoxPrompt(bytes, onAccept, onDecline) {
   msgState.bytes     = bytes;
   msgState.state     = 'slide-in';

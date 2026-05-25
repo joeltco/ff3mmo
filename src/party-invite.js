@@ -22,7 +22,7 @@ import { ps } from './player-stats.js';
 import { generateAllyStats } from './data/players.js';
 import { battleSt } from './battle-state.js';
 import { _nameToBytes } from './text-utils.js';
-import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, msgState } from './message-box.js';
+import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, yesNoLabels, msgState } from './message-box.js';
 import { battleSt as _battleSt } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
@@ -260,7 +260,7 @@ setNetPartyInviteHandler((msg) => {
   // Two-line prompt: name + invite verb on line 1 (wraps), prompt cue on line 2.
   // The 16-char wrap puts "<Name> wants party" on line 1 (typ.) and the cue
   // on line 2.
-  const text = _nameToBytes(challenger.name + ' wants party Z=ok X=no');
+  const text = _nameToBytes(challenger.name + ' wants party ' + yesNoLabels());
   showMsgBoxPrompt(text,
     // Accept — mirror the inviter's `_resolveAsJoin` locally so the invitee's
     // own random encounters also pull the inviter in as an ally. Server only

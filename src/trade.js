@@ -19,7 +19,7 @@ import { playerInventory, removeItem, addItem, buildItemSelectList, canAddItem }
 import { ps } from './player-stats.js';
 import { battleSt } from './battle-state.js';
 import { _nameToBytes, _nesNameToString } from './text-utils.js';
-import { showMsgBox, showMsgBoxPrompt, replaceMsgBoxText, dismissMsgBox, msgState } from './message-box.js';
+import { showMsgBox, showMsgBoxPrompt, yesNoLabels, replaceMsgBoxText, dismissMsgBox, msgState } from './message-box.js';
 import { playSFX, SFX } from './music.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { getItemNameClean, getItemNameShrines } from './text-decoder.js';
@@ -232,7 +232,7 @@ setNetTradeOfferHandler((msg) => {
   const itemName = _nesNameToString(getItemNameClean(itemId));
   tradeSt.recvFromUserId = fromUserId;
   showMsgBoxPrompt(
-    _nameToBytes(fromName + ' offers ' + itemName + ' Z=ok X=no'),
+    _nameToBytes(fromName + ' offers ' + itemName + ' ' + yesNoLabels()),
     () => {
       tradeSt.recvFromUserId = null;
       addItem(itemId, 1);
