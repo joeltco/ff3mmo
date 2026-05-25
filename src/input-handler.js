@@ -24,7 +24,7 @@ import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } f
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
 import { openInspect } from './inspect.js';
-import { playerInventory, addItem, removeItem } from './inventory.js';
+import { playerInventory, addItem, removeItem, buildItemSelectList } from './inventory.js';
 
 // Battle Item menu rows-per-page. The pause inventory uses a single
 // scrollable list of bag-cap slots (16); the battle menu uses horizontal
@@ -338,7 +338,6 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
       removeItem(item.id);
       if (oldWeapon !== 0) addItem(oldWeapon, 1, { bypass: true });
-      inputSt.itemSelectList[inputSt.itemHeldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -350,13 +349,11 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
       removeItem(invItem.id); addItem(handWeaponId, 1, { bypass: true });
-      inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else if (!invItem) {
       if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
       addItem(handWeaponId, 1, { bypass: true });
-      inputSt.itemSelectList[dstIdx] = { id: handWeaponId, count: 1 };
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -365,7 +362,19 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     equipChanged = true;
   }
-  if (equipChanged) saveSlotsToDB();
+  // After any equip swap, rebuild the displayed list from canonical
+  // `playerInventory` rather than trying to patch the slot in place. The
+  // old patch-in-place code (`itemSelectList[heldIdx] = {oldWeapon, 1}`)
+  // destroyed the stack's count: equipping 1 from a stack of 5 left the
+  // slot reading "{X, 1}" instead of "{X, 4}", and any follow-up swap or
+  // re-equip from the corrupted slot misreported the inventory. The
+  // canonical `playerInventory` already has the correct post-equip
+  // counts (`removeItem` + `addItem` are the source of truth) — rebuild
+  // syncs the display. v1.7.706.
+  if (equipChanged) {
+    inputSt.itemSelectList = buildItemSelectList();
+    saveSlotsToDB();
+  }
 }
 
 function _itemSelectZ(isEquipPage, gIdx) {

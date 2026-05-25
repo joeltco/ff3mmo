@@ -18,6 +18,44 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.706 — 2026-05-25
+
+### Battle equip — stacked item count corrupted after equipping one
+
+**Symptom (reported by jointc):** "Moving a stacked item to an equipment
+slot during battle — the entire stack is deleted except one."
+
+**Root cause.** `_itemSelectSwap` in `input-handler.js` (all three equip
+branches) patched the displayed `inputSt.itemSelectList` slot in place
+after the swap:
+```
+inputSt.itemSelectList[heldIdx] = oldWeapon !== 0 ? { id: oldWeapon, count: 1 } : null;
+```
+This destroyed the stack's count entirely — equipping 1 from a stack
+of 5 left the displayed slot reading `{X, 1}` (the old weapon, count
+1) or `null` instead of `{X, 4}` (the remaining stack). The canonical
+`playerInventory` was correct (`removeItem` dropped count by exactly
+1), but the displayed list misreported the stack. Any follow-up swap
+or equip that read `itemSelectList[heldIdx]` worked off the corrupted
+slot and could double-add or destroy items.
+
+**Fix.** Treat the displayed list as derived state, not authoritative.
+After any equip swap, rebuild `inputSt.itemSelectList =
+buildItemSelectList()` from canonical `playerInventory`. The stack's
+remaining count shows correctly, the old weapon lands at its natural
+slot in `playerInventoryOrder`, and any follow-up swap reads fresh
+state.
+
+Removed the three patch-in-place lines that wrote `{oldWeapon, 1}` /
+`null` into the displayed list — they were the source of the
+corruption and are now unnecessary (the rebuild handles everything).
+
+Files:
+- `src/input-handler.js` — import `buildItemSelectList`; drop the
+  three patch-in-place writes in `_itemSelectSwap`; one rebuild call
+  at the end of any `equipChanged` branch (right next to the existing
+  `saveSlotsToDB()`).
+
 ## 1.7.705 — 2026-05-25
 
 ### Battle item arrows — "more items" semantics, not generic nav
