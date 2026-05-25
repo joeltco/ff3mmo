@@ -18,6 +18,16 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.727 — 2026-05-25
+
+### Change: disable party-pin in roster — partymates only show when same-loc
+
+Reverts the v1.7.709-724 "partymates always visible in roster" behavior. Partymates now appear in the roster only when they're in the same room as you (via the normal stranger path), same as any other player. Out-of-room partymates are no longer pinned to the top of the list.
+
+`src/roster.js#_partyRosterEntries()` is now gated behind a `PARTY_PIN_TO_ROSTER = false` module constant. When false, the helper returns `[]` and the downstream `[...party, ...strangers, ...]` spreads become no-ops on the party side; `_strangersAtLoc`'s `partyNames`-exclusion filter is also a no-op (empty Set), so same-loc partymates surface naturally via `getOnlineAtLocation(loc)` and still get the green ◇ party badge (`isInParty` check at line 403 unchanged). The `partyInviteSt.partyMemberProfiles` cache is still maintained server- and client-side so a flag flip back to `true` restores v1.7.724 behavior with no other changes needed.
+
+No wire-side change; party membership, snapshot reconciliation, and all the v1.7.720-724 reconnect hardening remain intact. Only the roster's rendering rule for out-of-room partymates flips.
+
 ## 1.7.726 — 2026-05-25
 
 ### Fix: enemy-name HUD bugs 2–5 (count timing, PVP list, panel clip)

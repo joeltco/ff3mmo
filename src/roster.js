@@ -95,14 +95,20 @@ export function getPlayerLocation() {
   return rosterLocForMapId(currentMapId);
 }
 
-// Party members get a permanent roster slot regardless of room or online
-// state — partymates should always be visible at a glance ("if we're
-// partied, I can see them"). v1.7.709. Returns ALL party entries (both
-// same-loc and remote) in `partyMembers` order so they can be pinned to
-// the top of the visible window ahead of any strangers. Online mates
-// pull their live profile; offline mates fall back to the cached profile
-// (`partyInviteSt.partyMemberProfiles`) set when they were last seen.
+// v1.7.727 — party-pin DISABLED. Partymates are NO longer surfaced in the
+// roster from other rooms; they appear only when same-loc, via the normal
+// stranger path (which is naturally unfiltered when `partyNames` is empty).
+// Flip `PARTY_PIN_TO_ROSTER` back to `true` to restore the v1.7.709-724
+// always-visible behavior.
+//
+// Original rationale (v1.7.709): party members get a permanent roster slot
+// regardless of room or online state — partymates should always be visible at
+// a glance. Online mates pull their live profile; offline mates fall back to
+// the cached profile (`partyInviteSt.partyMemberProfiles`) set when they were
+// last seen.
+const PARTY_PIN_TO_ROSTER = false;
 function _partyRosterEntries() {
+  if (!PARTY_PIN_TO_ROSTER) return [];
   const out = [];
   for (const name of partyInviteSt.partyMembers) {
     const live = getOnlinePlayerByName(name);
