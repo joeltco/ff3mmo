@@ -418,12 +418,41 @@ function _startWalk(npc) {
 // the NPC can step into a corridor temporarily; their next wander will
 // route them back to open space once the player walks past).
 // Returns true on a successful yield. v1.7.693.
+//
+// **Yields on the 2nd distinct bump**, not the first (v1.7.712). The 1st
+// bump just blocks ("hey, watch it"); a follow-up bump from a separate
+// keypress makes them step aside ("oh, you really do want through").
+// Key auto-repeat is filtered via `BUMP_MIN_GAP_MS` (under that window
+// counts as the same press); after `BUMP_RESET_MS` of no bumps the
+// counter resets so a later first-bump still requires a follow-up.
+const BUMP_MIN_GAP_MS = 250;   // below = same keypress (auto-repeat); ignore
+const BUMP_RESET_MS   = 800;   // above = player walked away / did something else; reset
+const BUMPS_TO_YIELD  = 2;     // bump count required before the NPC actually yields
 export function tryYieldToPlayer(npc, playerDir) {
   if (!mapSt.mapData) return false;
   if (npc.mode === 'walk') return false;       // already moving — let the current step finish, the player can press again next frame
   if (npc.mode === 'static' || npc.mode === 'idle-march') return false;
   if (npc.reveal) return false;                // crystal reveal etc.
   if (npc.talkFacing != null) return false;    // in dialogue
+
+  // Bump-count gate. 1st distinct bump = block + record; subsequent bumps
+  // within the same keypress (auto-repeat) DON'T re-count; second distinct
+  // bump = yield.
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (!npc._bumpAt || (now - npc._bumpAt) > BUMP_RESET_MS) {
+    npc._bumpCount = 0;
+  }
+  if (npc._bumpAt && (now - npc._bumpAt) < BUMP_MIN_GAP_MS) {
+    // Same keypress (auto-repeat). Refresh timestamp so the reset window
+    // re-arms from "last contact", but DON'T increment.
+    npc._bumpAt = now;
+    return false;
+  }
+  npc._bumpCount = (npc._bumpCount || 0) + 1;
+  npc._bumpAt = now;
+  if (npc._bumpCount < BUMPS_TO_YIELD) return false;
+  // Reset for the next interaction.
+  npc._bumpCount = 0;
   const pdx = playerDir === DIR_RIGHT ? 1 : playerDir === DIR_LEFT ? -1 : 0;
   const pdy = playerDir === DIR_DOWN  ? 1 : playerDir === DIR_UP   ? -1 : 0;
   // Candidate priority:
