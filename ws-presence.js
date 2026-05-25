@@ -871,22 +871,38 @@ function _handleMessage(entry, msg) {
       // existing members. Without this fanout the local `partyMembers` list
       // diverges across the three views: A sees [B,C] but B saw only [A]
       // and C saw only [A].
+      //
+      // v1.7.702 — INCLUDE THE INVITER IN THE JOINER'S SNAPSHOT.
+      // Pre-fix the snapshot only listed _partyMemberships entries (which
+      // is members→inviter, never the inviter themselves). The joiner's
+      // ONLY source for "the inviter is in my party" was the local
+      // accept-callback at party-invite.js:271-277 — if that silently
+      // failed for any reason (modal race, prompt state, page reload), the
+      // joiner ended up with empty partyMembers and the inviter never
+      // appeared as an AI battle ally on the joiner's screen (while the
+      // inviter, who learned about the joiner via the official
+      // party-invite-result message, saw them just fine — the reported
+      // "JoeltCo sees jointc but jointc doesn't see JoeltCo" asymmetry).
+      // Server now backfills the inviter into the snapshot so both sides
+      // share the same party pool authoritatively.
       if (accept) {
-        const existingMembers = [];
+        const partyPool = [];
+        // Inviter (challenger) first — the missing piece pre-v1.7.702.
+        partyPool.push({
+          userId: challengerId, ...challenger.profile, loc: challenger.loc,
+        });
         for (const [memberId, inviterId] of _partyMemberships) {
           if (inviterId !== challengerId) continue;
           if (memberId === entry.userId) continue;  // skip the new joiner themselves
           const m = _connected.get(memberId);
           if (!m || !m.helloed) continue;
-          existingMembers.push({ userId: memberId, ...m.profile, loc: m.loc });
+          partyPool.push({ userId: memberId, ...m.profile, loc: m.loc });
           _send(m.ws, {
             type:   'party-member-joined',
             member: { userId: entry.userId, ...entry.profile, loc: entry.loc },
           });
         }
-        if (existingMembers.length > 0) {
-          _send(entry.ws, { type: 'party-snapshot', members: existingMembers });
-        }
+        _send(entry.ws, { type: 'party-snapshot', members: partyPool });
       }
       return;
     }
