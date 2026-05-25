@@ -30,6 +30,7 @@ import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
          setNetPartyInviteHandler, setNetPartyResultHandler,
          setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler,
          setNetPartyMemberJoinedHandler, setNetPartySnapshotHandler,
+         setNetPartyInviteCancelledHandler,
          getOnlinePlayerByName } from './net.js';
 import { addChatMessage } from './chat.js';
 
@@ -208,6 +209,9 @@ export function cancelPartyInvite(reason = 'user') {
     showMsgBox(_nameToBytes('In a party'));
   } else if (reason === 'self-busy') {
     showMsgBox(_nameToBytes('Already in a party'));
+  } else if (reason === 'cooldown') {
+    // Server-enforced re-invite cooldown — survives client reload. v1.7.721.
+    showMsgBox(_nameToBytes('Try later'));
   }
 }
 
@@ -257,6 +261,10 @@ function _resolveAsJoin(remotePartner) {
 // A's full profile. Show a Z/X prompt in the message box; the player picks.
 // If B is busy (in a battle or another msg already on screen), auto-decline
 // rather than overlay — protects the FSM from incoming UI during combat.
+// v1.7.721 stashes the challengerUserId in `_pendingIncomingInviteFrom`
+// so the `party-invite-cancelled` handler can verify it's dismissing OUR
+// prompt and not some unrelated one.
+let _pendingIncomingInviteFrom = null;
 setNetPartyInviteHandler((msg) => {
   const challenger = msg && msg.challenger;
   if (!challenger) return;
@@ -264,6 +272,7 @@ setNetPartyInviteHandler((msg) => {
     sendNetPartyResponse(false);
     return;
   }
+  _pendingIncomingInviteFrom = challenger.userId || null;
   // Two-line prompt: name + invite verb on line 1 (wraps), prompt cue on line 2.
   // The 16-char wrap puts "<Name> wants party" on line 1 (typ.) and the cue
   // on line 2.
@@ -276,13 +285,17 @@ setNetPartyInviteHandler((msg) => {
     // empty and `tryJoinPlayerAlly`'s pre-pass finds nothing → invitee fights
     // solo despite being in the party. v1.7.412.
     () => {
+      _pendingIncomingInviteFrom = null;
       if (challenger.name && !partyInviteSt.partyMembers.includes(challenger.name) && !isPartyFull()) {
         partyInviteSt.partyMembers.push(challenger.name);
         partyInviteSt.partyMemberProfiles.set(challenger.name, challenger);
       }
       sendNetPartyResponse(true);
     },
-    () => sendNetPartyResponse(false),
+    () => {
+      _pendingIncomingInviteFrom = null;
+      sendNetPartyResponse(false);
+    },
   );
 });
 
@@ -387,7 +400,29 @@ setNetPartyDisbandedHandler((msg) => {
   // and the inviter-side party-dismiss both route through this handler.
   partyInviteSt.partyMembers.length = 0;
   partyInviteSt.partyMemberProfiles.clear();
-  addChatMessage('* ' + name + "'s party disbanded", 'system');
+  // P8 (v1.7.721) — server now flags single-member dismissals with
+  // `reason: 'dismissed'` so the chat message reads accurately. Pre-fix
+  // a dismissed member saw "X's party disbanded" even though the party
+  // could still have other members; just THEY were kicked.
+  const txt = msg.reason === 'dismissed'
+    ? '* You were dismissed from ' + name + "'s party"
+    : '* ' + name + "'s party disbanded";
+  addChatMessage(txt, 'system');
+});
+
+// v1.7.721 — inviter (challenger) cancelled their invite before we
+// responded. Dismiss the modal silently so we're not stuck staring at
+// the stale prompt. Defensive against the unlikely case where another
+// prompt has overlaid since: only dismiss if `_pendingIncomingInviteFrom`
+// matches the cancelling challenger. The msgState.isPrompt block in
+// movement.js owns Z/X for open msgboxes since v1.7.643 — we just need
+// to call `dismissMsgBox` to clear it.
+setNetPartyInviteCancelledHandler((msg) => {
+  const fromUid = msg && msg.challengerUserId;
+  if (_pendingIncomingInviteFrom == null) return;
+  if (fromUid != null && fromUid !== _pendingIncomingInviteFrom) return;
+  _pendingIncomingInviteFrom = null;
+  if (msgState.isPrompt) dismissMsgBox();
 });
 
 // Inviter side (A) — server relays B's response. On accept we have B's
@@ -413,6 +448,11 @@ setNetPartyResultHandler((msg) => {
   // instead of "<Name> is busy".
   if (msg && msg.reason === 'self-busy') {
     cancelPartyInvite('self-busy');
+    return;
+  }
+  // v1.7.721 — server-enforced cooldown on a recently-declined target.
+  if (msg && msg.reason === 'cooldown') {
+    cancelPartyInvite('cooldown');
     return;
   }
   // Server reported a rejection — show the "Declined" message and apply

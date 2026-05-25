@@ -35,9 +35,10 @@ let _onPVPAllyJoin = null;   // ({name}) → void — partner picked a fake-rost
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
-let _onPartyDisbanded = null;   // ({inviterUserId, inviterName}) → void — the party WE were in disbanded
+let _onPartyDisbanded = null;   // ({inviterUserId, inviterName, reason?}) → void — the party WE were in disbanded (reason: 'dismissed' = just us; absent = full disband, v1.7.721)
 let _onPartyMemberJoined = null; // ({member}) → void — a NEW member joined OUR party (existing-member side)
 let _onPartySnapshot = null;    // ({members}) → void — list of existing party peers (new-joiner side)
+let _onPartyInviteCancelled = null; // ({challengerUserId, challengerName}) → void — inviter cancelled before we responded; dismiss the modal (v1.7.721)
 let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void — partner used a heal/cure item on us
 let _onTradeOffer = null;       // ({fromUserId, fromName, itemId}) → void — incoming roster trade offer, prompt user
 let _onTradeResult = null;      // ({targetUserId, targetName, accept}) → void — our outgoing trade resolved
@@ -191,6 +192,15 @@ function _handleMessage(data) {
       if (_onPartySnapshot) {
         try { _onPartySnapshot(msg); }
         catch (e) { console.warn('[net] party-snapshot handler error', e); }
+      }
+      return;
+    case 'party-invite-cancelled':
+      // The inviter cancelled (or disbanded) before we responded. Dismiss
+      // the local invite-incoming modal silently so the user isn't stuck
+      // staring at a stale "X wants party" prompt. v1.7.721.
+      if (_onPartyInviteCancelled) {
+        try { _onPartyInviteCancelled(msg); }
+        catch (e) { console.warn('[net] party-invite-cancelled handler error', e); }
       }
       return;
     case 'give-item':
@@ -589,6 +599,10 @@ export function setNetPartyMemberJoinedHandler(fn) {
 
 export function setNetPartySnapshotHandler(fn) {
   _onPartySnapshot = typeof fn === 'function' ? fn : null;
+}
+
+export function setNetPartyInviteCancelledHandler(fn) {
+  _onPartyInviteCancelled = typeof fn === 'function' ? fn : null;
 }
 
 export function getOnlinePlayers() {

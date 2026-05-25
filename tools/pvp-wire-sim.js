@@ -646,6 +646,79 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.721 P7 server-side cooldown survives client reload ─────────
+  await asyncTest('v1.7.721 P7 decline sets server cooldown; re-invite rejected', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7721, { ...baseProfile, name: 'CdA' });
+    const B = await connectClient(port, 7722, { ...targetProfile, name: 'CdB' });
+    // Simulate the full invite → decline flow so the cooldown gets set.
+    const bGotInvite = once(B, m => m.type === 'party-invite-incoming', 600);
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7722 }));
+    await bGotInvite;
+    const aGotDecline = once(A, m => m.type === 'party-invite-result', 600);
+    B.send(JSON.stringify({ type: 'party-invite-response', accept: false }));
+    const decline = await aGotDecline;
+    assertEqual(decline.accept, false, 'first invite declined');
+    // Re-invite immediately → server rejects with reason: 'cooldown'.
+    const aGotCooldown = once(A, m => m.type === 'party-invite-result', 600);
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7722 }));
+    const cooldown = await aGotCooldown;
+    assertEqual(cooldown.accept, false, 'second invite rejected');
+    assertEqual(cooldown.reason, 'cooldown', 'rejected with cooldown reason');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.721 P8 dismiss carries reason: 'dismissed' ─────────────────
+  await asyncTest('v1.7.721 P8 dismiss flags party-disbanded msg as dismissed', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7731, { ...baseProfile, name: 'DismA' });
+    const B = await connectClient(port, 7732, { ...targetProfile, name: 'DismB' });
+    _testHooks.state.partyMemberships.set(7732, 7731);
+    const bGotDisbanded = once(B, m => m.type === 'party-disbanded', 600);
+    A.send(JSON.stringify({ type: 'party-dismiss', memberUserId: 7732 }));
+    const msg = await bGotDisbanded;
+    assertEqual(msg.reason, 'dismissed', 'dismissed flag on disband msg');
+    assertEqual(msg.inviterUserId, 7731, 'inviter userId carried');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.721 P9 disband cancels pending outgoing invite ─────────────
+  await asyncTest('v1.7.721 P9 disband cancels outgoing invite + notifies target', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7741, { ...baseProfile, name: 'P9A' });
+    const B = await connectClient(port, 7742, { ...targetProfile, name: 'P9B' });
+    const bGotInvite = once(B, m => m.type === 'party-invite-incoming', 600);
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7742 }));
+    await bGotInvite;
+    // A disbands while invite is pending. B should get party-invite-cancelled.
+    const bGotCancelled = once(B, m => m.type === 'party-invite-cancelled', 600);
+    A.send(JSON.stringify({ type: 'party-disband' }));
+    const cancelled = await bGotCancelled;
+    assertEqual(cancelled.challengerUserId, 7741, 'cancelled msg carries challenger userId');
+    // _partyInvites should be cleared.
+    assertTrue(!_testHooks.state.partyInvites.has(7741), 'pending invite cleared from server');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.721 party-cancel notifies target so modal dismisses ───────
+  await asyncTest('v1.7.721 party-cancel notifies target with party-invite-cancelled', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7751, { ...baseProfile, name: 'CancA' });
+    const B = await connectClient(port, 7752, { ...targetProfile, name: 'CancB' });
+    const bGotInvite = once(B, m => m.type === 'party-invite-incoming', 600);
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7752 }));
+    await bGotInvite;
+    const bGotCancelled = once(B, m => m.type === 'party-invite-cancelled', 600);
+    A.send(JSON.stringify({ type: 'party-cancel' }));
+    const cancelled = await bGotCancelled;
+    assertEqual(cancelled.challengerUserId, 7751, 'cancelled msg carries challenger userId');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── P3 JWT rotation — refresh endpoint smoke ─────────────────────────────
   await asyncTest('P3 /api/refresh returns a fresh token for a valid one', async () => {
     _testEnsureUser(2001);

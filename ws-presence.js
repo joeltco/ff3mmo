@@ -90,6 +90,36 @@ const _pvpPartners = new Map();
 // `party-invite`, cleared on `party-cancel` / response / disconnect.
 const _partyInvites = new Map();
 
+// Per-pair invite cooldown (v1.7.721) — `${challengerUserId}:${targetUserId}`
+// → expiresAtMs. Set on decline / cancel; checked at the top of
+// `party-invite`. Pre-fix the cooldown was client-only (`partyInviteSt.
+// cooldowns`) so a reload wiped it and the player could spam the same
+// target instantly. Server enforces the rate now; client-side cooldown
+// stays as a UX hint that avoids the round-trip-then-reject pattern when
+// nothing has changed.
+const _partyInviteCooldowns = new Map();
+const PARTY_INVITE_COOLDOWN_MS = 60 * 1000;
+
+function _partyCooldownKey(challengerUserId, targetUserId) {
+  return challengerUserId + ':' + targetUserId;
+}
+function _isInviteOnCooldown(challengerUserId, targetUserId) {
+  const key = _partyCooldownKey(challengerUserId, targetUserId);
+  const exp = _partyInviteCooldowns.get(key);
+  if (!exp) return false;
+  if (exp <= Date.now()) {
+    _partyInviteCooldowns.delete(key);     // lazy reap
+    return false;
+  }
+  return true;
+}
+function _setInviteCooldown(challengerUserId, targetUserId) {
+  _partyInviteCooldowns.set(
+    _partyCooldownKey(challengerUserId, targetUserId),
+    Date.now() + PARTY_INVITE_COOLDOWN_MS
+  );
+}
+
 // Active party memberships — memberUserId → inviterUserId. Enforces the
 // one-party-per-player invariant: server rejects a new `party-invite`
 // targeting someone who's already a member. Cleared by explicit
@@ -909,6 +939,12 @@ function _handleMessage(entry, msg) {
         _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'busy' });
         return;
       }
+      // Server-side cooldown (v1.7.721) — survives client reload, so a
+      // declined target can't be spammed by force-reloading the page.
+      if (_isInviteOnCooldown(entry.userId, targetUserId)) {
+        _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'cooldown' });
+        return;
+      }
       _partyInvites.set(entry.userId, targetUserId);
       _send(target.ws, {
         type: 'party-invite-incoming',
@@ -918,7 +954,27 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'party-cancel': {
+      // Inviter (A) is cancelling their own outgoing invite. Pre-v1.7.721
+      // the server silently dropped the entry — target's `party-invite-
+      // incoming` modal stayed open. If B then accepted, the server
+      // looked up `_partyInvites`, found nothing, and silently returned;
+      // B was left with A locally-added to their partyMembers despite no
+      // actual party (asymmetric phantom). Now we notify B so the modal
+      // dismisses, and we set the cooldown so A can't re-spam after their
+      // own cancel.
+      const targetUserId = _partyInvites.get(entry.userId);
       _partyInvites.delete(entry.userId);
+      if (targetUserId) {
+        _setInviteCooldown(entry.userId, targetUserId);
+        const target = _connected.get(targetUserId);
+        if (target && target.helloed) {
+          _send(target.ws, {
+            type:             'party-invite-cancelled',
+            challengerUserId: entry.userId,
+            challengerName:   entry.profile?.name || '',
+          });
+        }
+      }
       return;
     }
     case 'party-invite-response': {
@@ -943,6 +999,12 @@ function _handleMessage(entry, msg) {
         // disable their "Party" menu against either of them. v1.7.711.
         _broadcastInPartyChange(entry.userId);
         _broadcastInPartyChange(challengerId);
+      } else {
+        // Decline → set the (challenger, target) cooldown so A can't
+        // immediately re-invite B (with or without a client reload). The
+        // expiry mirrors the client-side `COOLDOWN_MS` in party-invite.js.
+        // v1.7.721.
+        _setInviteCooldown(challengerId, entry.userId);
       }
       _send(challenger.ws, {
         type:    'party-invite-result',
@@ -1012,10 +1074,15 @@ function _handleMessage(entry, msg) {
       // their whole local partyMembers (reusing the party-disbanded handler
       // — same effect from their POV: the party they were in is dead).
       if (dismissedPeer?.helloed) {
+        // `reason: 'dismissed'` distinguishes this from a full disband
+        // (v1.7.721). Client's handler renders "You were dismissed from
+        // X's party" instead of "X's party disbanded" — accurate since
+        // the party may still exist with other members.
         _send(dismissedPeer.ws, {
           type:          'party-disbanded',
           inviterUserId: entry.userId,
           inviterName:   entry.profile?.name || '',
+          reason:        'dismissed',
         });
       }
       return;
@@ -1026,12 +1093,34 @@ function _handleMessage(entry, msg) {
       // SQLite write + a clean party-disbanded broadcast to each member.
       if (!entry.helloed) return;
       if (_partyMemberships.has(entry.userId)) return; // I'm a member, not an inviter
+      const inviterName = entry.profile?.name || '';
+      // P9 (v1.7.721): also cancel any pending OUTGOING invite from this
+      // user. Pre-fix the invite survived the disband — if the target then
+      // accepted, the server treated it as a fresh new party with just
+      // that target. Now we cancel + notify the target so their pending
+      // invite-incoming modal dismisses.
+      const pendingTargetUserId = _partyInvites.get(entry.userId);
+      if (pendingTargetUserId) {
+        _partyInvites.delete(entry.userId);
+        _setInviteCooldown(entry.userId, pendingTargetUserId);
+        const target = _connected.get(pendingTargetUserId);
+        if (target && target.helloed) {
+          _send(target.ws, {
+            type:             'party-invite-cancelled',
+            challengerUserId: entry.userId,
+            challengerName:   inviterName,
+          });
+        }
+      }
       const memberIds = [];
       for (const [memberId, mInviterId] of _partyMemberships) {
         if (mInviterId === entry.userId) memberIds.push(memberId);
       }
+      // If there are no members AND no pending invite, the disband is a
+      // no-op — the v1.7.720 unconditional-send means many `/disband`s
+      // will land here harmlessly. Old behavior was to early-return at
+      // `memberIds.length === 0` before any cleanup happened.
       if (memberIds.length === 0) return;
-      const inviterName = entry.profile?.name || '';
       for (const memberId of memberIds) _partyMemberships.delete(memberId);
       partyRemoveByInviter(entry.userId);   // persist (v1.7.595)
       _broadcastInPartyChange(entry.userId);          // inviter no longer in party
@@ -1439,6 +1528,7 @@ export const _testHooks = {
     pvpPartners: _pvpPartners,
     partyInvites: _partyInvites,
     partyMemberships: _partyMemberships,
+    partyInviteCooldowns: _partyInviteCooldowns,
     lastSeenProfiles: _lastSeenProfiles,
     connsByIp: _connsByIp,
   },
@@ -1448,6 +1538,7 @@ export const _testHooks = {
     _pvpPartners.clear();
     _partyInvites.clear();
     _partyMemberships.clear();
+    _partyInviteCooldowns.clear();
     _lastSeenProfiles.clear();
     _connsByIp.clear();
   },

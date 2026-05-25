@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.721 — 2026-05-25
+
+### Party system — close the last drift edges (P7-P9 from v1.7.720 audit)
+
+Three party-system findings deferred from v1.7.720, plus a related bug surfaced during implementation. All four address asymmetric / phantom states between server and client.
+
+1. **P7 — Server-side invite cooldown.** Pre-fix: `partyInviteSt.cooldowns` was client-only memory. A reload wiped it, so a declined target could be spammed instantly. Server now tracks `_partyInviteCooldowns: Map<\`${challengerUserId}:${targetUserId}\`, expiresAtMs>` (60 s window matching the client UX hint). Set on decline + cancel; checked at the top of `case 'party-invite'`. Rejects with `reason: 'cooldown'` → client renders "Try later". Lazy reap on read keeps the map bounded.
+
+2. **P8 — Dismissed vs disbanded distinction.** Pre-fix: when an inviter dismissed a single member, the dismissed peer saw "X's party disbanded" even though the party often still had other members. Server now flags the `party-disbanded` message to the dismissed peer with `reason: 'dismissed'`. Client's `setNetPartyDisbandedHandler` reads it and renders "You were dismissed from X's party" instead. Full disbands (`/disband`, last-member-leaves) keep the original wording.
+
+3. **P9 — `/disband` cancels outgoing pending invite.** Pre-fix: if A invited B (pending in `_partyInvites`) and A `/disband`ed, the invite survived. If B then accepted, the server treated it as a brand-new party of just A+B — A's previous-party history was wiped but the invite-side never knew. Server now clears A's outgoing invite as part of `case 'party-disband'` AND notifies B with `party-invite-cancelled` so B's incoming modal dismisses. The pre-existing `memberIds.length === 0` early-return was moved AFTER the pending-invite cleanup so a `/disband` with no members but with a pending invite still cleans up.
+
+4. **Related bug — `party-cancel` silently dropped target's incoming modal.** When A cancelled their own invite (`sendNetPartyCancel`), pre-v1.7.721 server just `_partyInvites.delete(entry.userId)` with no notification to B. B's `party-invite-incoming` modal stayed open. If B then accepted, the server's response handler found no entry, silently returned — but B's local accept-callback had already pushed A into `partyMembers`. **Asymmetric phantom party.** Now `case 'party-cancel'` sends `party-invite-cancelled` to the target so the modal dismisses. Also sets the cooldown so A can't immediately re-spam after their own cancel.
+
+Client-side support:
+
+- New wire shape `party-invite-cancelled` + `setNetPartyInviteCancelledHandler` (`src/net.js`). Carries `{challengerUserId, challengerName}`.
+- Handler in `src/party-invite.js` is defensive: tracks `_pendingIncomingInviteFrom` when the invite prompt opens, only dismisses the modal if the cancelling challenger matches. Avoids dismissing an unrelated overlay if one somehow raced in.
+- `cancelPartyInvite('cooldown')` shows "Try later" in the message box.
+
+Wire-sim regression tests (`tools/pvp-wire-sim.js`):
+
+- P7: decline → re-invite within cooldown rejected with `reason: 'cooldown'`.
+- P8: dismiss flags the party-disbanded message with `reason: 'dismissed'`.
+- P9: `/disband` while invite pending cancels the invite AND notifies target.
+- Cancel-notify: `party-cancel` reaches the target as `party-invite-cancelled`.
+
+43 wire-sim tests now (was 39, +4 new). Lint clean, deploy.sh gates pass.
+
 ## 1.7.720 — 2026-05-25
 
 ### Party system — smooth client-server drift on reconnect
