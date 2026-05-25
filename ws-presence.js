@@ -97,6 +97,18 @@ const _partyInvites = new Map();
 // disconnect of either side.
 const _partyMemberships = new Map();
 
+// Last-known profile per userId — written on hello + every `update` so a
+// partymate's profile survives their voluntary disconnect (the WS-close
+// handler deletes `presence_shadows` for voluntary disconnects, leaving
+// us nothing to populate "offline partymate" rows with otherwise). Used
+// by the reconnect party-snapshot fanout (v1.7.720) to ship offline
+// mates' profiles to a reconnecting client so the client's local
+// partyMembers + roster pin can rebuild without waiting for the mate to
+// come back online. Unbounded but tiny — one record per ever-online
+// user, dropped on `party-leave` / `party-dismiss` / `party-disband`
+// when that user can no longer be a partymate.
+const _lastSeenProfiles = new Map();   // userId → profile (without userId/loc)
+
 // Pending roster-trade offers (v1.7.598). offererUserId → { targetUserId,
 // itemId, expiresAt }. Server doesn't track inventory — it relays + arbitrates
 // the offer/response. Same trust model as give-item: a malicious sender can
@@ -535,6 +547,9 @@ function _handleMessage(entry, msg) {
       entry.loc = String(parsed.loc || 'ur').slice(0, 16);
       const wasHelloed = entry.helloed;
       entry.helloed = true;
+      // Cache for offline partymate snapshots (v1.7.720). Strip userId/loc —
+      // they're carried by the wrapping snapshot entry, not the profile.
+      _lastSeenProfiles.set(entry.userId, { ...entry.profile });
       // A real connection takes over from any restored shadow for the same
       // user. The `player-join` broadcast below upserts in clients that
       // had the shadow in their initial snapshot, so no extra cleanup
@@ -558,24 +573,36 @@ function _handleMessage(entry, msg) {
         // about the online mates via party-snapshot and tell each online
         // mate that this user is back via party-member-joined. Reuses the
         // existing client handlers — no client change needed.
+        //
+        // v1.7.720: snapshot now ships ALL mates, online + offline. Offline
+        // mates carry their last-known profile from `_lastSeenProfiles` so
+        // the reconnecting client can rebuild `partyMembers` + roster pin
+        // immediately rather than waiting for the mate to come back. Each
+        // entry has an `online: 0|1` flag so client knows which path to
+        // take (live lookup vs cached). Pre-v1.7.720 a reconnect with all
+        // mates offline got NO snapshot at all and lived in a phantom-
+        // party state.
         const mateIds = _getPartyMates(entry.userId);
         if (mateIds.length > 0) {
-          const onlineMates = mateIds
-            .map(uid => _connected.get(uid))
-            .filter(m => m && m.helloed);
-          if (onlineMates.length > 0) {
-            _send(entry.ws, {
-              type:    'party-snapshot',
-              members: onlineMates.map(m => ({
-                userId: m.userId, ...m.profile, loc: m.loc,
-              })),
-            });
-            const selfMember = {
-              userId: entry.userId, ...entry.profile, loc: entry.loc,
-            };
-            for (const m of onlineMates) {
-              _send(m.ws, { type: 'party-member-joined', member: selfMember });
+          const members = mateIds.map(uid => {
+            const live = _connected.get(uid);
+            if (live && live.helloed) {
+              return { userId: uid, ...live.profile, loc: live.loc, online: 1 };
             }
+            const cached = _lastSeenProfiles.get(uid);
+            return {
+              userId: uid,
+              ...(cached || { name: 'Player' }),
+              online: 0,
+            };
+          });
+          _send(entry.ws, { type: 'party-snapshot', members });
+          // Tell each online mate this user is back via party-member-joined.
+          const selfMember = { userId: entry.userId, ...entry.profile, loc: entry.loc };
+          for (const uid of mateIds) {
+            const m = _connected.get(uid);
+            if (!m || !m.helloed) continue;
+            _send(m.ws, { type: 'party-member-joined', member: selfMember });
           }
         }
       } else {
@@ -632,6 +659,9 @@ function _handleMessage(entry, msg) {
         fields[k] = v;
       }
       if (Object.keys(fields).length === 0) return;
+      // Refresh the offline-snapshot cache so a future reconnect sees the
+      // latest realized stats / palette / status mask. v1.7.720.
+      _lastSeenProfiles.set(entry.userId, { ...entry.profile });
       _broadcast({ type: 'player-update', userId: entry.userId, fields }, entry.userId);
       return;
     }
@@ -1017,6 +1047,25 @@ function _handleMessage(entry, msg) {
       }
       return;
     }
+    case 'party-resync': {
+      // Client-requested party-snapshot — used by `/party` (chat command)
+      // to repair any client-server drift, and as a defensive resync from
+      // anywhere the client suspects its local `partyMembers` is stale.
+      // Same payload shape as the hello-time party-snapshot, including
+      // offline mates from `_lastSeenProfiles`. v1.7.720.
+      if (!entry.helloed) return;
+      const mateIds = _getPartyMates(entry.userId);
+      const members = mateIds.map(uid => {
+        const live = _connected.get(uid);
+        if (live && live.helloed) {
+          return { userId: uid, ...live.profile, loc: live.loc, online: 1 };
+        }
+        const cached = _lastSeenProfiles.get(uid);
+        return { userId: uid, ...(cached || { name: 'Player' }), online: 0 };
+      });
+      _send(entry.ws, { type: 'party-snapshot', members });
+      return;
+    }
     case 'party-leave': {
       // Member voluntarily leaves their current party (no UI yet, but the
       // hook exists for future client-side "leave party" action). Fan out
@@ -1390,6 +1439,7 @@ export const _testHooks = {
     pvpPartners: _pvpPartners,
     partyInvites: _partyInvites,
     partyMemberships: _partyMemberships,
+    lastSeenProfiles: _lastSeenProfiles,
     connsByIp: _connsByIp,
   },
   resetState() {
@@ -1398,6 +1448,7 @@ export const _testHooks = {
     _pvpPartners.clear();
     _partyInvites.clear();
     _partyMemberships.clear();
+    _lastSeenProfiles.clear();
     _connsByIp.clear();
   },
 };

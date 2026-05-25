@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.720 — 2026-05-25
+
+### Party system — smooth client-server drift on reconnect
+
+Full audit of the party system uncovered a drift class where the server's authoritative `_partyMemberships` could disagree with a reconnecting client's local `partyInviteSt.partyMembers`. The trigger: client reconnects while partymate is offline → server's hello fanout only sent `party-snapshot` if at least one mate was currently online → reconnecting user got NO snapshot → local list stayed empty → user couldn't see they were partied, couldn't `/disband`, couldn't `/leave`, couldn't invite anyone new (server rejects with `self-busy`). Phantom party with no escape until the offline mate came back.
+
+Fix bundle:
+
+1. **`_lastSeenProfiles` cache (server)** — written on every `hello` + `update`, preserves the last-known profile per user even after voluntary disconnect (when `presence_shadows` is deleted). Used by the snapshot fanout to populate offline mates' profile data.
+
+2. **Reconnect snapshot ships ALL mates (server, `case 'hello'`)** — online mates carry live `entry.profile` + `online: 1`; offline mates carry `_lastSeenProfiles` entry + `online: 0`. Pre-fix the snapshot was skipped entirely when zero mates were online.
+
+3. **`party-resync` handler (server, NEW)** — client can request a fresh snapshot anytime. Same payload shape as the hello-time snapshot. Used by `/party` defensively and as a general escape hatch from drift.
+
+4. **`sendNetPartyResync()` wire helper (client, `net.js`)** — sends `{type:'party-resync'}`, server replies with `party-snapshot`.
+
+5. **`party-snapshot` handler now REPLACES (client, `party-invite.js`)** — pre-fix it appended. Server is authoritative, so a snapshot that's missing entries the client thinks it has = those entries are stale and must drop. Plays nicely with the existing accept flow (replace = same end state as append from empty).
+
+6. **`requestPartyResync(cb)` (client, `party-invite.js`)** — one-shot callback fired on the next snapshot reply. 800 ms fallback timer so `/party` doesn't hang if server is unreachable.
+
+7. **`/disband` and `/leave` (client, `chat.js`)** — now send `party-disband` / `party-leave` to the server **unconditionally**, even if local list is empty. Pre-fix the local-empty early-return left phantom server-side parties that the user couldn't clean up.
+
+8. **`removeFromParty` (client, `party-invite.js`)** — now resolves the target userId from `_onlinePlayers` if the profile cache misses, so the server dismiss still fires when cache is empty post-reload.
+
+9. **`/party` now resyncs first** (client, `chat.js`), then prints. Snapshot reply replaces local state, callback renders. 800 ms fallback if server doesn't reply.
+
+10. **Wire-sim regression tests** (`tools/pvp-wire-sim.js`) — two new tests prove `party-resync` ships offline mates with `online: 0` + cached profile, and live mates with `online: 1`. Snapshot shape locked in for future changes.
+
+This closes the entire drift class: any reconnect, any offline-mate combination, any `/disband`/`/leave` from a stale view now reach the server and resolve. The `inParty` flag continues to do its existing job of disabling the "Party" invite option on the roster menu for already-partied targets.
+
 ## 1.7.719 — 2026-05-25
 
 ### Stale-cache rescue via `Clear-Site-Data` on BOOT ERROR reports

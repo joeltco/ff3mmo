@@ -531,6 +531,15 @@ export function sendNetPartyDisband() {
   return _send({ type: 'party-disband' });
 }
 
+// Defensive resync — ask the server to send a fresh party-snapshot. The
+// `setNetPartySnapshotHandler` consumer will REPLACE local partyMembers
+// from the response. Used by `/party` chat command + by other client-
+// suspects-drift sites. v1.7.720.
+export function sendNetPartyResync() {
+  if (!_helloed) return false;
+  return _send({ type: 'party-resync' });
+}
+
 export function setNetPartyInviteHandler(fn) {
   _onPartyInvite = typeof fn === 'function' ? fn : null;
 }

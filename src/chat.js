@@ -6,7 +6,7 @@ import { _nesNameToString, _nameToBytes } from './text-utils.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { drawCursorFaded } from './hud-drawing.js';
 import { nesColorFade } from './palette.js';
-import { partyInviteSt, disbandMyParty } from './party-invite.js';
+import { partyInviteSt, disbandMyParty, requestPartyResync } from './party-invite.js';
 import { sendNetPartyLeave } from './net.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
@@ -438,39 +438,42 @@ registerCommand('r', 'Reply to the last player who PM\'d you: /r <message>', (ar
 // mirror has the expected names AND whether each is currently online (the
 // fill loop drops anyone `getOnlinePlayerByName` can't find). v1.7.701.
 registerCommand('party', 'Show your party + each member\'s online state', () => {
-  const names = partyInviteSt.partyMembers || [];
-  if (names.length === 0) {
-    addChatMessage('You are not in a party.', 'console');
-    return;
-  }
-  addChatMessage('Party (' + names.length + '):', 'console');
-  for (const n of names) {
-    const online = !!getOnlinePlayerByName(n);
-    addChatMessage('  ' + n + (online ? '  ONLINE' : '  offline'), 'console');
-  }
+  // v1.7.720: defensive resync first — server is authoritative for
+  // membership, and our local `partyMembers` can drift after a hard
+  // reload while the partymate was offline (the hello fanout only
+  // re-syncs offline mates as of v1.7.720; clients that loaded an
+  // older index.html or run the command opportunistically still
+  // benefit from this resync). The snapshot reply replaces the local
+  // list; the callback renders ~50-200 ms later.
+  requestPartyResync(() => {
+    const names = partyInviteSt.partyMembers || [];
+    if (names.length === 0) {
+      addChatMessage('You are not in a party.', 'console');
+      return;
+    }
+    addChatMessage('Party (' + names.length + '):', 'console');
+    for (const n of names) {
+      const online = !!getOnlinePlayerByName(n);
+      addChatMessage('  ' + n + (online ? '  ONLINE' : '  offline'), 'console');
+    }
+  });
 });
 
 registerCommand('disband', 'Dismiss your entire party (inviter only)', () => {
-  if (disbandMyParty()) {
-    addChatMessage('* You disbanded the party', 'system');
-  } else {
-    addChatMessage('No party to disband.', 'console');
-  }
+  // v1.7.720: always sends `party-disband` even if local list is empty —
+  // server is authoritative. Pre-fix, a phantom server-side party with
+  // an empty client list was unreachable from this command.
+  disbandMyParty();
+  addChatMessage('* Disband sent to server', 'system');
 });
 
 registerCommand('leave', 'Leave the party you\'re currently in', () => {
-  // Member-side leave. Server's `party-leave` handler clears persistence +
-  // notifies remaining members via party-member-left. Local partyMembers
-  // mostly tracks the inviter-side roster; for members we still clear so
-  // any stale view drops too.
-  if (partyInviteSt.partyMembers.length === 0) {
-    addChatMessage('You\'re not in a party.', 'console');
-    return;
-  }
+  // v1.7.720: always sends `party-leave` even if local list is empty —
+  // same drift-fix as /disband.
   partyInviteSt.partyMembers.length = 0;
   partyInviteSt.partyMemberProfiles.clear();
   sendNetPartyLeave();
-  addChatMessage('* You left the party', 'system');
+  addChatMessage('* Leave sent to server', 'system');
 });
 
 registerCommand('ff1', 'Play FF1 NSF track N (or "stop" to resume map music)', (args) => {

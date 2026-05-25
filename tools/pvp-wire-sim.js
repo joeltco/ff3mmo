@@ -599,6 +599,53 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.720 party-resync offline-mate snapshot ─────────────────────────
+  // Pre-fix: a reconnecting client whose partymate is currently offline got
+  // NO party-snapshot at all (server's hello fanout only sent the snapshot
+  // when at least one mate was online). Local `partyMembers` stayed empty,
+  // /disband/leave/party all said "not in a party" — phantom party.
+  // v1.7.720: snapshot now ships ALL mates with `online: 0|1` flag;
+  // offline mates carry their last-known profile from `_lastSeenProfiles`.
+  await asyncTest('v1.7.720 party-resync includes offline mates with cached profile', async () => {
+    _testHooks.resetState();
+    // Mate's last-known profile cached by a prior session (simulated).
+    _testHooks.state.lastSeenProfiles.set(7720, {
+      name: 'OfflineMate', jobIdx: 3, level: 7, palIdx: 1,
+      hp: 25, maxHP: 60, agi: 8, inBattle: 0, statusMask: 0,
+      weaponR: 1, armorId: 0, helmId: 0, allies: [],
+    });
+    // Membership preserved across the mate's disconnect.
+    _testHooks.state.partyMemberships.set(7720, 7710);
+    const A = await connectClient(port, 7710, { ...baseProfile, name: 'Resync' });
+    const got = once(A, m => m.type === 'party-snapshot', 800);
+    A.send(JSON.stringify({ type: 'party-resync' }));
+    const snap = await got;
+    assertTrue(Array.isArray(snap.members), 'snapshot.members is an array');
+    assertEqual(snap.members.length, 1, 'expected one mate in snapshot');
+    assertEqual(snap.members[0].userId, 7720, 'mate userId carried');
+    assertEqual(snap.members[0].name, 'OfflineMate', 'cached profile fields carried');
+    assertEqual(snap.members[0].online, 0, 'offline mate flagged online=0');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.720 party-resync flags online mate with online=1 ──────────────
+  await asyncTest('v1.7.720 party-resync flags live mate online=1', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7711, { ...baseProfile, name: 'ResyncA' });
+    const B = await connectClient(port, 7712, { ...targetProfile, name: 'ResyncB' });
+    _testHooks.state.partyMemberships.set(7712, 7711);
+    const got = once(A, m => m.type === 'party-snapshot', 800);
+    A.send(JSON.stringify({ type: 'party-resync' }));
+    const snap = await got;
+    assertEqual(snap.members.length, 1, 'one online mate in snapshot');
+    assertEqual(snap.members[0].userId, 7712, 'mate userId carried');
+    assertEqual(snap.members[0].online, 1, 'online mate flagged online=1');
+    assertTrue(typeof snap.members[0].name === 'string' && snap.members[0].name.length > 0, 'live profile name carried');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── P3 JWT rotation — refresh endpoint smoke ─────────────────────────────
   await asyncTest('P3 /api/refresh returns a fresh token for a valid one', async () => {
     _testEnsureUser(2001);

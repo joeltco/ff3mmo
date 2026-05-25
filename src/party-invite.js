@@ -26,10 +26,11 @@ import { showMsgBox, replaceMsgBoxText, dismissMsgBox, showMsgBoxPrompt, yesNoLa
 import { battleSt as _battleSt } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
-         sendNetPartyDismiss, sendNetPartyDisband,
+         sendNetPartyDismiss, sendNetPartyDisband, sendNetPartyResync,
          setNetPartyInviteHandler, setNetPartyResultHandler,
          setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler,
-         setNetPartyMemberJoinedHandler, setNetPartySnapshotHandler } from './net.js';
+         setNetPartyMemberJoinedHandler, setNetPartySnapshotHandler,
+         getOnlinePlayerByName } from './net.js';
 import { addChatMessage } from './chat.js';
 
 const BASE_ACCEPT   = 0.35;
@@ -109,31 +110,35 @@ export function removeFromParty(targetName) {
   if (i >= 0) partyInviteSt.partyMembers.splice(i, 1);
   // MP — drop the cached real-player profile and tell the server to clear
   // its `_partyMemberships` entry so the dismissed player can accept new
-  // invites again (one-party-per-player). No-op for fake-roster names.
+  // invites again (one-party-per-player). v1.7.720: send the dismiss even
+  // if the local cache is empty — server's authoritative and we may have
+  // lost our cache on a hard reload while the server still has the
+  // membership. Look up the userId from `_onlinePlayers` if cache misses.
   const profile = partyInviteSt.partyMemberProfiles.get(targetName);
-  if (profile) {
-    partyInviteSt.partyMemberProfiles.delete(targetName);
-    if (profile.userId) sendNetPartyDismiss(profile.userId);
+  let userId = profile && profile.userId;
+  if (!userId) {
+    const live = getOnlinePlayerByName(targetName);
+    if (live && live.userId) userId = live.userId;
   }
+  if (profile) partyInviteSt.partyMemberProfiles.delete(targetName);
+  if (userId) sendNetPartyDismiss(userId);
 }
 
 // Inviter-side disband. Clears every local party-mate + cached profile and
 // tells the server to drop all members in one shot (server emits
 // party-disbanded to each so their local lists clear too). v1.7.615.
-// Members do not have an inviter-side party — they should /leave instead;
-// returns false if there's no party to disband.
+// Members do not have an inviter-side party — they should /leave instead.
+//
+// v1.7.720: ALWAYS sends `party-disband` to the server, even when the
+// local list is empty. Pre-fix the local-empty early-return left a phantom
+// party on the server (P1 drift class) that the user couldn't clean up.
+// Server is the authoritative source — local emptiness is a guess.
+// Returns true to confirm the request fired (no useful "you weren't in
+// a party" feedback possible without a server round-trip).
 export function disbandMyParty() {
-  if (partyInviteSt.partyMembers.length === 0) return false;
-  // Only real players are tracked in `_partyMemberships`; if every member
-  // is a fake-roster name, there's no MP party to disband server-side —
-  // just clear locally so /disband still works in single-player setups.
-  let anyReal = false;
-  for (const profile of partyInviteSt.partyMemberProfiles.values()) {
-    if (profile && profile.userId) { anyReal = true; break; }
-  }
   partyInviteSt.partyMembers.length = 0;
   partyInviteSt.partyMemberProfiles.clear();
-  if (anyReal) sendNetPartyDisband();
+  sendNetPartyDisband();
   return true;
 }
 
@@ -314,21 +319,62 @@ setNetPartyMemberJoinedHandler((msg) => {
   }
 });
 
-// MP party-sync — we JUST accepted an invite to a party that already has
-// other members. Server hands us the list so our partyMembers mirrors the
-// inviter's view immediately. Inviter (A) is already added by the local
-// accept handler at `setNetPartyInviteHandler`; this snapshot covers any
-// OTHER existing members (e.g., C was already in A's party when we joined).
+// MP party-sync — full party-pool snapshot from the server. Sent in three
+// places: (1) inviter-side accept response (joiner gets the existing
+// pool), (2) reconnect hello-time fanout (returning user gets their
+// party), (3) `/party` chat command's defensive resync (v1.7.720).
+//
+// v1.7.720: REPLACE semantics. Server is authoritative for membership; any
+// local divergence (lost cache on hard reload, missed party-member-left
+// during a network blip) is corrected by trusting the snapshot in full.
+// Offline mates carry `online: 0` + their last-known profile from
+// `_lastSeenProfiles` on the server — stashed locally so the roster's
+// `_partyRosterEntries` fallback can render them without a live lookup.
+// Pre-fix: append-only loop, so a stale local entry could survive a
+// snapshot that removed it server-side.
 setNetPartySnapshotHandler((msg) => {
   const members = Array.isArray(msg && msg.members) ? msg.members : [];
+  partyInviteSt.partyMembers.length = 0;
+  partyInviteSt.partyMemberProfiles.clear();
   for (const m of members) {
     if (!m || !m.name) continue;
-    if (partyInviteSt.partyMembers.includes(m.name)) continue;
     if (isPartyFull()) break;
     partyInviteSt.partyMembers.push(m.name);
     partyInviteSt.partyMemberProfiles.set(m.name, m);
   }
+  // Pending /party render — fire the one-shot callback the chat command
+  // registered before issuing the resync. setTimeout guarantees the
+  // command's setTimeout (fallback) doesn't race the snapshot reply.
+  if (_pendingResyncCallback) {
+    const cb = _pendingResyncCallback;
+    _pendingResyncCallback = null;
+    try { cb(); } catch (e) { /* swallow — diagnostic only */ }
+  }
 });
+
+// One-shot callback for the `/party` chat command (and any other site that
+// wants to render after a fresh resync). `requestPartyResync(cb)` sends
+// the wire message + arms the callback; the snapshot handler above fires
+// it on the next snapshot. Fallback timer fires the callback after 800 ms
+// in case the server doesn't reply (offline, rate-limited, etc.).
+let _pendingResyncCallback = null;
+export function requestPartyResync(cb) {
+  if (typeof cb !== 'function') { sendNetPartyResync(); return; }
+  if (_pendingResyncCallback) {
+    // Coalesce — earlier caller wins, new one fires too via shared timer.
+    const prev = _pendingResyncCallback;
+    _pendingResyncCallback = () => { try { prev(); } catch (_) {} try { cb(); } catch (_) {} };
+  } else {
+    _pendingResyncCallback = cb;
+  }
+  sendNetPartyResync();
+  setTimeout(() => {
+    if (!_pendingResyncCallback) return;
+    const fallback = _pendingResyncCallback;
+    _pendingResyncCallback = null;
+    try { fallback(); } catch (_) {}
+  }, 800);
+}
 
 setNetPartyDisbandedHandler((msg) => {
   const name = msg && msg.inviterName;
