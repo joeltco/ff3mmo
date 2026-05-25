@@ -252,7 +252,9 @@ db.exec(`
   -- never wrote a save). No PII; UA is truncated to 120 chars.
   CREATE TABLE IF NOT EXISTS storage_beacons (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts          INTEGER NOT NULL,
+    ts          INTEGER NOT NULL,   -- Unix epoch SECONDS (v1.7.728+). Pre-v1.7.728 rows
+                                    -- were stored as Date.now() ms; the boot migration
+                                    -- below normalizes them in-place.
     already     INTEGER NOT NULL,   -- 1 = persisted() already true (returning visitor)
     granted     INTEGER NOT NULL,   -- 1 = persist() returned true
     ua          TEXT,
@@ -271,6 +273,15 @@ db.exec(`
 try {
   db.exec('ALTER TABLE users ADD COLUMN token_iat_min INTEGER DEFAULT 0');
 } catch (_) { /* column exists — fine */ }
+
+// v1.7.728 — storage_beacons.ts was inserted as Date.now() (ms) from v1.7.631
+// → v1.7.727. Normalize all ms-style values to Unix seconds so the column
+// matches `users.created_at` / `presence_shadows.last_seen` / `bug_reports.
+// created_at`, and `datetime(ts,'unixepoch')` works. Idempotent: the
+// `> 1700000000000` guard matches ms timestamps from 2023+ (so it catches
+// every existing row) and never matches a valid seconds-style insert (which
+// caps well under that bound for the next ~50,000 years).
+db.prepare("UPDATE storage_beacons SET ts = ts / 1000 WHERE ts > 1700000000000").run();
 
 // Party persistence (v1.7.595). The `parties` table is the source of truth
 // for "who is in a party with whom"; `_partyMemberships` in ws-presence.js
@@ -439,7 +450,7 @@ export async function handleAPI(req, res) {
     db.prepare(
       'INSERT INTO storage_beacons (ts, already, granted, ua, ip) VALUES (?, ?, ?, ?, ?)'
     ).run(
-      Date.now(),
+      Math.floor(Date.now() / 1000),  // Unix seconds, matches rest of DB. v1.7.728.
       body.already ? 1 : 0,
       body.granted ? 1 : 0,
       String(body.ua || '').slice(0, 120),

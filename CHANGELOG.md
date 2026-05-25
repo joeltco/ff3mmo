@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.728 — 2026-05-25
+
+### Fix: storage_beacons.ts now stored as Unix seconds (was ms)
+
+`POST /api/storage-beacon` (api.js, shipped v1.7.631) inserted `Date.now()` into `storage_beacons.ts`, but the rest of the DB (`users.created_at`, `presence_shadows.last_seen`, `bug_reports.created_at`, `users.token_iat_min`) uses Unix-second timestamps. The mismatch silently broke `datetime(ts, 'unixepoch')` formatting in ad-hoc SQL audits (the conversion returns NULL for ms-scale values because they exceed the year-9999 cap).
+
+Two changes:
+1. Insert now uses `Math.floor(Date.now() / 1000)` (api.js#`/api/storage-beacon`).
+2. Boot-time idempotent migration normalizes existing rows in-place: `UPDATE storage_beacons SET ts = ts / 1000 WHERE ts > 1700000000000`. Guard matches every ms-style row (2023+) and never matches a valid Unix-second insert (which stays well below the bound). Re-runs are no-ops.
+
+Schema comment updated to call out the Unix-seconds convention so future writers don't reintroduce the bug. The 130 existing rows on prod will be normalized by the migration on the next restart.
+
+The sibling `trades.ts` column also uses `Date.now()` (ms), but that one is intentional and matched by `tools/trade-audit.cjs` (`new Date(r.ts).toISOString()`). Not touching it.
+
 ## 1.7.727 — 2026-05-25
 
 ### Change: disable party-pin in roster — partymates only show when same-loc
