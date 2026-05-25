@@ -419,40 +419,42 @@ function _startWalk(npc) {
 // route them back to open space once the player walks past).
 // Returns true on a successful yield. v1.7.693.
 //
-// **Yields on the 2nd distinct bump**, not the first (v1.7.712). The 1st
-// bump just blocks ("hey, watch it"); a follow-up bump from a separate
-// keypress makes them step aside ("oh, you really do want through").
-// Key auto-repeat is filtered via `BUMP_MIN_GAP_MS` (under that window
-// counts as the same press); after `BUMP_RESET_MS` of no bumps the
-// counter resets so a later first-bump still requires a follow-up.
-const BUMP_MIN_GAP_MS = 250;   // below = same keypress (auto-repeat); ignore
-const BUMP_RESET_MS   = 800;   // above = player walked away / did something else; reset
-const BUMPS_TO_YIELD  = 2;     // bump count required before the NPC actually yields
-export function tryYieldToPlayer(npc, playerDir) {
+// **Yields on the 2nd distinct bump**, not the first (v1.7.712,
+// edge-detected via `isNewPress` in v1.7.713). The 1st bump just blocks
+// ("hey, watch it"); a follow-up press makes them step aside ("oh, you
+// really do want through").
+//
+// `isNewPress` is computed in movement.js#startMoveFromKeys — true only
+// on the tick where the player FIRST presses an arrow (or switches
+// direction) after a tick where it wasn't pressed. Holding the arrow
+// down doesn't generate repeated isNewPress=true, so the count stays at
+// 1 through any continuous hold. Releasing + re-pressing produces a
+// second isNewPress=true → count hits 2 → yield. Counter resets after
+// `BUMP_RESET_MS` of no contact so a much-later first bump still needs
+// a follow-up.
+const BUMP_RESET_MS  = 2000;
+const BUMPS_TO_YIELD = 2;
+export function tryYieldToPlayer(npc, playerDir, isNewPress) {
   if (!mapSt.mapData) return false;
   if (npc.mode === 'walk') return false;       // already moving — let the current step finish, the player can press again next frame
   if (npc.mode === 'static' || npc.mode === 'idle-march') return false;
   if (npc.reveal) return false;                // crystal reveal etc.
   if (npc.talkFacing != null) return false;    // in dialogue
 
-  // Bump-count gate. 1st distinct bump = block + record; subsequent bumps
-  // within the same keypress (auto-repeat) DON'T re-count; second distinct
-  // bump = yield.
+  // Time-based reset so an idle player walking back to the same NPC later
+  // starts fresh at bump 1 instead of yielding immediately.
   const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   if (!npc._bumpAt || (now - npc._bumpAt) > BUMP_RESET_MS) {
     npc._bumpCount = 0;
   }
-  if (npc._bumpAt && (now - npc._bumpAt) < BUMP_MIN_GAP_MS) {
-    // Same keypress (auto-repeat). Refresh timestamp so the reset window
-    // re-arms from "last contact", but DON'T increment.
-    npc._bumpAt = now;
-    return false;
-  }
-  npc._bumpCount = (npc._bumpCount || 0) + 1;
   npc._bumpAt = now;
+  // Continued hold of the same direction (no fresh press this tick) —
+  // doesn't count as a new bump. Player must release + re-press to
+  // increment.
+  if (!isNewPress) return false;
+  npc._bumpCount = (npc._bumpCount || 0) + 1;
   if (npc._bumpCount < BUMPS_TO_YIELD) return false;
-  // Reset for the next interaction.
-  npc._bumpCount = 0;
+  npc._bumpCount = 0;   // reset for the next interaction
   const pdx = playerDir === DIR_RIGHT ? 1 : playerDir === DIR_LEFT ? -1 : 0;
   const pdy = playerDir === DIR_DOWN  ? 1 : playerDir === DIR_UP   ? -1 : 0;
   // Candidate priority:

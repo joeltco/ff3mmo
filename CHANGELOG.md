@@ -18,6 +18,45 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.713 — 2026-05-25
+
+### NPC bump-counter: edge-detect via `isNewPress`, not time gap
+
+v1.7.712's time-based filter (gap < 250 ms = ignore as auto-repeat)
+DIDN'T WORK. `startMoveFromKeys` is called every game-loop tick when
+the player holds an arrow — gaps are ~16-33 ms (60Hz / 30Hz). My 250
+ms threshold filtered those as "auto-repeat" → count stayed at 1 →
+the NPC never yielded no matter how many times the player pressed.
+
+Even fast taps (release for 1 tick + re-press) have gaps in the same
+~30-50 ms range, so I couldn't pick a threshold that filtered holds
+without also filtering deliberate re-presses.
+
+Fix: track the press EDGE in `movement.js#startMoveFromKeys`. New
+module state `_prevPressedDir` records which arrow was pressed LAST
+tick; `isNewPress = pressedDir != null && pressedDir !== _prevPressedDir`
+is true exactly on the tick where the player started pressing (or
+switched direction). `startMove(dir, isNewPress)` threads it to
+`tryYieldToPlayer(npc, dir, isNewPress)`.
+
+`tryYieldToPlayer` now early-returns when `!isNewPress` (continued
+hold), so the bump counter only increments on actual press events.
+Releasing + re-pressing the same arrow takes ≥1 input-free tick →
+`_prevPressedDir` resets to `null` → next press is `isNewPress=true`
+→ count hits 2 → yield.
+
+Kept `BUMP_RESET_MS` (now 2000) so a much-later first bump doesn't
+inherit a stale count.
+
+Files:
+- `src/movement.js` — `_prevPressedDir` module state;
+  `startMoveFromKeys` computes `isNewPress` and passes through
+  `startMove(dir, isNewPress)`; `startMove` signature gains optional
+  `isNewPress`; the NPC-blocked branch passes it to
+  `tryYieldToPlayer`.
+- `src/npc.js` — `tryYieldToPlayer(npc, playerDir, isNewPress)`;
+  dropped time-gap filter; early-return when `!isNewPress`.
+
 ## 1.7.712 — 2026-05-25
 
 ### NPC yields on the SECOND bump, not the first

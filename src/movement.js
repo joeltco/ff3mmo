@@ -46,7 +46,7 @@ export function setPoisonFlashTimer(v) { poisonFlashTimer = v; }
 
 // ── Movement ───────────────────────────────────────────────────────────────
 
-export function startMove(dir) {
+export function startMove(dir, isNewPress = false) {
   const dx = dir === DIR_RIGHT ? TILE_SIZE : dir === DIR_LEFT ? -TILE_SIZE : 0;
   const dy = dir === DIR_DOWN ? TILE_SIZE : dir === DIR_UP ? -TILE_SIZE : 0;
   const targetX = mapSt.worldX + dx;
@@ -66,13 +66,16 @@ export function startMove(dir) {
   // When blocked, ask the NPC to yield: it hops one tile out of the way at
   // half walk duration, prefers a perpendicular sidestep, falls back to
   // continuing along the player's heading. Single-tile hop, then resumes
-  // its normal pause cycle. v1.7.693.
+  // its normal pause cycle. v1.7.693. v1.7.712 added a 2-bump-before-yield
+  // gate; v1.7.713 switched the bump-edge detection from time-based to
+  // `isNewPress` (key state edge) so holding the arrow doesn't auto-tick
+  // bumps and fast taps still register.
   if (!mapSt.onWorldMap) {
     const blocker = findNpcAt(tileX, tileY);
     if (blocker) {
       sprite.setDirection(dir);
       sprite.resetFrame();
-      tryYieldToPlayer(blocker, dir);
+      tryYieldToPlayer(blocker, dir, isNewPress);
       return;
     }
   }
@@ -430,11 +433,33 @@ function _checkWarpTile() {
   return true;
 }
 
+// Track the direction that was being pressed LAST tick so we can flag the
+// first call to startMove on a fresh press (as opposed to continuous
+// auto-poll of a held arrow). v1.7.713 — NPC bump-counter needs this to
+// distinguish "deliberate re-press" from "still holding". Time-based gap
+// detection couldn't do it: both 60Hz/30Hz holds AND fast taps fall in
+// the same ~20-50 ms window.
+let _prevPressedDir = null;
+
 export function startMoveFromKeys(resetOnIdle) {
-  if (isEncounterCheckPending()) { if (resetOnIdle) sprite.resetFrame(); return; }
-  if (keys['ArrowDown']) startMove(DIR_DOWN);
-  else if (keys['ArrowUp']) startMove(DIR_UP);
-  else if (keys['ArrowLeft']) startMove(DIR_LEFT);
-  else if (keys['ArrowRight']) startMove(DIR_RIGHT);
+  if (isEncounterCheckPending()) {
+    _prevPressedDir = null;
+    if (resetOnIdle) sprite.resetFrame();
+    return;
+  }
+  let pressedDir = null;
+  if (keys['ArrowDown']) pressedDir = DIR_DOWN;
+  else if (keys['ArrowUp']) pressedDir = DIR_UP;
+  else if (keys['ArrowLeft']) pressedDir = DIR_LEFT;
+  else if (keys['ArrowRight']) pressedDir = DIR_RIGHT;
+
+  // Edge detection: new press = different (or first) direction this tick.
+  // Releasing + re-pressing the same arrow takes at least one input-free
+  // tick (key state goes false then true), so `pressedDir` differs from
+  // `_prevPressedDir` exactly on the press edge.
+  const isNewPress = pressedDir != null && pressedDir !== _prevPressedDir;
+  _prevPressedDir = pressedDir;
+
+  if (pressedDir != null) startMove(pressedDir, isNewPress);
   else if (resetOnIdle) sprite.resetFrame();
 }
