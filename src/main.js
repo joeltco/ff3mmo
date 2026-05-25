@@ -298,7 +298,7 @@ export async function loadROM(arrayBuffer) {
       '  Press T to open chat. Tab through World/Party/PM/System.',
       '  Cross grass tiles on the overworld to find monsters.',
       '  Roster panel shows real players online (green dot).',
-      '  Pick Battle on a roster row to issue a PvP challenge.',
+      '  Roster: pick Party / Trade / Message / Inspect to interact.',
       '  /help lists commands (try /who, /block, /report).',
     );
     try { localStorage.setItem('ff3_first_run', '1'); } catch (_) {}
