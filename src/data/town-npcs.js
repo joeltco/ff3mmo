@@ -94,16 +94,17 @@ export const UR_VILLAGER_PEACH = {
   ],
 };
 
-// South-west plaza quest giver, spawn (10, 28) facing RIGHT. STATIC — does
-// not wander (`wander: false`, `animate: false` → `mode: 'static'`); the
-// canonical FF3 spot for this NPC. Placeholder dialogue until the quest
-// system lands; when it does, wire the trigger here (the placement +
-// rendering are stable). v1.7.696.
+// South-west plaza quest giver, spawn (10, 28) facing RIGHT. Stays put
+// (no `wander: true`) but `animate: true` cycles the walk frames in place
+// so the NPC reads as alive instead of frozen — same pattern the
+// shopkeepers use. The canonical FF3 spot for this NPC. Placeholder
+// dialogue until the quest system lands; when it does, wire the trigger
+// here (the placement + rendering are stable). v1.7.696, animate v1.7.698.
 //
 // (10, 28) isn't openArea by the wander rule (lacks ≥3 walkable neighbors
-// for safe wandering), but that doesn't matter for a static NPC — the
-// openArea check only gates _startWalk / _trySameDir / placeMoogleAtCaveCenter,
-// none of which run for `mode: 'static'`.
+// for safe wandering), but that doesn't matter for `mode: 'idle-march'` —
+// the openArea check only gates _startWalk / _trySameDir, neither of which
+// run for non-wander modes.
 //
 // Bundle 0x01E210 (item-shop-keeper body) + peach hair gives the "adult
 // villager" silhouette distinct from the existing PEACH and RED villagers
@@ -115,7 +116,7 @@ export const UR_QUEST_NPC = {
   palTop: VILLAGER_HAIR_PEACH,
   palBtm: TOWN_KEEPER_PAL_BTM,
   dir: DIR_RIGHT,
-  // wander + animate both omitted → mode === 'static' (see addSceneNpc).
+  animate: true,   // walk-cycle in place; no wander → stays on (10, 28)
   dialogue: [
     'I have a task for the brave...',
     "...but not yet. Return soon.",
