@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.749 — 2026-05-26
+
+### PvP rewrite P-3 — Node-clean battle math + per-battle RNG
+
+Battle math is now callable from the server with a per-battle RNG instance, independent of the client's singleton. The arbiter is sole roller for every gameplay decision; clients see the seed and can preview animation rolls without drifting from server-canonical state.
+
+**What landed:**
+- `src/rng.js` — new `createRng(seedValue)` factory returns an isolated RNG instance with `{rand, getState, setState}`. Singleton (`seed`, `rand`, `randInt`, etc.) preserved as the client default; algorithm shared via internal `_step(state)` helper so both paths roll identically.
+- `src/battle-math.js` — `rollInitiative`, `calcDamage`, and `rollHits` now accept `opts.rand` for injection. Defaults to the singleton — existing client callers (battle-update / battle-ally / pvp / spell-cast) unchanged. `rollHits` forwards `opts` to `calcDamage` so its internal damage rolls also use the injected RNG.
+- `src/status-effects.js` — `tryInflictStatus`, `tryInflictStatusByte`, `processTurnStart` accept `opts.rand` for the same reasons (status inflict rolls, sleep wake roll, confuse snap-out roll).
+- `pvp-arbiter.js` — `createBattle` now stamps `battle.rng = createRng(seed)` + `battle.rngSeed` (seed value shipped to clients in `pvp-battle-start`). Per-battle RNG state — two concurrent battles roll independently.
+- `_testGetBattleRng(battleId)` test export so wire-sim can assert server-RNG ↔ client-RNG parity for the same seed.
+- 5 new wire-sim tests:
+  - `createRng(seed)` produces deterministic + reproducible sequences across instances.
+  - `calcDamage`, `rollHits`, `rollInitiative` accept `opts.rand` and produce identical output for the same seeded RNG.
+  - Independence: two RNGs with the same seed but advanced different amounts diverge as expected (proves they're separate instances).
+  - End-to-end: a battle's server-side `rng` and a client-side `createRng(start.rngSeed)` produce identical roll sequences (proves the wire seed lets the client preview anim rolls).
+
+**No production behavior change.** Client engine paths still call singleton `rand()` everywhere. Server-arbiter is the only consumer of `opts.rand` so far; P-4 turn resolution plumbs it through every damage / hit / status / AI roll inside the FSM.
+
+**Gates:** lint 0, pvp-wire-sim 91/91 (was 86; +5 P-3 tests).
+
 ## 1.7.748 — 2026-05-26
 
 ### PvP rewrite P-2 — server-side stat generation + combatant table

@@ -16,8 +16,12 @@ export const DAMAGE_CAP = 9999;
 // Initiative priority — `agi*2 + rand(0..255)`. Higher rolls go first.
 // Single source for buildTurnOrder (player / ally / encounter / PVP-opp /
 // PVP-enemy-ally) so the formula can't drift across actor types.
-export function rollInitiative(agi) {
-  return ((agi || 0) * 2) + Math.floor(rand() * 256);
+// `opts.rand` lets the PvP arbiter inject a per-battle RNG instance
+// (created via `createRng()` in rng.js). Defaults to the singleton —
+// existing client callers unchanged. v1.7.749 P-3.
+export function rollInitiative(agi, opts = {}) {
+  const rng = opts.rand || rand;
+  return ((agi || 0) * 2) + Math.floor(rng() * 256);
 }
 
 // Reduce a hit-results array to its battle-display summary. Used by player,
@@ -57,8 +61,10 @@ export function elemMultiplier(atkElem, weakness, resist) {
 // NES FF3 damage formula: atk + random(0..floor(atk/2)) - def
 // Crit adds flat bonus (NES $28: per-job/weapon crit bonus, additive not multiplicative)
 // elemMult: elemental multiplier (1 = neutral, 2 = weak, 0.5 = resist)
-export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1) {
-  let dmg = atk + Math.floor(rand() * (Math.floor(atk / 2) + 1)) - def;
+// `opts.rand` — see rollInitiative above for the injection convention.
+export function calcDamage(atk, def, crit = false, critBonus = 0, elemMult = 1, opts = {}) {
+  const rng = opts.rand || rand;
+  let dmg = atk + Math.floor(rng() * (Math.floor(atk / 2) + 1)) - def;
   if (crit) dmg += critBonus;
   dmg = Math.floor(dmg * elemMult);
   return Math.min(DAMAGE_CAP, Math.max(1, dmg));
@@ -165,17 +171,21 @@ export function resolveLivingTarget(picked, factionList) {
 export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
   const { shieldEvade = 0, evade = 0, defendHalve = false, targetProtected = false,
           elemMult = 1, critPct = 0, critBonus = 0, lAtk = 0, splitRH = false } = opts;
+  // v1.7.749 P-3 — per-battle RNG injection. Defaults to singleton so
+  // existing client callers (battle-update / battle-ally / pvp) behave
+  // identically.
+  const rng = opts.rand || rand;
   const results = [];
   const splitIdx = splitRH ? (potentialHits >> 1) : potentialHits;
   for (let i = 0; i < potentialHits; i++) {
     const handAtk = (splitRH && i >= splitIdx) ? lAtk : atk;
-    if (shieldEvade > 0 && rand() * 100 < shieldEvade) {
+    if (shieldEvade > 0 && rng() * 100 < shieldEvade) {
       results.push({ shieldBlock: true });
-    } else if (evade > 0 && rand() * 100 < evade) {
+    } else if (evade > 0 && rng() * 100 < evade) {
       results.push({ miss: true });
-    } else if (rand() * 100 < hitRate) {
-      const crit = critPct > 0 && rand() * 100 < critPct;
-      let dmg = calcDamage(handAtk, def, crit, critBonus, elemMult);
+    } else if (rng() * 100 < hitRate) {
+      const crit = critPct > 0 && rng() * 100 < critPct;
+      let dmg = calcDamage(handAtk, def, crit, critBonus, elemMult, opts);
       if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
       if (targetProtected) dmg = Math.max(1, Math.floor(dmg / 2));
       results.push({ damage: dmg, crit });

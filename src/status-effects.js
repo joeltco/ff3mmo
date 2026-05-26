@@ -93,7 +93,9 @@ const NAME_TO_FLAG = STATUS_NAME_TO_FLAG;
 
 // resist: optional — status name, array of names, or bitmask of NAME_TO_FLAG.
 // If the incoming status matches any resisted flag, inflict auto-fails (NES immunity check).
-export function tryInflictStatus(targetState, statusName, hitChance = 50, resist = null) {
+// `opts.rand` lets the PvP arbiter inject a per-battle RNG. Defaults to
+// the singleton (v1.7.749 P-3).
+export function tryInflictStatus(targetState, statusName, hitChance = 50, resist = null, opts = {}) {
   const flag = NAME_TO_FLAG[statusName];
   if (!flag) return 0;
   if (hasStatus(targetState, flag)) return 0; // already afflicted
@@ -104,9 +106,11 @@ export function tryInflictStatus(targetState, statusName, hitChance = 50, resist
     else if (Array.isArray(resist)) { for (const r of resist) resistMask |= NAME_TO_FLAG[r] || 0; }
     if (resistMask & flag) return 0; // immune
   }
-  // Wire-PvP: rand() is seeded from the server-broadcast seed so both clients
-  // roll identically. See docs/MULTIPLAYER-AUDIT-2026-05-15.md #2.
-  if (rand() * 100 < hitChance) {
+  const rng = opts.rand || rand;
+  // Pre-P3 (lockstep PvP): rand() was seeded from the server-broadcast
+  // seed so both clients rolled identically. P3 retires that with
+  // per-battle RNG injection (server is sole roller).
+  if (rng() * 100 < hitChance) {
     addStatus(targetState, flag);
     return flag;
   }
@@ -114,12 +118,13 @@ export function tryInflictStatus(targetState, statusName, hitChance = 50, resist
 }
 
 // Try inflicting from a raw NES status byte (bitmask of multiple possible statuses)
-// Each bit is rolled independently against hitChance
-export function tryInflictStatusByte(targetState, statusByte, hitChance = 50) {
+// Each bit is rolled independently against hitChance. `opts.rand` forwards
+// to tryInflictStatus (v1.7.749 P-3).
+export function tryInflictStatusByte(targetState, statusByte, hitChance = 50, opts = {}) {
   let applied = 0;
   for (const [name, flag] of Object.entries(NAME_TO_FLAG)) {
     if (statusByte & flag) {
-      const result = tryInflictStatus(targetState, name, hitChance);
+      const result = tryInflictStatus(targetState, name, hitChance, null, opts);
       applied |= result;
     }
   }
@@ -129,7 +134,8 @@ export function tryInflictStatusByte(targetState, statusByte, hitChance = 50) {
 // --- Per-turn effects ---
 // Called at start of a combatant's turn. Returns { canAct, poisonDmg }
 
-export function processTurnStart(state, maxHP) {
+export function processTurnStart(state, maxHP, opts = {}) {
+  const rng = opts.rand || rand;
   let canAct = true;
   let poisonDmg = 0;
   let confused = false;
@@ -147,7 +153,7 @@ export function processTurnStart(state, maxHP) {
 
   // Sleep = skip turn (NES: wakes on physical hit, or 25% chance per turn)
   if (hasStatus(state, STATUS.SLEEP)) {
-    if (rand() < 0.25) {
+    if (rng() < 0.25) {
       removeStatus(state, STATUS.SLEEP);
     } else {
       canAct = false;
@@ -158,7 +164,7 @@ export function processTurnStart(state, maxHP) {
   if (hasStatus(state, STATUS.CONFUSE)) {
     confused = true;
     // NES: 25% chance to snap out per turn
-    if (rand() < 0.25) {
+    if (rng() < 0.25) {
       removeStatus(state, STATUS.CONFUSE);
       confused = false;
     }

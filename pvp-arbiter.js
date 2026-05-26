@@ -24,6 +24,7 @@
 
 import { mirrorReadFullState, readSaveSlot } from './api.js';
 import { computeRealizedStats } from './src/realized-stats.js';
+import { createRng } from './src/rng.js';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -184,11 +185,18 @@ function createBattle(userIdA, userIdB, opts) {
   const mainB = pushCombatant(userIdB, 'B');
   if (!mainB) throw new Error('user-B has no save in slot ' + slot);
   for (const uid of matesB) pushCombatant(uid, 'B');
+  // v1.7.749 P-3 — per-battle RNG instance. Server is sole roller for
+  // every gameplay-affecting decision (turn order, damage variance,
+  // crit, hit/miss, shield block, status inflict, AI choice). Clients
+  // get the seed in `pvp-battle-start` for ANIMATION rolls only (frame
+  // jitter, miss-graphic position) — never gameplay.
+  const seedValue = ((Date.now() ^ battleId * 0x9E3779B1) >>> 0) || 1;
   const battle = {
     battleId,
     createdAt: Date.now(),
     turnIdx: 0,
-    rngState: ((Date.now() ^ battleId) >>> 0),
+    rngSeed: seedValue,
+    rng: createRng(seedValue),
     status: 'awaiting-intent',     // 'awaiting-intent' | 'resolving' | 'ended'
     pendingIntents: new Map(),     // userId → intent
     combatants,
@@ -265,7 +273,7 @@ function buildStartFrame(battle, forUserId) {
       A: battle.combatants.filter(c => c.side === 'A').map(wireShape),
       B: battle.combatants.filter(c => c.side === 'B').map(wireShape),
     },
-    rngSeed:    battle.rngState,    // animation-only on the client
+    rngSeed:    battle.rngSeed,     // animation-only on the client
   };
 }
 
@@ -390,6 +398,16 @@ function _testReset() {
   _nextBattleId = 1;
 }
 
+// v1.7.749 P-3 — expose the per-battle RNG for parity tests. Wire-sim
+// asserts that a client `createRng(rngSeed)` instance rolls identical
+// values to the server's `battle.rng`. Production code should not call
+// this — it leaks the RNG identity and would let a client predict server
+// rolls (defeats the whole "server is sole roller" point).
+function _testGetBattleRng(battleId) {
+  const b = _battles.get(battleId);
+  return b ? b.rng : null;
+}
+
 export {
   createBattle,
   buildStartFrame,
@@ -400,4 +418,5 @@ export {
   getActiveCount,
   getBattleForUser,
   _testReset,
+  _testGetBattleRng,
 };

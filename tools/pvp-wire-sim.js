@@ -27,6 +27,10 @@ import {
   tryInflictStatus, processTurnStart,
 } from '../src/status-effects.js';
 import { generateAllyStats } from '../src/data/players.js';
+import { createRng } from '../src/rng.js';
+import { _testGetBattleRng as pvpArbGetBattleRng } from '../pvp-arbiter.js';
+// calcDamage / rollHits / rollInitiative are already imported at line 24
+// (Suite 1 RNG determinism tests). Reuse those for the P-3 parity tests.
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
 import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testMirrorSync, _testMirrorSyncRuntime,
@@ -1812,6 +1816,85 @@ async function suiteWire() {
     assertEqual(sa.sides.B[0].cellId, 4, 'B main cellId=4 (range reserved)');
     assertEqual(sa.yourCellId, 0, 'A yourCellId=0');
     assertEqual(sb.yourCellId, 4, 'B yourCellId=4');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.749 P-3 — per-battle RNG + injected battle-math ───────────────
+  // The server-arbiter holds a per-battle RNG instance. A second RNG
+  // seeded with the same value must produce IDENTICAL sequences. This
+  // verifies the createRng factory + the singleton don't share state
+  // and the mulberry32 step works correctly on both.
+  test('v1.7.749 P-3 createRng(seed) produces deterministic sequence', () => {
+    const rngA = createRng(12345);
+    const rngB = createRng(12345);
+    for (let i = 0; i < 10; i++) {
+      assertEqual(rngA.rand(), rngB.rand(), 'seq[' + i + '] matches');
+    }
+    // Different seed → different sequence.
+    const rngC = createRng(67890);
+    assertTrue(rngA.rand() !== rngC.rand(), 'different seed → different roll');
+  });
+
+  test('v1.7.749 P-3 calcDamage accepts opts.rand', () => {
+    // Pure math test — no battle. Identical seeded RNGs produce
+    // identical damage rolls; advancing one without the other proves
+    // they hold independent state.
+    const rngA = createRng(424242);
+    const rngB = createRng(424242);
+    for (let i = 0; i < 10; i++) {
+      const dA = calcDamage(50, 10, false, 0, 1, { rand: rngA.rand });
+      const dB = calcDamage(50, 10, false, 0, 1, { rand: rngB.rand });
+      assertEqual(dA, dB, 'seq[' + i + '] parity');
+    }
+    // Burn one extra roll on rngA, then verify the next pair diverges
+    // (proves they're independent instances, not aliases of one state).
+    rngA.rand();
+    let diverged = false;
+    for (let i = 0; i < 5; i++) {
+      if (calcDamage(50, 10, false, 0, 1, { rand: rngA.rand }) !==
+          calcDamage(50, 10, false, 0, 1, { rand: rngB.rand })) {
+        diverged = true; break;
+      }
+    }
+    assertTrue(diverged, 'independent state — diverges after one offset');
+  });
+
+  test('v1.7.749 P-3 rollHits accepts opts.rand for reproducibility', () => {
+    const rngA = createRng(987654);
+    const rngB = createRng(987654);
+    const hitsA = rollHits(40, 8, 80, 4, { rand: rngA.rand, evade: 0 });
+    const hitsB = rollHits(40, 8, 80, 4, { rand: rngB.rand, evade: 0 });
+    assertEqual(JSON.stringify(hitsA), JSON.stringify(hitsB), 'rollHits seq matches');
+  });
+
+  test('v1.7.749 P-3 rollInitiative accepts opts.rand', () => {
+    const rngA = createRng(11111);
+    const rngB = createRng(11111);
+    assertEqual(rollInitiative(10, { rand: rngA.rand }),
+                rollInitiative(10, { rand: rngB.rand }), 'initiative parity');
+  });
+
+  await asyncTest('v1.7.749 P-3 battle carries an RNG instance via the seed', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7498); _testSeedSave(7498, 0);
+    _testEnsureUser(7499); _testSeedSave(7499, 0);
+    const A = await connectClient(port, 7498, { ...baseProfile, name: 'RngA' });
+    const B = await connectClient(port, 7499, { ...targetProfile, name: 'RngB' });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7499 }));
+    const start = await aStart;
+    assertTrue(start.rngSeed > 0, 'rngSeed shipped in start frame');
+    // Server's battle RNG must produce the same sequence as a client
+    // createRng(seed) — proves the wire seed lets a client preview
+    // animation rolls without drifting from the server's gameplay
+    // rolls (which the server makes independently after this point).
+    const serverRng = pvpArbGetBattleRng(start.battleId);
+    assertTrue(serverRng != null, 'arbiter exposes per-battle rng');
+    const clientRng = createRng(start.rngSeed);
+    for (let i = 0; i < 5; i++) {
+      assertEqual(serverRng.rand(), clientRng.rand(), 'roll[' + i + '] parity');
+    }
     A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
