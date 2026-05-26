@@ -31,6 +31,7 @@ import { sendNetPartyInvite, sendNetPartyCancel, sendNetPartyResponse,
          setNetPartyMemberLeftHandler, setNetPartyDisbandedHandler,
          setNetPartyMemberJoinedHandler, setNetPartySnapshotHandler,
          setNetPartyInviteCancelledHandler,
+         setNetPlayerUpdateHandler,
          getOnlinePlayerByName } from './net.js';
 import { addChatMessage } from './chat.js';
 
@@ -481,6 +482,18 @@ setNetPartyResultHandler((msg) => {
   // Server reported a rejection — show the "Declined" message and apply
   // the standard cooldown.
   cancelPartyInvite('rejected');
+});
+
+// D-2 (v1.7.737) — keep `partyMemberProfiles` live with the wire. Pre-fix
+// the cache was set at join / snapshot time only and lagged on subsequent
+// `player-update` (level up, equipment swap, HP, status). Mostly dead code
+// while `PARTY_PIN_TO_ROSTER = false` (v1.7.727), but a defensive wire-up
+// so re-enabling the pin doesn't expose stale cached stats. Match by name
+// since `partyMemberProfiles` is keyed that way.
+setNetPlayerUpdateHandler((userId, entry) => {
+  if (!entry || !entry.name) return;
+  if (!partyInviteSt.partyMembers.includes(entry.name)) return;
+  partyInviteSt.partyMemberProfiles.set(entry.name, { ...entry });
 });
 
 export function tickPartyInvite(dt) {

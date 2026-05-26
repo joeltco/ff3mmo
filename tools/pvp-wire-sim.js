@@ -880,6 +880,45 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.737 D-1 _lastSeenProfiles reaped on party-leave ────────────
+  // Pre-fix the cache grew unbounded — comment claimed it dropped on
+  // leave/dismiss/disband but no delete() calls existed. Fixed by
+  // wiring the deletes per the comment.
+  await asyncTest('v1.7.737 D-1 party-leave drops cached profile', async () => {
+    _testHooks.resetState();
+    // Seed: member 7371 in inviter 7370's party, both cached.
+    _testHooks.state.partyMemberships.set(7371, 7370);
+    _testHooks.state.lastSeenProfiles.set(7370, { name: 'Inviter' });
+    _testHooks.state.lastSeenProfiles.set(7371, { name: 'Member' });
+    const B = await connectClient(port, 7371, { ...targetProfile, name: 'Member' });
+    B.send(JSON.stringify({ type: 'party-leave' }));
+    // Wait a beat for the server to process.
+    await new Promise(r => setTimeout(r, 100));
+    assertEqual(_testHooks.state.lastSeenProfiles.has(7371), false,
+      'leaver cache reaped');
+    assertEqual(_testHooks.state.lastSeenProfiles.has(7370), true,
+      'inviter cache preserved (still party-ful with other members)');
+    B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.737 D-1 party-disband drops all cached profiles', async () => {
+    _testHooks.resetState();
+    _testHooks.state.partyMemberships.set(7373, 7372);
+    _testHooks.state.partyMemberships.set(7374, 7372);
+    _testHooks.state.lastSeenProfiles.set(7372, { name: 'InvAll' });
+    _testHooks.state.lastSeenProfiles.set(7373, { name: 'M1' });
+    _testHooks.state.lastSeenProfiles.set(7374, { name: 'M2' });
+    const A = await connectClient(port, 7372, { ...baseProfile, name: 'InvAll' });
+    A.send(JSON.stringify({ type: 'party-disband' }));
+    await new Promise(r => setTimeout(r, 100));
+    assertEqual(_testHooks.state.lastSeenProfiles.has(7372), false, 'inviter reaped');
+    assertEqual(_testHooks.state.lastSeenProfiles.has(7373), false, 'member 1 reaped');
+    assertEqual(_testHooks.state.lastSeenProfiles.has(7374), false, 'member 2 reaped');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── v1.7.721 P7 server-side cooldown survives client reload ─────────
   await asyncTest('v1.7.721 P7 decline sets server cooldown; re-invite rejected', async () => {
     _testHooks.resetState();

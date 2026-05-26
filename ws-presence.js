@@ -133,10 +133,11 @@ const _partyMemberships = new Map();
 // us nothing to populate "offline partymate" rows with otherwise). Used
 // by the reconnect party-snapshot fanout (v1.7.720) to ship offline
 // mates' profiles to a reconnecting client so the client's local
-// partyMembers + roster pin can rebuild without waiting for the mate to
-// come back online. Unbounded but tiny — one record per ever-online
-// user, dropped on `party-leave` / `party-dismiss` / `party-disband`
-// when that user can no longer be a partymate.
+// partyMembers can rebuild without waiting for the mate to come back
+// online. Bounded by reaping on `party-leave` / `party-dismiss` /
+// `party-disband` — wired in those handlers as of v1.7.737. (Pre-v1.7.737
+// this comment claimed it was reaped but the deletes were never landed,
+// so the map grew unbounded per ever-online user.)
 const _lastSeenProfiles = new Map();   // userId → profile (without userId/loc)
 
 // Pending roster-trade offers (v1.7.598). offererUserId → { targetUserId,
@@ -1143,6 +1144,7 @@ function _handleMessage(entry, msg) {
       const dismissedPeer = _connected.get(memberUserId);
       const dismissedName = dismissedPeer?.profile?.name || '';
       _partyMemberships.delete(memberUserId);
+      _lastSeenProfiles.delete(memberUserId);   // D-1 (v1.7.737) — bounded growth
       partyRemoveMember(memberUserId);    // persist (v1.7.595)
       _broadcastInPartyChange(memberUserId);
       // Inviter's `inParty` may flip off if that was their last member.
@@ -1202,6 +1204,12 @@ function _handleMessage(entry, msg) {
       // `memberIds.length === 0` before any cleanup happened.
       if (memberIds.length === 0) return;
       for (const memberId of memberIds) _partyMemberships.delete(memberId);
+      // D-1 (v1.7.737) — drop cached profiles for everyone leaving the
+      // party. Comment at `_lastSeenProfiles` claimed this happened; the
+      // delete calls were never wired. They rebuild on the user's next
+      // hello / update.
+      for (const memberId of memberIds) _lastSeenProfiles.delete(memberId);
+      _lastSeenProfiles.delete(entry.userId);
       partyRemoveByInviter(entry.userId);   // persist (v1.7.595)
       _broadcastInPartyChange(entry.userId);          // inviter no longer in party
       for (const memberId of memberIds) _broadcastInPartyChange(memberId);
@@ -1265,6 +1273,9 @@ function _handleMessage(entry, msg) {
         }
         if (memberIds.length === 0) return;   // neither role — silent
         for (const memberId of memberIds) _partyMemberships.delete(memberId);
+        // D-1 (v1.7.737) — drop cached profiles for everyone leaving.
+        for (const memberId of memberIds) _lastSeenProfiles.delete(memberId);
+        _lastSeenProfiles.delete(entry.userId);
         partyRemoveByInviter(entry.userId);   // persist
         _broadcastInPartyChange(entry.userId);
         for (const memberId of memberIds) _broadcastInPartyChange(memberId);
@@ -1280,6 +1291,7 @@ function _handleMessage(entry, msg) {
         return;
       }
       _partyMemberships.delete(entry.userId);
+      _lastSeenProfiles.delete(entry.userId);   // D-1 (v1.7.737) — bounded growth
       partyRemoveMember(entry.userId);    // persist (v1.7.595)
       _broadcastInPartyChange(entry.userId);
       _broadcastInPartyChange(inviterId);   // may have been the last member

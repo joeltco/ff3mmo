@@ -35,6 +35,7 @@ let _locPollHandle = null;
 let _reconnectDelay = 1000;
 let _myUserId = null;
 let _onChat = null;          // (msg) → void — set via setNetChatHandler
+let _onPlayerUpdate = null;  // (userId, mergedEntry) → void — fired after _onlinePlayers merge (v1.7.737)
 let _onPVPMatch = null;      // ({opponent}) → void — set via setNetPVPMatchHandler
 let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedHandler
 let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHandler
@@ -124,7 +125,18 @@ function _handleMessage(data) {
     }
     case 'player-update': {
       const p = _onlinePlayers.get(msg.userId);
-      if (p && msg.fields) Object.assign(p, msg.fields);
+      if (p && msg.fields) {
+        Object.assign(p, msg.fields);
+        // D-2 (v1.7.737) — fire any registered subscriber (e.g.
+        // party-invite.js refreshes `partyMemberProfiles` from this hook
+        // so partymate level/HP/equipment caches stay live with the
+        // wire). Pre-fix the cache was set at join time only and lagged
+        // until the next snapshot.
+        if (_onPlayerUpdate) {
+          try { _onPlayerUpdate(msg.userId, p); }
+          catch (e) { console.warn('[net] player-update subscriber error', e); }
+        }
+      }
       else if (!p && msg.fields) {
         // v1.7.736 — update arrived before the player-join for this user
         // (network reordering). Stash the fields; the player-join branch
@@ -452,6 +464,14 @@ export function sendNetChat(channel, text, to) {
 
 // Register a callback for incoming chat messages. Called by `chat.js`
 // during init. Replaces any previous handler.
+// v1.7.737 — fires on every `player-update` AFTER _onlinePlayers merge.
+// `party-invite.js` registers a subscriber that refreshes its
+// `partyMemberProfiles` cache (which lags otherwise — only set at join /
+// snapshot). Wired here to avoid a circular import from net.js → party-invite.js.
+export function setNetPlayerUpdateHandler(fn) {
+  _onPlayerUpdate = typeof fn === 'function' ? fn : null;
+}
+
 export function setNetChatHandler(fn) {
   _onChat = typeof fn === 'function' ? fn : null;
 }

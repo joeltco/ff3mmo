@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.737 — 2026-05-26
+
+### Fix: two reconnect-drift findings (D-1 cache reap, D-2 partyMemberProfiles live updates)
+
+Closes the remaining drift/staleness gaps from the broader out-of-order audit. Neither is a correctness emergency; both are defensive hardening for already-shipped invariants.
+
+**D-1 — `_lastSeenProfiles` was never reaped.** The comment at `ws-presence.js#_lastSeenProfiles` declaration claimed entries were "dropped on `party-leave` / `party-dismiss` / `party-disband`" but no `_lastSeenProfiles.delete()` calls were ever wired. Map grew by one entry per ever-online user, unbounded (~200-500 bytes per profile; 10K users ≈ 5MB).
+
+Now actually reaped in all three handlers per the original intent. `party-leave` drops the leaver's cache (and the inviter's if /leave was the inviter's path via Gap C). `party-dismiss` drops the dismissed member. `party-disband` drops every member's + the inviter's. Rebuilds naturally on each user's next hello / update.
+
+**D-2 — Client `partyMemberProfiles` lagged on `player-update`.** Set when the partymate first appeared (invite-accept / party-snapshot / party-member-joined) and never refreshed. If a partymate leveled up, swapped equipment, or took damage, the cached profile stayed at first-seen state. Currently dead code while `PARTY_PIN_TO_ROSTER = false` (v1.7.727) but a real bug the moment the pin is re-enabled.
+
+`net.js` now exposes `setNetPlayerUpdateHandler(fn)` — a generic subscription that fires after every `player-update` merge. `party-invite.js` registers a handler that refreshes `partyMemberProfiles[name]` when the updated userId belongs to a current partymate. Wire-side independent — no extra traffic, just a client-side cache update.
+
+2 new wire-sim tests guard the D-1 reap on party-leave and party-disband paths (56 tests total).
+
+Files: `ws-presence.js`, `src/net.js`, `src/party-invite.js`, `tools/pvp-wire-sim.js`.
+
 ## 1.7.736 — 2026-05-26
 
 ### Fix: three pattern-adjacent gaps (JWT-bump live-kick + save-fail surface + player-update buffer)
