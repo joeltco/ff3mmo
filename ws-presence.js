@@ -44,6 +44,7 @@ import {
   partyAddMember, partyRemoveMember, partyRemoveByInviter, partyLoadAll,
   tradeLog,
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
+  mirrorApplyInvEvent, mirrorReadFullState,    // v1.7.741 Phase 1a
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS } from './src/data/items.js';
@@ -312,6 +313,11 @@ function _normalizeProfileField(key, value) {
     case 'jobIdx':   return _clamp(value, 0, 31);
     case 'level':    return _clamp(value, 1, 99);
     case 'palIdx':   return _clamp(value, 0, 31);
+    // v1.7.741 — Phase 1a inventory mirror. `slot` is the active save slot
+    // the client is currently playing. Server stashes on entry.slot so
+    // subsequent inv-event frames know which (userId, slot) to mutate.
+    // Defaults to 0 if the client doesn't send it (pre-1a clients).
+    case 'slot':     return _clamp(value, 0, 2);
     case 'hp':       return _clamp(value, 0, 9999);
     case 'maxHP':    return _clamp(value, 1, 9999);
     case 'agi':      return _clamp(value, 1, 99);
@@ -369,6 +375,11 @@ const PER_KIND_RATES = {
   'chat':                      { cap: 20, refill: 5 },
   'give-item':                 { cap: 6,  refill: 1 },
   'party-invite':              { cap: 6,  refill: 1 },
+  // v1.7.741 Phase 1a — inv-event is per-mutation. A burst (mid-battle
+  // item-use, opening a chest with 4 stack) can hit 4-6 events in a
+  // second; refill 4/s keeps sustained mutation fine while capping
+  // malicious flood.
+  'inv-event':                 { cap: 30, refill: 4 },
 };
 function _rateAllowKind(entry, kind) {
   const rate = PER_KIND_RATES[kind];
@@ -586,6 +597,12 @@ function _handleMessage(entry, msg) {
         allies:   _normalizeProfileField('allies',   profile.allies) || [],
       };
       entry.loc = String(parsed.loc || 'ur').slice(0, 16);
+      // v1.7.741 — Phase 1a inventory mirror. Stash the active save slot
+      // on entry (NOT in profile — peers don't need to know my slot).
+      // Defaults to 0 if missing for pre-1a client compat. `inv-event`
+      // frames use entry.slot as the default mutation target; explicit
+      // `slot` in the event payload overrides.
+      entry.slot = _normalizeProfileField('slot', profile.slot) ?? 0;
       const wasHelloed = entry.helloed;
       entry.helloed = true;
       // Cache for offline partymate snapshots (v1.7.720). Strip userId/loc —
@@ -716,6 +733,12 @@ function _handleMessage(entry, msg) {
         entry.profile[k] = v;
         fields[k] = v;
       }
+      // v1.7.741 — `slot` is a per-WS field, not broadcast to peers. Update
+      // entry.slot without adding it to the player-update fanout.
+      if (parsed.slot != null) {
+        const s = _normalizeProfileField('slot', parsed.slot);
+        if (s !== undefined) entry.slot = s;
+      }
       if (Object.keys(fields).length === 0) return;
       // Refresh the offline-snapshot cache so a future reconnect sees the
       // latest realized stats / palette / status mask. v1.7.720.
@@ -815,6 +838,54 @@ function _handleMessage(entry, msg) {
         damageRoll: parsed.damageRoll,    // v1.7.389 — sender's pre-rolled damage (audit #24)
         healAmount: parsed.healAmount,    // v1.7.389 — sender's pre-rolled heal (audit #24)
         hitResults: parsed.hitResults,    // v1.7.407 — sender's pre-rolled physical hits
+      });
+      return;
+    }
+    case 'inv-event': {
+      // v1.7.741 Phase 1a — inventory mirror authoritative-write scaffold.
+      // Client emits an event for every inventory mutation; server
+      // validates bounds + applies to the (userId, slot) mirror.
+      //
+      // Shadow mode: never rejects on state mismatch — just logs
+      // `[mirror divergence]` to pm2 for forensic review. Phase 1b will
+      // flip a flag to start rejecting + pushing corrective `inv-state`
+      // on mismatch. See `docs/INVENTORY-MIRROR-PLAN.md` Phase 1a/1b.
+      //
+      // Per-kind rate limit: inv-event is user-action-driven; cap stops
+      // a malicious client from flooding the mirror with no-op writes.
+      // Bucket constants in PER_KIND_RATES below.
+      if (!entry.helloed) return;
+      // Default to entry.slot (set at hello time); explicit slot in
+      // payload overrides for the rare mid-session save swap. Clamp 0-2.
+      const slot = parsed.slot != null
+        ? _clamp(parsed.slot | 0, 0, 2)
+        : (entry.slot | 0);
+      const result = mirrorApplyInvEvent(entry.userId, slot, parsed);
+      if (!result.ok) {
+        // Bad event — log but don't push back; the client's local state
+        // is the source of truth in Phase 1a, so a bounds violation is
+        // a developer bug, not a user-visible failure.
+        console.warn('[inv-event] reject user=' + entry.userId + ' slot=' + slot +
+          ' kind=' + (parsed.kind || '?') + ' reason=' + result.reason);
+        return;
+      }
+      // Successful shadow-mode apply — divergence (if any) was already
+      // logged inside mirrorApplyInvEvent.
+      return;
+    }
+    case 'inv-state-request': {
+      // v1.7.741 Phase 1a — client requests a fresh snapshot of mirror
+      // state for the active slot. Used by future Phase 1c hello-sync
+      // path; exposed early so clients can defensively re-pull state
+      // (similar to party-resync).
+      if (!entry.helloed) return;
+      const slot = parsed.slot != null
+        ? _clamp(parsed.slot | 0, 0, 2)
+        : (entry.slot | 0);
+      _send(entry.ws, {
+        type: 'inv-state',
+        reason: 'requested',
+        ...mirrorReadFullState(entry.userId, slot),
       });
       return;
     }

@@ -21,6 +21,7 @@ import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
 import { addItem, canAddItem } from './inventory.js';
+import { sendNetInvEvent } from './net.js';
 import { saveSlotsToDB } from './save-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN } from './sprite.js';
@@ -259,9 +260,18 @@ export function handleChest(facedX, facedY) {
     const [min, max] = entry.gil;
     const amount = min + Math.floor(Math.random() * (max - min + 1));
     grantGil(amount);
+    // v1.7.741 Phase 1a — fire inv-event for the gil grant. Server-side
+    // mirror records it; in 1a the local `grantGil` above is still the
+    // source of truth (`INV_MIRROR_AUTHORITATIVE = false`). Wire fires
+    // unconditionally so the server can detect divergence even in 1a.
+    sendNetInvEvent('gil-delta', 0, amount, 'chest');
     msg = foundGilMsg(amount);
   } else {
     addItem(entry, 1);
+    // v1.7.741 Phase 1a — fire inv-event for the item add. itemId here
+    // is the chest's loot pick (entry is a number for simple items).
+    // Server applies to mirror in shadow mode.
+    sendNetInvEvent('add', entry, 1, 'chest');
     msg = foundItemMsg(entry);
   }
   playSFX(SFX.TREASURE);

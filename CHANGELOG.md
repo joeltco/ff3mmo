@@ -18,6 +18,57 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.741 — 2026-05-26
+
+### Inventory mirror Phase 1a — `inv-event` wire scaffold (shadow mode)
+
+First wire-level step of the mirror rollout. Scaffolds the authoritative-write protocol that Phase 1b will flip on for enforcement. **Zero user-facing change.** Server now accepts `inv-event` frames from clients and applies them to the Phase 0 mirror in shadow mode — never rejects on state mismatch, just logs `[mirror divergence]` to pm2 for forensic review. One real call site (chest open) fires events so the wire actually exercises in production.
+
+**New wire shapes** (frozen — Phase 1b/1c will not change the protocol):
+
+```js
+// Client → server: every inventory mutation generates one of these.
+{ type:'inv-event', kind:'add'|'remove'|'equip'|'gil-delta',
+  itemId, qty, source:'chest'|'shop'|'loot'|'use'|'trade'|'levelup'|'equip-swap'|'scroll'|'other',
+  slot?:<0-2> }
+
+// Server → client: full mirror snapshot for active slot. Used now by
+// inv-state-request (defensive); 1b will fire on reject, 1c on hello.
+{ type:'inv-state', slot, inventory, gil, cp, exp, unlockedJobs,
+  equipped:{weaponR,weaponL,head,body,arms}, knownSpells, jobLevels,
+  reason?:'rejected'|'hello-sync'|'requested'|'post-restore' }
+```
+
+**Slot tracking:** the `hello` profile now carries `slot` (the active save slot, 0-2). Server stashes on `entry.slot` and uses it as the default for inv-event mutations. NOT broadcast to peers (no peer needs to know your active slot). `update` frames can change it mid-session.
+
+**Server changes** (`ws-presence.js` + `api.js`):
+- New `case 'inv-event'` — validates bounds (itemId 0-255, qty 0-99 for add/remove, signed for gil-delta), applies to mirror via `mirrorApplyInvEvent`, logs divergence in shadow mode (`remove` of an item the mirror doesn't have, etc.).
+- New `case 'inv-state-request'` — read-only snapshot push. Used now for defensive client resync; future code path for Phase 1c hello-sync.
+- New `mirrorApplyInvEvent(userId, slot, ev)` in api.js — dispatch table for the 4 kinds.
+- New `mirrorReadFullState(userId, slot)` — assembles the wire-shaped snapshot.
+- Per-kind rate limit: 30 cap / 4 refill — generous enough for mid-battle item-use bursts, capped enough to bound flood.
+
+**Client changes** (`src/net.js`, `src/main.js`, `src/map-triggers.js`):
+- `sendNetInvEvent(kind, itemId, qty, source)` — fire-and-forget wire send.
+- `sendNetInvStateRequest()` — defensive resync trigger.
+- `setNetInvStateHandler(fn)` — subscription slot (no live producer yet in 1a).
+- `INV_MIRROR_AUTHORITATIVE = false` exported as the phase-flip flag.
+- Hello profile builder adds `slot: selectCursor`.
+- `handleChest` in `map-triggers.js` fires events for both gil and item drops alongside the existing `grantGil` / `addItem` calls (flag-gating deferred — wire fires unconditionally in 1a so divergence detection actually exercises).
+
+**7 new wire-sim tests** — inv-event add/remove/zero/gil-delta/bad-bounds, inv-state-request snapshot, hello-slot routes to correct slot. Total 66 tests passing.
+
+**Migration map for Phase 1c** (per the audit, the other ~30 call sites that need migration before flag flip):
+- `addItem` callers: `inventory.js` (1), `battle-encounter.js` (drops), `battle-turn.js` (item use), `shop.js`, `pause-menu.js` (rewards), `map-triggers.js` (hidden treasure already covered + secret walls), `chat.js` (give-item receive), `pvp.js`
+- `removeItem` callers: `pause-menu.js` (item use, equip swap), `battle-turn.js`, `trade.js`, `chat.js` (give-item send)
+- `setEquipSlotId` callers: `pause-menu.js` (Equip menu, Optimize)
+- `grantGil` callers: `battle-encounter.js`, `shop.js` (sell)
+- `grantSpell` / spell-learning: `scroll-use.js`, `level-up.js`
+
+Per-site migration is mechanical once the wire shape is locked. Plan tracking: tasks 1-7 of this Phase 1a session ship today; Phase 1b (flag flip + rejection) + 1c (remaining sites) follow.
+
+Files: `api.js`, `ws-presence.js`, `src/net.js`, `src/main.js`, `src/map-triggers.js`, `tools/pvp-wire-sim.js`, `docs/INVENTORY-MIRROR-PLAN.md`.
+
 ## 1.7.740 — 2026-05-26
 
 ### Inventory mirror Phase 0 — read-only server-side mirror

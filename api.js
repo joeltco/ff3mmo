@@ -479,6 +479,142 @@ function mirrorCheckDivergence(userId, slot, newData) {
   } catch { /* read failure is non-fatal */ }
 }
 
+// ── Phase 1a inv-event handlers (v1.7.741) ────────────────────────────
+// Per-kind mutators. All take (userId, slot, ...) and either apply to the
+// mirror or return a structured result describing what would have changed
+// (in shadow mode, the apply is allowed even if the player's claimed prior
+// state doesn't match — divergence is logged). Phase 1b will gate the
+// apply behind a state-match check + emit inv-state corrective push.
+
+const _invInvReadOneStmt  = db.prepare('SELECT qty FROM inv_inventories WHERE user_id = ? AND slot = ? AND item_id = ?');
+const _invInvUpsertStmt   = db.prepare(
+  'INSERT INTO inv_inventories (user_id, slot, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)' +
+  ' ON CONFLICT(user_id, slot, item_id) DO UPDATE SET qty = excluded.qty, updated_at = excluded.updated_at'
+);
+const _invInvDeleteOneStmt = db.prepare('DELETE FROM inv_inventories WHERE user_id = ? AND slot = ? AND item_id = ?');
+const _invEquipReadStmt   = db.prepare('SELECT weapon_r, weapon_l, head, body, arms FROM inv_equipped WHERE user_id = ? AND slot = ?');
+
+// Returns { ok, applied?, reason?, mirrorBefore, mirrorAfter } describing
+// the outcome. Shadow mode (Phase 1a) always returns ok:true and applies;
+// Phase 1b will gate apply behind state matching and return ok:false with
+// the corrective state on mismatch.
+function mirrorApplyInvEvent(userId, slot, ev) {
+  const now = Math.floor(Date.now() / 1000);
+  const kind = String(ev.kind || '');
+  const itemId = ev.itemId | 0;
+  const qty = ev.qty | 0;
+  // Bounds: itemId 0-255 (0 is "empty" / valid for equip-unset), qty signed
+  // for gil-delta else positive. Reject out-of-bounds frames entirely —
+  // these can't come from a legitimate client.
+  if (itemId < 0 || itemId > 255) {
+    return { ok: false, reason: 'bad-itemId' };
+  }
+  switch (kind) {
+    case 'add': {
+      if (qty <= 0 || qty > 99) return { ok: false, reason: 'bad-qty' };
+      const cur = _invInvReadOneStmt.get(userId, slot, itemId);
+      const before = cur ? (cur.qty | 0) : 0;
+      const after = Math.min(99, before + qty);
+      _invInvUpsertStmt.run(userId, slot, itemId, after, now);
+      return { ok: true, before, after, kind, itemId };
+    }
+    case 'remove': {
+      if (qty <= 0 || qty > 99) return { ok: false, reason: 'bad-qty' };
+      const cur = _invInvReadOneStmt.get(userId, slot, itemId);
+      const before = cur ? (cur.qty | 0) : 0;
+      // Shadow mode allows remove even if mirror lacks the item; log
+      // the divergence. Phase 1b will reject here.
+      if (before < qty) {
+        console.warn('[mirror divergence] user=' + userId + ' slot=' + slot +
+          ' inv-event remove kind=' + kind + ' item=0x' + itemId.toString(16) +
+          ' qty=' + qty + ' but mirror has ' + before + ' (src=' + (ev.source || '?') + ')');
+      }
+      const after = Math.max(0, before - qty);
+      if (after === 0) _invInvDeleteOneStmt.run(userId, slot, itemId);
+      else _invInvUpsertStmt.run(userId, slot, itemId, after, now);
+      return { ok: true, before, after, kind, itemId, diverged: before < qty };
+    }
+    case 'equip': {
+      // qty here is repurposed as the slot index: 0=weaponR, 1=weaponL,
+      // 2=head, 3=body, 4=arms. itemId=0 → unequip.
+      const slotMap = ['weapon_r', 'weapon_l', 'head', 'body', 'arms'];
+      const slotName = slotMap[qty];
+      if (!slotName) return { ok: false, reason: 'bad-slot' };
+      const eq = _invEquipReadStmt.get(userId, slot) || {};
+      const before = (eq[slotName] | 0);
+      // SQL injection-safe — slotName from whitelist only.
+      db.prepare('INSERT OR REPLACE INTO inv_equipped (user_id, slot, weapon_r, weapon_l, head, body, arms, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+        userId, slot,
+        slotName === 'weapon_r' ? itemId : (eq.weapon_r | 0),
+        slotName === 'weapon_l' ? itemId : (eq.weapon_l | 0),
+        slotName === 'head'     ? itemId : (eq.head | 0),
+        slotName === 'body'     ? itemId : (eq.body | 0),
+        slotName === 'arms'     ? itemId : (eq.arms | 0),
+        now,
+      );
+      return { ok: true, before, after: itemId, kind, equipSlot: slotName };
+    }
+    case 'unequip':
+      // Equivalent to equip with itemId=0 + qty=slotIdx; client should
+      // just send 'equip' with itemId=0. Reject for now to keep the
+      // dispatch table small.
+      return { ok: false, reason: 'use-equip-with-itemId-0' };
+    case 'gil-delta': {
+      // qty is signed for gil. Bound to ±999999 per event to defend
+      // against int overflow.
+      if (qty < -999999 || qty > 999999) return { ok: false, reason: 'bad-qty' };
+      const cur = _invEconReadStmt.get(userId, slot);
+      const before = cur ? (cur.gil | 0) : 0;
+      const after = Math.max(0, Math.min(999999, before + qty));
+      _invEconUpsertStmt.run(
+        userId, slot, after,
+        cur ? cur.cp : 0, cur ? cur.exp : 0, cur ? cur.unlocked_jobs : 0,
+        now,
+      );
+      return { ok: true, before, after, kind };
+    }
+    default:
+      return { ok: false, reason: 'bad-kind' };
+  }
+}
+
+// Read the full mirror state for (userId, slot) as a wire-shaped object
+// suitable for sending as the body of an `inv-state` frame. Used for
+// corrective state push in Phase 1b + hello-time sync in Phase 1c.
+function mirrorReadFullState(userId, slot) {
+  const econ = _invEconReadStmt.get(userId, slot) || {};
+  const eqRow = _invEquipReadStmt.get(userId, slot) || {};
+  const invRows = db.prepare('SELECT item_id, qty FROM inv_inventories WHERE user_id = ? AND slot = ?').all(userId, slot);
+  const spRows  = db.prepare('SELECT spell_id FROM inv_known_spells WHERE user_id = ? AND slot = ?').all(userId, slot);
+  const jlRows  = db.prepare('SELECT job_id, level, jp FROM inv_job_levels WHERE user_id = ? AND slot = ?').all(userId, slot);
+  // Also need cp/exp/unlocked_jobs — re-read with the full row.
+  const econFull = db.prepare('SELECT gil, cp, exp, unlocked_jobs FROM inv_economies WHERE user_id = ? AND slot = ?').get(userId, slot) || {};
+  const inventory = {};
+  for (const r of invRows) inventory[r.item_id] = r.qty;
+  const jobLevels = {};
+  for (const r of jlRows) jobLevels[r.job_id] = { level: r.level, jp: r.jp };
+  return {
+    slot,
+    inventory,
+    gil:          econFull.gil          | 0,
+    cp:           econFull.cp           | 0,
+    exp:          econFull.exp          | 0,
+    unlockedJobs: econFull.unlocked_jobs >>> 0,
+    equipped: {
+      weaponR: eqRow.weapon_r | 0,
+      weaponL: eqRow.weapon_l | 0,
+      head:    eqRow.head     | 0,
+      body:    eqRow.body     | 0,
+      arms:    eqRow.arms     | 0,
+    },
+    knownSpells: spRows.map(r => r.spell_id),
+    jobLevels,
+  };
+}
+
+// Exports — the wire handler in ws-presence.js calls these.
+export { mirrorApplyInvEvent, mirrorReadFullState };
+
 // Boot seed — populate mirror from every existing save. Idempotent
 // (transaction inside mirrorSyncFromSave is replace-semantics). Runs once
 // at module load. Negligible cost: O(saves), ~13 users × ≤3 slots today.

@@ -166,12 +166,84 @@ than reasonable deltas.
 Server applies to mirror, then pushes the corrective state if the
 client's local state diverges.
 
-**New wire shape:**
+**Substructure — Phase 1a / 1b / 1c:** the work splits along the
+risk-vs-deploy-size axis. 1a lands the wire scaffold + handler in shadow
+mode (logs only, never rejects). 1b flips a flag so the server starts
+rejecting events that don't match mirror state. 1c (multi-session)
+migrates the remaining ~30-40 client call sites onto the wire. Each
+sub-phase is independently shippable and rolls back via flag flip.
+
+**Phase 1a deliverables** (v1.7.741):
+- `inv-event` + `inv-state` wire shapes defined and stable
+- Server handler that validates bounds, applies to mirror, logs
+  divergence in shadow mode (`INV_MIRROR_AUTHORITATIVE = false` server-
+  side)
+- Client `sendNetInvEvent` + `setNetInvStateHandler` exports
+- Hello payload extended with active `slot` so the server knows which
+  (userId, slot) to apply events to
+- ONE real call site migrated (chest open) — fires the event in
+  ADDITION to the existing `addItem` call, gated on the flag.
+  Flag-off: wire fires, server logs, no behavior change.
+- Wire-sim regression tests for the roundtrip + bounds validation
+
+**Phase 1b** (future): flip `INV_MIRROR_AUTHORITATIVE = true`. Server
+starts rejecting events that don't match mirror state (e.g. "you
+claimed to remove a Sage Staff you don't have"). Server pushes `inv-state`
+back on rejection. Client wholesale-replaces local state from the push.
+
+**Phase 1c+** (future, multi-session): migrate the remaining mutation
+sites. Audit identifies them at: `addItem` (chest/loot/shop/levelup/use),
+`removeItem` (use/trade/equip), `setEquipSlotId` (equip menu),
+`grantSpell` (scroll use / level-up), gil/cp/exp deltas in player-stats.
+
+**Wire shapes (frozen as of Phase 1a):**
+
 ```js
 // Client → server
-{ type: 'inv-event', kind: 'add' | 'remove' | 'equip' | 'unequip',
-  itemId, qty, source: 'chest' | 'shop' | 'loot' | 'use' | 'trade' | 'levelup' }
-// Server → client (corrective push if rejected)
+// kind defines the mutation; source is a free-text reason field used
+// for divergence logging + future rejection messaging. itemId/qty
+// semantics depend on kind.
+{
+  type:   'inv-event',
+  kind:   'add' | 'remove' | 'equip' | 'unequip' | 'gil-delta',
+  itemId: <0-255>,           // ignored when kind === 'gil-delta'
+  qty:    <integer>,          // signed for 'gil-delta', else positive
+  source: 'chest' | 'shop' | 'loot' | 'use' | 'trade' |
+          'levelup' | 'equip-swap' | 'scroll' | 'other',
+  slot?:  <0-2>,              // optional; server falls back to entry.slot
+}
+```
+
+```js
+// Server → client (corrective state push)
+// Sent on rejection in Phase 1b, on hello in 1c-onward (replaces the
+// existing /api/saves load for inventory fields). Carries the full
+// mirror snapshot for the active slot so the client can replace its
+// local state wholesale.
+{
+  type:        'inv-state',
+  slot:        <0-2>,
+  inventory:   { <itemIdHexOrDecimal>: qty, ... },
+  gil:         <integer>,
+  cp:          <integer>,
+  exp:         <integer>,
+  unlockedJobs: <uint32>,
+  equipped:    { weaponR, weaponL, head, body, arms },
+  knownSpells: [spellId, spellId, ...],
+  jobLevels:   { <jobIdx>: { level, jp }, ... },
+  reason?:     'rejected' | 'hello-sync' | 'post-restore',
+}
+```
+
+**Slot-tracking convention:** the `hello` profile (and subsequent
+`update` frames) carries `slot` as a normal field — server stashes it
+on `entry.slot`. Subsequent `inv-event` frames apply to that slot by
+default; an explicit `slot` in the event payload overrides (used when
+the client changes active save mid-session).
+
+**Pre-1a scaffold doc — read this in any 1b/1c session before adding code:**
+```js
+// Client → server (corrective push if rejected)
 { type: 'inv-state', inventory: {...}, gil, equipped: {...} }
 ```
 

@@ -85,6 +85,12 @@ export function init() {
         jobIdx:  ps.jobIdx | 0,
         level:   ps.stats.level | 0 || 1,
         palIdx:  ps.palIdx | 0,
+        // v1.7.741 Phase 1a — active save slot. Server stashes on
+        // entry.slot so inv-event frames know which (userId, slot) of
+        // the mirror to mutate. selectCursor is the currently-loaded
+        // slot (0-2). NOT broadcast to peers — server pulls it off
+        // entry.slot, doesn't include in player-update fanouts.
+        slot:    selectCursor | 0,
         hp:      ps.hp | 0,
         maxHP:   ps.stats.maxHP | 0,
         mp:      ps.mp | 0,

@@ -54,6 +54,7 @@ let _onTradeOffer = null;       // ({fromUserId, fromName, itemId}) → void —
 let _onTradeResult = null;      // ({targetUserId, targetName, accept}) → void — our outgoing trade resolved
 let _onTradeCancelled = null;   // ({fromUserId, fromName}) → void — offerer cancelled before we responded
 let _onPmFailed = null;         // ({to, toUserId?, reason}) → void — our outgoing PM couldn't be delivered (v1.7.735)
+let _onInvState = null;         // ({slot, inventory, gil, equipped, ...}) → void — server pushed full inventory mirror snapshot (v1.7.741 Phase 1a)
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -275,6 +276,16 @@ function _handleMessage(data) {
       if (_onPmFailed) {
         try { _onPmFailed(msg); }
         catch (e) { console.warn('[net] chat-pm-failed handler error', e); }
+      }
+      return;
+    case 'inv-state':
+      // v1.7.741 Phase 1a — server pushed a full inventory mirror snapshot
+      // (in 1a only via explicit `inv-state-request`; 1b will push on
+      // rejection). Handler — when wired — should wholesale-replace local
+      // inventory / gil / equipment / spells / jobs from the payload.
+      if (_onInvState) {
+        try { _onInvState(msg); }
+        catch (e) { console.warn('[net] inv-state handler error', e); }
       }
       return;
     case 'trade-offer-incoming':
@@ -583,6 +594,59 @@ export function setNetGiveItemFailedHandler(fn) {
 // `chat.js` to flag the optimistic-echo line as undelivered.
 export function setNetPmFailedHandler(fn) {
   _onPmFailed = typeof fn === 'function' ? fn : null;
+}
+
+// ── Inventory mirror Phase 1a (v1.7.741) ──────────────────────────────
+//
+// `INV_MIRROR_AUTHORITATIVE` is the feature flag for the mirror rollout.
+// Phase 1a (this version): scaffold + ONE call site (chest open) wired
+// to fire `inv-event` — but the flag is FALSE, so the local apply path
+// (addItem / removeItem / etc.) still runs as the source of truth.
+// Server logs `[mirror divergence]` when events disagree with mirror.
+//
+// Phase 1b (future flip): flag → true. Local apply paths become
+// optimistic; on server rejection the client receives `inv-state` and
+// wholesale-replaces local state. Flip is a one-line change here +
+// matching `INV_MIRROR_AUTHORITATIVE_SERVER` in ws-presence.js.
+//
+// Phase 1c (multi-session): every other inventory mutation site
+// (shop / loot / item-use / equip-swap / scroll / trade-resolution)
+// gets migrated. Each migration is independently shippable while the
+// flag is still false.
+//
+// Full plan: `docs/INVENTORY-MIRROR-PLAN.md`.
+export const INV_MIRROR_AUTHORITATIVE = false;
+
+// Send an inventory mutation event to the server. `kind` is one of
+// 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason
+// used for divergence logging — keep it consistent with the documented
+// enum so log queries are stable. Fire-and-forget: success is silent,
+// rejection logs server-side (Phase 1a) or pushes inv-state back (Phase 1b).
+export function sendNetInvEvent(kind, itemId, qty, source) {
+  if (!_helloed) return false;
+  return _send({
+    type:   'inv-event',
+    kind:   String(kind || ''),
+    itemId: itemId | 0,
+    qty:    qty | 0,
+    source: String(source || 'other'),
+  });
+}
+
+// Request a fresh mirror snapshot for the active slot. Phase 1a exposes
+// the wire for completeness even though no client path uses it yet;
+// Phase 1c will call this at hello time + as a defensive resync hook.
+export function sendNetInvStateRequest() {
+  if (!_helloed) return false;
+  return _send({ type: 'inv-state-request' });
+}
+
+// Server pushed a full inventory-state snapshot. Phase 1a: not yet
+// driven by any server event (handler is exposed but inert). Phase 1b
+// will fire this on rejection — handler should wholesale-replace the
+// local inventory/gil/equipment/spells/jobs from `msg`.
+export function setNetInvStateHandler(fn) {
+  _onInvState = typeof fn === 'function' ? fn : null;
 }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:

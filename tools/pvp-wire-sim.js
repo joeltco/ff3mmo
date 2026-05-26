@@ -991,6 +991,135 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.741 Phase 1a inv-event roundtrip ────────────────────────────
+  // Client sends inv-event {kind:'add'}, server applies to mirror.
+  // Verify the mirror has the new qty after the event lands. Shadow
+  // mode: no rejection, no inv-state push back.
+  await asyncTest('v1.7.741 inv-event add applies to mirror', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7411);
+    _testMirrorClear(7411, 0);
+    const A = await connectClient(port, 7411, { ...baseProfile, name: 'InvA', slot: 0 });
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'add', itemId: 0x80, qty: 3, source: 'chest' }));
+    // Wait for the server to process the event (no response in 1a; small delay).
+    await new Promise(r => setTimeout(r, 80));
+    const m = _testMirrorRead(7411, 0);
+    assertEqual(m.inv.length, 1, 'mirror has 1 item after add');
+    assertEqual(m.inv[0].item_id, 0x80, 'item id');
+    assertEqual(m.inv[0].qty, 3, 'qty applied');
+    A.close();
+    _testMirrorClear(7411, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.741 inv-event remove decrements mirror', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7412);
+    _testMirrorClear(7412, 0);
+    // Seed mirror with 5 Potions.
+    _testMirrorSync(7412, 0, { gil: 0, inventory: { 0x80: 5 } });
+    const A = await connectClient(port, 7412, { ...baseProfile, name: 'InvR', slot: 0 });
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 2, source: 'use' }));
+    await new Promise(r => setTimeout(r, 80));
+    const m = _testMirrorRead(7412, 0);
+    assertEqual(m.inv.length, 1, '1 item row remains');
+    assertEqual(m.inv[0].qty, 3, 'qty decremented 5 → 3');
+    A.close();
+    _testMirrorClear(7412, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.741 inv-event remove past zero deletes row', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7413);
+    _testMirrorClear(7413, 0);
+    _testMirrorSync(7413, 0, { gil: 0, inventory: { 0x80: 2 } });
+    const A = await connectClient(port, 7413, { ...baseProfile, name: 'InvZ', slot: 0 });
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
+    await new Promise(r => setTimeout(r, 80));
+    const m = _testMirrorRead(7413, 0);
+    assertEqual(m.inv.length, 0, 'row deleted when qty reaches 0');
+    A.close();
+    _testMirrorClear(7413, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.741 inv-event gil-delta applies', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7414);
+    _testMirrorClear(7414, 0);
+    _testMirrorSync(7414, 0, { gil: 100 });
+    const A = await connectClient(port, 7414, { ...baseProfile, name: 'InvG', slot: 0 });
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'gil-delta', itemId: 0, qty: 250, source: 'chest' }));
+    await new Promise(r => setTimeout(r, 80));
+    const m = _testMirrorRead(7414, 0);
+    assertEqual(m.econ.gil, 350, 'gil 100 + 250 = 350');
+    A.close();
+    _testMirrorClear(7414, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.741 inv-event bad bounds silently rejected', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7415);
+    _testMirrorClear(7415, 0);
+    const A = await connectClient(port, 7415, { ...baseProfile, name: 'InvBad', slot: 0 });
+    // Out-of-range itemId, bad qty, bad kind — all should no-op on the mirror.
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'add', itemId: 999, qty: 1, source: 'chest' }));
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'add', itemId: 0x80, qty: 0, source: 'chest' }));
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'totally-fake-kind', itemId: 0x80, qty: 1 }));
+    await new Promise(r => setTimeout(r, 80));
+    const m = _testMirrorRead(7415, 0);
+    assertEqual(m.inv.length, 0, 'no rows added for invalid events');
+    A.close();
+    _testMirrorClear(7415, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.741 inv-state-request returns full mirror snapshot', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7416);
+    _testMirrorClear(7416, 0);
+    _testMirrorSync(7416, 0, {
+      gil: 1500, cp: 50, exp: 800, unlockedJobs: 0x7,
+      inventory: { 0x80: 5, 0x90: 1 },
+      stats: { weaponR: 0x1E, head: 0x62 },
+      knownSpells: [0x01, 0x02],
+    });
+    const A = await connectClient(port, 7416, { ...baseProfile, name: 'InvSnap', slot: 0 });
+    const got = once(A, m => m.type === 'inv-state', 800);
+    A.send(JSON.stringify({ type: 'inv-state-request' }));
+    const snap = await got;
+    assertEqual(snap.slot, 0, 'slot in snapshot');
+    assertEqual(snap.gil, 1500, 'gil');
+    assertEqual(snap.inventory[0x80], 5, 'inventory potion qty');
+    assertEqual(snap.inventory[0x90], 1, 'inventory elixir qty');
+    assertEqual(snap.equipped.weaponR, 0x1E, 'equipped weaponR');
+    assertEqual(snap.equipped.head, 0x62, 'equipped head');
+    assertTrue(Array.isArray(snap.knownSpells) && snap.knownSpells.length === 2, 'spells array');
+    A.close();
+    _testMirrorClear(7416, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.741 hello slot routes inv-event to right slot', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7417);
+    _testMirrorClear(7417, 0);
+    _testMirrorClear(7417, 1);
+    const A = await connectClient(port, 7417, { ...baseProfile, name: 'InvSlot', slot: 1 });
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'add', itemId: 0x80, qty: 1, source: 'chest' }));
+    await new Promise(r => setTimeout(r, 80));
+    const slot0 = _testMirrorRead(7417, 0);
+    const slot1 = _testMirrorRead(7417, 1);
+    assertEqual(slot0.inv.length, 0, 'slot 0 untouched');
+    assertEqual(slot1.inv.length, 1, 'slot 1 received the add');
+    A.close();
+    _testMirrorClear(7417, 0);
+    _testMirrorClear(7417, 1);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── v1.7.721 P7 server-side cooldown survives client reload ─────────
   await asyncTest('v1.7.721 P7 decline sets server cooldown; re-invite rejected', async () => {
     _testHooks.resetState();
