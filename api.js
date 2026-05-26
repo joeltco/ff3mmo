@@ -69,8 +69,23 @@ export function _testValidateSaveData(data) { return _validateSaveData(data); }
 // schema. Both wrap prepared statements created later in this file; the
 // late-binding works because the test caller imports api.js (which runs
 // the schema + prepare block top-to-bottom) before invoking either.
-export function _testMirrorSync(userId, slot, data) {
-  return mirrorSyncFromSave(userId, slot, data);
+//
+// v1.7.744 Phase 4 (partial) — `opts` is forwarded so tests can exercise
+// the bootSeed bypass + the authoritative-server gate that skips
+// wire-managed fields. Defaults to {} so existing callers are unaffected.
+export function _testMirrorSync(userId, slot, data, opts) {
+  return mirrorSyncFromSave(userId, slot, data, opts);
+}
+// v1.7.744 — runtime override for the authoritative-server flag. Used by
+// wire-sim to toggle the gate per-test without restarting the process.
+// Returns the previous value so tests can restore it on teardown.
+export function _testSetMirrorAuthoritative(on) {
+  const prev = INV_MIRROR_AUTHORITATIVE_SERVER;
+  INV_MIRROR_AUTHORITATIVE_SERVER = !!on;
+  return prev;
+}
+export function _testGetMirrorAuthoritative() {
+  return INV_MIRROR_AUTHORITATIVE_SERVER;
 }
 export function _testMirrorRead(userId, slot) {
   const econ = db.prepare('SELECT gil, cp, exp, unlocked_jobs FROM inv_economies WHERE user_id = ? AND slot = ?').get(userId, slot);
@@ -400,40 +415,81 @@ const _invEconReadStmt    = db.prepare('SELECT gil FROM inv_economies WHERE user
 // lands or fully no-ops. Replace-semantics (DELETE then INSERT for the array-
 // shaped tables) so the mirror state is whatever the save claims — Phase 0
 // trusts the save fully (same as the existing `saves` table), but tracks it.
-function mirrorSyncFromSave(userId, slot, data) {
+// v1.7.744 Phase 4 (partial) — authoritative-server gate. When true, the
+// wire (inv-event) becomes the sole writer for inventory/gil/equipped;
+// `mirrorSyncFromSave` no longer overwrites these fields at save time.
+// This eliminates the race documented in INVENTORY-MIRROR-PLAN.md:
+//   client mutates locally → fires inv-event (WS) → saveSlotsToDB (HTTP)
+//   server receives in either order; if save lands first, it stamps the
+//   mirror to N-1 from the just-written save, then the wire 'remove'
+//   decrements again to N-2 — mirror under-counts by 1.
+// With the gate on, the save path no-ops the wire-managed fields, so the
+// wire's apply is idempotent regardless of HTTP/WS arrival order.
+//
+// Non-wire-managed fields (cp/exp/unlockedJobs/knownSpells/jobLevels)
+// still sync from /api/save — no wire events for them yet. Phase 4 (full)
+// would migrate them too and flip /api/save to a server-snapshot read.
+//
+// Boot seed bypasses the gate so empty mirrors get populated from the
+// `saves` table even when the flag is on.
+let INV_MIRROR_AUTHORITATIVE_SERVER = false;
+
+function mirrorSyncFromSave(userId, slot, data, opts) {
   const now = Math.floor(Date.now() / 1000);
+  const bootSeed = !!(opts && opts.bootSeed);
+  const skipWire = INV_MIRROR_AUTHORITATIVE_SERVER && !bootSeed;
   const tx = db.transaction(() => {
-    // Inventory — wipe and replace.
-    _invInvDeleteStmt.run(userId, slot);
-    if (data.inventory && typeof data.inventory === 'object' && !Array.isArray(data.inventory)) {
-      for (const [k, v] of Object.entries(data.inventory)) {
-        const id = parseInt(k, 10);
-        if (!Number.isFinite(id) || id < 0 || id > 255) continue;
-        const qty = (Number(v) | 0);
-        if (qty <= 0) continue;
-        _invInvInsertStmt.run(userId, slot, id, qty, now);
+    // Inventory — wipe and replace. Skipped when wire is authoritative
+    // (the wire handler owns this table; see `mirrorApplyInvEvent`).
+    if (!skipWire) {
+      _invInvDeleteStmt.run(userId, slot);
+      if (data.inventory && typeof data.inventory === 'object' && !Array.isArray(data.inventory)) {
+        for (const [k, v] of Object.entries(data.inventory)) {
+          const id = parseInt(k, 10);
+          if (!Number.isFinite(id) || id < 0 || id > 255) continue;
+          const qty = (Number(v) | 0);
+          if (qty <= 0) continue;
+          _invInvInsertStmt.run(userId, slot, id, qty, now);
+        }
       }
     }
-    // Economy.
-    _invEconUpsertStmt.run(
-      userId, slot,
-      (data.gil | 0),
-      (data.cp | 0),
-      (data.exp | 0),
-      (data.unlockedJobs >>> 0),    // unsigned — unlockedJobs is a 32-bit mask
-      now,
-    );
-    // Equipped — from stats.weaponR/L/head/body/arms.
-    const st = (data.stats && typeof data.stats === 'object') ? data.stats : {};
-    _invEquipUpsertStmt.run(
-      userId, slot,
-      (st.weaponR | 0),
-      (st.weaponL | 0),
-      (st.head | 0),
-      (st.body | 0),
-      (st.arms | 0),
-      now,
-    );
+    // Economy. When wire-authoritative, preserve the wire-managed `gil`
+    // but still let cp/exp/unlocked_jobs sync from the save — no wire
+    // events carry those fields yet.
+    if (skipWire) {
+      const prior = _invEconReadStmt.get(userId, slot);
+      _invEconUpsertStmt.run(
+        userId, slot,
+        prior ? (prior.gil | 0) : (data.gil | 0),    // preserve wire-managed gil
+        (data.cp | 0),
+        (data.exp | 0),
+        (data.unlockedJobs >>> 0),
+        now,
+      );
+    } else {
+      _invEconUpsertStmt.run(
+        userId, slot,
+        (data.gil | 0),
+        (data.cp | 0),
+        (data.exp | 0),
+        (data.unlockedJobs >>> 0),    // unsigned — unlockedJobs is a 32-bit mask
+        now,
+      );
+    }
+    // Equipped — from stats.weaponR/L/head/body/arms. Skipped when wire
+    // is authoritative (the wire's `equip` kind owns this table).
+    if (!skipWire) {
+      const st = (data.stats && typeof data.stats === 'object') ? data.stats : {};
+      _invEquipUpsertStmt.run(
+        userId, slot,
+        (st.weaponR | 0),
+        (st.weaponL | 0),
+        (st.head | 0),
+        (st.body | 0),
+        (st.arms | 0),
+        now,
+      );
+    }
     // Known spells — wipe and replace.
     _invSpellsDeleteStmt.run(userId, slot);
     if (Array.isArray(data.knownSpells)) {
@@ -522,12 +578,16 @@ function mirrorApplyInvEvent(userId, slot, ev) {
       if (qty <= 0 || qty > 99) return { ok: false, reason: 'bad-qty' };
       const cur = _invInvReadOneStmt.get(userId, slot, itemId);
       const before = cur ? (cur.qty | 0) : 0;
-      // Shadow mode allows remove even if mirror lacks the item; log
-      // the divergence. Phase 1b will reject here.
+      // Shadow mode: log divergence + apply anyway (client is source of
+      // truth). Authoritative mode (Phase 1b, v1.7.745): reject without
+      // applying; caller pushes corrective inv-state to the client.
       if (before < qty) {
         console.warn('[mirror divergence] user=' + userId + ' slot=' + slot +
           ' inv-event remove kind=' + kind + ' item=0x' + itemId.toString(16) +
           ' qty=' + qty + ' but mirror has ' + before + ' (src=' + (ev.source || '?') + ')');
+        if (INV_MIRROR_AUTHORITATIVE_SERVER) {
+          return { ok: false, reason: 'divergent-remove', before, requested: qty, itemId };
+        }
       }
       const after = Math.max(0, before - qty);
       if (after === 0) _invInvDeleteOneStmt.run(userId, slot, itemId);
@@ -565,6 +625,16 @@ function mirrorApplyInvEvent(userId, slot, ev) {
       if (qty < -999999 || qty > 999999) return { ok: false, reason: 'bad-qty' };
       const cur = _invEconReadStmt.get(userId, slot);
       const before = cur ? (cur.gil | 0) : 0;
+      // Authoritative mode rejects gil deltas that would underflow the
+      // mirror (player claiming to spend gil they don't have). Shadow
+      // mode clamps to 0 and applies.
+      if (qty < 0 && before + qty < 0) {
+        console.warn('[mirror divergence] user=' + userId + ' slot=' + slot +
+          ' gil-delta=' + qty + ' but mirror has ' + before + ' (src=' + (ev.source || '?') + ')');
+        if (INV_MIRROR_AUTHORITATIVE_SERVER) {
+          return { ok: false, reason: 'divergent-gil', before, requested: qty };
+        }
+      }
       const after = Math.max(0, Math.min(999999, before + qty));
       _invEconUpsertStmt.run(
         userId, slot, after,
@@ -625,7 +695,9 @@ export { mirrorApplyInvEvent, mirrorReadFullState };
   for (const row of rows) {
     try {
       const data = JSON.parse(row.data);
-      mirrorSyncFromSave(row.user_id, row.slot, data);
+      // bootSeed:true bypasses the wire-authoritative gate so empty
+      // mirrors still get populated when the flag is on. v1.7.744.
+      mirrorSyncFromSave(row.user_id, row.slot, data, { bootSeed: true });
       synced++;
     } catch (e) {
       failed++;

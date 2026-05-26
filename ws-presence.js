@@ -862,14 +862,28 @@ function _handleMessage(entry, msg) {
         : (entry.slot | 0);
       const result = mirrorApplyInvEvent(entry.userId, slot, parsed);
       if (!result.ok) {
-        // Bad event — log but don't push back; the client's local state
-        // is the source of truth in Phase 1a, so a bounds violation is
-        // a developer bug, not a user-visible failure.
+        // Bad event — log. Two categories:
+        //   bounds violations (`bad-qty`, `bad-itemId`, `bad-kind`,
+        //     `bad-slot`, `use-equip-with-itemId-0`) → developer bug;
+        //     don't push corrective state, client local is canonical.
+        //   divergence rejections (`divergent-remove`, `divergent-gil`)
+        //     → only emitted when INV_MIRROR_AUTHORITATIVE_SERVER is on
+        //     (v1.7.745 Phase 1b); push the full mirror snapshot back
+        //     so the client wholesale-replaces its state to match.
         console.warn('[inv-event] reject user=' + entry.userId + ' slot=' + slot +
           ' kind=' + (parsed.kind || '?') + ' reason=' + result.reason);
+        if (result.reason === 'divergent-remove' || result.reason === 'divergent-gil') {
+          _send(entry.ws, {
+            type: 'inv-state',
+            reason: 'rejected',
+            rejectedKind: parsed.kind || null,
+            rejectedItemId: (parsed.itemId | 0),
+            ...mirrorReadFullState(entry.userId, slot),
+          });
+        }
         return;
       }
-      // Successful shadow-mode apply — divergence (if any) was already
+      // Successful apply — shadow-mode divergence (if any) was already
       // logged inside mirrorApplyInvEvent.
       return;
     }

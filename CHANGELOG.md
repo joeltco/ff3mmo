@@ -18,6 +18,26 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.744 — 2026-05-26
+
+### Inventory mirror Phase 4 (partial) — wire-managed save gate
+
+Lands the prerequisite that unblocks Phase 1b enforcement. No flag flip; behavior unchanged in production. Pure scaffolding + reversible runtime gate.
+
+**What landed:**
+- `INV_MIRROR_AUTHORITATIVE_SERVER` flag in `api.js` (default `false`). When `true`, `mirrorSyncFromSave` skips the three wire-managed fields (inventory, gil, equipped) — the wire (`inv-event`) becomes the sole writer. Non-wire fields (cp/exp/unlockedJobs/knownSpells/jobLevels) still sync from `/api/save`.
+- Boot seed (`_mirrorBootSeed`) bypasses the gate via `{bootSeed:true}` so new server boots still populate the mirror from existing `saves` rows.
+- `mirrorApplyInvEvent` now distinguishes shadow-mode behavior (log divergence + apply anyway) from authoritative behavior (return `divergent-remove` / `divergent-gil` without mutating mirror). The flag controls which branch runs.
+- ws-presence `case 'inv-event'` push corrective `inv-state` (`reason: 'rejected'`, includes `rejectedKind` + `rejectedItemId`) when a `divergent-*` reason comes back. Bounds violations still log only — those are developer bugs, not user state divergence.
+- Test exports `_testSetMirrorAuthoritative` + `_testGetMirrorAuthoritative` so wire-sim can flip the flag per-test and restore on teardown.
+- 7 new wire-sim tests covering: save gate on/off, bootSeed bypass, divergent remove rejection + push, legitimate remove silent, gil underflow rejection, shadow mode never pushes.
+
+**Race condition resolved (when flag flipped):** with `mirrorSyncFromSave` no longer touching wire-managed fields, the `/api/save` HTTP and `inv-event` WS arrival order no longer matters — the wire's delta is applied exactly once regardless of which lands first.
+
+**Gates:** lint 0, pvp-wire-sim 73/73.
+
+**Next:** v1.7.745 flips both `INV_MIRROR_AUTHORITATIVE_SERVER` (api.js) and `INV_MIRROR_AUTHORITATIVE` (src/net.js) to `true` atomically.
+
 ## 1.7.743 — 2026-05-26
 
 ### Inventory mirror Phase 1b prep + race-condition documentation

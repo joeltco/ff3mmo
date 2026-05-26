@@ -28,7 +28,8 @@ import {
 } from '../src/status-effects.js';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
 import { _testEnsureUser, handleAPI, _testValidateSaveData,
-         _testMirrorSync, _testMirrorRead, _testMirrorClear } from '../api.js';
+         _testMirrorSync, _testMirrorRead, _testMirrorClear,
+         _testSetMirrorAuthoritative, _testGetMirrorAuthoritative } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -1117,6 +1118,188 @@ async function suiteWire() {
     A.close();
     _testMirrorClear(7417, 0);
     _testMirrorClear(7417, 1);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.744 Phase 4 (partial) — gate save sync ────────────────────────
+  // With INV_MIRROR_AUTHORITATIVE_SERVER on, mirrorSyncFromSave must skip
+  // the wire-managed fields (inventory, gil, equipped) so the wire becomes
+  // the sole writer. Non-wire-managed fields (cp, exp, unlockedJobs, spells,
+  // jobLevels) still sync.
+  test('v1.7.744 save sync skips wire-managed fields when flag on', () => {
+    const UID = 7441; const SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    // Seed mirror with state the wire would have produced.
+    _testMirrorSync(UID, SLOT, {
+      gil: 500, inventory: { 0x80: 5 },
+      stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
+    });
+    const prev = _testSetMirrorAuthoritative(true);
+    try {
+      // Save claims different inventory + gil + equipped — should be IGNORED
+      // for those fields. cp/exp/unlockedJobs/spells/jobs should still apply.
+      _testMirrorSync(UID, SLOT, {
+        gil: 99999, inventory: { 0x80: 99, 0xDE: 1 },
+        stats: { weaponR: 0xDE, weaponL: 0xDE, head: 0xDE, body: 0xDE, arms: 0xDE },
+        cp: 42, exp: 1234, unlockedJobs: 0xFF,
+        knownSpells: [0x01, 0x02],
+      });
+      const m = _testMirrorRead(UID, SLOT);
+      assertEqual(m.econ.gil, 500, 'gil preserved (wire-managed)');
+      assertEqual(m.inv.length, 1, 'inventory unchanged (wire-managed)');
+      assertEqual(m.inv[0].qty, 5, 'potion qty preserved');
+      assertEqual(m.eq.weapon_r, 0x1E, 'weaponR preserved (wire-managed)');
+      assertEqual(m.eq.body, 0, 'body unchanged (wire-managed)');
+      assertEqual(m.econ.cp, 42, 'cp synced (not wire-managed)');
+      assertEqual(m.econ.exp, 1234, 'exp synced (not wire-managed)');
+      assertEqual(m.econ.unlocked_jobs, 0xFF, 'unlockedJobs synced (not wire-managed)');
+      assertEqual(m.sp.length, 2, 'knownSpells synced (not wire-managed)');
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(UID, SLOT);
+    }
+  });
+
+  test('v1.7.744 save sync writes wire-managed fields when flag off (shadow)', () => {
+    const UID = 7442; const SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    assertEqual(_testGetMirrorAuthoritative(), false, 'flag default is shadow mode');
+    _testMirrorSync(UID, SLOT, {
+      gil: 7777, inventory: { 0x80: 3 },
+      stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
+    });
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.econ.gil, 7777, 'gil written in shadow mode');
+    assertEqual(m.inv[0].qty, 3, 'inventory written in shadow mode');
+    assertEqual(m.eq.weapon_r, 0x1E, 'equipped written in shadow mode');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.744 bootSeed opt bypasses gate even with flag on', () => {
+    const UID = 7443; const SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    const prev = _testSetMirrorAuthoritative(true);
+    try {
+      // Empty mirror — bootSeed must populate it (the seed runs at module
+      // load to migrate the existing `saves` table into the mirror tables).
+      _testMirrorSync(UID, SLOT, {
+        gil: 250, inventory: { 0x80: 4 },
+        stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
+      }, { bootSeed: true });
+      const m = _testMirrorRead(UID, SLOT);
+      assertEqual(m.econ.gil, 250, 'bootSeed wrote gil');
+      assertEqual(m.inv[0].qty, 4, 'bootSeed wrote inventory');
+      assertEqual(m.eq.weapon_r, 0x1E, 'bootSeed wrote equipped');
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(UID, SLOT);
+    }
+  });
+
+  // ── v1.7.745 Phase 1b — authoritative rejection + corrective push ──────
+  // When the server-side flag is on, divergent remove + gil-delta events
+  // are rejected with a corrective inv-state push (reason: 'rejected').
+  // The mirror is NOT mutated by a rejected event.
+  await asyncTest('v1.7.745 divergent remove rejected with inv-state push', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7451);
+    _testMirrorClear(7451, 0);
+    // Seed mirror with 2 Potions.
+    _testMirrorSync(7451, 0, { gil: 100, inventory: { 0x80: 2 } });
+    const prev = _testSetMirrorAuthoritative(true);
+    try {
+      const A = await connectClient(port, 7451, { ...baseProfile, name: 'RejR', slot: 0 });
+      // Client claims to remove 5 — only has 2.
+      const gotState = once(A, m => m.type === 'inv-state', 800);
+      A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
+      const snap = await gotState;
+      assertEqual(snap.reason, 'rejected', 'inv-state reason is rejected');
+      assertEqual(snap.rejectedKind, 'remove', 'rejected kind is remove');
+      assertEqual(snap.rejectedItemId, 0x80, 'rejected itemId echoed');
+      assertEqual(snap.inventory[0x80], 2, 'inventory snapshot still shows 2 (no mutation)');
+      const m = _testMirrorRead(7451, 0);
+      assertEqual(m.inv[0].qty, 2, 'mirror still 2 after rejection');
+      A.close();
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(7451, 0);
+      await new Promise(r => setTimeout(r, 40));
+    }
+  });
+
+  await asyncTest('v1.7.745 legitimate remove applies without push', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7452);
+    _testMirrorClear(7452, 0);
+    _testMirrorSync(7452, 0, { gil: 0, inventory: { 0x80: 5 } });
+    const prev = _testSetMirrorAuthoritative(true);
+    try {
+      const A = await connectClient(port, 7452, { ...baseProfile, name: 'OkR', slot: 0 });
+      // Set up a listener that should NOT fire (only listen briefly).
+      let gotState = false;
+      A.on('message', (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.type === 'inv-state') gotState = true;
+      });
+      A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 2, source: 'use' }));
+      await new Promise(r => setTimeout(r, 120));
+      assertTrue(!gotState, 'no inv-state push for legitimate remove');
+      const m = _testMirrorRead(7452, 0);
+      assertEqual(m.inv[0].qty, 3, 'mirror decremented 5 → 3');
+      A.close();
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(7452, 0);
+      await new Promise(r => setTimeout(r, 40));
+    }
+  });
+
+  await asyncTest('v1.7.745 gil-delta underflow rejected with corrective push', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7453);
+    _testMirrorClear(7453, 0);
+    _testMirrorSync(7453, 0, { gil: 50 });
+    const prev = _testSetMirrorAuthoritative(true);
+    try {
+      const A = await connectClient(port, 7453, { ...baseProfile, name: 'GilU', slot: 0 });
+      const gotState = once(A, m => m.type === 'inv-state', 800);
+      // Spend 200 with only 50 in mirror.
+      A.send(JSON.stringify({ type: 'inv-event', kind: 'gil-delta', itemId: 0, qty: -200, source: 'shop' }));
+      const snap = await gotState;
+      assertEqual(snap.reason, 'rejected', 'rejected push');
+      assertEqual(snap.gil, 50, 'gil snapshot unchanged');
+      const m = _testMirrorRead(7453, 0);
+      assertEqual(m.econ.gil, 50, 'mirror gil unchanged after rejection');
+      A.close();
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(7453, 0);
+      await new Promise(r => setTimeout(r, 40));
+    }
+  });
+
+  await asyncTest('v1.7.745 shadow mode (flag off) still applies divergent removes', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7454);
+    _testMirrorClear(7454, 0);
+    _testMirrorSync(7454, 0, { gil: 0, inventory: { 0x80: 1 } });
+    // Flag stays default (false). Divergent remove should apply + log, no push.
+    const A = await connectClient(port, 7454, { ...baseProfile, name: 'ShdR', slot: 0 });
+    let gotState = false;
+    A.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'inv-state') gotState = true;
+    });
+    A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
+    await new Promise(r => setTimeout(r, 120));
+    assertTrue(!gotState, 'shadow mode never pushes inv-state on divergence');
+    const m = _testMirrorRead(7454, 0);
+    assertEqual(m.inv.length, 0, 'mirror clamped to 0 + row deleted');
+    A.close();
+    _testMirrorClear(7454, 0);
     await new Promise(r => setTimeout(r, 40));
   });
 
