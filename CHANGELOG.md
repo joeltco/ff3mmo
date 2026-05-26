@@ -20,7 +20,11 @@ All notable changes to this project are documented here.
 
 ## 1.7.746 — 2026-05-26
 
-### Inventory mirror Phase 5 — update broadcast cross-check (closes V-D)
+### Inventory mirror Phase 5 + Phase 4 (full) — V-C and V-D closed
+
+Two phases shipped together (working-tree bundle). With this deploy, **four of the five original dup vectors are closed at runtime** (V-A, V-B via Phase 1b; V-C, V-E via Phase 4 full; V-D via Phase 5). Only secondary cheat surfaces remain (CP/EXP/level/unlockedJobs/knownSpells/jobLevels — still trust-based on save).
+
+#### Phase 5 — `update` broadcast cross-check (closes V-D)
 
 The `case 'update'` handler now cross-checks any equipment fields (weaponR/L/helmId/armorId/shieldId) in the broadcast against `inv_equipped` mirror state. Mismatches get the broadcast field silently overwritten with mirror's view; peers + the entry's own profile cache only ever see authoritative equipment.
 
@@ -35,9 +39,23 @@ The `case 'update'` handler now cross-checks any equipment fields (weaponR/L/hel
 - ws-presence `case 'update'` calls it when any of the 5 equip fields are present, walks the diff, logs `[update divergence]` per mismatch, overwrites both `fields` (broadcast) and `entry.profile` (cache).
 - 3 wire-sim tests: cheated equipment overwritten, matching equipment passes through, non-equipment fields untouched.
 
-**Closes:** V-D (lying-equipped broadcast).
+#### Phase 4 (full) — `GET /api/saves` overlays mirror (closes V-C / V-E)
 
-**Gates:** lint 0, pvp-wire-sim 76/76.
+The load path now overlays mirror's wire-managed fields onto the save JSON: inventory + gil + stats.weaponR/L/head/body/arms come from mirror tables, the rest (palIdx, currentMapId, lastTown, knownSpells, cp/exp/jobs/etc.) come from the save JSON unchanged.
+
+**Why this closes V-C:** a cheated save row still gets written to the `saves` table (POST /api/save validates structurally but doesn't second-guess). But the load path now reads inventory/gil/equipped from the mirror tables, which are wire-authoritative since Phase 1b. The client never sees the cheated values on load → no path to weaponize them.
+
+**Empty-mirror fallback:** if a slot has no `inv_economies` row AND no `inv_inventories` rows, the load returns the save JSON unchanged. This is the brand-new-user / never-logged-in-since-mirror-existed safety. All existing accounts were boot-seeded into the mirror in v1.7.740 + auto-stamped on every subsequent /api/save.
+
+**Implementation:**
+- Single block in api.js `GET /api/saves` walks the 3 slots, fetches mirror rows per slot, overwrites the JSON's wire-managed fields if any mirror data exists.
+- 3 wire-sim tests: mirror inventory returned (not cheated save JSON), non-wire fields preserved (palIdx/currentMapId/knownSpells/stats.level), save-as-is fallback when mirror empty.
+
+**Closes:** V-C (cheated save fields), V-D (lying-equipped broadcast), V-E (cross-device replay — naturally follows V-C).
+
+**Gates:** lint 0, pvp-wire-sim 79/79.
+
+**Remaining audit surface:** save-managed fields with no wire mirror (cp / exp / level / unlockedJobs / knownSpells / jobLevels). Cheatable on save → readable on load. None enable item dup or AI-ally inflation. Would close with Phase 6 (full wire coverage for ps fields) — explicit deferral, not load-bearing for V-A through V-E.
 
 ## 1.7.745 — 2026-05-26
 
