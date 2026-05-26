@@ -26,11 +26,13 @@ import {
   STATUS, addStatus, hasStatus, createStatusState,
   tryInflictStatus, processTurnStart,
 } from '../src/status-effects.js';
+import { generateAllyStats } from '../src/data/players.js';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
 import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testMirrorSync, _testMirrorSyncRuntime,
          _testMirrorRead, _testMirrorClear,
-         _testSetMirrorAuthoritative, _testGetMirrorAuthoritative } from '../api.js';
+         _testSetMirrorAuthoritative, _testGetMirrorAuthoritative,
+         _testSeedSave } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -1612,8 +1614,8 @@ async function suiteWire() {
   // (stub — P-4 lands real resolution).
   await asyncTest('v1.7.747 P-1 pvp-arb-start spawns battle + ends draw', async () => {
     _testHooks.resetState();
-    _testEnsureUser(7484);
-    _testEnsureUser(7485);
+    _testEnsureUser(7484); _testSeedSave(7484, 0);
+    _testEnsureUser(7485); _testSeedSave(7485, 0);
     const A = await connectClient(port, 7484, { ...baseProfile, name: 'ArbA' });
     const B = await connectClient(port, 7485, { ...targetProfile, name: 'ArbB' });
     // Both clients should see pvp-battle-start with matching battleId,
@@ -1650,9 +1652,9 @@ async function suiteWire() {
 
   await asyncTest('v1.7.747 P-1 pvp-arb-start rejects when already in battle', async () => {
     _testHooks.resetState();
-    _testEnsureUser(7474);
-    _testEnsureUser(7475);
-    _testEnsureUser(7476);
+    _testEnsureUser(7474); _testSeedSave(7474, 0);
+    _testEnsureUser(7475); _testSeedSave(7475, 0);
+    _testEnsureUser(7476); _testSeedSave(7476, 0);
     const A = await connectClient(port, 7474, { ...baseProfile, name: 'A2' });
     const B = await connectClient(port, 7475, { ...targetProfile, name: 'B2' });
     const C = await connectClient(port, 7476, { ...targetProfile, name: 'C2' });
@@ -1677,8 +1679,8 @@ async function suiteWire() {
 
   await asyncTest('v1.7.747 P-1 pvp-intent stale-turn rejected silently', async () => {
     _testHooks.resetState();
-    _testEnsureUser(7477);
-    _testEnsureUser(7478);
+    _testEnsureUser(7477); _testSeedSave(7477, 0);
+    _testEnsureUser(7478); _testSeedSave(7478, 0);
     const A = await connectClient(port, 7477, { ...baseProfile, name: 'IntA' });
     const B = await connectClient(port, 7478, { ...targetProfile, name: 'IntB' });
     const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
@@ -1705,8 +1707,8 @@ async function suiteWire() {
 
   await asyncTest('v1.7.747 P-1 disconnect mid-battle notifies survivor', async () => {
     _testHooks.resetState();
-    _testEnsureUser(7479);
-    _testEnsureUser(7480);
+    _testEnsureUser(7479); _testSeedSave(7479, 0);
+    _testEnsureUser(7480); _testSeedSave(7480, 0);
     const A = await connectClient(port, 7479, { ...baseProfile, name: 'DropA' });
     const B = await connectClient(port, 7480, { ...targetProfile, name: 'DropB' });
     const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
@@ -1728,6 +1730,89 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 80));
     assertTrue(!cancelled, 'no pvp-cancel after already-ended battle (P-1 stub)');
     B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.748 P-2 — server stat parity vs client generateAllyStats ──────
+  // The arbiter populates combatant cells via buildCombatantFromUser on
+  // the server. The client's generateAllyStats fast-path consumes those
+  // same wire fields. Both must agree on atk/def/agi/evade/mdef/etc. —
+  // otherwise the rendered preview diverges from the math the server
+  // runs at turn resolution (P-4). This test seeds a non-trivial save
+  // (Fighter level 5 with Longsword + shield), spawns a battle, parses
+  // the wire frame, runs generateAllyStats on the wire shape, asserts
+  // every realized stat field matches.
+  await asyncTest('v1.7.748 P-2 wire combatant matches client generateAllyStats', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7494);
+    _testEnsureUser(7495);
+    // Fighter (jobIdx 1) at level 5 with Longsword (0x24) + heavy armor.
+    // Real numbers: ATK ≈ wpn(20) + str/2 + jp; DEF ≈ floor(vit/2) + arm.
+    _testSeedSave(7494, 0, {
+      name: 'Aldric', jobIdx: 1, palIdx: 3,
+      stats: {
+        level: 5, exp: 0, hp: 80, maxHP: 80, mp: 0, maxMP: 0,
+        str: 14, agi: 9, vit: 12, int: 5, mnd: 5,
+      },
+      jobLevels: { 1: { level: 3, jp: 200 } },
+    });
+    _testMirrorSync(7494, 0, {
+      gil: 0, inventory: {},
+      stats: { weaponR: 0x24, weaponL: 0, head: 0x62, body: 0x73, arms: 0x58 },
+    });
+    _testSeedSave(7495, 0);
+    const A = await connectClient(port, 7494, { ...baseProfile, name: 'Aldric', slot: 0 });
+    const B = await connectClient(port, 7495, { ...targetProfile, name: 'Opp2' });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7495 }));
+    const start = await aStart;
+    // A's main is at sides.A[0] — the heavy-equipped Aldric.
+    const wireCell = start.sides.A[0];
+    assertEqual(wireCell.name, 'Aldric', 'name from save');
+    assertEqual(wireCell.jobIdx, 1, 'jobIdx from save');
+    assertEqual(wireCell.level, 5, 'level from save');
+    // Realized stats come from computeRealizedStats. Recompute on the
+    // client via generateAllyStats fast-path — must agree exactly.
+    const clientStats = generateAllyStats(wireCell);
+    assertEqual(clientStats.atk, wireCell.atk, 'atk parity');
+    assertEqual(clientStats.def, wireCell.def, 'def parity');
+    assertEqual(clientStats.agi, wireCell.agi, 'agi parity');
+    assertEqual(clientStats.evade, wireCell.evade, 'evade parity');
+    assertEqual(clientStats.mdef, wireCell.mdef, 'mdef parity');
+    assertEqual(clientStats.hitRate, wireCell.hitRate, 'hitRate parity');
+    assertEqual(clientStats.shieldEvade, wireCell.shieldEvade, 'shieldEvade parity');
+    assertEqual(clientStats.statusResist, wireCell.statusResist, 'statusResist parity');
+    assertEqual(clientStats.int, wireCell.intStat, 'intStat parity');
+    assertEqual(clientStats.mnd, wireCell.mndStat, 'mndStat parity');
+    assertEqual(clientStats.maxHP, wireCell.maxHP, 'maxHP parity');
+    A.close(); B.close();
+    _testMirrorClear(7494, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.748 P-2 wire frame carries combatant on both sides', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7496); _testSeedSave(7496, 0);
+    _testEnsureUser(7497); _testSeedSave(7497, 0);
+    const A = await connectClient(port, 7496, { ...baseProfile, name: 'SymA' });
+    const B = await connectClient(port, 7497, { ...targetProfile, name: 'SymB' });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    const bStart = once(B, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7497 }));
+    const [sa, sb] = await Promise.all([aStart, bStart]);
+    assertEqual(sa.sides.A.length, 1, 'A frame: 1 combatant on side A');
+    assertEqual(sa.sides.B.length, 1, 'A frame: 1 combatant on side B');
+    assertEqual(sa.sides.A[0].userId, 7496, 'A sees self on side A');
+    assertEqual(sa.sides.B[0].userId, 7497, 'A sees opponent on side B');
+    // Both clients see the SAME combatant data — wire is symmetric.
+    assertEqual(sb.sides.A[0].atk, sa.sides.A[0].atk, 'cross-client atk parity');
+    assertEqual(sb.sides.B[0].atk, sa.sides.B[0].atk, 'cross-client B atk parity');
+    // Cell IDs: A=0, B=4 (reserved range).
+    assertEqual(sa.sides.A[0].cellId, 0, 'A main cellId=0');
+    assertEqual(sa.sides.B[0].cellId, 4, 'B main cellId=4 (range reserved)');
+    assertEqual(sa.yourCellId, 0, 'A yourCellId=0');
+    assertEqual(sb.yourCellId, 4, 'B yourCellId=4');
+    A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
 

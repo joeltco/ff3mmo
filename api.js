@@ -92,6 +92,29 @@ export function _testSetMirrorAuthoritative(on) {
 export function _testGetMirrorAuthoritative() {
   return INV_MIRROR_AUTHORITATIVE_SERVER;
 }
+// v1.7.748 P-2 — minimal save seed for tests that need a parseable save
+// row (e.g. PvP arbiter combatant generation needs base stats). The
+// optional `overrides` merge into a sensible default — jobIdx 0 (Onion
+// Knight) at level 1 with the canonical starting equipment.
+export function _testSeedSave(userId, slot, overrides) {
+  const data = {
+    name: 'Test',
+    jobIdx: 0, palIdx: 0,
+    gil: 0, inventory: {},
+    knownSpells: [],
+    stats: {
+      level: 1, exp: 0, hp: 28, maxHP: 28, mp: 0, maxMP: 0,
+      str: 5, agi: 5, vit: 5, int: 5, mnd: 5,
+      weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0,
+    },
+    jobLevels: { 0: { level: 1, jp: 0 } },
+    ...overrides,
+  };
+  db.prepare('INSERT OR REPLACE INTO saves (user_id, slot, data, updated_at) VALUES (?, ?, ?, unixepoch())').run(
+    userId, slot, JSON.stringify(data)
+  );
+  return data;
+}
 export function _testMirrorRead(userId, slot) {
   const econ = db.prepare('SELECT gil, cp, exp, unlocked_jobs FROM inv_economies WHERE user_id = ? AND slot = ?').get(userId, slot);
   const eq   = db.prepare('SELECT weapon_r, weapon_l, head, body, arms FROM inv_equipped WHERE user_id = ? AND slot = ?').get(userId, slot);
@@ -707,8 +730,23 @@ function mirrorReadEquippedBroadcast(userId, slot) {
   };
 }
 
+// Read the saved JSON for a (userId, slot). Returns null if no row.
+// Used by the PvP arbiter to spawn combatants from save state + mirror
+// equipped (Phase 4 full's GET /api/saves overlay applies inside the
+// HTTP path; this is a direct read for server-internal callers).
+// v1.7.748 P-2.
+function readSaveSlot(userId, slot) {
+  const row = db.prepare('SELECT data FROM saves WHERE user_id = ? AND slot = ?').get(userId, slot);
+  if (!row) return null;
+  try { return JSON.parse(row.data); }
+  catch { return null; }
+}
+
 // Exports — the wire handler in ws-presence.js calls these.
-export { mirrorApplyInvEvent, mirrorReadFullState, mirrorReadEquippedBroadcast };
+export {
+  mirrorApplyInvEvent, mirrorReadFullState, mirrorReadEquippedBroadcast,
+  readSaveSlot,
+};
 
 // Boot seed — populate mirror from every existing save. Idempotent
 // (transaction inside mirrorSyncFromSave is replace-semantics). Runs once

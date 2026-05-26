@@ -3,8 +3,13 @@
 import { buildExpTable, JOBS, jobLevelStatBonus } from './data/jobs.js';
 import { computeJobStats, getJobLevelDelta } from './data/players.js';
 import { ITEMS, isWeapon } from './data/items.js';
-import { BASE_HIT_RATE, calcAttackerAtk, isRightHandHit } from './battle-math.js';
+import { isRightHandHit } from './battle-math.js';
 import { createStatusState } from './status-effects.js';
+// v1.7.748 P-2 — pure stat math lives in `realized-stats.js` so the
+// server can call the same functions for PvP-arbiter combatant generation.
+// The wrappers below pull from `ps`, hand off, write back. Client behavior
+// is unchanged.
+import { computeRealizedStats } from './realized-stats.js';
 
 // Hard level cap. The ROM exp table holds 98 thresholds (levels 1-99), but
 // gameplay clamps progression here. grantExp stops leveling at MAX_LEVEL and
@@ -85,52 +90,25 @@ export function setEquipSlotId(eqIdx, id) {
 }
 
 export function recalcCombatStats() {
-  const allSlots = [ps.weaponR, ps.weaponL, ps.head, ps.body, ps.arms];
-  // Sum equipment stat bonuses
-  let strB = 0, agiB = 0, vitB = 0;
-  for (const id of allSlots) {
-    const item = ITEMS.get(id);
-    if (!item) continue;
-    strB += item.strBonus || 0;
-    agiB += item.agiBonus || 0;
-    vitB += item.vitBonus || 0;
-  }
-  const jobLv = getJobLevel();
-  const jlb = getJobLevelStatBonus(ps.jobIdx, jobLv);
-  const effStr = (ps.stats ? ps.stats.str : 5) + strB + jlb.str;
-  const effAgi = (ps.stats ? ps.stats.agi : 5) + agiB + jlb.agi;
-  ps.atk = calcAttackerAtk({
-    rWpnAtk: isWeapon(ps.weaponR) ? (ITEMS.get(ps.weaponR)?.atk || 0) : 0,
-    lWpnAtk: isWeapon(ps.weaponL) ? (ITEMS.get(ps.weaponL)?.atk || 0) : 0,
-    isMonkClass: ps.jobIdx === 2 || ps.jobIdx === 13,
-    level: ps.stats ? ps.stats.level : 1,
-    str: effStr,
-    jobLevel: jobLv,
+  // v1.7.748 P-2 — delegates to the pure helper in realized-stats.js so
+  // the server can call the same math for PvP arbiter combatant
+  // generation. Same output, same call-site behavior.
+  const r = computeRealizedStats({
+    stats:    ps.stats,
+    jobIdx:   ps.jobIdx,
+    jobLevel: getJobLevel(),
+    equipped: {
+      weaponR: ps.weaponR, weaponL: ps.weaponL,
+      head: ps.head, body: ps.body, arms: ps.arms,
+    },
   });
-  // Hit rate from equipped weapon (or base if unarmed)
-  const rWpn = isWeapon(ps.weaponR) ? ITEMS.get(ps.weaponR) : null;
-  const lWpn = isWeapon(ps.weaponL) ? ITEMS.get(ps.weaponL) : null;
-  ps.hitRate = (rWpn || lWpn) ? (rWpn ? rWpn.hit : lWpn.hit) : BASE_HIT_RATE;
-  // Armor evade% (non-shield — shield evade handled separately by getShieldEvade)
-  ps.evade = (ITEMS.get(ps.head)?.evade || 0)
-           + (ITEMS.get(ps.body)?.evade || 0)
-           + (ITEMS.get(ps.arms)?.evade || 0);
-  // Magic defense from all equipment
-  ps.mdef = 0;
-  for (const id of allSlots) { ps.mdef += ITEMS.get(id)?.mdef || 0; }
-  // Elemental resistances from all equipment
-  const resSet = new Set();
-  for (const id of allSlots) {
-    const r = ITEMS.get(id)?.resist;
-    if (r) { const arr = Array.isArray(r) ? r : [r]; arr.forEach(e => resSet.add(e)); }
-  }
-  ps.elemResist = [...resSet];
-  // Status resistance bitmask — OR of armor sResist bytes (NES status immunity)
-  let sMask = 0;
-  for (const id of allSlots) { sMask |= ITEMS.get(id)?.sResist || 0; }
-  ps.statusResist = sMask;
-  // DEF with equipment + job level vitality bonus
-  recalcDEF(vitB + jlb.vit);
+  ps.atk          = r.atk;
+  ps.def          = r.def;
+  ps.hitRate      = r.hitRate;
+  ps.evade        = r.evade;
+  ps.mdef         = r.mdef;
+  ps.elemResist   = r.elemResist;
+  ps.statusResist = r.statusResist;
 }
 
 export function recalcDEF(vitBonus = 0) {

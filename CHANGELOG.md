@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.748 — 2026-05-26
+
+### PvP rewrite P-2 — server-side stat generation + combatant table
+
+The arbiter can now spawn full combatants for both sides from server state alone. No client trust required.
+
+**What landed:**
+- `src/realized-stats.js` (NEW, Node-clean) — pure `computeRealizedStats({stats, jobIdx, jobLevel, equipped})`, `computeEffectiveStats(...)`, `computeShieldEvade(weaponR, weaponL)`. Same math as `player-stats.js`'s `recalcCombatStats` / `getEffectiveStats` / `getShieldEvade` but takes inputs as arguments — no singleton `ps` coupling.
+- `player-stats.js#recalcCombatStats` refactored to delegate to the pure helper (writes results back to `ps` fields). Client behavior unchanged.
+- `pvp-arbiter.js#buildCombatantFromUser(userId, slot)` reads save row + mirror equipped, runs `computeRealizedStats`, returns a combatant object whose wire shape matches what `generateAllyStats` fast-path consumes. Server is sole source of truth for combatant stats.
+- `createBattle(userIdA, userIdB, {sideAMates, sideBMates, slot})` populates the combatants array — main + up to 3 partymate AI cells per side. Cell ids are stable: A=0-3, B=4-7 (range reserved even if a side has fewer combatants, so a client tracking a target cellId doesn't need to recompute).
+- `buildStartFrame` now ships full combatant tables in `sides.A[]` / `sides.B[]` with realized stats.
+- ws-presence's `pvp-arb-start` reads each side's party (`_getPartyMates`) + the entry's active slot, passes through to `createBattle`. Splits cancel reason: `no-save` vs `already-in-battle`.
+- `_testSeedSave(userId, slot, overrides)` test helper for wire-sim — writes a minimal valid save (jobIdx 0, level 1, starting equip).
+- 2 new wire-sim tests:
+  - **Parity test (the linchpin):** seeds a Fighter level 5 with Longsword + shield + heavy armor, spawns battle, asserts every realized stat field (atk/def/agi/evade/mdef/hitRate/shieldEvade/statusResist/intStat/mndStat/maxHP) matches client `generateAllyStats(wireProfile)` output exactly.
+  - Cross-client symmetry: both sides see the same combatant data for both sides; cellId assignments stable.
+
+**Wire shape change:** `pvp-battle-start` `sides.A` / `sides.B` arrays now contain full combatant entries (was empty `[]` stubs in P-1).
+
+**No production behavior change.** `PVP_ARBITER` still `false`; the path is reachable only from wire-sim's `pvp-arb-start` test entry. P-3 (Node-clean battle math) + P-4 (turn resolution) bring the FSM to life.
+
+**Gates:** lint 0, pvp-wire-sim 86/86 (was 84; +2 parity tests).
+
 ## 1.7.747 — 2026-05-26
 
 ### PvP rewrite P-0 + P-1 — design doc + server arbiter scaffold

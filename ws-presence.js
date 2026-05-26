@@ -897,11 +897,27 @@ function _handleMessage(entry, msg) {
         _send(entry.ws, { type: 'pvp-cancel', battleId: 0, reason: 'opponent-offline' });
         return;
       }
+      // P-2 — gather each side's party mate userIds so the arbiter can
+      // spawn AI combatants for the full 1+3-vs-1+3 max layout. Solo
+      // players (no party) just send a 1-vs-N or N-vs-1 battle; the
+      // arbiter handles asymmetric sides.
+      const sideAMates = _getPartyMates(entry.userId);
+      const sideBMates = _getPartyMates(opponentUserId);
+      // Active slot for stat read — both clients defaulted to slot 0
+      // until the user picks at the title screen + sends it on hello.
+      // `entry.slot` was added in v1.7.741.
+      const slotA = (entry.slot | 0);
       let battle;
-      try { battle = pvpArbCreate(entry.userId, opponentUserId); }
-      catch (e) {
+      try {
+        battle = pvpArbCreate(entry.userId, opponentUserId, {
+          sideAMates, sideBMates, slot: slotA,
+        });
+      } catch (e) {
         console.log('[pvp-arb-start] reject reason=' + e.message + ' user=' + entry.userId);
-        _send(entry.ws, { type: 'pvp-cancel', battleId: 0, reason: 'already-in-battle' });
+        // Distinguish no-save errors from already-in-battle for the
+        // client (better UX: "save data missing" vs "you're in a fight").
+        const reason = e.message.includes('no save') ? 'no-save' : 'already-in-battle';
+        _send(entry.ws, { type: 'pvp-cancel', battleId: 0, reason });
         return;
       }
       _send(entry.ws, pvpArbStartFrame(battle, entry.userId));
