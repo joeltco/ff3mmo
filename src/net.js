@@ -633,6 +633,22 @@ export function sendNetInvEvent(kind, itemId, qty, source) {
   });
 }
 
+// Convenience wrapper for equip mutations — translates player-stats'
+// eqIdx constants (-100..-104) to the wire's slot-index integer
+// (0=weapon_r, 1=weapon_l, 2=head, 3=body, 4=arms) which is what the
+// `equip` kind's `qty` field carries. v1.7.742 Phase 1c.
+export function sendNetInvEquip(eqIdx, itemId, source) {
+  const slotIdx = (
+    eqIdx === -100 ? 0 :
+    eqIdx === -101 ? 1 :
+    eqIdx === -102 ? 2 :
+    eqIdx === -103 ? 3 :
+    eqIdx === -104 ? 4 : -1
+  );
+  if (slotIdx < 0) return false;
+  return sendNetInvEvent('equip', itemId | 0, slotIdx, source);
+}
+
 // Request a fresh mirror snapshot for the active slot. Phase 1a exposes
 // the wire for completeness even though no client path uses it yet;
 // Phase 1c will call this at hello time + as a defensive resync hook.

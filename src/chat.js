@@ -18,7 +18,7 @@ import { ps, changeJob, fullHeal, grantExp, MAX_LEVEL } from './player-stats.js'
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
-import { sendNetChat, setNetChatHandler, setNetPmFailedHandler, getOnlinePlayerByName, getOnlinePlayers } from './net.js';
+import { sendNetChat, setNetChatHandler, setNetPmFailedHandler, getOnlinePlayerByName, getOnlinePlayers, sendNetInvEvent } from './net.js';
 import { ITEMS } from './data/items.js';
 import { addItem } from './inventory.js';
 import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
@@ -632,6 +632,7 @@ registerCommand('give', 'Give item: /give <hexId> [qty]. e.g. /give b1 3', (args
   if (!Number.isFinite(qty) || qty < 1) { addChatMessage('Bad qty', 'console'); return; }
   if (!ITEMS.get(id)) { addChatMessage('Unknown item $' + id.toString(16).padStart(2, '0'), 'console'); return; }
   addItem(id, qty);
+  sendNetInvEvent('add', id, qty, 'other');   // v1.7.742 Phase 1c — dev /give
   saveSlotsToDB();
   const name = bytesToAscii(getItemNameClean(id) || []);
   addChatMessage('+' + qty + 'x $' + id.toString(16).padStart(2, '0') + ' ' + name, 'console');

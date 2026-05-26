@@ -315,9 +315,11 @@ export function handleHiddenTreasure(facedX, facedY) {
     const [min, max] = entry.gil;
     const amount = min + Math.floor(Math.random() * (max - min + 1));
     grantGil(amount);
+    sendNetInvEvent('gil-delta', 0, amount, 'loot');   // v1.7.742 Phase 1c — hidden treasure gil
     msg = foundGilMsg(amount);
   } else {
     addItem(entry, 1);
+    sendNetInvEvent('add', entry, 1, 'loot');          // v1.7.742 Phase 1c — hidden treasure item
     msg = foundItemMsg(entry);
   }
   playSFX(SFX.TREASURE);

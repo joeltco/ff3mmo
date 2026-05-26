@@ -19,7 +19,7 @@ import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum,
 import { startSpellCast } from './spell-cast.js';
 import { applyMagicHeal } from './combatant-cast.js';
 import { dispatchDelta } from './deltas.js';
-import { sendNetPVPAction } from './net.js';
+import { sendNetPVPAction, sendNetInvEvent } from './net.js';   // v1.7.742 Phase 1c
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
@@ -765,6 +765,7 @@ function _playerTurnItem() {
   battleSt.isDefending = false;
   const pending = inputSt.playerActionPending;
   removeItem(pending.itemId);
+  sendNetInvEvent('remove', pending.itemId, 1, 'use');   // v1.7.742 Phase 1c — battle item use
   const item = ITEMS.get(pending.itemId);
   if (item?.type === 'battle_item') {
     const tm = pending.targetMode || 'single';

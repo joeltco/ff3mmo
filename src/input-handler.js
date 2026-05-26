@@ -25,6 +25,7 @@ import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldo
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
 import { openInspect } from './inspect.js';
 import { playerInventory, addItem, removeItem, buildItemSelectList } from './inventory.js';
+import { sendNetInvEvent, sendNetInvEquip } from './net.js';   // v1.7.742 Phase 1c
 
 // Battle Item menu rows-per-page. The pause inventory uses a single
 // scrollable list of bag-cap slots (16); the battle menu uses horizontal
@@ -335,30 +336,46 @@ function _itemSelectSwap(isEquipPage, gIdx) {
     const handIdx = inputSt.itemPageCursor;
     if (item && isHandEquippable(ITEMS.get(item.id)) && canJobEquip(ps.jobIdx, item.id, ITEMS)) {
       const oldWeapon = handIdx === 0 ? ps.weaponR : ps.weaponL;
+      const handEqIdx = handIdx === 0 ? -100 : -101;   // v1.7.742 Phase 1c
       if (handIdx === 0) ps.weaponR = item.id; else ps.weaponL = item.id;
       removeItem(item.id);
-      if (oldWeapon !== 0) addItem(oldWeapon, 1, { bypass: true });
+      sendNetInvEvent('remove', item.id, 1, 'equip-swap');
+      sendNetInvEquip(handEqIdx, item.id, 'equip-swap');
+      if (oldWeapon !== 0) {
+        addItem(oldWeapon, 1, { bypass: true });
+        sendNetInvEvent('add', oldWeapon, 1, 'equip-swap');
+      }
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
   } else if (srcEquip && !dstEquip) {
     const srcHand = -(inputSt.itemHeldIdx + 100);
     const handWeaponId = srcHand === 0 ? ps.weaponR : ps.weaponL;
+    const handEqIdx = srcHand === 0 ? -100 : -101;   // v1.7.742 Phase 1c
     const dstIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
     const invItem = inputSt.itemSelectList[dstIdx];
     if (invItem && isHandEquippable(ITEMS.get(invItem.id)) && canJobEquip(ps.jobIdx, invItem.id, ITEMS)) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
       removeItem(invItem.id); addItem(handWeaponId, 1, { bypass: true });
+      sendNetInvEvent('remove', invItem.id, 1, 'equip-swap');
+      sendNetInvEquip(handEqIdx, invItem.id, 'equip-swap');
+      sendNetInvEvent('add', handWeaponId, 1, 'equip-swap');
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else if (!invItem) {
       if (srcHand === 0) ps.weaponR = 0; else ps.weaponL = 0;
       addItem(handWeaponId, 1, { bypass: true });
+      sendNetInvEvent('add', handWeaponId, 1, 'equip-swap');
+      sendNetInvEquip(handEqIdx, 0, 'equip-swap');
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
   } else {
+    // R↔L hand swap — both already equipped, no inventory mutation;
+    // mirror just sees two equip events.
     const tmp = ps.weaponR; ps.weaponR = ps.weaponL; ps.weaponL = tmp;
+    sendNetInvEquip(-100, ps.weaponR, 'equip-swap');   // v1.7.742 Phase 1c
+    sendNetInvEquip(-101, ps.weaponL, 'equip-swap');
     recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
     equipChanged = true;
   }

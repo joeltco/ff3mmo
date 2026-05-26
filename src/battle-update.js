@@ -16,7 +16,7 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getOnlineAtLocation } from './net.js';
+import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getOnlineAtLocation, sendNetInvEvent } from './net.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -722,6 +722,7 @@ function _triggerPVPVictory() {
   battleSt.encounterGilGained = Math.max(1, Math.floor(10 * oppLv / 4));
   battleSt.encounterCpGained = Math.max(1, Math.floor(oppLv / 4)); grantCP(battleSt.encounterCpGained);
   grantGil(battleSt.encounterGilGained);
+  sendNetInvEvent('gil-delta', 0, battleSt.encounterGilGained, 'loot');   // v1.7.742 Phase 1c — PvP win gil
   battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
   inputSt.battleActionCount = 0;
   // PvP wins don't drop items. Null any leftover drop from a prior monster
@@ -766,6 +767,7 @@ function _updateMonsterDeath() {
       battleSt.encounterGilGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
       battleSt.encounterCpGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(battleSt.encounterCpGained);
       grantGil(battleSt.encounterGilGained);
+      sendNetInvEvent('gil-delta', 0, battleSt.encounterGilGained, 'loot');   // v1.7.742 Phase 1c — random encounter gil
       battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
       battleSt.encounterDropItem = null;
@@ -789,6 +791,10 @@ function _updateMonsterDeath() {
       if (battleSt.encounterDropItem !== null) {
         const added = addItem(battleSt.encounterDropItem, 1);
         if (added === 0) battleSt.encounterDropItemRejected = true;
+        // v1.7.742 Phase 1c — only fire if the add actually landed (a
+        // full-bag rejection sets `added === 0` and the mirror should
+        // see no add either).
+        else sendNetInvEvent('add', battleSt.encounterDropItem, 1, 'loot');
       }
       saveSlotsToDB();
       _queueVictoryRewards();
@@ -897,6 +903,7 @@ function _updateBossDissolve(dt) {
     battleSt.encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));
     battleSt.encounterGilGained = Math.max(1, Math.floor((_bossData?.gil || 500) / 4));
     grantGil(battleSt.encounterGilGained);
+    sendNetInvEvent('gil-delta', 0, battleSt.encounterGilGained, 'loot');   // v1.7.742 Phase 1c — boss win gil
     battleSt.encounterCpGained = Math.max(1, Math.floor((_bossData?.cp || 10) / 4)); grantCP(battleSt.encounterCpGained);
     battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
     inputSt.battleActionCount = 0;

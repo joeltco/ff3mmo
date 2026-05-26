@@ -24,6 +24,7 @@ import { decodeTile, drawTile } from './tile-decoder.js';
 import { SPELLS, getSpellBuyPrice, canLearnSpell } from './data/spells.js';
 import { ps, grantGil, spendGil } from './player-stats.js';
 import { addItem, removeItem, playerInventory, canAddItem } from './inventory.js';
+import { sendNetInvEvent } from './net.js';    // v1.7.742 Phase 1c
 import { showMsgBox } from './message-box.js';
 import { playSFX, SFX, pauseMusic, resumeMusic, playFF1Track, stopFF1Music, FF1_TRACKS } from './music.js';
 import { ui, isMobile } from './ui-state.js';
@@ -359,6 +360,12 @@ function _attemptBuy(itemId, qty = 1) {
     return;
   }
   addItem(itemId, qty);
+  // v1.7.742 Phase 1c — fire inv-event for both the gil spend AND the
+  // item add. Server applies to mirror in shadow mode. Phase 2 will
+  // replace this with server-rolled shop transactions (price + stock
+  // validated against the shop's canonical catalog).
+  sendNetInvEvent('gil-delta', 0, -total, 'shop');
+  sendNetInvEvent('add', itemId, qty, 'shop');
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
   showMsgBox(_actionMsg(qty > 1 ? `Bought ${qty} ` : 'Bought ', itemId));
@@ -385,6 +392,9 @@ function _attemptBuySpell(spellId) {
   }
   if (!ps.knownSpells) ps.knownSpells = [];
   ps.knownSpells.push(spellId);
+  // v1.7.742 Phase 1c — spell-buy gil spend. Spell learning itself
+  // travels through the save sync (not a wire-event in this phase).
+  sendNetInvEvent('gil-delta', 0, -price, 'shop');
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
   showMsgBox(_spellActionMsg('Learned ', spellId));
@@ -405,6 +415,10 @@ function _attemptSell(entry, qty = 1) {
   const n = Math.max(1, Math.min(qty, entry.count));
   grantGil(entry.price * n);
   for (let i = 0; i < n; i++) removeItem(entry.id);
+  // v1.7.742 Phase 1c — shop sell: remove items + gain gil. Mirror
+  // gets both in shadow mode.
+  sendNetInvEvent('remove', entry.id, n, 'shop');
+  sendNetInvEvent('gil-delta', 0, entry.price * n, 'shop');
   saveSlotsToDB();
   playSFX(SFX.TREASURE);
   showMsgBox(_actionMsg(n > 1 ? `Sold ${n} ` : 'Sold ', entry.id));

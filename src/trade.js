@@ -28,6 +28,7 @@ import { ui } from './ui-state.js';
 import {
   sendNetTradeOffer, sendNetTradeResponse, sendNetTradeCancel,
   setNetTradeOfferHandler, setNetTradeResultHandler, setNetTradeCancelledHandler,
+  sendNetInvEvent,    // v1.7.742 Phase 1c
 } from './net.js';
 
 // HUD viewport (duplicated where needed — canonical source in pvp-math.js)
@@ -180,6 +181,7 @@ function _resolveAsAccept() {
     // Sender side of the inventory mutation. Receiver's client adds the
     // item via `applyTradeOfferIncoming`'s accept closure (addItem there).
     removeItem(itemId, 1);
+    sendNetInvEvent('remove', itemId, 1, 'trade');   // v1.7.742 Phase 1c
     _endTrade(target ? target.name : null);
   });
 }
@@ -236,6 +238,7 @@ setNetTradeOfferHandler((msg) => {
     () => {
       tradeSt.recvFromUserId = null;
       addItem(itemId, 1);
+      sendNetInvEvent('add', itemId, 1, 'trade');   // v1.7.742 Phase 1c
       sendNetTradeResponse(fromUserId, true);
       playSFX(SFX.CONFIRM);
     },

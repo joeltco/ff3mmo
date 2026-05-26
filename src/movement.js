@@ -10,6 +10,7 @@ import { pauseSt, handlePauseInput } from './pause-menu.js';
 import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt, yesNoLabels } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { hasItem, removeItem } from './inventory.js';
+import { sendNetInvEvent } from './net.js';   // v1.7.742 Phase 1c
 import { isSearchActive, isSearchResolving, cancelPVPSearch } from './pvp-search.js';
 import { isInviteActive, isInviteResolving, cancelPartyInvite } from './party-invite.js';
 import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } from './trade.js';
@@ -301,6 +302,7 @@ function handleAction() {
         _nameToBytes('Use MagicKey? ' + yesNoLabels()),
         () => {
           removeItem(0x98, 1);
+          sendNetInvEvent('remove', 0x98, 1, 'use');   // v1.7.742 Phase 1c — Magic Key consume
           mapSt.lockedDoors.delete(doorKey);
           // Persist unlock — write the (unchanged) door tile id 0x70 to
           // ps.consumedTiles so `_replayConsumedTiles` removes the coord

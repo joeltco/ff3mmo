@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.742 — 2026-05-26
+
+### Inventory mirror Phase 1c — migrate all mutation call sites (still shadow mode)
+
+Every inventory mutation now fires an `inv-event` to the server alongside the local apply. Mirror state stays in lockstep with client state through every gameplay action; divergence is logged but not enforced (`INV_MIRROR_AUTHORITATIVE = false` still). Sets the stage for Phase 1b (flag flip → enforcement).
+
+**Sites migrated (29 total across 9 files):**
+- **addItem → 'add' event:** trade.js (receive), shop.js (buy), battle-update.js (drops, 1 site), chat.js (dev /give), pause-menu.js (give-item refund, 5 equip-swap sites), map-triggers.js (hidden treasure), input-handler.js (3 battle equip-swap sites)
+- **removeItem → 'remove' event:** battle-fenix-revive.js (auto-revive), trade.js (send), battle-turn.js (battle item use), movement.js (Magic Key), pause-menu.js (scroll, 2 trash sites, 4 cure/heal sites, equip-swap), shop.js (sell), input-handler.js (battle equip-swap)
+- **setEquipSlotId → 'equip' event:** pause-menu.js (Optimize main slots, Optimize left hand, manual equip menu, job-change unequip), input-handler.js (battle equip)
+- **grantGil / spendGil → 'gil-delta' event:** shop.js (buy spend, sell gain, spell buy spend), battle-update.js (3 victory gil sites — random encounter, boss, PvP win), map-triggers.js (hidden treasure gil, chest gil already in v1.7.741)
+
+**New helper:** `sendNetInvEquip(eqIdx, itemId, source)` in `net.js` — translates player-stats eqIdx constants (-100..-104) to the wire's 0-4 slot index. Reduces wire-event call-site noise + keeps eqIdx mapping in one place.
+
+**Skipped (out of Phase 1 scope):**
+- `main.js:219` debug-mode init seed (dev path, not production)
+- Spell learning (shop + scroll + dev /spell, level-up) — not a V-A/V-D dup vector; the existing save-sync path covers spell state. Phase 4 will tighten.
+- `_inventoryOrder` slot reordering — pure presentation, doesn't affect ownership
+
+**Why this is a separate deploy from Phase 1b:** the flag flip needs every mutation site routed through the wire FIRST. If any site is missed, the mirror diverges on the next save (mismatched `remove` events) and enforcement misfires for real players. Phase 1c ships now in shadow mode — `./prod.sh errors | grep "mirror divergence"` over the next play session should show zero spurious entries before Phase 1b is safe to flip.
+
+**Testing strategy for Phase 1b green-light:** play through every mutation surface (chest, shop buy/sell, item use in pause + battle, equip swap pause + battle, trade, give-item, Magic Key door) → save → check `./prod.sh errors`. If zero divergence, Phase 1b is safe. Each unhandled site shows up as a `remove kind=remove ... but mirror has N (src=...)` line.
+
+Files: `src/net.js` (sendNetInvEquip helper), `src/trade.js`, `src/shop.js`, `src/battle-update.js`, `src/chat.js`, `src/pause-menu.js`, `src/battle-fenix-revive.js`, `src/battle-turn.js`, `src/movement.js`, `src/map-triggers.js`, `src/input-handler.js`.
+
 ## 1.7.741 — 2026-05-26
 
 ### Inventory mirror Phase 1a — `inv-event` wire scaffold (shadow mode)

@@ -23,6 +23,7 @@ import { battleSt, DEATH_TOTAL_MS } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { hudSt } from './hud-state.js';
 import { hasItem, removeItem } from './inventory.js';
+import { sendNetInvEvent } from './net.js';    // v1.7.742 Phase 1c
 import { queueBattleMsg } from './battle-msg.js';
 import { showMsgBoxPrompt, yesNoLabels, forceCloseMsgBox } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
@@ -93,6 +94,7 @@ export function fenixConfirmYes() {
   if (_phase !== 'confirm') return;
   if (!hasItem(FENIX_ITEM_ID)) { fenixConfirmNo(); return; }  // safety
   removeItem(FENIX_ITEM_ID, 1);
+  sendNetInvEvent('remove', FENIX_ITEM_ID, 1, 'use');   // v1.7.742 Phase 1c — auto-revive consume
   forceCloseMsgBox();
   _phase = 'angel';
   _t = 0;

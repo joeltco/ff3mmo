@@ -26,7 +26,7 @@ import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { ITEMS, isHandEquippable, ITEM_NAMES_SHRINES } from './data/items.js';
-import { sendNetGiveItem, setNetGiveItemHandler, setNetGiveItemFailedHandler } from './net.js';
+import { sendNetGiveItem, setNetGiveItemHandler, setNetGiveItemFailedHandler, sendNetInvEvent, sendNetInvEquip } from './net.js';
 import { addChatMessage, chatJustClosedRecently } from './chat.js';
 import { hudSt } from './hud-state.js';
 import { swapBattleSprites } from './job-sprites.js';
@@ -978,6 +978,7 @@ function _applyScrollLearn(itemId, item) {
   }
   ps.knownSpells.push(spellId);
   removeItem(itemId);
+  sendNetInvEvent('remove', itemId, 1, 'scroll');   // v1.7.742 Phase 1c — scroll consume
   playSFX(SFX.TREASURE);
   saveSlotsToDB();
   showMsgBox(_scrollLearnedMsg(spellId));
@@ -1064,7 +1065,9 @@ function _pauseInvDeleteHeld() {
   showMsgBoxPrompt(
     _nameToBytes('Delete ' + itemName + '? ' + yesNoLabels()),
     () => {
-      removeItem(itemId, getItemCount(itemId));
+      const trashedQty = getItemCount(itemId);
+      removeItem(itemId, trashedQty);
+      sendNetInvEvent('remove', itemId, trashedQty, 'use');   // v1.7.742 Phase 1c — held trash
       pauseSt.heldItem = -1;
       pauseSt.invScroll = 0;       // v1.7.611: jump back to top of list after deletion
       pauseSt.deleteMode = false;  // v1.7.612: drop any latent delete-mode cursor too
@@ -1088,7 +1091,9 @@ function _pauseInvDeletePress() {
   showMsgBoxPrompt(
     _nameToBytes('Delete ' + itemName + '? ' + yesNoLabels()),
     () => {
-      removeItem(itemId, getItemCount(itemId));
+      const trashedQty = getItemCount(itemId);
+      removeItem(itemId, trashedQty);
+      sendNetInvEvent('remove', itemId, trashedQty, 'use');   // v1.7.742 Phase 1c — trash-mode delete
       pauseSt.invScroll = 0;       // v1.7.611: jump back to top of list after deletion
       pauseSt.deleteMode = false;  // v1.7.612: exit delete mode → clears the held cursor on trash
       saveSlotsToDB();
@@ -1180,11 +1185,13 @@ function _applyPauseItemUse(item, rosterTargets) {
         if (typeof rp.statusMask === 'number') rp.statusMask &= ~flag;
       }
       removeItem(itemId); playSFX(SFX.CURE);
+      sendNetInvEvent('remove', itemId, 1, 'use');   // v1.7.742 Phase 1c — cure on roster ally
       if (rp.isReal && rp.userId) sendNetGiveItem(rp.userId, itemId);
       pauseSt.healNum = { value: 0, timer: 0, rosterIdx: pauseSt.invAllyTarget, itemId };
     } else {
       if (flag) applyMagicCureStatus(ps, flag);
       removeItem(itemId); playSFX(SFX.CURE);
+      sendNetInvEvent('remove', itemId, 1, 'use');   // v1.7.742 Phase 1c — cure on self
       pauseSt.healNum = { value: 0, timer: 0, itemId };
     }
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
@@ -1200,6 +1207,7 @@ function _applyPauseItemUse(item, rosterTargets) {
     if (!rp) { playSFX(SFX.ERROR); return; }
     const heal = applyMagicHeal(rp, healPower);
     removeItem(itemId); playSFX(SFX.CURE);
+    sendNetInvEvent('remove', itemId, 1, 'use');   // v1.7.742 Phase 1c — heal on roster ally
     // Wire-give: real player target → relay so their client also applies the
     // heal to their own `ps` (the local `rp` mutation only touches our roster
     // snapshot; without this, the partner's actual HP stays the same on their
@@ -1211,6 +1219,7 @@ function _applyPauseItemUse(item, rosterTargets) {
   } else {
     const heal = applyMagicHeal(ps, healPower);
     removeItem(itemId); playSFX(SFX.CURE);
+    sendNetInvEvent('remove', itemId, 1, 'use');   // v1.7.742 Phase 1c — heal on self
     pauseSt.healNum = { value: heal, timer: 0, itemId };
     pauseSt.state = 'inv-heal'; pauseSt.timer = 0;
     saveSlotsToDB();
@@ -1264,6 +1273,9 @@ function _enforceEquipRestrictions(jobIdx) {
     if (id && !canJobEquip(jobIdx, id, ITEMS)) {
       setEquipSlotId(eq, 0);
       addItem(id, 1, { bypass: true });   // never destroy gear on job-change unequip
+      // v1.7.742 Phase 1c — job-change auto-unequip mirrors to wire.
+      sendNetInvEquip(eq, 0, 'equip-swap');
+      sendNetInvEvent('add', id, 1, 'equip-swap');
     }
   }
   recalcCombatStats();
@@ -1289,8 +1301,19 @@ function _equipBestMainSlots() {
       const val = item[sd.stat] || 0; if (val > bestVal) { bestVal = val; bestId = id; }
     }
     if (bestId !== curId) {
-      if (curId !== 0) addItem(curId, 1, { bypass: true });
-      if (bestId !== 0) { setEquipSlotId(sd.eq, bestId); removeItem(bestId); } else setEquipSlotId(sd.eq, 0);
+      if (curId !== 0) {
+        addItem(curId, 1, { bypass: true });
+        sendNetInvEvent('add', curId, 1, 'equip-swap');   // v1.7.742 Phase 1c
+      }
+      if (bestId !== 0) {
+        setEquipSlotId(sd.eq, bestId);
+        removeItem(bestId);
+        sendNetInvEvent('remove', bestId, 1, 'equip-swap');
+        sendNetInvEquip(sd.eq, bestId, 'equip-swap');
+      } else {
+        setEquipSlotId(sd.eq, 0);
+        sendNetInvEquip(sd.eq, 0, 'equip-swap');
+      }
     }
   }
 }
@@ -1310,8 +1333,19 @@ function _equipBestLeftHand() {
   }
   const bestId = bestShieldId !== 0 ? bestShieldId : bestWepId;
   if (bestId !== curId) {
-    if (curId !== 0) addItem(curId, 1, { bypass: true });
-    if (bestId !== 0) { setEquipSlotId(-101, bestId); removeItem(bestId); } else setEquipSlotId(-101, 0);
+    if (curId !== 0) {
+      addItem(curId, 1, { bypass: true });
+      sendNetInvEvent('add', curId, 1, 'equip-swap');   // v1.7.742 Phase 1c
+    }
+    if (bestId !== 0) {
+      setEquipSlotId(-101, bestId);
+      removeItem(bestId);
+      sendNetInvEvent('remove', bestId, 1, 'equip-swap');
+      sendNetInvEquip(-101, bestId, 'equip-swap');
+    } else {
+      setEquipSlotId(-101, 0);
+      sendNetInvEquip(-101, 0, 'equip-swap');
+    }
   }
 }
 
@@ -1375,11 +1409,20 @@ function _pauseInputEquipItemSelect() {
       const oldId = getEquipSlotId(pauseSt.eqSlotIdx);
       if (pick.label === 'remove') {
         setEquipSlotId(pauseSt.eqSlotIdx, 0);
-        if (oldId !== 0) addItem(oldId, 1, { bypass: true });
+        sendNetInvEquip(pauseSt.eqSlotIdx, 0, 'equip-swap');   // v1.7.742 Phase 1c
+        if (oldId !== 0) {
+          addItem(oldId, 1, { bypass: true });
+          sendNetInvEvent('add', oldId, 1, 'equip-swap');
+        }
       } else {
         setEquipSlotId(pauseSt.eqSlotIdx, pick.id);
         removeItem(pick.id);
-        if (oldId !== 0) addItem(oldId, 1, { bypass: true });
+        sendNetInvEvent('remove', pick.id, 1, 'equip-swap');
+        sendNetInvEquip(pauseSt.eqSlotIdx, pick.id, 'equip-swap');
+        if (oldId !== 0) {
+          addItem(oldId, 1, { bypass: true });
+          sendNetInvEvent('add', oldId, 1, 'equip-swap');
+        }
       }
       recalcCombatStats();
       saveSlotsToDB();
@@ -1547,6 +1590,7 @@ setNetGiveItemHandler((msg) => {
 setNetGiveItemFailedHandler((msg) => {
   if (!msg || !msg.itemId) return;
   addItem(msg.itemId, 1, { bypass: true });
+  sendNetInvEvent('add', msg.itemId, 1, 'other');   // v1.7.742 Phase 1c — give-item refund
   const itemName = ITEM_NAMES_SHRINES.get(msg.itemId) || 'item';
   addChatMessage('* ' + itemName + ' returned — recipient is offline', 'system');
   saveSlotsToDB();
