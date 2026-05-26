@@ -1,4 +1,4 @@
-import { getItemNameClean } from './text-decoder.js';
+import { getItemNameShrines } from './text-decoder.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
 
@@ -65,9 +65,14 @@ export function drawLvHpRow(ctx, leftX, rightX, y, level, hp, maxHP, fadeStep) {
   drawText(ctx, rightX - measureText(hpLabel), y, hpLabel, hpPal);
 }
 
-// "[name]!" — for 2-line drop display paired with BATTLE_FOUND on top row
+// "[icon] [name]!" — for 2-line drop display paired with BATTLE_FOUND on top
+// row. v1.7.732 — switched from getItemNameClean (which strips the leading
+// icon byte) to getItemNameShrines so the drop message gets the class glyph
+// (staff $EA, sword $EF, etc.) the same way chest treasures + inventory rows
+// do. Pre-fix: "Found Staff!" rendered with no icon; chests already had it
+// via map-triggers.js#getItemNameShrines.
 export function makeItemDropText(itemId) {
-  const name = getItemNameClean(itemId);
+  const name = getItemNameShrines(itemId);
   const arr = new Uint8Array(name.length + 1);
   arr.set(name, 0);
   arr[name.length] = 0xC4; // "!"
