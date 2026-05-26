@@ -972,6 +972,24 @@ function _handleMessage(entry, msg) {
         _send(entry.ws, { type: 'party-invite-result', accept: false, reason: 'cooldown' });
         return;
       }
+      // Gap B (v1.7.734) — if this user already has an outgoing invite to a
+      // DIFFERENT target, dismiss that target's modal before overwriting.
+      // Pre-fix the previous target's `party-invite-incoming` modal stayed
+      // open indefinitely; clicking Accept fell into `case 'party-invite-
+      // response'`'s silent-no-op branch because the lookup found A→<new
+      // target> instead of A→<old target>. Mirrors the equivalent guard in
+      // `case 'trade-offer'` (line ~879).
+      const priorTargetId = _partyInvites.get(entry.userId);
+      if (priorTargetId && priorTargetId !== targetUserId) {
+        const priorTarget = _connected.get(priorTargetId);
+        if (priorTarget && priorTarget.helloed) {
+          _send(priorTarget.ws, {
+            type:             'party-invite-cancelled',
+            challengerUserId: entry.userId,
+            challengerName:   entry.profile?.name || '',
+          });
+        }
+      }
       _partyInvites.set(entry.userId, targetUserId);
       _send(target.ws, {
         type: 'party-invite-incoming',
@@ -1013,7 +1031,23 @@ function _handleMessage(entry, msg) {
       for (const [chId, tgtId] of _partyInvites) {
         if (tgtId === entry.userId) { challengerId = chId; break; }
       }
-      if (!challengerId) return;
+      if (!challengerId) {
+        // Gap D (v1.7.734) — stale response (invite was cancelled, overwritten,
+        // or its challenger disconnected). Pre-fix the responder's modal
+        // hung forever; now we send `party-invite-cancelled` back so their
+        // local prompt dismisses. Client provides the expected challenger
+        // via `expectChallengerUserId` (set from `_pendingIncomingInviteFrom`)
+        // so the cancelled-handler's challengerUserId-match check passes.
+        const expected = parsed.expectChallengerUserId | 0;
+        if (expected) {
+          _send(entry.ws, {
+            type:             'party-invite-cancelled',
+            challengerUserId: expected,
+            challengerName:   '',
+          });
+        }
+        return;
+      }
       _partyInvites.delete(challengerId);
       const challenger = _connected.get(challengerId);
       if (!challenger || !challenger.helloed) return;
@@ -1192,13 +1226,46 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'party-leave': {
-      // Member voluntarily leaves their current party (no UI yet, but the
-      // hook exists for future client-side "leave party" action). Fan out
-      // to every member (inviter + peer members), not just the inviter,
-      // so all local views stay in sync. v1.7.460.
+      // Member voluntarily leaves their current party. Fan out to every
+      // member (inviter + peer members), not just the inviter, so all local
+      // views stay in sync. v1.7.460.
+      //
+      // Gap C (v1.7.734) — if the leaver is actually the INVITER (no row
+      // keyed by their own userId; they only appear as the VALUE of member
+      // rows), redirect into the disband path. Pre-fix `/leave` by an
+      // inviter silently no-op'd server-side (the early-return at "no
+      // inviterId" branch) while the client cleared local state and printed
+      // "* You left the party" — on reconnect they'd get a fresh
+      // party-snapshot listing every member and find themselves right back
+      // as inviter, confused.
       if (!entry.helloed) return;
       const inviterId = _partyMemberships.get(entry.userId);
-      if (inviterId == null) return;
+      if (inviterId == null) {
+        // Maybe this user is an INVITER. Collect every member under them
+        // and run the disband path inline (same cleanup as case 'party-
+        // disband'). If they're neither member nor inviter, fall through
+        // to silent no-op.
+        const inviterName = entry.profile?.name || '';
+        const memberIds = [];
+        for (const [memberId, mInviterId] of _partyMemberships) {
+          if (mInviterId === entry.userId) memberIds.push(memberId);
+        }
+        if (memberIds.length === 0) return;   // neither role — silent
+        for (const memberId of memberIds) _partyMemberships.delete(memberId);
+        partyRemoveByInviter(entry.userId);   // persist
+        _broadcastInPartyChange(entry.userId);
+        for (const memberId of memberIds) _broadcastInPartyChange(memberId);
+        for (const memberId of memberIds) {
+          const peer = _connected.get(memberId);
+          if (!peer || !peer.helloed) continue;
+          _send(peer.ws, {
+            type:          'party-disbanded',
+            inviterUserId: entry.userId,
+            inviterName,
+          });
+        }
+        return;
+      }
       _partyMemberships.delete(entry.userId);
       partyRemoveMember(entry.userId);    // persist (v1.7.595)
       _broadcastInPartyChange(entry.userId);
@@ -1474,6 +1541,22 @@ export function attachWebSocketPresence(httpServer) {
           }
         }
         // Clean up pending party invites involving this user.
+        // Gap A (v1.7.734) — if this user had an OUTGOING invite pending,
+        // tell the target so their `party-invite-incoming` modal dismisses.
+        // Pre-fix the modal hung forever and any subsequent accept silently
+        // no-op'd (the server's lookup found nothing to resolve). Mirror of
+        // the v1.7.721 explicit `case 'party-cancel'` notify path.
+        const outgoingTargetId = _partyInvites.get(userId);
+        if (outgoingTargetId) {
+          const outgoingTarget = _connected.get(outgoingTargetId);
+          if (outgoingTarget && outgoingTarget.helloed) {
+            _send(outgoingTarget.ws, {
+              type:             'party-invite-cancelled',
+              challengerUserId: userId,
+              challengerName:   entry.profile?.name || '',
+            });
+          }
+        }
         _partyInvites.delete(userId);  // outgoing
         for (const [chId, tgtId] of [..._partyInvites]) {
           if (tgtId === userId) {

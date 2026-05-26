@@ -696,6 +696,80 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.734 Gap A — inviter disconnect dismisses target's modal ─────
+  await asyncTest('v1.7.734 Gap A inviter disconnect notifies target', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7341, { ...baseProfile, name: 'GapAInv' });
+    const B = await connectClient(port, 7342, { ...targetProfile, name: 'GapATgt' });
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7342 }));
+    // Wait for B's invite-incoming so we know the invite was registered.
+    await once(B, m => m.type === 'party-invite-incoming', 800);
+    // Now close A — should trigger the dismiss notify on B.
+    const got = once(B, m => m.type === 'party-invite-cancelled', 1500);
+    A.close();
+    const cancel = await got;
+    assertEqual(cancel.challengerUserId, 7341, 'challengerUserId matches the disconnecting inviter');
+    B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.734 Gap B — invite overwrite dismisses prior target's modal ──
+  await asyncTest('v1.7.734 Gap B inviter switching targets cancels prior invite', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7343, { ...baseProfile, name: 'GapBInv' });
+    const B = await connectClient(port, 7344, { ...targetProfile, name: 'GapBTgt1' });
+    const C = await connectClient(port, 7345, { ...targetProfile, name: 'GapBTgt2' });
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7344 }));
+    await once(B, m => m.type === 'party-invite-incoming', 800);
+    // A switches to C. B should get a party-invite-cancelled.
+    const got = once(B, m => m.type === 'party-invite-cancelled', 1500);
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7345 }));
+    const cancel = await got;
+    assertEqual(cancel.challengerUserId, 7343, 'cancel carries original inviter userId');
+    A.close(); B.close(); C.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.734 Gap C — inviter /leave redirects to disband ──────────────
+  await asyncTest('v1.7.734 Gap C inviter party-leave runs disband path', async () => {
+    _testHooks.resetState();
+    // Pre-seed an inviter+member pair so we don't have to round-trip an invite.
+    _testHooks.state.partyMemberships.set(7347, 7346);
+    const A = await connectClient(port, 7346, { ...baseProfile, name: 'GapCInv' });
+    const B = await connectClient(port, 7347, { ...targetProfile, name: 'GapCMem' });
+    const got = once(B, m => m.type === 'party-disbanded', 1500);
+    A.send(JSON.stringify({ type: 'party-leave' }));   // inviter calls /leave
+    const disbanded = await got;
+    assertEqual(disbanded.inviterUserId, 7346, 'disband attributed to inviter');
+    assertEqual(_testHooks.state.partyMemberships.has(7347), false, 'member row cleared server-side');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.734 Gap D — stale invite-response gets dismissed back ───────
+  await asyncTest('v1.7.734 Gap D stale response dismisses responder modal', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7348, { ...baseProfile, name: 'GapDInv' });
+    const B = await connectClient(port, 7349, { ...targetProfile, name: 'GapDTgt' });
+    A.send(JSON.stringify({ type: 'party-invite', targetUserId: 7349 }));
+    await once(B, m => m.type === 'party-invite-incoming', 800);
+    // A cancels server-side (clears _partyInvites); B's modal still open
+    // locally. B then attempts to accept — should get party-invite-cancelled
+    // back so B's modal dismisses gracefully.
+    A.send(JSON.stringify({ type: 'party-cancel' }));
+    // Drain the cancel notify that fires naturally so we don't latch onto it.
+    await once(B, m => m.type === 'party-invite-cancelled', 800);
+    // Now simulate B responding (their modal didn't see the cancel, or the
+    // user clicked accept in the same tick). Server should send a fresh
+    // cancelled back. Use a fresh listener.
+    const got = once(B, m => m.type === 'party-invite-cancelled', 1500);
+    B.send(JSON.stringify({ type: 'party-invite-response', accept: true, expectChallengerUserId: 7348 }));
+    const cancel = await got;
+    assertEqual(cancel.challengerUserId, 7348, 'stale-response cancel carries expectChallengerUserId');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── v1.7.721 P7 server-side cooldown survives client reload ─────────
   await asyncTest('v1.7.721 P7 decline sets server cooldown; re-invite rejected', async () => {
     _testHooks.resetState();

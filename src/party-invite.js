@@ -275,7 +275,7 @@ setNetPartyInviteHandler((msg) => {
   const challenger = msg && msg.challenger;
   if (!challenger) return;
   if (_battleSt.battleState !== 'none' || msgState.state !== 'none') {
-    sendNetPartyResponse(false);
+    sendNetPartyResponse(false, challenger.userId);
     return;
   }
   _pendingIncomingInviteFrom = challenger.userId || null;
@@ -291,6 +291,9 @@ setNetPartyInviteHandler((msg) => {
     // empty and `tryJoinPlayerAlly`'s pre-pass finds nothing → invitee fights
     // solo despite being in the party. v1.7.412.
     () => {
+      // v1.7.734 — pass challenger.userId as `expectChallengerUserId` so the
+      // server can defensively dismiss our modal if the invite is stale.
+      const challengerUid = challenger.userId || 0;
       _pendingIncomingInviteFrom = null;
       if (challenger.name && !partyInviteSt.partyMembers.includes(challenger.name) && !isPartyFull()) {
         partyInviteSt.partyMembers.push(challenger.name);
@@ -299,11 +302,12 @@ setNetPartyInviteHandler((msg) => {
       // v1.7.722 — accepter-side celebration jingle. Mirrors the inviter
       // side (`_resolveAsJoin`) so both ends of the new pair hear it.
       playPartyJoinJingle();
-      sendNetPartyResponse(true);
+      sendNetPartyResponse(true, challengerUid);
     },
     () => {
+      const challengerUid = challenger.userId || 0;
       _pendingIncomingInviteFrom = null;
-      sendNetPartyResponse(false);
+      sendNetPartyResponse(false, challengerUid);
     },
   );
 });

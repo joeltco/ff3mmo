@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.734 — 2026-05-25
+
+### Fix: four party-invite modal-hang gaps (A–D)
+
+Sweep of audit findings beyond v1.7.733. Each gap left someone's `party-invite-incoming` modal hung indefinitely or a server-side party in a confused state. All four ship with a new wire-sim regression test.
+
+**Gap A — inviter disconnect didn't dismiss the target's modal.** `ws.on('close')` deleted the outgoing `_partyInvites` entry but never told the target. Modal hung; any subsequent Accept fell into the silent-no-op branch of `case 'party-invite-response'`. Now the close handler sends `party-invite-cancelled` to the target (mirror of the v1.7.721 explicit `party-cancel` notify path).
+
+**Gap B — re-invite silently overwrote the prior outgoing invite.** `case 'party-invite'` did `_partyInvites.set(entry.userId, targetUserId)` with no guard for an existing entry. If A invited B → A invited C, B's modal hung. Same modal-hang failure mode as Gap A. Now mirrors `case 'trade-offer'`'s prior-target cancel: reads the existing entry, fires `party-invite-cancelled` to the prior target if it's a different userId, then overwrites.
+
+**Gap C — inviter calling `/leave` was a silent server no-op.** `case 'party-leave'` gated on `_partyMemberships.has(entry.userId)`. Inviters never have a row keyed by their own userId (asymmetric data model), so the handler early-returned. Client cleared local state and printed `* You left the party`, but on reconnect the inviter got a fresh `party-snapshot` listing every member — confused-user state. Server now detects this case (no member row but at least one row pointing to them as inviter) and runs the same cleanup as `case 'party-disband'` inline, fanning `party-disbanded` to every member.
+
+**Gap D — stale invite-response left responder modal hanging.** When the responder's accept/decline landed AFTER the invite was already gone (cancelled, overwritten, challenger disconnected), the server silently returned and the modal hung. Now responds with `party-invite-cancelled` so the local prompt dismisses. Required a client-side wire change: `sendNetPartyResponse(accept, expectChallengerUserId)` now passes the expected challenger so the server's defensive cancel carries the right `challengerUserId` for the client's `_pendingIncomingInviteFrom`-match check.
+
+Files touched: `ws-presence.js`, `src/net.js`, `src/party-invite.js`, `tools/pvp-wire-sim.js`.
+
 ## 1.7.733 — 2026-05-25
 
 ### Fix: hello sends `party-snapshot` unconditionally — closes inviter soft-reconnect gap

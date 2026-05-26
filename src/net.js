@@ -511,9 +511,21 @@ export function sendNetPartyCancel() {
   return _send({ type: 'party-cancel' });
 }
 
-export function sendNetPartyResponse(accept) {
+// v1.7.734 — `expectChallengerUserId` lets the server send a defensive
+// `party-invite-cancelled` BACK to the responder if its lookup for the
+// pending invite returns empty (challenger disconnected, switched targets,
+// or cancelled in the same tick). Server uses the value verbatim as the
+// `challengerUserId` field on the cancelled message so the client's
+// `_pendingIncomingInviteFrom`-match check passes and the prompt dismisses.
+// Optional — pre-v1.7.734 callers (or any 0/missing value) still work, they
+// just lose the fallback dismiss path.
+export function sendNetPartyResponse(accept, expectChallengerUserId) {
   if (!_helloed) return false;
-  return _send({ type: 'party-invite-response', accept: !!accept });
+  return _send({
+    type: 'party-invite-response',
+    accept: !!accept,
+    expectChallengerUserId: expectChallengerUserId || 0,
+  });
 }
 
 // Inviter side — tell server we're removing this real-player member from
