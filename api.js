@@ -690,8 +690,25 @@ function mirrorReadFullState(userId, slot) {
   };
 }
 
+// Read mirror's equipped state, shaped to match the `update` broadcast's
+// field names (helmId / armorId / shieldId instead of mirror's
+// head / body / arms). v1.7.746 Phase 5 uses this to overwrite cheated
+// equipment claims before they reach peers. Returns null when no row
+// exists for (user, slot) so the caller can skip the cross-check.
+function mirrorReadEquippedBroadcast(userId, slot) {
+  const eq = _invEquipReadStmt.get(userId, slot);
+  if (!eq) return null;
+  return {
+    weaponR:  eq.weapon_r | 0,
+    weaponL:  eq.weapon_l | 0,
+    helmId:   eq.head     | 0,
+    armorId:  eq.body     | 0,
+    shieldId: eq.arms     | 0,
+  };
+}
+
 // Exports — the wire handler in ws-presence.js calls these.
-export { mirrorApplyInvEvent, mirrorReadFullState };
+export { mirrorApplyInvEvent, mirrorReadFullState, mirrorReadEquippedBroadcast };
 
 // Boot seed — populate mirror from every existing save. Idempotent
 // (transaction inside mirrorSyncFromSave is replace-semantics). Runs once
@@ -1099,6 +1116,41 @@ export async function handleAPI(req, res) {
     for (const row of rows) {
       try { slots[row.slot] = JSON.parse(row.data); }
       catch { slots[row.slot] = null; }
+    }
+    // v1.7.747 Phase 4 (full) — overlay mirror state on every slot for
+    // the wire-managed fields (inventory, gil, equipped). The `saves`
+    // table is still the source of truth for non-wire fields (currentMapId,
+    // lastTown, palIdx, statuses, etc.). Closes V-C / V-E: a client that
+    // cheated their save to write 99 Sage Staves still has them in the
+    // saves row, but the load path never returns those — mirror's
+    // canonical count comes back instead.
+    //
+    // Empty mirror row (brand-new player, never saved before mirror
+    // existed) → leave the save's wire-managed fields as-is. The boot
+    // seed already populated existing accounts; this is the only path
+    // where mirror absence is benign.
+    for (let slot = 0; slot < 3; slot++) {
+      const data = slots[slot];
+      if (!data) continue;
+      const econ = _invEconReadStmt.get(user.userId, slot);
+      const eq   = _invEquipReadStmt.get(user.userId, slot);
+      const invRows = db.prepare('SELECT item_id, qty FROM inv_inventories WHERE user_id = ? AND slot = ?').all(user.userId, slot);
+      if (econ) data.gil = econ.gil | 0;
+      if (eq) {
+        if (!data.stats || typeof data.stats !== 'object') data.stats = {};
+        data.stats.weaponR = eq.weapon_r | 0;
+        data.stats.weaponL = eq.weapon_l | 0;
+        data.stats.head    = eq.head     | 0;
+        data.stats.body    = eq.body     | 0;
+        data.stats.arms    = eq.arms     | 0;
+      }
+      if (invRows.length > 0 || econ) {
+        // Replace the inventory object entirely (don't merge — would
+        // leak phantom items that mirror doesn't track).
+        const inv = {};
+        for (const r of invRows) inv[r.item_id] = r.qty | 0;
+        data.inventory = inv;
+      }
     }
     send(res, 200, { slots });
     return true;

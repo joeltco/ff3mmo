@@ -1402,6 +1402,209 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.746 Phase 5 — update broadcast cross-check vs mirror ──────────
+  // Authoritative mirror owns equipped (since Phase 1b). A client that
+  // claims weaponR/L/helmId/armorId/shieldId different from mirror state
+  // gets the broadcast field SILENTLY overwritten with mirror's view —
+  // peers + ally-stat generation only ever see authoritative gear.
+  await asyncTest('v1.7.746 update overwrites cheated weaponR from mirror', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7461);
+    _testEnsureUser(7462);
+    _testMirrorClear(7461, 0);
+    // Seed mirror with the legitimate weapon (Knife 0x1E).
+    _testMirrorSync(7461, 0, {
+      gil: 0, inventory: {},
+      stats: { weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0 },
+    });
+    const A = await connectClient(port, 7461, { ...baseProfile, name: 'CheatW', slot: 0 });
+    const B = await connectClient(port, 7462, { ...targetProfile, name: 'PeerW' });
+    // B should receive A's player-update with weaponR === mirror's 0x1E,
+    // NOT A's claimed 0xDE (Sage Staff).
+    const bGotUpdate = once(B, m => m.type === 'player-update' && m.userId === 7461, 800);
+    A.send(JSON.stringify({ type: 'update', weaponR: 0xDE, armorId: 0xDE, helmId: 0xDE }));
+    const msg = await bGotUpdate;
+    assertEqual(msg.fields.weaponR, 0x1E, 'weaponR overwritten with mirror');
+    assertEqual(msg.fields.armorId, 0x73, 'armorId overwritten with mirror body');
+    assertEqual(msg.fields.helmId, 0x62, 'helmId overwritten with mirror head');
+    A.close(); B.close();
+    _testMirrorClear(7461, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.746 update passes through matching equipment', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7463);
+    _testEnsureUser(7464);
+    _testMirrorClear(7463, 0);
+    _testMirrorSync(7463, 0, {
+      gil: 0, inventory: {},
+      stats: { weaponR: 0x1F, weaponL: 0, head: 0x62, body: 0x73, arms: 0x58 },
+    });
+    const A = await connectClient(port, 7463, { ...baseProfile, name: 'OkW', slot: 0 });
+    const B = await connectClient(port, 7464, { ...targetProfile, name: 'PeerOk' });
+    const bGotUpdate = once(B, m => m.type === 'player-update' && m.userId === 7463, 800);
+    // Client claims values that match mirror exactly — no overwrite, no warning.
+    A.send(JSON.stringify({ type: 'update', weaponR: 0x1F, armorId: 0x73, helmId: 0x62, shieldId: 0x58 }));
+    const msg = await bGotUpdate;
+    assertEqual(msg.fields.weaponR, 0x1F, 'matching weaponR passes through');
+    assertEqual(msg.fields.armorId, 0x73, 'matching armorId passes through');
+    assertEqual(msg.fields.shieldId, 0x58, 'matching shieldId passes through');
+    A.close(); B.close();
+    _testMirrorClear(7463, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.746 update non-equipment fields untouched', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7465);
+    _testEnsureUser(7466);
+    _testMirrorClear(7465, 0);
+    _testMirrorSync(7465, 0, {
+      gil: 0, inventory: {},
+      stats: { weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0 },
+    });
+    const A = await connectClient(port, 7465, { ...baseProfile, name: 'NameU', slot: 0 });
+    const B = await connectClient(port, 7466, { ...targetProfile, name: 'PeerN' });
+    const bGotUpdate = once(B, m => m.type === 'player-update' && m.userId === 7465, 800);
+    A.send(JSON.stringify({ type: 'update', name: 'Renamed', level: 9 }));
+    const msg = await bGotUpdate;
+    assertEqual(msg.fields.name, 'Renamed', 'name field passes through');
+    assertEqual(msg.fields.level, 9, 'level field passes through');
+    A.close(); B.close();
+    _testMirrorClear(7465, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.747 Phase 4 (full) — GET /api/saves overlays mirror ───────────
+  // Save row may carry cheated inventory / gil / equipped — the load
+  // path overwrites those wire-managed fields with mirror's canonical
+  // view. Non-wire fields (palIdx, currentMapId, knownSpells, etc.)
+  // still come from the save JSON.
+  await asyncTest('v1.7.747 GET /api/saves returns mirror inventory, not save JSON', async () => {
+    _testEnsureUser(7471);
+    _testMirrorClear(7471, 0);
+    const t = mintToken(7471);
+    // POST a save with "cheated" inventory + gil.
+    let r = await fetch(`http://127.0.0.1:${port}/api/save`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + t, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slot: 0,
+        data: {
+          gil: 99999,
+          inventory: { 0xDE: 99 },
+          stats: { weaponR: 0xDE, weaponL: 0xDE, head: 0xDE, body: 0xDE, arms: 0xDE },
+          knownSpells: [],
+        },
+      }),
+    });
+    assertEqual(r.status, 200, 'save POST succeeded');
+    // Mirror was gated by Phase 4 partial — the wire-managed fields
+    // were skipped. So the mirror's inventory/gil/equipped remained
+    // empty (this is a fresh user). We need to populate the mirror so
+    // the load-overlay has something to overlay.
+    _testMirrorSync(7471, 0, {
+      gil: 200,
+      inventory: { 0x80: 3 },
+      stats: { weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0 },
+    });
+    // Now GET — should return mirror's inventory/gil/equipped, NOT the
+    // cheated values from the save POST.
+    r = await fetch(`http://127.0.0.1:${port}/api/saves`, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + t },
+    });
+    assertEqual(r.status, 200, 'saves GET succeeded');
+    const body = await r.json();
+    const slot = body.slots[0];
+    assertTrue(slot != null, 'slot 0 present');
+    assertEqual(slot.gil, 200, 'gil from mirror, not 99999');
+    assertEqual(slot.inventory[0x80], 3, 'inventory[Potion] from mirror');
+    assertTrue(slot.inventory[0xDE] === undefined, 'cheated 0xDE not in returned inventory');
+    assertEqual(slot.stats.weaponR, 0x1E, 'weaponR from mirror, not 0xDE');
+    assertEqual(slot.stats.body, 0x73, 'body from mirror, not 0xDE');
+    _testMirrorClear(7471, 0);
+  });
+
+  await asyncTest('v1.7.747 GET /api/saves preserves non-wire-managed fields', async () => {
+    _testEnsureUser(7472);
+    _testMirrorClear(7472, 0);
+    const t = mintToken(7472);
+    // palIdx + currentMapId + knownSpells live at TOP level on the save
+    // shape; `level` is inside `stats:`. The overlay only touches
+    // inventory + gil + stats.weaponR/L/head/body/arms — these should
+    // all flow through to the load unchanged.
+    let r = await fetch(`http://127.0.0.1:${port}/api/save`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + t, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slot: 0,
+        data: {
+          gil: 0, inventory: {},
+          palIdx: 3, currentMapId: 7,
+          stats: { weaponR: 0, weaponL: 0, head: 0, body: 0, arms: 0, level: 4 },
+          knownSpells: [0x01, 0x02, 0x05],
+        },
+      }),
+    });
+    assertEqual(r.status, 200, 'save POST succeeded');
+    _testMirrorSync(7472, 0, {
+      gil: 100, inventory: { 0x80: 1 },
+      stats: { weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0 },
+    });
+    r = await fetch(`http://127.0.0.1:${port}/api/saves`, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + t },
+    });
+    const body = await r.json();
+    const slot = body.slots[0];
+    assertEqual(slot.palIdx, 3, 'non-wire palIdx preserved');
+    assertEqual(slot.currentMapId, 7, 'non-wire currentMapId preserved');
+    assertEqual(slot.stats.level, 4, 'non-wire stats.level preserved');
+    assertTrue(Array.isArray(slot.knownSpells) && slot.knownSpells.length === 3, 'knownSpells preserved');
+    _testMirrorClear(7472, 0);
+  });
+
+  await asyncTest('v1.7.747 GET /api/saves leaves save as-is when mirror empty', async () => {
+    _testEnsureUser(7473);
+    _testMirrorClear(7473, 0);
+    const t = mintToken(7473);
+    let r = await fetch(`http://127.0.0.1:${port}/api/save`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + t, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slot: 0,
+        data: {
+          gil: 50, inventory: { 0x80: 2 },
+          stats: { weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0 },
+          knownSpells: [],
+        },
+      }),
+    });
+    assertEqual(r.status, 200, 'save POST succeeded');
+    // Mirror is intentionally empty (cleared above). With both Phase 4
+    // partial gating mirrorSyncFromSave AND no boot seed for this user,
+    // the mirror has no rows for (7473, 0). The load path must fall
+    // back to the save JSON's values — otherwise this user would lose
+    // legitimate state.
+    _testMirrorClear(7473, 0);
+    r = await fetch(`http://127.0.0.1:${port}/api/saves`, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + t },
+    });
+    const body = await r.json();
+    const slot = body.slots[0];
+    assertTrue(slot != null, 'slot 0 present');
+    // Mirror empty: gil and equipped untouched (no overlay), but
+    // inventory was also empty in mirror so the load returns save's
+    // inventory unchanged. Note: the overlay condition is "if mirror
+    // has any econ or inv rows" — for a truly-empty mirror, save wins.
+    assertEqual(slot.gil, 50, 'gil from save (mirror empty)');
+    assertEqual(slot.stats.weaponR, 0x1E, 'weaponR from save (mirror empty)');
+    assertEqual(slot.inventory[0x80], 2, 'inventory from save (mirror empty)');
+  });
+
   // ── P3 JWT rotation — refresh endpoint smoke ─────────────────────────────
   await asyncTest('P3 /api/refresh returns a fresh token for a valid one', async () => {
     _testEnsureUser(2001);

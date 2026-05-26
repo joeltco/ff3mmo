@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.746 — 2026-05-26
+
+### Inventory mirror Phase 5 — update broadcast cross-check (closes V-D)
+
+The `case 'update'` handler now cross-checks any equipment fields (weaponR/L/helmId/armorId/shieldId) in the broadcast against `inv_equipped` mirror state. Mismatches get the broadcast field silently overwritten with mirror's view; peers + the entry's own profile cache only ever see authoritative equipment.
+
+**Why "overwrite" not "reject":** the legitimate race where a client equips locally → fires `inv-event equip` → broadcasts an `update` could deliver the update frame BEFORE the equip lands on the mirror. Rejection would break legitimate UX; overwrite is correct for both legitimate-race AND cheating cases — the broadcast carries the server's truth either way.
+
+**Why the mismatch is the whole anti-cheat:**
+- V-D was specifically about a client lying about equipped gear to inflate AI-ally stats in co-op (since the ally regeneration uses the wire profile). Now the wire profile is server-authoritative for equipment.
+- PvP impact is dead while PvP is disabled (see [[ff3mmo-pvp-disabled]]), but this is one of the prerequisites for the eventual PvP rewrite.
+
+**Implementation:**
+- New `mirrorReadEquippedBroadcast(userId, slot)` helper in `api.js` returns mirror equipment shaped to broadcast field names (`helmId`/`armorId`/`shieldId` instead of mirror's `head`/`body`/`arms`).
+- ws-presence `case 'update'` calls it when any of the 5 equip fields are present, walks the diff, logs `[update divergence]` per mismatch, overwrites both `fields` (broadcast) and `entry.profile` (cache).
+- 3 wire-sim tests: cheated equipment overwritten, matching equipment passes through, non-equipment fields untouched.
+
+**Closes:** V-D (lying-equipped broadcast).
+
+**Gates:** lint 0, pvp-wire-sim 76/76.
+
 ## 1.7.745 — 2026-05-26
 
 ### Inventory mirror Phase 1b — flag flip, enforcement on

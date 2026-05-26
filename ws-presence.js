@@ -45,6 +45,7 @@ import {
   tradeLog,
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
   mirrorApplyInvEvent, mirrorReadFullState,    // v1.7.741 Phase 1a
+  mirrorReadEquippedBroadcast,                  // v1.7.746 Phase 5
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS } from './src/data/items.js';
@@ -738,6 +739,32 @@ function _handleMessage(entry, msg) {
       if (parsed.slot != null) {
         const s = _normalizeProfileField('slot', parsed.slot);
         if (s !== undefined) entry.slot = s;
+      }
+      // v1.7.746 Phase 5 — equipment cross-check vs inv_equipped mirror.
+      // The wire is authoritative for equipped state (Phase 1b), so a
+      // claimed `update` field that disagrees with the mirror is either
+      // (a) a cheating client trying to inflate AI-ally stats / roster
+      // display, or (b) a benign race where update arrived before the
+      // equip event applied. Both cases get the same treatment:
+      // overwrite the broadcast field with mirror's view. Peers + the
+      // entry's own profile cache only ever see authoritative equipment.
+      if (fields.weaponR != null || fields.weaponL != null ||
+          fields.helmId != null || fields.armorId != null || fields.shieldId != null) {
+        try {
+          const mirror = mirrorReadEquippedBroadcast(entry.userId, entry.slot | 0);
+          if (mirror) {
+            for (const k of ['weaponR', 'weaponL', 'helmId', 'armorId', 'shieldId']) {
+              if (fields[k] == null) continue;
+              if (fields[k] === mirror[k]) continue;
+              console.warn('[update divergence] user=' + entry.userId + ' slot=' + (entry.slot | 0) +
+                ' ' + k + ' claimed=' + fields[k] + ' mirror=' + mirror[k]);
+              fields[k] = mirror[k];
+              entry.profile[k] = mirror[k];
+            }
+          }
+        } catch (e) {
+          console.warn('[update equip-check] failed user=' + entry.userId + ': ' + e.message);
+        }
       }
       if (Object.keys(fields).length === 0) return;
       // Refresh the offline-snapshot cache so a future reconnect sees the
