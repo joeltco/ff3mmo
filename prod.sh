@@ -130,8 +130,8 @@ case "$CMD" in
     # docs/INVENTORY-MIRROR-PLAN.md). No arg = totals across all users /
     # slots. With a userId = per-slot detail for that user (inventory +
     # gil + equipment + spell count). Read-only against the inv_* tables.
-    UID="${2:-}"
-    if [[ -z "$UID" ]]; then
+    USER_ID="${2:-}"
+    if [[ -z "$USER_ID" ]]; then
       echo "── mirror totals ──────────────────────────"
       _sql "
         const counts = {
@@ -148,9 +148,9 @@ case "$CMD" in
         console.log('  total (user, slot)  ' + slots);
       "
     else
-      echo "── mirror detail for user $UID ────────────"
+      echo "── mirror detail for user $USER_ID ────────────"
       _sql "
-        const uid = ${UID};
+        const uid = ${USER_ID};
         const econ = db.prepare('SELECT slot, gil, cp, exp, unlocked_jobs, updated_at FROM inv_economies WHERE user_id = ? ORDER BY slot').all(uid);
         if (!econ.length) { console.log('  (no mirror data for user ' + uid + ')'); }
         for (const e of econ) {
