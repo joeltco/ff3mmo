@@ -39,7 +39,7 @@ import { saveSlots } from './save-state.js';
 import { _nesNameToString } from './text-utils.js';
 import { resetBattleVars, isTeamWiped, executeBattleCommand, tryJoinPlayerAlly } from './battle-update.js';
 import { startGameLoop } from './game-loop.js';
-import { connectNet } from './net.js';
+import { connectNet, setNetInvStateHandler } from './net.js';   // v1.7.742 Phase 1b prep
 import { ps, getEffectiveStats, getShieldEvade, getJobLevel } from './player-stats.js';
 import { selectCursor } from './save-state.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
@@ -162,6 +162,58 @@ export function init() {
     },
     () => getPlayerLocation(),
   );
+
+  // v1.7.742 Phase 1b prep — server-pushed mirror state. Used by
+  // `inv-state-request` now (defensive resync hook); Phase 1b will
+  // fire this on every rejected `inv-event` so the client's local
+  // state wholesale-replaces from the server's authoritative copy.
+  // Touches every wire-managed field. NOTE: this handler is currently
+  // ONLY safe to call when the user explicitly requests state (e.g.
+  // via /inv-resync debug command) — full Phase 1b enforcement
+  // requires Phase 4 (save sync must stop overwriting wire-managed
+  // fields first). See `docs/INVENTORY-MIRROR-PLAN.md`.
+  setNetInvStateHandler((msg) => {
+    if (!msg || msg.slot == null) return;
+    // Inventory wholesale-replace. Server inventory is { itemId: qty } shape.
+    const inv = {};
+    const order = [];
+    if (msg.inventory && typeof msg.inventory === 'object') {
+      for (const [k, v] of Object.entries(msg.inventory)) {
+        const id = parseInt(k, 10);
+        if (!Number.isFinite(id) || id < 0 || id > 255) continue;
+        const qty = Number(v) | 0;
+        if (qty <= 0) continue;
+        inv[id] = qty;
+        order.push(id);
+      }
+    }
+    setPlayerInventory(inv, order);
+    // Economy / progression.
+    if (typeof msg.gil === 'number') ps.gil = msg.gil | 0;
+    if (typeof msg.cp === 'number') ps.cp = msg.cp | 0;
+    if (typeof msg.exp === 'number' && ps.stats) ps.stats.exp = msg.exp | 0;
+    if (typeof msg.unlockedJobs === 'number') ps.unlockedJobs = msg.unlockedJobs >>> 0;
+    // Equipment.
+    if (msg.equipped && typeof msg.equipped === 'object') {
+      if (typeof msg.equipped.weaponR === 'number') ps.weaponR = msg.equipped.weaponR | 0;
+      if (typeof msg.equipped.weaponL === 'number') ps.weaponL = msg.equipped.weaponL | 0;
+      if (typeof msg.equipped.head === 'number')    ps.head    = msg.equipped.head    | 0;
+      if (typeof msg.equipped.body === 'number')    ps.body    = msg.equipped.body    | 0;
+      if (typeof msg.equipped.arms === 'number')    ps.arms    = msg.equipped.arms    | 0;
+    }
+    // Spells.
+    if (Array.isArray(msg.knownSpells)) ps.knownSpells = msg.knownSpells.slice();
+    // Job levels.
+    if (msg.jobLevels && typeof msg.jobLevels === 'object') {
+      ps.jobLevels = {};
+      for (const [k, v] of Object.entries(msg.jobLevels)) {
+        if (!v || typeof v !== 'object') continue;
+        ps.jobLevels[k] = { level: v.level | 0, jp: v.jp | 0 };
+      }
+    }
+    saveSlotsToDB();
+  });
+
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
   canvas.width = CANVAS_W;

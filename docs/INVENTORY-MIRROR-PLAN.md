@@ -186,10 +186,36 @@ sub-phase is independently shippable and rolls back via flag flip.
   Flag-off: wire fires, server logs, no behavior change.
 - Wire-sim regression tests for the roundtrip + bounds validation
 
-**Phase 1b** (future): flip `INV_MIRROR_AUTHORITATIVE = true`. Server
-starts rejecting events that don't match mirror state (e.g. "you
-claimed to remove a Sage Staff you don't have"). Server pushes `inv-state`
-back on rejection. Client wholesale-replaces local state from the push.
+**Phase 1b** (future, NOT YET SAFE — see prerequisite): flip
+`INV_MIRROR_AUTHORITATIVE = true`. Server starts rejecting events that
+don't match mirror state (e.g. "you claimed to remove a Sage Staff you
+don't have"). Server pushes `inv-state` back on rejection. Client
+wholesale-replaces local state from the push.
+
+**Phase 1b prerequisite (discovered v1.7.742):** `/api/save`'s mirror
+sync (`mirrorSyncFromSave`) wholesale-replaces the wire-managed fields
+(inventory / equipped / spells / gil). With both Phase 1c migration
+AND the existing save sync writing the mirror, race conditions are
+possible: client uses Potion → fires wire `remove`, then
+`saveSlotsToDB()` posts /api/save. WS and HTTP arrive at the server in
+either order. If save arrives first, it sets mirror inventory to N-1
+(post-mutation count from the just-written save), then the wire event
+decrements again to N-2 — mirror under-counts by 1. Harmless in shadow
+mode (just logs); catastrophic with enforcement (next legitimate
+remove falsely rejected).
+
+To make Phase 1b safe, EITHER:
+- (Partial Phase 4) Stop `mirrorSyncFromSave` from touching the
+  wire-managed fields when `INV_MIRROR_AUTHORITATIVE_SERVER = true`.
+  Wire becomes sole writer; save sync covers metadata only
+  (currentMapId, lastTown, playTime, etc.). ~20 lines.
+- (Full Phase 4) Save endpoint becomes a snapshot of the server's
+  mirror state. Client save data ignored for wire-managed fields.
+  Larger surface area; pairs naturally with Phase 1b flip.
+
+Until one of these lands, Phase 1b stays deferred. Phase 1a + 1c
+(shadow mode with full wire coverage) is the right resting state for
+gathering production divergence data without breaking players.
 
 **Phase 1c+** (future, multi-session): migrate the remaining mutation
 sites. Audit identifies them at: `addItem` (chest/loot/shop/levelup/use),

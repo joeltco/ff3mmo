@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.743 — 2026-05-26
+
+### Inventory mirror Phase 1b prep + race-condition documentation
+
+Followup to v1.7.742. Adds the client-side `inv-state` handler (wholesale-replace local state from a server-pushed mirror snapshot) — half of what Phase 1b needs. The OTHER half (server-side rejection enforcement) is deferred pending Phase 4 work after a race condition was discovered during the migration.
+
+**Race condition surfaced:** with Phase 1c shipped, every mutation now fires both a wire event AND a delayed `/api/save` POST. Both arrive at the server out-of-order (WS and HTTP are separate connections through nginx). The existing `mirrorSyncFromSave` wholesale-replaces wire-managed fields when /api/save lands; if it lands AFTER the wire event, the mirror correctly reflects post-mutation state — then the wire event applies its delta AGAIN, decrementing once more. Mirror under-counts. Harmless in shadow mode; catastrophic with enforcement (next legitimate remove falsely rejected).
+
+**Fix path for safe Phase 1b** (documented in `docs/INVENTORY-MIRROR-PLAN.md`): either gate `mirrorSyncFromSave` to skip wire-managed fields when authoritative, or land full Phase 4 (save = mirror snapshot, client save data ignored for wire fields). Either is ~20-50 lines but needs its own deploy with care. Pairs naturally with the eventual Phase 1b flag flip.
+
+**What landed this version:**
+- `setNetInvStateHandler` wired in `src/main.js` — wholesale-replaces local `playerInventory` (via `setPlayerInventory`), `ps.gil/cp/exp/unlockedJobs`, `ps.weaponR/L/head/body/arms`, `ps.knownSpells`, `ps.jobLevels`. Then triggers `saveSlotsToDB`.
+- Useful immediately for `inv-state-request` (defensive resync). Ready for Phase 1b's rejection-push path once flag-flip prerequisites are met.
+- `INVENTORY-MIRROR-PLAN.md` updated with the race condition + the two paths to safe enforcement.
+
+**What's deferred to next session:**
+- `INV_MIRROR_AUTHORITATIVE` flag flip (current value still `false`).
+- Server-side rejection gate in `case 'inv-event'`.
+- Either Phase 4 partial (gate `mirrorSyncFromSave`) OR full save = mirror snapshot.
+
+**Mirror progress recap:** Phase 0 ✓ (read-only tables + boot seed + `./prod.sh inv` + divergence telemetry). Phase 1a ✓ (wire scaffold + chest open as proof). Phase 1c ✓ (29 mutation sites migrated). Phase 1b BLOCKED on race-condition fix. The system is in a safe steady state — shadow mode with full wire coverage. Production divergence data accumulates in `[mirror divergence]` log lines; `./prod.sh errors | grep "mirror divergence"` is the operator's hand for monitoring.
+
+Files: `src/main.js`, `src/net.js`, `docs/INVENTORY-MIRROR-PLAN.md`.
+
 ## 1.7.742 — 2026-05-26
 
 ### Inventory mirror Phase 1c — migrate all mutation call sites (still shadow mode)
