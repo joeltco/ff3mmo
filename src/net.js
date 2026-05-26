@@ -626,6 +626,24 @@ export function setNetPmFailedHandler(fn) {
 // back to `false` and redeploy.
 export const INV_MIRROR_AUTHORITATIVE = true;
 
+// ── PvP rewrite Phase 1 (v1.7.747) ────────────────────────────────────
+//
+// `PVP_ARBITER` is the feature flag for the server-arbitrated PvP rewrite.
+// Full plan: `docs/PVP-REWRITE-PLAN.md`.
+//
+// P-1 (this version): server scaffold + wire roundtrip. Flag is `false`;
+// existing lockstep `pvp-action` relay path still runs as the production
+// PvP path (which is itself disabled by `PVP_ENABLED = false` in
+// `pvp-search.js` — see [[ff3mmo-pvp-disabled]]). Both flags must flip
+// together at P-9 for PvP to come back online under the new model.
+//
+// When `PVP_ARBITER` is true (P-6+):
+//   - Input handlers emit `pvp-intent` instead of pre-rolling locally
+//   - `pvp-arb-viewer.js` consumes server `pvp-turn` deltas + renders
+//   - Server is sole RNG source + arbiter
+// When false (now): existing lockstep / search path runs unchanged.
+export const PVP_ARBITER = false;
+
 // Send an inventory mutation event to the server. `kind` is one of
 // 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason
 // used for divergence logging — keep it consistent with the documented

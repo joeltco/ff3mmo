@@ -60,6 +60,7 @@ export default [
       'api.js',
       'debug-server.js',
       'ws-presence.js',
+      'pvp-arbiter.js',
       'tools/**/*.js',
       'tools/**/*.mjs',
       'tools/**/*.cjs',

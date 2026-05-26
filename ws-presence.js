@@ -49,6 +49,14 @@ import {
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS } from './src/data/items.js';
+// v1.7.747 P-1 — server-arbitrated PvP battle FSM. Behind PVP_ARBITER flag.
+// Module is self-contained; ws-presence just plumbs the wire frames through.
+import {
+  createBattle as pvpArbCreate, buildStartFrame as pvpArbStartFrame,
+  endBattle as pvpArbEnd, handleIntent as pvpArbIntent,
+  handleDisconnect as pvpArbDisconnect, getActiveCount as pvpArbActiveCount,
+  _testReset as pvpArbTestReset,
+} from './pvp-arbiter.js';
 
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
@@ -381,6 +389,10 @@ const PER_KIND_RATES = {
   // second; refill 4/s keeps sustained mutation fine while capping
   // malicious flood.
   'inv-event':                 { cap: 30, refill: 4 },
+  // v1.7.747 P-1 — pvp-intent is once-per-turn. Even a fast player can't
+  // legitimately exceed ~1/s. Tight cap (3 burst, 1/s sustained) so a
+  // misbehaving client can't grief the FSM by spamming intents.
+  'pvp-intent':                { cap: 3,  refill: 1 },
 };
 function _rateAllowKind(entry, kind) {
   const rate = PER_KIND_RATES[kind];
@@ -866,6 +878,57 @@ function _handleMessage(entry, msg) {
         healAmount: parsed.healAmount,    // v1.7.389 — sender's pre-rolled heal (audit #24)
         hitResults: parsed.hitResults,    // v1.7.407 — sender's pre-rolled physical hits
       });
+      return;
+    }
+    case 'pvp-arb-start': {
+      // v1.7.747 P-1 — TEST-ONLY entry point for the server-arbitrated PvP
+      // FSM scaffold. Lets wire-sim spin up a battle without going through
+      // the full pvp-search → encounter hook path. P-9 wires the search
+      // hook to call `pvpArbCreate` directly when PVP_ARBITER is on; until
+      // then this case is the only way to land in the arbiter from a
+      // client. Authentication still required (entry.helloed) and the
+      // opponent must be a real online user; production exposure is low
+      // (a client could only stall their own session by calling it).
+      if (!entry.helloed) return;
+      const opponentUserId = parsed.opponentUserId | 0;
+      if (!opponentUserId || opponentUserId === entry.userId) return;
+      const opponent = _connected.get(opponentUserId);
+      if (!opponent || !opponent.helloed) {
+        _send(entry.ws, { type: 'pvp-cancel', battleId: 0, reason: 'opponent-offline' });
+        return;
+      }
+      let battle;
+      try { battle = pvpArbCreate(entry.userId, opponentUserId); }
+      catch (e) {
+        console.log('[pvp-arb-start] reject reason=' + e.message + ' user=' + entry.userId);
+        _send(entry.ws, { type: 'pvp-cancel', battleId: 0, reason: 'already-in-battle' });
+        return;
+      }
+      _send(entry.ws, pvpArbStartFrame(battle, entry.userId));
+      _send(opponent.ws, pvpArbStartFrame(battle, opponentUserId));
+      // P-1 stub: immediately end as draw. P-4 will replace this with the
+      // turn-resolution loop driven by collected intents.
+      const endFrame = pvpArbEnd(battle, 'draw');
+      _send(entry.ws, endFrame);
+      _send(opponent.ws, endFrame);
+      console.log('[pvp-arb-start] battle=' + battle.battleId + ' A=' + entry.userId + ' B=' + opponentUserId);
+      return;
+    }
+    case 'pvp-intent': {
+      // v1.7.747 P-1 — client emits one intent per turn; server validates
+      // envelope, queues for resolution. P-1 only validates the wire
+      // shape (battleId match, turnIdx match, kind allowlist). P-4 lands
+      // the resolution loop that consumes queued intents into deltas.
+      if (!entry.helloed) return;
+      const result = pvpArbIntent(entry.userId, parsed);
+      if (!result.ok) {
+        console.log('[pvp-intent] reject user=' + entry.userId + ' reason=' + result.reason);
+        // Bad envelope → corrective state-resync would go here in P-4.
+        // P-1 just logs; client retry / give-up is on the client.
+        return;
+      }
+      // P-1: intent accepted but not yet resolved into a turn. P-4 fires
+      // the resolution + broadcasts `pvp-turn` from here.
       return;
     }
     case 'inv-event': {
@@ -1721,6 +1784,21 @@ export function attachWebSocketPresence(httpServer) {
           if (partner && partner.helloed) {
             _send(partner.ws, { type: 'pvp-action', kind: 'disconnect' });
           }
+        }
+        // v1.7.747 P-1 — server-arbitrated PvP disconnect path. If this
+        // user was in an arbiter-managed battle, end it and notify the
+        // survivor with `pvp-cancel reason: 'opponent-disconnect'`. Lives
+        // in parallel with the legacy `_pvpPartners` cleanup above; under
+        // PVP_ARBITER both could fire but only one will have state for
+        // any given user. P-10 cleanup deletes the legacy path.
+        try {
+          const arbCancel = pvpArbDisconnect(userId);
+          if (arbCancel) {
+            const survivor = _connected.get(arbCancel.survivorId);
+            if (survivor && survivor.helloed) _send(survivor.ws, arbCancel.frame);
+          }
+        } catch (e) {
+          console.warn('[pvp-arb] disconnect handler failed user=' + userId + ': ' + e.message);
         }
         // Clean up pending party invites involving this user.
         // Gap A (v1.7.734) — if this user had an OUTGOING invite pending,
