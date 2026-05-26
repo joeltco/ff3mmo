@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.736 — 2026-05-26
+
+### Fix: three pattern-adjacent gaps (JWT-bump live-kick + save-fail surface + player-update buffer)
+
+Closes the remaining "silent failure of user intent" findings from the system audit. None match the modal-hang pattern of Gaps A-D exactly, but each leaves an unresolved race or invisible failure that should be addressed for parity.
+
+**JWT-bump didn't kick existing WS connections** (MEDIUM). `/api/logout-all` bumped `users.token_iat_min` in the DB, which made subsequent HTTP requests 401 — but existing WS sessions were already verified at upgrade and never re-checked. User's intent of "kick my other devices NOW" didn't fulfill until each stale session made its next HTTP call.
+
+`ws-presence.js` now stashes `tokenIat` on each entry at upgrade time and exports `revokeWsBeforeIat(userId, iatMinSec)` to close any user-WS with an older iat. `api.js` exposes `setLogoutAllHook(fn)` and calls the hook after the DB update; `server.js` wires `ws-presence.revokeWsBeforeIat` to that hook at boot (avoids a circular import — api.js doesn't know about ws-presence by design). Close code `4002 logout-all` distinguishes from the v1.7.624 `4001 replaced` path so the client's reconnect log is greppable.
+
+**`/api/save` failures were invisible to the user** (LOW). `serverSave` in `index.html` only did `console.warn`; the local IndexedDB save still succeeded so single-device play continued, but cross-device sync silently drifted on validation rejects or 5xxs. Now reads the response and posts `* Cloud save failed: <reason> — local save kept` to chat (via `window.ff3AddChatMessage`, exposed from `chat.js` for inline scripts that can't import ESM). Network errors keep the original console-only path (offline is a normal state, not worth a chat line per save).
+
+**`player-update` arriving before `player-join` silently dropped** (LOW). Client `net.js#case 'player-update'` did `Object.assign` only when `_onlinePlayers.has(userId)` — out-of-order delivery (esp. on a fresh hello fanout where join + update fire back-to-back) lost the field until the next periodic update or snapshot. New `_pendingPlayerUpdates` Map (capped at 64 entries with FIFO eviction) buffers unknown-userId fields; `case 'player-join'` drains the buffer when the join lands. `case 'player-leave'` drops the buffer too.
+
+2 new wire-sim tests guard the JWT-bump kick (54 tests total) and the player-update ordering contract.
+
+Files: `ws-presence.js`, `api.js`, `server.js`, `src/net.js`, `src/chat.js`, `index.html`, `tools/pvp-wire-sim.js`.
+
 ## 1.7.735 — 2026-05-26
 
 ### Fix: silent-drop gaps in give-item + PM (GI-1, PM-1)

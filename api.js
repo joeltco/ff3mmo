@@ -263,6 +263,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_storage_beacons_ts ON storage_beacons(ts);
 `);
 
+// v1.7.736 — hook for `/api/logout-all` so it can kick stale WS connections
+// in real time. Set by `server.js` at boot to ws-presence's
+// `revokeWsBeforeIat`. Pre-fix the watermark bump only blocked NEW requests;
+// existing WS sessions kept running until each made its next HTTP call.
+let _onLogoutAllHook = null;
+export function setLogoutAllHook(fn) {
+  _onLogoutAllHook = typeof fn === 'function' ? fn : null;
+}
+
 // JWT rotation column on `users`. Tokens issued before this unix-second
 // timestamp are rejected as if expired. Bumped by `/api/logout-all` so a
 // user with a stolen token can invalidate every outstanding session
@@ -567,6 +576,13 @@ export async function handleAPI(req, res) {
     if (!user) return send(res, 401, { error: 'Not authenticated' }), true;
     const now = Math.floor(Date.now() / 1000);
     db.prepare('UPDATE users SET token_iat_min = ? WHERE id = ?').run(now, user.userId);
+    // v1.7.736 — kick any live WS session for this user whose token iat
+    // pre-dates the new watermark. Client's net.js retry loop will
+    // reconnect with the fresh token returned below.
+    if (_onLogoutAllHook) {
+      try { _onLogoutAllHook(user.userId, now); }
+      catch (e) { console.warn('[logout-all] WS revoke hook failed:', e); }
+    }
     // Issue a fresh token so the caller (who just logged everyone else out)
     // stays signed in. iat = now ≥ token_iat_min so this one survives.
     const newToken = jwt.sign({ userId: user.userId, email: user.email }, JWT_SECRET, { expiresIn: '30d' });

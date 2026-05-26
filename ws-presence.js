@@ -1485,6 +1485,22 @@ export function getPlayerCounts() {
   return { total: _connected.size, visible };
 }
 
+// v1.7.736 — close any live WS for `userId` whose token iat is older than
+// `iatMinSec` (Unix seconds). Called from `api.js#/api/logout-all` AFTER
+// the `users.token_iat_min` DB bump so the user's other sessions get
+// kicked off immediately rather than waiting for their next HTTP call to
+// 401. The caller's NEW session (issued a fresh token with iat=now)
+// won't match this filter because it hasn't upgraded its WS yet — the
+// client's net.js retry loop reconnects with the fresh token. Close
+// code 4002 distinguishes this from the v1.7.624 4001 "replaced" path.
+export function revokeWsBeforeIat(userId, iatMinSec) {
+  const entry = _connected.get(userId);
+  if (!entry) return false;
+  if ((entry.tokenIat | 0) >= (iatMinSec | 0)) return false;
+  try { entry.ws.close(4002, 'logout-all'); } catch { /* drop */ }
+  return true;
+}
+
 export function attachWebSocketPresence(httpServer) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
 
@@ -1538,7 +1554,14 @@ export function attachWebSocketPresence(httpServer) {
     }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      const entry = { ws, userId, profile: null, loc: null, helloed: false, ip };
+      // v1.7.736 — stash token iat on the entry so `/api/logout-all` can
+      // selectively close stale WS connections. Pre-fix the watermark bump
+      // only blocked NEW requests; existing WS kept running because they
+      // were validated at upgrade and never re-verified. The user's intent
+      // of "kick my other devices NOW" wasn't fulfilled until each stale
+      // session made its next HTTP call.
+      const tokenIat = (decoded.iat | 0) || 0;
+      const entry = { ws, userId, profile: null, loc: null, helloed: false, ip, tokenIat };
       _connected.set(userId, entry);
       _connsByIp.set(ip, ipCount + 1);
 
@@ -1676,6 +1699,7 @@ export const _testHooks = {
   rateAllow: _rateAllow,
   rateAllowKind: _rateAllowKind,
   perKindRates: PER_KIND_RATES,
+  revokeWsBeforeIat,   // v1.7.736 — exposed for wire-sim regression test
   state: {
     connected: _connected,
     pvpSearches: _pvpSearches,

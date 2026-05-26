@@ -902,15 +902,30 @@
     });
 
     // --- Server save/load ---
+    // v1.7.736 — surface non-200 responses to the chat console so users
+    // notice when their cloud save isn't going through. The local
+    // IndexedDB save still succeeded (this runs after that), so
+    // single-device play continues normally; the warning matters for
+    // cross-device sync. Network errors keep the original console.warn
+    // (offline is a normal state, not worth a chat line every save).
     async function serverSave(slot, data) {
       if (!authToken) return;
       try {
-        await fetch(`${API}/api/save`, {
+        const res = await fetch(`${API}/api/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
           body: JSON.stringify({ slot, data }),
         });
-      } catch (e) { console.warn('Save sync failed:', e); }
+        if (!res.ok) {
+          let reason = 'HTTP ' + res.status;
+          try { const j = await res.json(); if (j && j.error) reason = j.error; } catch { /* not JSON */ }
+          console.warn('Save sync failed:', reason);
+          // The chat module may not be loaded yet (early-boot save before
+          // the game is in-world). Best-effort post if the hook exists.
+          try { window.ff3AddChatMessage?.('* Cloud save failed: ' + reason + ' — local save kept', 'system'); }
+          catch { /* swallow */ }
+        }
+      } catch (e) { console.warn('Save sync failed (network):', e); }
     }
 
     async function serverDeleteSave(slot) {

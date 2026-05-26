@@ -1,8 +1,13 @@
 import { createServer } from 'http';
 import { readFile } from 'fs/promises';
 import { extname, join } from 'path';
-import { handleAPI } from './api.js';
-import { attachWebSocketPresence, getPlayerCounts } from './ws-presence.js';
+import { handleAPI, setLogoutAllHook } from './api.js';
+import { attachWebSocketPresence, getPlayerCounts, revokeWsBeforeIat } from './ws-presence.js';
+
+// v1.7.736 — `/api/logout-all` calls this to kick the user's stale WS
+// sessions in real time. Wired here (not inside api.js) to avoid a
+// circular import — api.js doesn't know about ws-presence by design.
+setLogoutAllHook(revokeWsBeforeIat);
 
 // Boot timestamp for the /health uptime field. `process.uptime()` works too
 // but we want a stable wall-clock anchor in case the route adds more later.

@@ -201,6 +201,14 @@ export function addChatMessage(text, type, channel, meta) {
   if (tabIdx !== undefined && tabIdx !== activeTab && tabIdx !== 3) _tabUnread[tabIdx] = true;
 }
 
+// v1.7.736 — expose addChatMessage on `window` so the inline serverSave in
+// index.html (which can't import ES modules) can post a system line on a
+// non-200 cloud-save response. Best-effort: an early-boot save runs before
+// chat.js loads, so the caller guards with `?.()`.
+if (typeof window !== 'undefined') {
+  window.ff3AddChatMessage = addChatMessage;
+}
+
 // Client-side block list. Persisted in localStorage so /block survives a
 // page reload. Matched on either userId (preferred — spoof-proof since
 // PM-by-userId landed in v1.7.388) or name (fallback for old messages).

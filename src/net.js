@@ -15,6 +15,14 @@
 // presence on the local client.
 
 const _onlinePlayers = new Map();  // userId → { userId, name, jobIdx, level, palIdx, ..., loc, isReal: true }
+
+// v1.7.736 — buffer for player-update messages that arrive before the
+// corresponding player-join (network reordering, esp. on a fresh hello
+// fanout where the server emits join + update back-to-back). Drained
+// from the `case 'player-join'` branch when the join finally lands.
+// Capped to defend against unbounded growth from a misbehaving server.
+const _pendingPlayerUpdates = new Map();   // userId → merged fields
+const PENDING_PLAYER_UPDATES_CAP = 64;
 let _ws = null;
 let _ready = false;          // server sent `ready` — safe to `hello`
 let _helloed = false;        // we've sent at least one `hello`
@@ -91,10 +99,23 @@ function _handleMessage(data) {
     case 'player-join':
       if (msg.player && msg.player.userId !== _myUserId) {
         _onlinePlayers.set(msg.player.userId, { ...msg.player, isReal: true });
+        // v1.7.736 — drain any buffered player-update fields for this
+        // userId that arrived BEFORE the join (network reordering).
+        // Pre-fix the early update silently no-op'd (unknown userId
+        // branch) and the field was lost until the next periodic update
+        // or snapshot refresh.
+        const pending = _pendingPlayerUpdates.get(msg.player.userId);
+        if (pending) {
+          Object.assign(_onlinePlayers.get(msg.player.userId), pending);
+          _pendingPlayerUpdates.delete(msg.player.userId);
+        }
       }
       return;
     case 'player-leave':
       _onlinePlayers.delete(msg.userId);
+      // Drop any pending buffer for this user — they left, the fields
+      // are stale anyway.
+      _pendingPlayerUpdates.delete(msg.userId);
       return;
     case 'player-move': {
       const p = _onlinePlayers.get(msg.userId);
@@ -104,6 +125,21 @@ function _handleMessage(data) {
     case 'player-update': {
       const p = _onlinePlayers.get(msg.userId);
       if (p && msg.fields) Object.assign(p, msg.fields);
+      else if (!p && msg.fields) {
+        // v1.7.736 — update arrived before the player-join for this user
+        // (network reordering). Stash the fields; the player-join branch
+        // above will merge them when it lands. Bounded to PENDING_CAP
+        // to defend against unbounded growth from a misbehaving server
+        // (or a userId that never joins).
+        const existing = _pendingPlayerUpdates.get(msg.userId) || {};
+        _pendingPlayerUpdates.set(msg.userId, { ...existing, ...msg.fields });
+        if (_pendingPlayerUpdates.size > PENDING_PLAYER_UPDATES_CAP) {
+          // Evict the oldest entry (Map preserves insertion order).
+          const oldest = _pendingPlayerUpdates.keys().next().value;
+          _pendingPlayerUpdates.delete(oldest);
+        }
+        return;
+      }
       return;
     }
     case 'chat':
