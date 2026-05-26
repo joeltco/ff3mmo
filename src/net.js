@@ -615,7 +615,16 @@ export function setNetPmFailedHandler(fn) {
 // flag is still false.
 //
 // Full plan: `docs/INVENTORY-MIRROR-PLAN.md`.
-export const INV_MIRROR_AUTHORITATIVE = false;
+//
+// v1.7.745 — FLIPPED ON. Paired flip with `INV_MIRROR_AUTHORITATIVE_SERVER`
+// in `api.js`. Phase 4 (partial, v1.7.744) gated `mirrorSyncFromSave` from
+// touching wire-managed fields when the server flag is on, eliminating the
+// HTTP/WS arrival-order race that blocked enforcement. Server now rejects
+// divergent removes + gil underflows with a corrective `inv-state` push;
+// client's `setNetInvStateHandler` (wired in `src/main.js` v1.7.743)
+// wholesale-replaces local state on receipt. To roll back: set both flags
+// back to `false` and redeploy.
+export const INV_MIRROR_AUTHORITATIVE = true;
 
 // Send an inventory mutation event to the server. `kind` is one of
 // 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason

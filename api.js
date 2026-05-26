@@ -70,11 +70,16 @@ export function _testValidateSaveData(data) { return _validateSaveData(data); }
 // late-binding works because the test caller imports api.js (which runs
 // the schema + prepare block top-to-bottom) before invoking either.
 //
-// v1.7.744 Phase 4 (partial) — `opts` is forwarded so tests can exercise
-// the bootSeed bypass + the authoritative-server gate that skips
-// wire-managed fields. Defaults to {} so existing callers are unaffected.
-export function _testMirrorSync(userId, slot, data, opts) {
-  return mirrorSyncFromSave(userId, slot, data, opts);
+// v1.7.745 — `_testMirrorSync` is the SEED helper; it always bypasses the
+// authoritative-server gate (via `{bootSeed:true}`) so test setup writes
+// the mirror unconditionally regardless of the flag. To test the gated
+// runtime path (`/api/save` calling `mirrorSyncFromSave`), use
+// `_testMirrorSyncRuntime` instead — that one honors the flag.
+export function _testMirrorSync(userId, slot, data) {
+  return mirrorSyncFromSave(userId, slot, data, { bootSeed: true });
+}
+export function _testMirrorSyncRuntime(userId, slot, data) {
+  return mirrorSyncFromSave(userId, slot, data);
 }
 // v1.7.744 — runtime override for the authoritative-server flag. Used by
 // wire-sim to toggle the gate per-test without restarting the process.
@@ -432,7 +437,10 @@ const _invEconReadStmt    = db.prepare('SELECT gil FROM inv_economies WHERE user
 //
 // Boot seed bypasses the gate so empty mirrors get populated from the
 // `saves` table even when the flag is on.
-let INV_MIRROR_AUTHORITATIVE_SERVER = false;
+//
+// v1.7.745 — FLIPPED ON. Paired flip with `INV_MIRROR_AUTHORITATIVE` in
+// `src/net.js`. To roll back: set both back to `false` and redeploy.
+let INV_MIRROR_AUTHORITATIVE_SERVER = true;
 
 function mirrorSyncFromSave(userId, slot, data, opts) {
   const now = Math.floor(Date.now() / 1000);

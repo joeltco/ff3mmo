@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.745 — 2026-05-26
+
+### Inventory mirror Phase 1b — flag flip, enforcement on
+
+Both flags flipped to `true`. The server-canonical inventory mirror now actively rejects state-divergent mutations and pushes corrective `inv-state` snapshots back to the client. Closes V-A (trade dup at runtime — sender's `remove` now rejected if mirror lacks the item) and partially closes V-B (give-item dup — same enforcement path).
+
+**What changed atomically:**
+- `INV_MIRROR_AUTHORITATIVE_SERVER = true` in `api.js` (was `false` in v1.7.744). Activates the Phase 4 (partial) gate: `mirrorSyncFromSave` skips wire-managed fields (inventory, gil, equipped), so the wire is now the sole writer.
+- `INV_MIRROR_AUTHORITATIVE = true` in `src/net.js`. Documents the live state for any future grep.
+- ws-presence's `case 'inv-event'` reject branch is now load-bearing: any `divergent-remove` / `divergent-gil` triggers an immediate `inv-state` push with `reason: 'rejected'`. Client's `setNetInvStateHandler` (v1.7.743) wholesale-replaces local state on receipt — desync self-heals in one round-trip.
+- Wire-sim updated: `_testMirrorSync` always bypasses the gate (it's a test seeder); new `_testMirrorSyncRuntime` exposes the gated path for testing the gate behavior itself. Phase 1a "remove past zero" + Phase 4 "save sync writes wire-managed fields off" tests explicitly toggle the flag off via `_testSetMirrorAuthoritative` since the production default is now `true`.
+
+**Rollback procedure:** flip both flags back to `false` and redeploy. Wire-managed fields will start syncing from `/api/save` again. The race that v1.7.744 fixed is harmless in shadow mode (logs only).
+
+**What's still open:**
+- V-C (cheated save fields) — `_validateSaveData` still clamps but trusts client. Closed by Phase 4 (full): `/api/save` becomes a server-snapshot read, save payload ignored for wire-managed fields.
+- V-D (lying equipped in profile broadcast) — `case 'update'` still trusts client. Closed by Phase 5: cross-check broadcast equipment against mirror.
+- knownSpells / jobLevels / cp / exp / unlockedJobs — still save-managed, no wire events yet.
+
+**Gates:** lint 0, pvp-wire-sim 73/73 (all 7 v1.7.744 + v1.7.745 tests pass under authoritative-on default).
+
 ## 1.7.744 — 2026-05-26
 
 ### Inventory mirror Phase 4 (partial) — wire-managed save gate

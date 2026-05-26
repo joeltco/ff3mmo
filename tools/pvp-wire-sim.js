@@ -28,7 +28,8 @@ import {
 } from '../src/status-effects.js';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
 import { _testEnsureUser, handleAPI, _testValidateSaveData,
-         _testMirrorSync, _testMirrorRead, _testMirrorClear,
+         _testMirrorSync, _testMirrorSyncRuntime,
+         _testMirrorRead, _testMirrorClear,
          _testSetMirrorAuthoritative, _testGetMirrorAuthoritative } from '../api.js';
 
 const require = createRequire(import.meta.url);
@@ -1030,19 +1031,27 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
-  await asyncTest('v1.7.741 inv-event remove past zero deletes row', async () => {
+  await asyncTest('v1.7.741 inv-event remove past zero deletes row (shadow mode)', async () => {
     _testHooks.resetState();
     _testEnsureUser(7413);
     _testMirrorClear(7413, 0);
     _testMirrorSync(7413, 0, { gil: 0, inventory: { 0x80: 2 } });
-    const A = await connectClient(port, 7413, { ...baseProfile, name: 'InvZ', slot: 0 });
-    A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
-    await new Promise(r => setTimeout(r, 80));
-    const m = _testMirrorRead(7413, 0);
-    assertEqual(m.inv.length, 0, 'row deleted when qty reaches 0');
-    A.close();
-    _testMirrorClear(7413, 0);
-    await new Promise(r => setTimeout(r, 40));
+    // v1.7.745 — shadow-mode behavior; toggle off the authoritative gate
+    // for this test so the divergent remove applies (clamped to 0) instead
+    // of being rejected with a push.
+    const prev = _testSetMirrorAuthoritative(false);
+    try {
+      const A = await connectClient(port, 7413, { ...baseProfile, name: 'InvZ', slot: 0 });
+      A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
+      await new Promise(r => setTimeout(r, 80));
+      const m = _testMirrorRead(7413, 0);
+      assertEqual(m.inv.length, 0, 'row deleted when qty reaches 0');
+      A.close();
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(7413, 0);
+      await new Promise(r => setTimeout(r, 40));
+    }
   });
 
   await asyncTest('v1.7.741 inv-event gil-delta applies', async () => {
@@ -1130,16 +1139,18 @@ async function suiteWire() {
     const UID = 7441; const SLOT = 0;
     _testEnsureUser(UID);
     _testMirrorClear(UID, SLOT);
-    // Seed mirror with state the wire would have produced.
+    // Seed mirror with state the wire would have produced (bootSeed bypass
+    // — always writes regardless of flag).
     _testMirrorSync(UID, SLOT, {
       gil: 500, inventory: { 0x80: 5 },
       stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
     });
     const prev = _testSetMirrorAuthoritative(true);
     try {
-      // Save claims different inventory + gil + equipped — should be IGNORED
-      // for those fields. cp/exp/unlockedJobs/spells/jobs should still apply.
-      _testMirrorSync(UID, SLOT, {
+      // Runtime sync (gated by the flag) — claims different inventory + gil
+      // + equipped, should be IGNORED for those fields. cp/exp/unlockedJobs/
+      // spells/jobs should still apply (not wire-managed).
+      _testMirrorSyncRuntime(UID, SLOT, {
         gil: 99999, inventory: { 0x80: 99, 0xDE: 1 },
         stats: { weaponR: 0xDE, weaponL: 0xDE, head: 0xDE, body: 0xDE, arms: 0xDE },
         cp: 42, exp: 1234, unlockedJobs: 0xFF,
@@ -1165,30 +1176,39 @@ async function suiteWire() {
     const UID = 7442; const SLOT = 0;
     _testEnsureUser(UID);
     _testMirrorClear(UID, SLOT);
-    assertEqual(_testGetMirrorAuthoritative(), false, 'flag default is shadow mode');
-    _testMirrorSync(UID, SLOT, {
-      gil: 7777, inventory: { 0x80: 3 },
-      stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
-    });
-    const m = _testMirrorRead(UID, SLOT);
-    assertEqual(m.econ.gil, 7777, 'gil written in shadow mode');
-    assertEqual(m.inv[0].qty, 3, 'inventory written in shadow mode');
-    assertEqual(m.eq.weapon_r, 0x1E, 'equipped written in shadow mode');
-    _testMirrorClear(UID, SLOT);
+    // v1.7.745 production default is `true`; toggle off to exercise the
+    // shadow-mode path (still supported as the rollback target). Use the
+    // runtime helper so the gate decision is exercised — the bypass
+    // seed helper would always write regardless.
+    const prev = _testSetMirrorAuthoritative(false);
+    try {
+      _testMirrorSyncRuntime(UID, SLOT, {
+        gil: 7777, inventory: { 0x80: 3 },
+        stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
+      });
+      const m = _testMirrorRead(UID, SLOT);
+      assertEqual(m.econ.gil, 7777, 'gil written in shadow mode');
+      assertEqual(m.inv[0].qty, 3, 'inventory written in shadow mode');
+      assertEqual(m.eq.weapon_r, 0x1E, 'equipped written in shadow mode');
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(UID, SLOT);
+    }
   });
 
-  test('v1.7.744 bootSeed opt bypasses gate even with flag on', () => {
+  test('v1.7.744 bootSeed bypasses gate even with flag on', () => {
     const UID = 7443; const SLOT = 0;
     _testEnsureUser(UID);
     _testMirrorClear(UID, SLOT);
     const prev = _testSetMirrorAuthoritative(true);
     try {
-      // Empty mirror — bootSeed must populate it (the seed runs at module
-      // load to migrate the existing `saves` table into the mirror tables).
+      // Empty mirror — _testMirrorSync (which threads bootSeed:true) must
+      // populate it. Mirrors the real _mirrorBootSeed IIFE that runs at
+      // module load to migrate the existing `saves` table to mirror rows.
       _testMirrorSync(UID, SLOT, {
         gil: 250, inventory: { 0x80: 4 },
         stats: { weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
-      }, { bootSeed: true });
+      });
       const m = _testMirrorRead(UID, SLOT);
       assertEqual(m.econ.gil, 250, 'bootSeed wrote gil');
       assertEqual(m.inv[0].qty, 4, 'bootSeed wrote inventory');
@@ -1286,21 +1306,27 @@ async function suiteWire() {
     _testEnsureUser(7454);
     _testMirrorClear(7454, 0);
     _testMirrorSync(7454, 0, { gil: 0, inventory: { 0x80: 1 } });
-    // Flag stays default (false). Divergent remove should apply + log, no push.
-    const A = await connectClient(port, 7454, { ...baseProfile, name: 'ShdR', slot: 0 });
-    let gotState = false;
-    A.on('message', (raw) => {
-      const m = JSON.parse(raw.toString());
-      if (m.type === 'inv-state') gotState = true;
-    });
-    A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
-    await new Promise(r => setTimeout(r, 120));
-    assertTrue(!gotState, 'shadow mode never pushes inv-state on divergence');
-    const m = _testMirrorRead(7454, 0);
-    assertEqual(m.inv.length, 0, 'mirror clamped to 0 + row deleted');
-    A.close();
-    _testMirrorClear(7454, 0);
-    await new Promise(r => setTimeout(r, 40));
+    // Explicit shadow-mode toggle — production default is now `true`,
+    // so this test exercises the rollback path.
+    const prev = _testSetMirrorAuthoritative(false);
+    try {
+      const A = await connectClient(port, 7454, { ...baseProfile, name: 'ShdR', slot: 0 });
+      let gotState = false;
+      A.on('message', (raw) => {
+        const m = JSON.parse(raw.toString());
+        if (m.type === 'inv-state') gotState = true;
+      });
+      A.send(JSON.stringify({ type: 'inv-event', kind: 'remove', itemId: 0x80, qty: 5, source: 'use' }));
+      await new Promise(r => setTimeout(r, 120));
+      assertTrue(!gotState, 'shadow mode never pushes inv-state on divergence');
+      const m = _testMirrorRead(7454, 0);
+      assertEqual(m.inv.length, 0, 'mirror clamped to 0 + row deleted');
+      A.close();
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(7454, 0);
+      await new Promise(r => setTimeout(r, 40));
+    }
   });
 
   // ── v1.7.721 P7 server-side cooldown survives client reload ─────────
