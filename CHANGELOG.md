@@ -18,6 +18,52 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.750 — 2026-05-26
+
+### PvP rewrite P-4 — turn resolution loop (physical attacks)
+
+The arbiter now runs full rounds end-to-end. Both sides submit intents simultaneously; server picks AI intents for non-human cells, rolls initiative per cell, walks each combatant's intent in AGI order, applies HP damage, end-of-round poison ticks, and broadcasts a single `pvp-turn` frame with the ordered delta list + `nextActor` pointer (or `null` on battle end).
+
+**Round model:**
+- `awaiting-intent` — server waits for each alive human to submit one `pvp-intent`. AI cells don't gate; their intents get picked at resolution time.
+- `resolving` — server collects AI intents (P-4 stub: random alive enemy attack), rolls initiative for every alive cell, sorts descending, walks each combatant:
+  - `processTurnStart` handles sleep/paralysis (skip turn, log `state sleep-skip` delta)
+  - `defend` → set `defending = true`, emit `state defend-on` delta
+  - `attack` → `rollHits(actor.atk, target.def, hitRate, 1, {rand, shieldEvade, evade, defendHalve, critPct, critBonus})`, apply damage, emit `attack` + optional `death` delta
+  - Target dropped mid-round → retarget randomly on the same enemy side
+- End-of-round poison ticks (`status-tick` delta + optional `death`)
+- Side defeat check → `end` delta with victor (or null), battle GC'd after 5s
+- Otherwise loop back to `awaiting-intent`
+
+**Wire shape additions:**
+- Delta kinds in `pvp-turn`: `attack`, `defend` (via `state`), `state sleep-skip`, `status-tick`, `death`, `end`
+- `nextActor: { cellId, isHuman, userId } | null` per the plan spec
+- `turnIdx` increments on every resolved round
+
+**P-4 simplifications (deferred to sub-phases):**
+- Single-hit attacks only (potentialHits = 1). P-4b lifts to `calcPotentialHits` for multi-hit + dual-wield.
+- `magic` / `item` intents no-op (logged, treated as wasted turn). P-4c adds them — needs MP cost + inventory ownership validation against the mirror.
+- No per-intent 15s watchdog. P-4d adds the timeout → auto-defend fallback for unresponsive humans.
+- AI is dumb (random enemy target). P-5 ports the smart logic from `battle-ally.js#_pickAllyAction`.
+
+**Implementation:**
+- `pvp-arbiter.js#resolveTurn(battle)` — full round resolver, returns the `pvp-turn` wire frame.
+- `pvp-arbiter.js#isRoundReady(battle)` — true when every alive human has an intent queued.
+- `pvp-arbiter.js#handleIntent(userId, parsed)` — maps userId → mainCellId, returns `{ok, ready, battle}`. P-1's userId-keyed `pendingIntents` map is now cellId-keyed (resolution loop walks by cell, not user).
+- `pvp-arbiter.js#_resolveActorIntent(actor, intent, battle)` — single-combatant resolution → delta list.
+- `pvp-arbiter.js#_pickAiIntent(actor, battle)` — P-4 stub (random enemy attack).
+- `pvp-arbiter.js#_checkBattleEnd(battle)` — returns 'A' / 'B' / 'draw' / null.
+- ws-presence `case 'pvp-intent'` — on `ready: true`, calls `resolveTurn`, sends `pvp-turn` to both sides. Battle GC + state cleanup inside arbiter.
+- ws-presence `case 'pvp-arb-start'` — strips the P-1 immediate-end stub; battle lives until naturally terminated.
+
+**Test updates:**
+- 4 new wire-sim tests: simultaneous attack intents resolve into one turn; defend produces state delta; battle ends with victor on side defeat; latest intent wins (idempotent intent submit).
+- 4 P-1 tests updated for the new event flow (no immediate-end stub, disconnect mid-battle now triggers survivor `pvp-cancel`).
+
+**No production behavior change.** PVP_ARBITER + PVP_ENABLED both still false. Reachable only via wire-sim's pvp-arb-start path.
+
+**Gates:** lint 0, pvp-wire-sim 95/95 (was 91; +4 P-4 tests, 4 P-1 tests updated).
+
 ## 1.7.749 — 2026-05-26
 
 ### PvP rewrite P-3 — Node-clean battle math + per-battle RNG

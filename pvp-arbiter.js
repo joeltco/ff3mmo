@@ -25,6 +25,8 @@
 import { mirrorReadFullState, readSaveSlot } from './api.js';
 import { computeRealizedStats } from './src/realized-stats.js';
 import { createRng } from './src/rng.js';
+import { rollHits, rollInitiative, summarizeHits } from './src/battle-math.js';
+import { processTurnStart } from './src/status-effects.js';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -136,6 +138,208 @@ function buildCombatantFromUser(userId, slot) {
     defending:  false,
     asleep:     false,
   };
+}
+
+// ── AI intent picker (P-4 stub; P-5 replaces) ─────────────────────────────
+//
+// P-4 ships a minimal AI: pick a random alive enemy and attack. P-5 ports
+// the real `_pickAllyAction` logic from `battle-ally.js` (heal-when-low,
+// magic priority, target-selection by lowest HP, etc.).
+function _pickAiIntent(actor, battle) {
+  const enemySide = actor.side === 'A' ? 'B' : 'A';
+  const enemies = battle.combatants.filter(c => c.side === enemySide && c.hp > 0);
+  if (enemies.length === 0) return { kind: 'defend' };
+  const target = enemies[Math.floor(battle.rng.rand() * enemies.length)];
+  return { kind: 'attack', targetCellId: target.cellId };
+}
+
+// ── Turn resolution (P-4) ─────────────────────────────────────────────────
+//
+// Round model: both sides' humans submit intents simultaneously (one per
+// human cell). When all alive humans have submitted, the server picks
+// AI intents for non-human alive cells, sorts everyone by rolled
+// initiative (AGI*2 + rand[0..256)), and walks each cell in order
+// running its intent. Per-cell deltas are accumulated into one
+// `pvp-turn` frame broadcast to both clients.
+//
+// P-4 simplifications:
+//   - Single-hit attacks only (potentialHits=1). P-4b adds multi-hit
+//     via `calcPotentialHits` once we wire dual-wield correctly.
+//   - 'magic' / 'item' / 'flee' intents fall through to no-op (treated
+//     as a wasted turn). P-4c covers those.
+//   - No 15s per-intent timeout. P-4d adds the watchdog → 'defend'
+//     fallback if a human goes unresponsive.
+//   - Defend doubles your DEF this turn (NES half-damage); cleared at
+//     end of turn. Translates to `defendHalve: true` on rollHits.
+
+// Pick a single combatant's intent → list of deltas. Mutates target HP
+// + actor.defending. Reads from the battle's per-battle RNG.
+function _resolveActorIntent(actor, intent, battle) {
+  const deltas = [];
+  if (!intent || intent.kind === 'defend' || intent.kind === 'flee') {
+    actor.defending = true;
+    deltas.push({ kind: 'state', actorCellId: actor.cellId, change: 'defend-on' });
+    return deltas;
+  }
+  if (intent.kind === 'magic' || intent.kind === 'item') {
+    // P-4c will land these. Until then they no-op (logged so we notice
+    // any client trying to use them during smoke).
+    console.warn('[pvp-arb] kind=' + intent.kind + ' not yet implemented (P-4c); skipped actor=' + actor.cellId);
+    return deltas;
+  }
+  if (intent.kind === 'attack') {
+    let target = battle.combatants.find(c => c.cellId === intent.targetCellId);
+    // Target dead before our turn → pick a random replacement on the
+    // same side. Matches the existing client behavior in
+    // battle-ally.js where `resolveLivingTarget` retargets to a live
+    // enemy mid-round.
+    if (!target || target.hp <= 0) {
+      const enemySide = actor.side === 'A' ? 'B' : 'A';
+      const live = battle.combatants.filter(c => c.side === enemySide && c.hp > 0);
+      if (live.length === 0) return deltas;
+      target = live[Math.floor(battle.rng.rand() * live.length)];
+    }
+    const hits = rollHits(actor.atk, target.def, actor.hitRate, 1, {
+      rand:         battle.rng.rand,
+      shieldEvade:  target.shieldEvade | 0,
+      evade:        target.evade | 0,
+      defendHalve:  !!target.defending,
+      critPct:      4,                              // baseline crit; matches client's job-baseline
+      critBonus:    Math.floor(actor.atk / 2),     // matches calcAttackerAtk's display formula
+    });
+    const summary = summarizeHits(hits);
+    const dmg = summary.allMiss ? 0 : summary.totalDmg;
+    target.hp = Math.max(0, target.hp - dmg);
+    deltas.push({
+      kind:         'attack',
+      actorCellId:  actor.cellId,
+      targetCellId: target.cellId,
+      damage:       dmg,
+      hit:          !summary.allMiss,
+      crit:         summary.anyCrit,
+      hand:         'R',
+    });
+    if (target.hp === 0) {
+      deltas.push({ kind: 'death', actorCellId: target.cellId });
+    }
+    return deltas;
+  }
+  // Unknown kind — log and no-op (handleIntent validates the allowlist,
+  // so this shouldn't fire in production).
+  console.warn('[pvp-arb] unknown intent kind=' + intent.kind + ' actor=' + actor.cellId);
+  return deltas;
+}
+
+// Returns the side ('A' | 'B' | null) that has lost the battle, or null
+// if both sides have at least one combatant alive.
+function _checkBattleEnd(battle) {
+  const aliveA = battle.combatants.some(c => c.side === 'A' && c.hp > 0);
+  const aliveB = battle.combatants.some(c => c.side === 'B' && c.hp > 0);
+  if (!aliveA && !aliveB) return 'draw';
+  if (!aliveA) return 'B';   // A defeated → B wins
+  if (!aliveB) return 'A';
+  return null;
+}
+
+// Resolve one full round into a `pvp-turn` frame. Caller guarantees
+// `battle.status === 'awaiting-intent'` and all alive humans have an
+// intent in `battle.pendingIntents`. Returns the wire frame.
+function resolveTurn(battle) {
+  battle.status = 'resolving';
+  battle.turnIdx++;
+  const deltas = [];
+  // Clear defending flag at start of round (defend lasts ONE round per
+  // the NES tradition). Then collect AI intents for non-human alive
+  // cells.
+  for (const c of battle.combatants) {
+    c.defending = false;
+    if (c.hp <= 0) continue;
+    if (c.isHuman) continue;
+    if (!battle.pendingIntents.has(c.cellId)) {
+      battle.pendingIntents.set(c.cellId, _pickAiIntent(c, battle));
+    }
+  }
+  // Roll initiative for every alive cell; sort descending.
+  const order = battle.combatants
+    .filter(c => c.hp > 0)
+    .map(c => ({ c, init: rollInitiative(c.agi, { rand: battle.rng.rand }) }))
+    .sort((a, b) => b.init - a.init);
+  for (const { c } of order) {
+    if (c.hp <= 0) continue;    // died earlier in this round
+    // Sleep / paralysis check.
+    if (!c.status) c.status = { mask: 0, poisonDmgTick: 0 };
+    const tick = processTurnStart(c.status, c.maxHP, { rand: battle.rng.rand });
+    if (!tick.canAct) {
+      deltas.push({ kind: 'state', actorCellId: c.cellId, change: 'sleep-skip' });
+      continue;
+    }
+    const intent = battle.pendingIntents.get(c.cellId);
+    deltas.push(..._resolveActorIntent(c, intent, battle));
+    const victor = _checkBattleEnd(battle);
+    if (victor) break;
+  }
+  // End-of-round poison ticks. P-4 keeps this simple — applies the
+  // tick to every poisoned alive combatant (no order — symmetric).
+  for (const c of battle.combatants) {
+    if (c.hp <= 0) continue;
+    if (!c.status || !(c.status.mask & 0x08)) continue;   // 0x08 = STATUS.POISON
+    const tickDmg = Math.floor(c.maxHP / 16);
+    if (tickDmg > 0) {
+      c.hp = Math.max(0, c.hp - tickDmg);
+      deltas.push({
+        kind: 'status-tick', actorCellId: c.cellId, statusKind: 'poison', damage: tickDmg,
+      });
+      if (c.hp === 0) {
+        deltas.push({ kind: 'death', actorCellId: c.cellId });
+      }
+    }
+  }
+  // Final defeat check after status ticks.
+  const victor = _checkBattleEnd(battle);
+  if (victor) {
+    deltas.push({ kind: 'end', victor });
+    battle.status = 'ended';
+    battle.endedAt = Date.now();
+    setTimeout(() => {
+      _battles.delete(battle.battleId);
+      _userBattle.delete(battle.sideA.userId);
+      _userBattle.delete(battle.sideB.userId);
+    }, 5000);
+  } else {
+    // Round complete; next round waits on fresh human intents.
+    battle.pendingIntents.clear();
+    battle.status = 'awaiting-intent';
+  }
+  // nextActor — null when battle ended, otherwise points at the next
+  // ALIVE human cell whose turn-prompt should fire on their client.
+  // Both clients share the same value; each side's prompt fires only
+  // when nextActor.userId matches that client's userId.
+  let nextActor = null;
+  if (battle.status === 'awaiting-intent') {
+    const nextHuman = battle.combatants.find(c => c.isHuman && c.hp > 0);
+    if (nextHuman) {
+      nextActor = { cellId: nextHuman.cellId, isHuman: true, userId: nextHuman.userId };
+    }
+  }
+  return {
+    type:     'pvp-turn',
+    battleId: battle.battleId,
+    turnIdx:  battle.turnIdx,
+    deltas,
+    nextActor,
+  };
+}
+
+// True if the round is ready to resolve: every alive human has an
+// intent queued. AI cells don't gate — server picks for them.
+function isRoundReady(battle) {
+  if (battle.status !== 'awaiting-intent') return false;
+  for (const c of battle.combatants) {
+    if (!c.isHuman) continue;
+    if (c.hp <= 0) continue;
+    if (!battle.pendingIntents.has(c.cellId)) return false;
+  }
+  return true;
 }
 
 // ── Battle factory ─────────────────────────────────────────────────────────
@@ -307,12 +511,17 @@ function endBattle(battle, victor) {
 // ── Intent handling ────────────────────────────────────────────────────────
 
 // Validate + accept a `pvp-intent` frame. Returns:
-//   { ok: false, reason: 'no-battle' | 'wrong-battle' | 'stale-turn' | 'bad-kind' }
-//   { ok: true, battle, intent }
+//   { ok: false, reason: 'no-battle' | 'wrong-battle' | 'stale-turn' |
+//                         'bad-kind' | 'not-human' | 'dead' | 'wrong-turn' }
+//   { ok: true, battle, intent, ready }
 //
-// P-1 only validates the envelope (battleId match, turnIdx match, kind in
-// the allowlist). P-4 will validate target alive, MP cost, item ownership,
-// etc., once the FSM holds real combatant state.
+// `ready` is true when this intent completed the round (every alive
+// human has now submitted). The caller (ws-presence) then drives the
+// resolution + broadcast.
+//
+// P-1 only validated the envelope. v1.7.750 P-4 validates the human
+// cell is alive + maps userId → cellId. Target liveness + MP cost +
+// item ownership land in P-4c (when magic/item kinds activate).
 function handleIntent(userId, parsed) {
   const battleId = parsed.battleId | 0;
   const claimedTurn = parsed.turnIdx | 0;
@@ -323,9 +532,17 @@ function handleIntent(userId, parsed) {
   const battle = _battles.get(battleId);
   if (!battle) return { ok: false, reason: 'no-battle' };
   if (battle.status === 'ended') return { ok: false, reason: 'battle-ended' };
+  if (battle.status !== 'awaiting-intent') return { ok: false, reason: 'not-awaiting' };
   if (claimedTurn !== battle.turnIdx) return { ok: false, reason: 'stale-turn' };
   const allowed = ['attack', 'magic', 'item', 'defend', 'flee'];
   if (!allowed.includes(kind)) return { ok: false, reason: 'bad-kind' };
+  // Resolve which combatant this user controls. P-2 sets sideX.mainCellId.
+  let myCellId = null;
+  if (battle.sideA.userId === userId) myCellId = battle.sideA.mainCellId;
+  else if (battle.sideB.userId === userId) myCellId = battle.sideB.mainCellId;
+  if (myCellId == null) return { ok: false, reason: 'not-human' };
+  const myCell = battle.combatants.find(c => c.cellId === myCellId);
+  if (!myCell || myCell.hp <= 0) return { ok: false, reason: 'dead' };
   const intent = {
     kind,
     targetCellId: parsed.targetCellId != null ? (parsed.targetCellId | 0) : null,
@@ -333,8 +550,8 @@ function handleIntent(userId, parsed) {
     itemId:       parsed.itemId       != null ? (parsed.itemId       | 0) : null,
     submittedAt:  Date.now(),
   };
-  battle.pendingIntents.set(userId, intent);
-  return { ok: true, battle, intent };
+  battle.pendingIntents.set(myCellId, intent);
+  return { ok: true, battle, intent, ready: isRoundReady(battle) };
 }
 
 // ── Disconnect handling ────────────────────────────────────────────────────
@@ -413,6 +630,8 @@ export {
   buildStartFrame,
   endBattle,
   handleIntent,
+  resolveTurn,
+  isRoundReady,
   handleDisconnect,
   reapStalled,
   getActiveCount,

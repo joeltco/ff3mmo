@@ -54,6 +54,7 @@ import { ITEMS } from './src/data/items.js';
 import {
   createBattle as pvpArbCreate, buildStartFrame as pvpArbStartFrame,
   endBattle as pvpArbEnd, handleIntent as pvpArbIntent,
+  resolveTurn as pvpArbResolveTurn,
   handleDisconnect as pvpArbDisconnect, getActiveCount as pvpArbActiveCount,
   _testReset as pvpArbTestReset,
 } from './pvp-arbiter.js';
@@ -922,29 +923,35 @@ function _handleMessage(entry, msg) {
       }
       _send(entry.ws, pvpArbStartFrame(battle, entry.userId));
       _send(opponent.ws, pvpArbStartFrame(battle, opponentUserId));
-      // P-1 stub: immediately end as draw. P-4 will replace this with the
-      // turn-resolution loop driven by collected intents.
-      const endFrame = pvpArbEnd(battle, 'draw');
-      _send(entry.ws, endFrame);
-      _send(opponent.ws, endFrame);
-      console.log('[pvp-arb-start] battle=' + battle.battleId + ' A=' + entry.userId + ' B=' + opponentUserId);
+      // v1.7.750 P-4 — battle now lives until naturally terminated by
+      // side defeat. Clients send `pvp-intent` per round; the intent
+      // handler below resolves + broadcasts `pvp-turn` frames as each
+      // round closes. P-1's immediate-end stub is gone.
+      console.log('[pvp-arb-start] battle=' + battle.battleId + ' A=' + entry.userId + ' B=' + opponentUserId +
+        ' cells=' + battle.combatants.length);
       return;
     }
     case 'pvp-intent': {
-      // v1.7.747 P-1 — client emits one intent per turn; server validates
-      // envelope, queues for resolution. P-1 only validates the wire
-      // shape (battleId match, turnIdx match, kind allowlist). P-4 lands
-      // the resolution loop that consumes queued intents into deltas.
+      // v1.7.750 P-4 — client emits one intent per round; server validates,
+      // queues, and when every alive human on the battle has submitted
+      // (`result.ready === true`) drives the resolution + broadcasts a
+      // `pvp-turn` frame to both clients. End deltas trigger battle GC
+      // inside the arbiter; ws-presence just dispatches the frame.
       if (!entry.helloed) return;
       const result = pvpArbIntent(entry.userId, parsed);
       if (!result.ok) {
         console.log('[pvp-intent] reject user=' + entry.userId + ' reason=' + result.reason);
-        // Bad envelope → corrective state-resync would go here in P-4.
-        // P-1 just logs; client retry / give-up is on the client.
         return;
       }
-      // P-1: intent accepted but not yet resolved into a turn. P-4 fires
-      // the resolution + broadcasts `pvp-turn` from here.
+      if (!result.ready) return;     // waiting on the other human
+      const turnFrame = pvpArbResolveTurn(result.battle);
+      const sideA = _connected.get(result.battle.sideA.userId);
+      const sideB = _connected.get(result.battle.sideB.userId);
+      if (sideA && sideA.helloed) _send(sideA.ws, turnFrame);
+      if (sideB && sideB.helloed) _send(sideB.ws, turnFrame);
+      console.log('[pvp-turn] battle=' + result.battle.battleId + ' turn=' + turnFrame.turnIdx +
+        ' deltas=' + turnFrame.deltas.length +
+        (turnFrame.deltas.some(d => d.kind === 'end') ? ' END' : ''));
       return;
     }
     case 'inv-event': {

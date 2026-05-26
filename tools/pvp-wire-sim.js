@@ -1616,28 +1616,21 @@ async function suiteWire() {
   // is the wire roundtrip: client sends `pvp-arb-start`, server creates a
   // battle, sends `pvp-battle-start` to both, then `pvp-turn end:draw`
   // (stub — P-4 lands real resolution).
-  await asyncTest('v1.7.747 P-1 pvp-arb-start spawns battle + ends draw', async () => {
+  await asyncTest('v1.7.747 P-1 pvp-arb-start spawns battle (awaits intents)', async () => {
     _testHooks.resetState();
     _testEnsureUser(7484); _testSeedSave(7484, 0);
     _testEnsureUser(7485); _testSeedSave(7485, 0);
     const A = await connectClient(port, 7484, { ...baseProfile, name: 'ArbA' });
     const B = await connectClient(port, 7485, { ...targetProfile, name: 'ArbB' });
-    // Both clients should see pvp-battle-start with matching battleId,
-    // then pvp-turn with a single end delta.
+    // Both clients should see pvp-battle-start with matching battleId.
+    // v1.7.750 P-4 — battle no longer immediately ends; waits for intents.
     const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
     const bStart = once(B, m => m.type === 'pvp-battle-start', 800);
-    const aEnd   = once(A, m => m.type === 'pvp-turn', 800);
-    const bEnd   = once(B, m => m.type === 'pvp-turn', 800);
     A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7485 }));
-    const [sa, sb, ea, eb] = await Promise.all([aStart, bStart, aEnd, bEnd]);
+    const [sa, sb] = await Promise.all([aStart, bStart]);
     assertEqual(sa.battleId, sb.battleId, 'both sides see same battleId');
     assertEqual(sa.yourSide, 'A', 'A is side A');
     assertEqual(sb.yourSide, 'B', 'B is side B');
-    assertEqual(ea.battleId, sa.battleId, 'turn frame battleId matches');
-    assertEqual(eb.battleId, sb.battleId, 'B turn frame battleId matches');
-    assertTrue(Array.isArray(ea.deltas) && ea.deltas.length === 1, 'one delta in stub turn');
-    assertEqual(ea.deltas[0].kind, 'end', 'stub delta kind=end');
-    assertEqual(ea.deltas[0].victor, 'draw', 'P-1 stub ends as draw');
     A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
@@ -1662,17 +1655,11 @@ async function suiteWire() {
     const A = await connectClient(port, 7474, { ...baseProfile, name: 'A2' });
     const B = await connectClient(port, 7475, { ...targetProfile, name: 'B2' });
     const C = await connectClient(port, 7476, { ...targetProfile, name: 'C2' });
-    // First battle A vs B succeeds.
+    // First battle A vs B starts and stays open (no end stub since P-4).
     const aStart1 = once(A, m => m.type === 'pvp-battle-start', 800);
     A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7475 }));
     await aStart1;
-    // Wait for the end delta + GC delay to NOT happen yet (5s defer).
-    // Within that window, A trying to start a new battle vs C should
-    // be rejected — A is still in the previous battle entry until GC.
-    // But after the end delta, status='ended' is set immediately; the
-    // user-battle map only clears after 5s. So second start rejects
-    // with 'already-in-battle'.
-    await new Promise(r => setTimeout(r, 60));
+    // Second start attempt rejects — A is still in the first battle.
     const aCancel = once(A, m => m.type === 'pvp-cancel', 800);
     A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7476 }));
     const cancel = await aCancel;
@@ -1690,18 +1677,18 @@ async function suiteWire() {
     const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
     A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7478 }));
     const start = await aStart;
-    // Battle starts at turnIdx 0 and immediately ends. An intent with
-    // turnIdx 99 should be silently rejected (server logs, no response
-    // frame in P-1). Verify by sending intent + waiting 100ms for any
+    // Battle starts at turnIdx 0. An intent with turnIdx 99 should be
+    // silently rejected (server logs, no pvp-turn / state-resync frame
+    // in P-4). Verify by sending intent + waiting briefly for any
     // unexpected frame — if none arrive, rejection worked silently.
     let unexpected = false;
     A.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
-      if (m.type === 'pvp-state-resync' || m.type === 'pvp-turn-error') unexpected = true;
+      if (m.type === 'pvp-turn' || m.type === 'pvp-state-resync') unexpected = true;
     });
     A.send(JSON.stringify({
       type: 'pvp-intent', battleId: start.battleId, turnIdx: 99,
-      kind: 'attack', targetCellId: 0,
+      kind: 'attack', targetCellId: 4,
     }));
     await new Promise(r => setTimeout(r, 120));
     assertTrue(!unexpected, 'stale-turn intent silently rejected');
@@ -1718,21 +1705,12 @@ async function suiteWire() {
     const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
     A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7480 }));
     await aStart;
-    // P-1 stub ends battle immediately, but the FSM GC defers 5s. During
-    // that window, if A disconnects, B should NOT receive pvp-cancel
-    // (battle already ended). Test the opposite path: force A into a
-    // *new* hypothetical battle... actually the stub immediately ends
-    // so we can't test mid-battle disconnect without P-4. Mark this
-    // test as scaffold-only: verify the handler doesn't throw when
-    // a player disconnects after a battle ended (no notification expected).
-    let cancelled = false;
-    B.on('message', (raw) => {
-      const m = JSON.parse(raw.toString());
-      if (m.type === 'pvp-cancel') cancelled = true;
-    });
+    // v1.7.750 P-4 — battle is in awaiting-intent state. If A disconnects,
+    // B should receive `pvp-cancel reason: 'opponent-disconnect'`.
+    const bCancelled = once(B, m => m.type === 'pvp-cancel', 800);
     A.close();
-    await new Promise(r => setTimeout(r, 80));
-    assertTrue(!cancelled, 'no pvp-cancel after already-ended battle (P-1 stub)');
+    const cancel = await bCancelled;
+    assertEqual(cancel.reason, 'opponent-disconnect', 'survivor notified on drop');
     B.close();
     await new Promise(r => setTimeout(r, 40));
   });
@@ -1895,6 +1873,138 @@ async function suiteWire() {
     for (let i = 0; i < 5; i++) {
       assertEqual(serverRng.rand(), clientRng.rand(), 'roll[' + i + '] parity');
     }
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.750 P-4 — turn resolution loop ─────────────────────────────────
+  // The first P-4 test of an actual round: both humans submit 'attack',
+  // server resolves, both clients receive pvp-turn with attack deltas
+  // for both sides. Verifies the simultaneous-intent → resolve →
+  // broadcast loop end-to-end.
+  await asyncTest('v1.7.750 P-4 simultaneous attack intents resolve into one pvp-turn', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7500); _testSeedSave(7500, 0);
+    _testEnsureUser(7501); _testSeedSave(7501, 0);
+    const A = await connectClient(port, 7500, { ...baseProfile, name: 'RoundA' });
+    const B = await connectClient(port, 7501, { ...targetProfile, name: 'RoundB' });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7501 }));
+    const start = await aStart;
+    // Both sides submit 'attack' targeting the opposing main player.
+    const aTurn = once(A, m => m.type === 'pvp-turn', 1200);
+    const bTurn = once(B, m => m.type === 'pvp-turn', 1200);
+    A.send(JSON.stringify({
+      type: 'pvp-intent', battleId: start.battleId, turnIdx: 0,
+      kind: 'attack', targetCellId: 4,    // B's main cell
+    }));
+    B.send(JSON.stringify({
+      type: 'pvp-intent', battleId: start.battleId, turnIdx: 0,
+      kind: 'attack', targetCellId: 0,    // A's main cell
+    }));
+    const [ta, tb] = await Promise.all([aTurn, bTurn]);
+    assertEqual(ta.battleId, tb.battleId, 'both clients see same turn frame');
+    assertEqual(ta.turnIdx, 1, 'turnIdx incremented from 0 to 1');
+    // Two attack deltas expected (one per side); ordering driven by AGI.
+    const attackDeltas = ta.deltas.filter(d => d.kind === 'attack');
+    assertEqual(attackDeltas.length, 2, 'two attack deltas in turn');
+    const attackerCells = attackDeltas.map(d => d.actorCellId).sort();
+    assertEqual(JSON.stringify(attackerCells), '[0,4]', 'both mains attacked');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.750 P-4 defend halves incoming damage', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7502); _testSeedSave(7502, 0);
+    _testEnsureUser(7503); _testSeedSave(7503, 0);
+    const A = await connectClient(port, 7502, { ...baseProfile });
+    const B = await connectClient(port, 7503, { ...targetProfile });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7503 }));
+    const start = await aStart;
+    // Run two rounds: round 1 both attack to baseline damage. Round 2
+    // A defends, B attacks — A should take noticeably less damage.
+    // Server-rolled, so we just assert defend-on state delta exists +
+    // damage isn't a flat 0 (would mean attack didn't fire).
+    const aTurn = once(A, m => m.type === 'pvp-turn', 1200);
+    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'defend' }));
+    B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 0 }));
+    const t1 = await aTurn;
+    const defendDelta = t1.deltas.find(d => d.kind === 'state' && d.change === 'defend-on');
+    assertTrue(!!defendDelta, 'defend produced a state delta');
+    assertEqual(defendDelta.actorCellId, 0, 'defender is cell 0');
+    const bAttack = t1.deltas.find(d => d.kind === 'attack' && d.actorCellId === 4);
+    assertTrue(!!bAttack, 'B still attacked');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.750 P-4 battle ends with victor delta on side defeat', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7504);
+    // Give A a powerhouse loadout (Longsword + high str/atk) so a few
+    // rounds chunk B (default loadout — Knife). Use BB level (5) to push
+    // hit count high enough to KO in ~10 rounds even on bad rolls.
+    _testSeedSave(7504, 0, {
+      jobIdx: 1, palIdx: 3,
+      stats: { level: 5, exp: 0, hp: 80, maxHP: 80, mp: 0, maxMP: 0,
+               str: 20, agi: 15, vit: 12, int: 5, mnd: 5,
+               weaponR: 0x24, weaponL: 0, head: 0x62, body: 0x73, arms: 0x58 },
+      jobLevels: { 1: { level: 3, jp: 200 } },
+    });
+    _testEnsureUser(7505);
+    // Make B a glass cannon: tiny maxHP so any solid hit ends them fast.
+    _testSeedSave(7505, 0, {
+      stats: { level: 1, exp: 0, hp: 1, maxHP: 1, mp: 0, maxMP: 0,
+               str: 2, agi: 5, vit: 1, int: 5, mnd: 5,
+               weaponR: 0x1E, weaponL: 0, head: 0, body: 0, arms: 0 },
+    });
+    const A = await connectClient(port, 7504, { ...baseProfile });
+    const B = await connectClient(port, 7505, { ...targetProfile });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7505 }));
+    const start = await aStart;
+    // Round 1: A attacks B; with B at 1 HP and A's Longsword, A's
+    // attack KOs B → end delta with victor: 'A'.
+    const aTurn = once(A, m => m.type === 'pvp-turn' && m.deltas.some(d => d.kind === 'end'), 1500);
+    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 4 }));
+    B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'defend' }));
+    const t = await aTurn;
+    const endDelta = t.deltas.find(d => d.kind === 'end');
+    assertTrue(!!endDelta, 'end delta present');
+    assertEqual(endDelta.victor, 'A', 'A wins on B KO');
+    assertEqual(t.nextActor, null, 'nextActor cleared on end');
+    const deathDelta = t.deltas.find(d => d.kind === 'death');
+    assertTrue(!!deathDelta, 'death delta for KO');
+    assertEqual(deathDelta.actorCellId, 4, 'B main cell died');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.750 P-4 second pvp-intent on same turn idempotent (latest wins)', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7506); _testSeedSave(7506, 0);
+    _testEnsureUser(7507); _testSeedSave(7507, 0);
+    const A = await connectClient(port, 7506, { ...baseProfile });
+    const B = await connectClient(port, 7507, { ...targetProfile });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7507 }));
+    const start = await aStart;
+    // A sends an attack, then changes mind to defend BEFORE B responds.
+    // Latest intent (defend) wins; resolution happens when B's intent
+    // lands.
+    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 4 }));
+    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'defend' }));
+    const aTurn = once(A, m => m.type === 'pvp-turn', 1200);
+    B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 0 }));
+    const t = await aTurn;
+    // A's resolution should be defend, NOT attack — only one attack
+    // delta in the round (B's), and a defend-on state delta from A.
+    const aAttackDeltas = t.deltas.filter(d => d.kind === 'attack' && d.actorCellId === 0);
+    assertEqual(aAttackDeltas.length, 0, 'A did NOT attack (latest intent was defend)');
+    const aDefendDelta = t.deltas.find(d => d.kind === 'state' && d.actorCellId === 0 && d.change === 'defend-on');
+    assertTrue(!!aDefendDelta, 'A defended (latest intent wins)');
     A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
