@@ -335,31 +335,47 @@ too.)
 
 ### Phase 4 — Save sync becomes a read
 
-**Goal:** `POST /api/save` snapshots the server's mirror, not the
-client's data. Client save data becomes display-only metadata
-(currentMapId, lastTown, playTime).
+**Phase 4 (partial) SHIPPED v1.7.744** — mirrorSyncFromSave gated.
 
-**`_validateSaveData` shrinks** to just metadata fields. Combat / item /
-gil / equipment / job fields all come from mirror tables.
+**Phase 4 (full) SHIPPED v1.7.746** — `GET /api/saves` overlays mirror
+state on every slot for the three wire-managed fields (inventory + gil +
+equipped). The `_validateSaveData` clamp is still in place but no longer
+load-bearing: even if a client POSTs a cheated save, the load path reads
+inventory/gil/equipped from `inv_inventories` / `inv_economies` /
+`inv_equipped`. Save JSON values for those fields are dead-stored.
 
-**Client save-state.js:** `serverLoadSaves` returns mirror-derived data,
-not the saved JSON. Local IndexedDB save becomes a fallback for offline
-play only.
+Non-wire-managed fields (palIdx, currentMapId, lastTown, knownSpells,
+cp/exp/jobs/jobLevels/unlockedJobs) still flow through the save JSON
+unchanged. These remain cheatable on save → readable on load until
+they get their own wire events (deferred).
 
-**Risk:** legacy save compatibility — what about saves written before
-the mirror existed? Phase 0's seed handles this. After Phase 4, the
-client-asserted save fields are ignored.
+**Empty-mirror fallback** — if a slot has neither econ nor inventory
+rows in the mirror, the load returns the save JSON unchanged. This is
+the brand-new-user safety net; the boot seed populated existing
+accounts in v1.7.740 + every /api/save since has stamped them.
 
-**Rollback:** keep `_validateSaveData` as-is for one more release, then
-deprecate.
+**Closes V-C** (cheated save fields never reach client on load) +
+**V-E** (cross-device replay — follows naturally from V-C closure).
+
+**Rollback:** the GET /api/saves overlay is a small block; reverting it
+means inventory/gil/equipped come from save JSON again. The mirror keeps
+filling in the background regardless. No data loss either way.
 
 ### Phase 5 — Anti-cheat enforcement on `update`
 
-**Goal:** `case 'update'` cross-checks broadcast equipment/stats against
-the mirror's `equipped` table. Mismatch → reject with corrective push.
+**SHIPPED v1.7.746.** `case 'update'` cross-checks broadcast equipment
+fields (weaponR/L/helmId/armorId/shieldId) against `inv_equipped` mirror.
+Mismatches get the broadcast field SILENTLY OVERWRITTEN with mirror's
+view (not rejected — overwrite handles both cheaters AND legitimate
+races where update arrives before equip event applies). Peers + the
+entry's own profile cache only ever see authoritative equipment.
 
-**Risk:** breaks legitimate clients that haven't fully migrated.
-Mitigation: phase 5 ships AFTER phase 1-4 so all paths use the mirror.
+**Closes V-D** (lying-equipped broadcast — kills the AI-ally inflation
+cheat in co-op + the equip-Sage-Staff-without-owning-one cosmetic).
+
+**Rollback:** flip out the equip-overwrite block in `case 'update'`.
+The mirror keeps tracking equipment; only the broadcast cross-check
+goes away.
 
 ### Phase 6 — Cleanup
 
