@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.733 — 2026-05-25
+
+### Fix: hello sends `party-snapshot` unconditionally — closes inviter soft-reconnect gap
+
+`ws-presence.js#case 'hello'` wrapped the party-snapshot fanout in `if (mateIds.length > 0)`. A returning user whose party-mates had all `/leave`-d during their offline window got NO snapshot, so the client's REPLACE-semantics handler (`party-invite.js#setNetPartySnapshotHandler`) never ran to scrub the stale local list. Hard-reload reconnects were unaffected (local state starts empty), but mobile WS-unsuspend "soft" reconnects (page memory preserved) were left in a phantom-party state until the user manually ran `/party`.
+
+This was particularly visible for **inviters** because they're the only role that can have "all members gone" while still appearing in-party (members would themselves disappear from `_partyMemberships` when they left, but the inviter never had a row keyed by their own userId to remove). A member's equivalent edge case (their inviter alone left while they were offline) is rarer because /leave is per-user.
+
+Fix: drop the `mateIds.length > 0` guard. The snapshot now ships every hello, empty or not. The downstream `party-member-joined` fanout loop is a no-op when `mateIds` is empty so no extra wire traffic in that direction.
+
+Wire-sim test added — `v1.7.733 hello sends party-snapshot even with zero mates` regression-guards the scrub path.
+
 ## 1.7.732 — 2026-05-25
 
 ### Fix: battle drop "Found {item}!" message now shows the class icon

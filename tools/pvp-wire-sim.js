@@ -386,11 +386,19 @@ function connectClient(port, userId, profile) {
   return new Promise((resolve, reject) => {
     const token = mintToken(userId);
     const ws = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${token}`);
+    // v1.7.733 — capture every message received from connect-time onward so
+    // tests for hello-time-triggered traffic (e.g. the unconditional
+    // party-snapshot) can inspect what arrived during the handshake window
+    // instead of racing an `once()` listener that's only attached after
+    // resolve. The collector keeps running after resolve; `once` and other
+    // post-resolve helpers see live traffic the same as before.
+    ws._earlyMessages = [];
     let ready = false;
     ws.on('open', () => { /* wait for ready */ });
     ws.on('error', reject);
     ws.on('message', (data) => {
       const msg = JSON.parse(data.toString());
+      ws._earlyMessages.push(msg);
       if (!ready && msg.type === 'ready') {
         ready = true;
         ws.send(JSON.stringify({ type: 'hello', profile, loc: 'ur' }));
@@ -663,6 +671,28 @@ async function suiteWire() {
     assertEqual(snap.members[0].online, 1, 'online mate flagged online=1');
     assertTrue(typeof snap.members[0].name === 'string' && snap.members[0].name.length > 0, 'live profile name carried');
     A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.733 hello sends snapshot unconditionally ────────────────────
+  // Pre-fix the hello fanout was wrapped in `if (mateIds.length > 0)`, so a
+  // returning inviter whose members had all `/leave`-d during the offline
+  // window got NO snapshot. A soft-reconnect (mobile WS unsuspend, page
+  // memory preserved) was left with phantom `partyInviteSt.partyMembers`
+  // until they manually ran `/party`. Now the snapshot rides through
+  // unconditionally so client REPLACE semantics scrub stale state.
+  await asyncTest('v1.7.733 hello sends party-snapshot even with zero mates', async () => {
+    _testHooks.resetState();
+    // No party memberships set — user has zero mates. The hello-time
+    // party-snapshot fires during the connect handshake, so we can't use
+    // `once()` here (the listener would be attached after the snapshot
+    // already passed). Check the connect-time message buffer instead.
+    const A = await connectClient(port, 7733, { ...baseProfile, name: 'NoMates' });
+    const snap = A._earlyMessages.find(m => m.type === 'party-snapshot');
+    assertTrue(!!snap, 'hello fanout sent a party-snapshot frame');
+    assertTrue(Array.isArray(snap.members), 'snapshot.members is an array');
+    assertEqual(snap.members.length, 0, 'zero mates → empty members array');
+    A.close();
     await new Promise(r => setTimeout(r, 40));
   });
 

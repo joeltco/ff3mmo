@@ -622,36 +622,45 @@ function _handleMessage(entry, msg) {
         // take (live lookup vs cached). Pre-v1.7.720 a reconnect with all
         // mates offline got NO snapshot at all and lived in a phantom-
         // party state.
+        // v1.7.733 — ALWAYS send the snapshot at hello, even if mateIds is
+        // empty. Pre-fix the `if (mateIds.length > 0)` short-circuit meant a
+        // soft-reconnecting inviter (mobile WS unsuspend, page memory still
+        // alive) whose members had all `/leave`-d during the offline window
+        // got NO snapshot — leaving their local `partyInviteSt.partyMembers`
+        // in a phantom-party state until they ran `/party`. Now the empty
+        // snapshot rides through `setNetPartySnapshotHandler`'s REPLACE
+        // semantics (party-invite.js:367) and scrubs the stale local list.
+        // The `party-member-joined` fanout below is a no-op when mateIds is
+        // empty, so the cost is one extra wire frame on every hello (cheap).
         const mateIds = _getPartyMates(entry.userId);
-        if (mateIds.length > 0) {
-          // v1.7.723: only include mates we have real profile data for.
-          // Skeleton fallback `{name:'Player'}` was rendering as anonymous
-          // "Player" entries in the partymate's roster — looked like fake
-          // players to the user. Skipped mates can still recover later
-          // when they come back online (the reconnect fanout will send
-          // a fresh `party-member-joined`); for mates that NEVER come
-          // back, /disband cleans up the server side.
-          const members = [];
-          for (const uid of mateIds) {
-            const live = _connected.get(uid);
-            if (live && live.helloed) {
-              members.push({ userId: uid, ...live.profile, loc: live.loc, online: 1 });
-              continue;
-            }
-            const cached = _lastSeenProfiles.get(uid);
-            if (cached) {
-              members.push({ userId: uid, ...cached, online: 0 });
-            }
-            // No data — skip (don't render a 'Player' phantom)
+        // v1.7.723: only include mates we have real profile data for.
+        // Skeleton fallback `{name:'Player'}` was rendering as anonymous
+        // "Player" entries in the partymate's roster — looked like fake
+        // players to the user. Skipped mates can still recover later
+        // when they come back online (the reconnect fanout will send
+        // a fresh `party-member-joined`); for mates that NEVER come
+        // back, /disband cleans up the server side.
+        const members = [];
+        for (const uid of mateIds) {
+          const live = _connected.get(uid);
+          if (live && live.helloed) {
+            members.push({ userId: uid, ...live.profile, loc: live.loc, online: 1 });
+            continue;
           }
-          _send(entry.ws, { type: 'party-snapshot', members });
-          // Tell each online mate this user is back via party-member-joined.
-          const selfMember = { userId: entry.userId, ...entry.profile, loc: entry.loc };
-          for (const uid of mateIds) {
-            const m = _connected.get(uid);
-            if (!m || !m.helloed) continue;
-            _send(m.ws, { type: 'party-member-joined', member: selfMember });
+          const cached = _lastSeenProfiles.get(uid);
+          if (cached) {
+            members.push({ userId: uid, ...cached, online: 0 });
           }
+          // No data — skip (don't render a 'Player' phantom)
+        }
+        _send(entry.ws, { type: 'party-snapshot', members });
+        // Tell each online mate this user is back via party-member-joined.
+        // Empty when mateIds is empty (no party); harmless.
+        const selfMember = { userId: entry.userId, ...entry.profile, loc: entry.loc };
+        for (const uid of mateIds) {
+          const m = _connected.get(uid);
+          if (!m || !m.helloed) continue;
+          _send(m.ws, { type: 'party-member-joined', member: selfMember });
         }
       } else {
         _broadcast({
