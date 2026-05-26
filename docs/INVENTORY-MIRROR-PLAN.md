@@ -186,11 +186,16 @@ sub-phase is independently shippable and rolls back via flag flip.
   Flag-off: wire fires, server logs, no behavior change.
 - Wire-sim regression tests for the roundtrip + bounds validation
 
-**Phase 1b** (future, NOT YET SAFE — see prerequisite): flip
-`INV_MIRROR_AUTHORITATIVE = true`. Server starts rejecting events that
-don't match mirror state (e.g. "you claimed to remove a Sage Staff you
-don't have"). Server pushes `inv-state` back on rejection. Client
-wholesale-replaces local state from the push.
+**Phase 1b** (SHIPPED v1.7.745): both `INV_MIRROR_AUTHORITATIVE` (client,
+src/net.js) and `INV_MIRROR_AUTHORITATIVE_SERVER` (server, api.js) flipped
+to `true` atomically. Server rejects events that don't match mirror state
+("you claimed to remove a Sage Staff you don't have" / "you spent more
+gil than mirror has") with `divergent-remove` / `divergent-gil` reasons.
+Server pushes `inv-state` back on rejection with `reason: 'rejected'` +
+`rejectedKind` + `rejectedItemId`. Client's `setNetInvStateHandler`
+wholesale-replaces local state. Bounds violations (`bad-itemId`,
+`bad-qty`, `bad-kind`, `bad-slot`) still log only — those are developer
+bugs, not user state divergence.
 
 **Phase 1b prerequisite (discovered v1.7.742):** `/api/save`'s mirror
 sync (`mirrorSyncFromSave`) wholesale-replaces the wire-managed fields
@@ -204,18 +209,18 @@ decrements again to N-2 — mirror under-counts by 1. Harmless in shadow
 mode (just logs); catastrophic with enforcement (next legitimate
 remove falsely rejected).
 
-To make Phase 1b safe, EITHER:
-- (Partial Phase 4) Stop `mirrorSyncFromSave` from touching the
-  wire-managed fields when `INV_MIRROR_AUTHORITATIVE_SERVER = true`.
-  Wire becomes sole writer; save sync covers metadata only
-  (currentMapId, lastTown, playTime, etc.). ~20 lines.
-- (Full Phase 4) Save endpoint becomes a snapshot of the server's
-  mirror state. Client save data ignored for wire-managed fields.
-  Larger surface area; pairs naturally with Phase 1b flip.
+**Phase 4 (partial) SHIPPED v1.7.744** — the prerequisite. When
+`INV_MIRROR_AUTHORITATIVE_SERVER = true`, `mirrorSyncFromSave` skips the
+three wire-managed fields (inventory, gil, equipped). The wire becomes
+sole writer; non-wire-managed fields (cp/exp/unlockedJobs/knownSpells/
+jobLevels) still sync from `/api/save`. Boot seed bypasses the gate via
+`{bootSeed:true}` so empty mirrors get populated.
 
-Until one of these lands, Phase 1b stays deferred. Phase 1a + 1c
-(shadow mode with full wire coverage) is the right resting state for
-gathering production divergence data without breaking players.
+**Phase 4 (full) is still deferred** — when shipped, `/api/save` becomes
+a server-snapshot read of the mirror's state, and the client save
+payload is ignored for ALL wire-relevant fields. That closes V-C (the
+cheated-save-fields hole). Pairs naturally with later wire migrations
+that cover the remaining ps fields (spells / jobs / cp / exp).
 
 **Phase 1c+** (future, multi-session): migrate the remaining mutation
 sites. Audit identifies them at: `addItem` (chest/loot/shop/levelup/use),
