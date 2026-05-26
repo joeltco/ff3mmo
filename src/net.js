@@ -40,9 +40,11 @@ let _onPartyMemberJoined = null; // ({member}) → void — a NEW member joined 
 let _onPartySnapshot = null;    // ({members}) → void — list of existing party peers (new-joiner side)
 let _onPartyInviteCancelled = null; // ({challengerUserId, challengerName}) → void — inviter cancelled before we responded; dismiss the modal (v1.7.721)
 let _onGiveItem = null;         // ({fromUserId, fromName, itemId}) → void — partner used a heal/cure item on us
+let _onGiveItemFailed = null;   // ({targetUserId, itemId, reason}) → void — our outgoing give-item couldn't be delivered (v1.7.735)
 let _onTradeOffer = null;       // ({fromUserId, fromName, itemId}) → void — incoming roster trade offer, prompt user
 let _onTradeResult = null;      // ({targetUserId, targetName, accept}) → void — our outgoing trade resolved
 let _onTradeCancelled = null;   // ({fromUserId, fromName}) → void — offerer cancelled before we responded
+let _onPmFailed = null;         // ({to, toUserId?, reason}) → void — our outgoing PM couldn't be delivered (v1.7.735)
 const MAX_RECONNECT_DELAY = 30000;
 
 function _getToken() {
@@ -207,6 +209,24 @@ function _handleMessage(data) {
       if (_onGiveItem) {
         try { _onGiveItem(msg); }
         catch (e) { console.warn('[net] give-item handler error', e); }
+      }
+      return;
+    case 'give-item-failed':
+      // v1.7.735 — server couldn't deliver our give-item (target went
+      // offline in the race window). Sender already consumed the item
+      // locally; the handler should re-grant it.
+      if (_onGiveItemFailed) {
+        try { _onGiveItemFailed(msg); }
+        catch (e) { console.warn('[net] give-item-failed handler error', e); }
+      }
+      return;
+    case 'chat-pm-failed':
+      // v1.7.735 — server couldn't deliver our PM (target offline). Sender's
+      // local echo already painted on Private tab; the handler should flag
+      // the message as undelivered.
+      if (_onPmFailed) {
+        try { _onPmFailed(msg); }
+        catch (e) { console.warn('[net] chat-pm-failed handler error', e); }
       }
       return;
     case 'trade-offer-incoming':
@@ -494,6 +514,19 @@ export function sendNetGiveItem(targetUserId, itemId) {
 
 export function setNetGiveItemHandler(fn) {
   _onGiveItem = typeof fn === 'function' ? fn : null;
+}
+
+// v1.7.735 — sender's give-item couldn't be delivered (target offline in the
+// race window). Wired in `pause-menu.js` to re-grant the consumed item and
+// post a chat line so the user understands what happened.
+export function setNetGiveItemFailedHandler(fn) {
+  _onGiveItemFailed = typeof fn === 'function' ? fn : null;
+}
+
+// v1.7.735 — sender's PM couldn't be delivered (target offline). Wired in
+// `chat.js` to flag the optimistic-echo line as undelivered.
+export function setNetPmFailedHandler(fn) {
+  _onPmFailed = typeof fn === 'function' ? fn : null;
 }
 
 // Real party invites over the wire. Mirror of `pvp-search` lifecycle:

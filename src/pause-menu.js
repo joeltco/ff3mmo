@@ -26,7 +26,7 @@ import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBox } from './message-box.js';
 import { ITEMS, isHandEquippable, ITEM_NAMES_SHRINES } from './data/items.js';
-import { sendNetGiveItem, setNetGiveItemHandler } from './net.js';
+import { sendNetGiveItem, setNetGiveItemHandler, setNetGiveItemFailedHandler } from './net.js';
 import { addChatMessage, chatJustClosedRecently } from './chat.js';
 import { hudSt } from './hud-state.js';
 import { swapBattleSprites } from './job-sprites.js';
@@ -1536,5 +1536,18 @@ setNetGiveItemHandler((msg) => {
   const itemName = ITEM_NAMES_SHRINES.get(msg.itemId) || 'an item';
   const fromName = msg.fromName || 'Someone';
   addChatMessage('* ' + fromName + ' sent you ' + itemName, 'system');
+  saveSlotsToDB();
+});
+
+// GI-1 (v1.7.735) — outgoing give-item couldn't be delivered (target offline
+// in the race window after our client's online-check). We already consumed
+// the item locally; re-grant it and let the user know. `addItem` uses the
+// bypass flag in case the trash slot is otherwise full (it's our item coming
+// back, not a new acquisition).
+setNetGiveItemFailedHandler((msg) => {
+  if (!msg || !msg.itemId) return;
+  addItem(msg.itemId, 1, { bypass: true });
+  const itemName = ITEM_NAMES_SHRINES.get(msg.itemId) || 'item';
+  addChatMessage('* ' + itemName + ' returned — recipient is offline', 'system');
   saveSlotsToDB();
 });

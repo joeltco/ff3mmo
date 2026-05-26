@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.735 — 2026-05-26
+
+### Fix: silent-drop gaps in give-item + PM (GI-1, PM-1)
+
+Continuation of the system-wide audit beyond party invites. Both gaps share the same class as Gaps A-D: server-side conditional drops a relay without notifying the originating side, leaving the sender's local state misleading.
+
+**GI-1 — Give-item to offline target lost the sender's item.** `pause-menu.js` consumes the item via `removeItem(itemId)` BEFORE firing `sendNetGiveItem`. If the recipient went offline in the WS RTT (race against the client's own online check), the server's `case 'give-item'` silently returned and the item was gone — sender's inventory dropped a slot, recipient saw nothing.
+
+Server now sends `give-item-failed {targetUserId, itemId, reason:'offline'}` back to the sender. Client handler (`setNetGiveItemFailedHandler` in `pause-menu.js`) re-`addItem`s with the bypass flag and posts `* {ItemName} returned — recipient is offline` to system chat.
+
+**PM-1 — Private message to offline target was silently dropped.** Same shape. `_sendPm` paints `Me → X: text` on the Private tab locally, then fires `sendNetChat('pm', ...)`. If the recipient was offline at server time, `case 'chat'` PM branch silently returned. Sender's optimistic echo stayed visible — looks delivered, isn't.
+
+Server now sends `chat-pm-failed {to, toUserId?, reason:'offline'}` back. Both the userId-keyed primary path and the legacy name-loop fallback emit the failure. Client handler (`setNetPmFailedHandler` in `chat.js`) appends `* {Name} went offline — message not delivered` to the Private tab.
+
+3 new wire-sim tests guard against regressions on both paths (userId-keyed give-item failure, userId-keyed PM failure, legacy name-route PM failure).
+
+Files: `ws-presence.js`, `src/net.js`, `src/pause-menu.js`, `src/chat.js`, `tools/pvp-wire-sim.js`.
+
 ## 1.7.734 — 2026-05-25
 
 ### Fix: four party-invite modal-hang gaps (A–D)

@@ -18,7 +18,7 @@ import { ps, changeJob, fullHeal, grantExp, MAX_LEVEL } from './player-stats.js'
 import { JOBS } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
-import { sendNetChat, setNetChatHandler, getOnlinePlayerByName, getOnlinePlayers } from './net.js';
+import { sendNetChat, setNetChatHandler, setNetPmFailedHandler, getOnlinePlayerByName, getOnlinePlayers } from './net.js';
 import { ITEMS } from './data/items.js';
 import { addItem } from './inventory.js';
 import { getItemNameClean, getSpellNameClean, bytesToAscii } from './text-decoder.js';
@@ -249,6 +249,15 @@ setNetChatHandler((msg) => {
   // Chime on an @-mention always; on an incoming PM only when you're not
   // already watching the Private tab (no point pinging a live conversation).
   if (mentioned || (channel === 'pm' && activeTab !== 2)) playMentionChime();
+});
+
+// PM-1 (v1.7.735) — outgoing PM couldn't be delivered (target offline in the
+// race window between /pm's online-check and the server processing). Sender's
+// optimistic echo already painted on the Private tab; flag the failure with a
+// system line on the same tab so the user knows the recipient never saw it.
+setNetPmFailedHandler((msg) => {
+  if (!msg || !msg.to) return;
+  addChatMessage('* ' + msg.to + ' went offline — message not delivered', 'system', 'pm');
 });
 
 function _passesTabFilter(msg) {

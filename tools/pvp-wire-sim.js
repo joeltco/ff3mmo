@@ -770,6 +770,57 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  // ── v1.7.735 GI-1 give-item to offline target refunds sender ────────
+  await asyncTest('v1.7.735 GI-1 give-item to offline target notifies sender', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7351, { ...baseProfile, name: 'GiveSender' });
+    // No B connected — target userId 7352 is offline. Sender's local already
+    // consumed the item; server should respond with give-item-failed so the
+    // client can re-grant.
+    const got = once(A, m => m.type === 'give-item-failed', 800);
+    A.send(JSON.stringify({ type: 'give-item', targetUserId: 7352, itemId: 0x80 }));
+    const fail = await got;
+    assertEqual(fail.targetUserId, 7352, 'failed message carries target userId');
+    assertEqual(fail.itemId, 0x80, 'failed message carries item id for refund');
+    assertEqual(fail.reason, 'offline', 'reason flagged offline');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.735 PM-1 PM to offline target notifies sender ──────────────
+  await asyncTest('v1.7.735 PM-1 pm to offline target notifies sender', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7353, { ...baseProfile, name: 'PmSender' });
+    // toUserId path — target offline.
+    const got = once(A, m => m.type === 'chat-pm-failed', 800);
+    A.send(JSON.stringify({
+      type: 'chat', channel: 'pm', text: 'hi',
+      to: 'PmTarget', toUserId: 7354,
+    }));
+    const fail = await got;
+    assertEqual(fail.to, 'PmTarget', 'failed message carries display name');
+    assertEqual(fail.toUserId, 7354, 'failed message carries userId when known');
+    assertEqual(fail.reason, 'offline', 'reason flagged offline');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.735 PM-1 legacy name-only PM to nonexistent target notifies ──
+  await asyncTest('v1.7.735 PM-1 legacy name-route fail notifies sender', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7355, { ...baseProfile, name: 'PmSenderB' });
+    // toUserId omitted — server hits the legacy name-loop, finds no match.
+    const got = once(A, m => m.type === 'chat-pm-failed', 800);
+    A.send(JSON.stringify({
+      type: 'chat', channel: 'pm', text: 'hi',
+      to: 'NobodyByThatName',
+    }));
+    const fail = await got;
+    assertEqual(fail.to, 'NobodyByThatName', 'failed message carries name');
+    A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── v1.7.721 P7 server-side cooldown survives client reload ─────────
   await asyncTest('v1.7.721 P7 decline sets server cooldown; re-invite rejected', async () => {
     _testHooks.resetState();

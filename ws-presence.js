@@ -828,10 +828,23 @@ function _handleMessage(entry, msg) {
       if (!entry.helloed) return;
       const targetUserId = parsed.targetUserId | 0;
       if (!targetUserId || targetUserId === entry.userId) return;
-      const target = _connected.get(targetUserId);
-      if (!target || !target.helloed) return;
       const itemId = parsed.itemId | 0;
       if (itemId <= 0 || itemId > 255) return;
+      const target = _connected.get(targetUserId);
+      if (!target || !target.helloed) {
+        // GI-1 (v1.7.735) — sender already consumed the item locally
+        // (`pause-menu.js#removeItem` runs BEFORE `sendNetGiveItem`). Tell them
+        // the relay failed so their client can re-grant the item; otherwise
+        // a target-just-went-offline race silently destroys the sender's
+        // inventory slot. Mirror of the trade-result `reason:'offline'` shape.
+        _send(entry.ws, {
+          type:         'give-item-failed',
+          targetUserId,
+          itemId,
+          reason:       'offline',
+        });
+        return;
+      }
       console.log('[give-item] relay user=' + entry.userId + ' → ' + targetUserId + ' item=0x' + itemId.toString(16));
       _send(target.ws, {
         type: 'give-item',
@@ -1376,7 +1389,20 @@ function _handleMessage(entry, msg) {
         if (toUserId) {
           // Preferred path — direct userId target. Spoof-proof.
           const target = _connected.get(toUserId);
-          if (!target || !target.helloed) return;
+          if (!target || !target.helloed) {
+            // PM-1 (v1.7.735) — target went offline between sender's online
+            // check and the wire trip. Sender's local echo already painted
+            // their message on the Private tab. Tell them so they can flag
+            // the line as undelivered instead of silently misleading. Mirror
+            // of `give-item-failed`.
+            _send(entry.ws, {
+              type:   'chat-pm-failed',
+              to:     toName,
+              toUserId,
+              reason: 'offline',
+            });
+            return;
+          }
           _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
                              channel, text, to: target.profile?.name || toName });
           return;
@@ -1385,12 +1411,21 @@ function _handleMessage(entry, msg) {
         // until everyone is on the new wire. NEW clients should always send
         // `toUserId`.
         if (!toName) return;
+        let delivered = false;
         for (const [, target] of _connected) {
           if (!target.helloed) continue;
           if (target.profile?.name !== toName) continue;
           _send(target.ws, { type: 'chat', userId: entry.userId, name: senderName,
                              channel, text, to: toName });
+          delivered = true;
           break;  // stop at the first match — name collisions no longer broadcast.
+        }
+        if (!delivered) {
+          _send(entry.ws, {
+            type:   'chat-pm-failed',
+            to:     toName,
+            reason: 'offline',
+          });
         }
         return;
       }
