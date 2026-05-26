@@ -18,6 +18,16 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.739 — 2026-05-26
+
+### Tooling: `./prod.sh dup [N]` — trade dup-spam detector
+
+Bookmarks the dup-detection query suggested at the end of the v1.7.738 audit so we don't have to retype it every time. `./prod.sh dup` (default threshold 5) flags any sender with N+ accepted trades of the same `item_id` in the last 7 days; output line per flagged sender shows item id (hex), trade count, time span, and distinct target list.
+
+Run periodically (or on alert) as the early-warning signal for V-A from `[[ff3mmo-dup-vectors]]` until the Phase 3 server-mirror trade resolution lands. Threshold is configurable: `./prod.sh dup 1` lists every same-item sender for noise inspection, `./prod.sh dup 20` only flags egregious cases.
+
+NOTE: `give-item` (V-B) is not logged at all yet — this detector only sees trade traffic. Plan to add a `give_items` audit table is in `docs/INVENTORY-MIRROR-PLAN.md` under the forensic-tier fixes.
+
 ## 1.7.738 — 2026-05-26
 
 ### Docs: inventory dup-vector audit + server-mirror rollout plan

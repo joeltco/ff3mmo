@@ -11,6 +11,7 @@
 #   ./prod.sh errors          # last 20 CLIENT ERROR lines
 #   ./prod.sh logs [N]        # last N pm2 lines (default 50)
 #   ./prod.sh tail            # live pm2 tail (Ctrl-C to stop)
+#   ./prod.sh dup [N]         # trade dup-spam detector (default threshold 5 same-item trades / sender / 7d)
 #   ./prod.sh sql "<query>"   # arbitrary read-only SQLite query
 #
 # Host/path are pinned to match deploy.sh.
@@ -92,6 +93,35 @@ case "$CMD" in
   tail)
     echo "── live pm2 tail (Ctrl-C to stop) ─────────"
     ssh -o StrictHostKeyChecking=no "$HOST" "pm2 logs server --raw"
+    ;;
+
+  dup)
+    # Trade dup-spam detector. Flags any sender who has accepted N+ trades of
+    # the same item id in the last 7 days. Threshold N defaults to 5 — bump
+    # for noisier accounts, lower to investigate.
+    #
+    # Backstop for V-A (trade dup) from the dup-vector audit
+    # (docs/INVENTORY-MIRROR-PLAN.md). Server doesn't validate sender owns the
+    # item, so the `trades` audit log is the only real-time signal. Run this
+    # periodically (or on alert) until the Phase 3 trade-on-server mirror
+    # lands. v1.7.739.
+    #
+    # NOTE: `give-item` is NOT logged yet (V-B gap in the audit). This query
+    # only sees trade traffic. Cf. INVENTORY-MIRROR-PLAN.md "Forensic" tier.
+    THRESH="${2:-5}"
+    echo "── trade dup-spam (sender → same item ≥${THRESH}× / 7d) ──"
+    _sql "
+      const since = Date.now() - 7 * 86400 * 1000;
+      const sql = 'SELECT sender_user_id, sender_name, item_id, COUNT(*) AS n, GROUP_CONCAT(DISTINCT target_user_id) AS targets, MIN(ts) AS first_ts, MAX(ts) AS last_ts FROM trades WHERE accepted = 1 AND ts > ? GROUP BY sender_user_id, item_id HAVING n >= ? ORDER BY n DESC, last_ts DESC';
+      const rows = db.prepare(sql).all(since, ${THRESH});
+      if (!rows.length) { console.log('  (no flagged senders in the last 7d at threshold ' + ${THRESH} + ')'); }
+      for (const r of rows) {
+        const spanMin = Math.round((r.last_ts - r.first_ts) / 60000);
+        const spanStr = spanMin < 60 ? spanMin + 'm' : Math.round(spanMin / 60) + 'h';
+        const itemHex = '0x' + r.item_id.toString(16).toUpperCase().padStart(2, '0');
+        console.log('  sender=' + r.sender_user_id + ' (' + (r.sender_name||'?') + ')  item=' + itemHex + '  trades=' + r.n + '  span=' + spanStr + '  targets=[' + r.targets + ']');
+      }
+    "
     ;;
 
   sql)
