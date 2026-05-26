@@ -63,6 +63,30 @@ function _clamp(n, min, max) {
   return v < min ? min : (v > max ? max : v);
 }
 export function _testValidateSaveData(data) { return _validateSaveData(data); }
+
+// v1.7.740 — test hooks for the inventory mirror Phase 0. Exposes the sync
+// + a read so wire-sim can assert table contents without coupling to the
+// schema. Both wrap prepared statements created later in this file; the
+// late-binding works because the test caller imports api.js (which runs
+// the schema + prepare block top-to-bottom) before invoking either.
+export function _testMirrorSync(userId, slot, data) {
+  return mirrorSyncFromSave(userId, slot, data);
+}
+export function _testMirrorRead(userId, slot) {
+  const econ = db.prepare('SELECT gil, cp, exp, unlocked_jobs FROM inv_economies WHERE user_id = ? AND slot = ?').get(userId, slot);
+  const eq   = db.prepare('SELECT weapon_r, weapon_l, head, body, arms FROM inv_equipped WHERE user_id = ? AND slot = ?').get(userId, slot);
+  const inv  = db.prepare('SELECT item_id, qty FROM inv_inventories WHERE user_id = ? AND slot = ? ORDER BY item_id').all(userId, slot);
+  const sp   = db.prepare('SELECT spell_id FROM inv_known_spells WHERE user_id = ? AND slot = ? ORDER BY spell_id').all(userId, slot);
+  const jl   = db.prepare('SELECT job_id, level, jp FROM inv_job_levels WHERE user_id = ? AND slot = ? ORDER BY job_id').all(userId, slot);
+  return { econ, eq, inv, sp, jl };
+}
+export function _testMirrorClear(userId, slot) {
+  db.prepare('DELETE FROM inv_inventories WHERE user_id = ? AND slot = ?').run(userId, slot);
+  db.prepare('DELETE FROM inv_economies   WHERE user_id = ? AND slot = ?').run(userId, slot);
+  db.prepare('DELETE FROM inv_equipped    WHERE user_id = ? AND slot = ?').run(userId, slot);
+  db.prepare('DELETE FROM inv_known_spells WHERE user_id = ? AND slot = ?').run(userId, slot);
+  db.prepare('DELETE FROM inv_job_levels  WHERE user_id = ? AND slot = ?').run(userId, slot);
+}
 function _validateSaveData(data) {
   if (!data || typeof data !== 'object') return { ok: false, error: 'data must be an object' };
   const raw = JSON.stringify(data);
@@ -261,6 +285,71 @@ db.exec(`
     ip          TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_storage_beacons_ts ON storage_beacons(ts);
+
+  -- Inventory mirror Phase 0 (v1.7.740). Server-canonical state mirror.
+  -- READ-ONLY in Phase 0 — populated on every /api/save + at boot from
+  -- existing saves, but not enforced. Future phases route mutations
+  -- through wire events that validate against this state. Full design
+  -- in docs/INVENTORY-MIRROR-PLAN.md.
+  --
+  -- All tables key on (user_id, slot) — each save slot is an independent
+  -- character. Phase 1+ wire events will operate on the "active slot"
+  -- which the WS hello fanout will start tracking.
+  CREATE TABLE IF NOT EXISTS inv_inventories (
+    user_id    INTEGER NOT NULL,
+    slot       INTEGER NOT NULL,
+    item_id    INTEGER NOT NULL,
+    qty        INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, slot, item_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_inv_inventories_updated ON inv_inventories(updated_at);
+
+  CREATE TABLE IF NOT EXISTS inv_economies (
+    user_id        INTEGER NOT NULL,
+    slot           INTEGER NOT NULL,
+    gil            INTEGER NOT NULL DEFAULT 0,
+    cp             INTEGER NOT NULL DEFAULT 0,
+    exp            INTEGER NOT NULL DEFAULT 0,
+    unlocked_jobs  INTEGER NOT NULL DEFAULT 0,
+    updated_at     INTEGER NOT NULL,
+    PRIMARY KEY (user_id, slot),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS inv_equipped (
+    user_id    INTEGER NOT NULL,
+    slot       INTEGER NOT NULL,
+    weapon_r   INTEGER NOT NULL DEFAULT 0,
+    weapon_l   INTEGER NOT NULL DEFAULT 0,
+    head       INTEGER NOT NULL DEFAULT 0,
+    body       INTEGER NOT NULL DEFAULT 0,
+    arms       INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, slot),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS inv_known_spells (
+    user_id    INTEGER NOT NULL,
+    slot       INTEGER NOT NULL,
+    spell_id   INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, slot, spell_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS inv_job_levels (
+    user_id    INTEGER NOT NULL,
+    slot       INTEGER NOT NULL,
+    job_id     INTEGER NOT NULL,
+    level      INTEGER NOT NULL DEFAULT 1,
+    jp         INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, slot, job_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // v1.7.736 — hook for `/api/logout-all` so it can kick stale WS connections
@@ -291,6 +380,127 @@ try {
 // every existing row) and never matches a valid seconds-style insert (which
 // caps well under that bound for the next ~50,000 years).
 db.prepare("UPDATE storage_beacons SET ts = ts / 1000 WHERE ts > 1700000000000").run();
+
+// ── Inventory mirror Phase 0 (v1.7.740) ──────────────────────────────
+// Read-only server-side mirror of game state — populated from every save,
+// not enforced yet. Future phases will route mutations through wire events
+// that validate against this state. See `docs/INVENTORY-MIRROR-PLAN.md`.
+
+const _invInvDeleteStmt   = db.prepare('DELETE FROM inv_inventories WHERE user_id = ? AND slot = ?');
+const _invInvInsertStmt   = db.prepare('INSERT INTO inv_inventories (user_id, slot, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)');
+const _invEconUpsertStmt  = db.prepare('INSERT OR REPLACE INTO inv_economies (user_id, slot, gil, cp, exp, unlocked_jobs, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+const _invEquipUpsertStmt = db.prepare('INSERT OR REPLACE INTO inv_equipped (user_id, slot, weapon_r, weapon_l, head, body, arms, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+const _invSpellsDeleteStmt = db.prepare('DELETE FROM inv_known_spells WHERE user_id = ? AND slot = ?');
+const _invSpellsInsertStmt = db.prepare('INSERT INTO inv_known_spells (user_id, slot, spell_id, updated_at) VALUES (?, ?, ?, ?)');
+const _invJobsDeleteStmt  = db.prepare('DELETE FROM inv_job_levels WHERE user_id = ? AND slot = ?');
+const _invJobsInsertStmt  = db.prepare('INSERT INTO inv_job_levels (user_id, slot, job_id, level, jp, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
+const _invEconReadStmt    = db.prepare('SELECT gil FROM inv_economies WHERE user_id = ? AND slot = ?');
+
+// Wrap the slot replace in a single transaction so a save sync either fully
+// lands or fully no-ops. Replace-semantics (DELETE then INSERT for the array-
+// shaped tables) so the mirror state is whatever the save claims — Phase 0
+// trusts the save fully (same as the existing `saves` table), but tracks it.
+function mirrorSyncFromSave(userId, slot, data) {
+  const now = Math.floor(Date.now() / 1000);
+  const tx = db.transaction(() => {
+    // Inventory — wipe and replace.
+    _invInvDeleteStmt.run(userId, slot);
+    if (data.inventory && typeof data.inventory === 'object' && !Array.isArray(data.inventory)) {
+      for (const [k, v] of Object.entries(data.inventory)) {
+        const id = parseInt(k, 10);
+        if (!Number.isFinite(id) || id < 0 || id > 255) continue;
+        const qty = (Number(v) | 0);
+        if (qty <= 0) continue;
+        _invInvInsertStmt.run(userId, slot, id, qty, now);
+      }
+    }
+    // Economy.
+    _invEconUpsertStmt.run(
+      userId, slot,
+      (data.gil | 0),
+      (data.cp | 0),
+      (data.exp | 0),
+      (data.unlockedJobs >>> 0),    // unsigned — unlockedJobs is a 32-bit mask
+      now,
+    );
+    // Equipped — from stats.weaponR/L/head/body/arms.
+    const st = (data.stats && typeof data.stats === 'object') ? data.stats : {};
+    _invEquipUpsertStmt.run(
+      userId, slot,
+      (st.weaponR | 0),
+      (st.weaponL | 0),
+      (st.head | 0),
+      (st.body | 0),
+      (st.arms | 0),
+      now,
+    );
+    // Known spells — wipe and replace.
+    _invSpellsDeleteStmt.run(userId, slot);
+    if (Array.isArray(data.knownSpells)) {
+      const seen = new Set();
+      for (const id of data.knownSpells) {
+        const sid = id | 0;
+        if (sid < 0 || sid > 255) continue;
+        if (seen.has(sid)) continue;
+        seen.add(sid);
+        _invSpellsInsertStmt.run(userId, slot, sid, now);
+      }
+    }
+    // Job levels — wipe and replace.
+    _invJobsDeleteStmt.run(userId, slot);
+    if (data.jobLevels && typeof data.jobLevels === 'object' && !Array.isArray(data.jobLevels)) {
+      for (const [k, v] of Object.entries(data.jobLevels)) {
+        const jid = parseInt(k, 10);
+        if (!Number.isFinite(jid) || jid < 0 || jid > 31) continue;
+        if (!v || typeof v !== 'object') continue;
+        _invJobsInsertStmt.run(userId, slot, jid, (v.level | 0), (v.jp | 0), now);
+      }
+    }
+  });
+  tx();
+}
+
+// Phase 0 divergence signal — log a warning when a sync claims a gil jump
+// larger than what's plausibly earned between saves. Tunable; tier-2-style
+// detection but free since we're already inside the sync. Threshold chosen
+// so legitimate gameplay (vendor sells, level-up rewards) never trips it;
+// real abuse (write-99999-gil-via-API) flags clearly.
+const _MIRROR_GIL_JUMP_WARN = 50000;
+function mirrorCheckDivergence(userId, slot, newData) {
+  try {
+    const prior = _invEconReadStmt.get(userId, slot);
+    if (!prior) return;
+    const newGil = (newData.gil | 0);
+    const delta = newGil - (prior.gil | 0);
+    if (delta > _MIRROR_GIL_JUMP_WARN) {
+      console.warn('[mirror divergence] user=' + userId + ' slot=' + slot +
+        ' gil jumped ' + prior.gil + ' → ' + newGil + ' (+' + delta + ')');
+    }
+  } catch { /* read failure is non-fatal */ }
+}
+
+// Boot seed — populate mirror from every existing save. Idempotent
+// (transaction inside mirrorSyncFromSave is replace-semantics). Runs once
+// at module load. Negligible cost: O(saves), ~13 users × ≤3 slots today.
+(function _mirrorBootSeed() {
+  const rows = db.prepare('SELECT user_id, slot, data FROM saves').all();
+  let synced = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const data = JSON.parse(row.data);
+      mirrorSyncFromSave(row.user_id, row.slot, data);
+      synced++;
+    } catch (e) {
+      failed++;
+      console.warn('[mirror seed] failed user=' + row.user_id + ' slot=' + row.slot + ': ' + e.message);
+    }
+  }
+  if (synced > 0 || failed > 0) {
+    console.log('[mirror seed] synced ' + synced + ' (user, slot) entries' +
+      (failed > 0 ? ', ' + failed + ' failed' : ''));
+  }
+})();
 
 // Party persistence (v1.7.595). The `parties` table is the source of truth
 // for "who is in a party with whom"; `_partyMemberships` in ws-presence.js
@@ -650,6 +860,16 @@ export async function handleAPI(req, res) {
     const v = _validateSaveData(data);
     if (!v.ok) return send(res, 400, { error: v.error }), true;
     db.prepare('INSERT OR REPLACE INTO saves (user_id, slot, data, updated_at) VALUES (?, ?, ?, unixepoch())').run(user.userId, slot, JSON.stringify(v.data));
+    // Phase 0 mirror sync (v1.7.740). Behavior-neutral: tracks the save's
+    // claimed state in dedicated tables for future enforcement. Sync
+    // failure logs but doesn't fail the save — the `saves` table is still
+    // the source of truth in Phase 0.
+    try {
+      mirrorCheckDivergence(user.userId, slot, v.data);
+      mirrorSyncFromSave(user.userId, slot, v.data);
+    } catch (e) {
+      console.warn('[mirror] sync failed user=' + user.userId + ' slot=' + slot + ': ' + e.message);
+    }
     send(res, 200, { ok: true });
     return true;
   }
@@ -675,6 +895,21 @@ export async function handleAPI(req, res) {
     const { slot } = await readBody(req);
     if (![0, 1, 2].includes(slot)) return send(res, 400, { error: 'slot must be 0, 1, or 2' }), true;
     db.prepare('DELETE FROM saves WHERE user_id = ? AND slot = ?').run(user.userId, slot);
+    // Phase 0 mirror cleanup (v1.7.740) — wipe every mirror table for this
+    // slot too, so a deleted save doesn't leave ghost rows. Same trust as
+    // the save delete itself: client-authenticated, no extra validation.
+    try {
+      const tx = db.transaction(() => {
+        _invInvDeleteStmt.run(user.userId, slot);
+        db.prepare('DELETE FROM inv_economies  WHERE user_id = ? AND slot = ?').run(user.userId, slot);
+        db.prepare('DELETE FROM inv_equipped   WHERE user_id = ? AND slot = ?').run(user.userId, slot);
+        _invSpellsDeleteStmt.run(user.userId, slot);
+        _invJobsDeleteStmt.run(user.userId, slot);
+      });
+      tx();
+    } catch (e) {
+      console.warn('[mirror] delete failed user=' + user.userId + ' slot=' + slot + ': ' + e.message);
+    }
     send(res, 200, { ok: true });
     return true;
   }

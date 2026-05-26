@@ -27,7 +27,8 @@ import {
   tryInflictStatus, processTurnStart,
 } from '../src/status-effects.js';
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
-import { _testEnsureUser, handleAPI, _testValidateSaveData } from '../api.js';
+import { _testEnsureUser, handleAPI, _testValidateSaveData,
+         _testMirrorSync, _testMirrorRead, _testMirrorClear } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -348,6 +349,77 @@ function suiteServer() {
     assertEqual(data.stats.weaponR, 255, 'weaponR over-cap');
     assertEqual(data.stats.weaponL, 0, 'weaponL under-zero');
     assertEqual(data.stats.head, 255, 'head 256 not clamped');
+  });
+
+  // ── Inventory mirror Phase 0 (v1.7.740) ────────────────────────────
+  // Pure-API unit tests — no WS / network. mirrorSyncFromSave is the
+  // sole writer in Phase 0 (called from /api/save), so every assert on
+  // mirror state exercises the path the production save endpoint hits.
+  test('v1.7.740 mirror sync populates all five tables', () => {
+    const UID = 88810, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, {
+      gil: 1234, cp: 56, exp: 7890, unlockedJobs: 0x7,
+      stats: { weaponR: 0x1E, weaponL: 0x00, head: 0x62, body: 0x72, arms: 0x05 },
+      inventory: { 0x80: 5, 0x81: 2 },
+      knownSpells: [0x01, 0x02, 0x03],
+      jobLevels: { 0: { level: 5, jp: 100 }, 3: { level: 2, jp: 50 } },
+    });
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.econ.gil, 1234, 'gil');
+    assertEqual(m.econ.cp, 56, 'cp');
+    assertEqual(m.econ.exp, 7890, 'exp');
+    assertEqual(m.econ.unlocked_jobs, 0x7, 'unlockedJobs');
+    assertEqual(m.eq.weapon_r, 0x1E, 'weapon_r');
+    assertEqual(m.eq.head, 0x62, 'head');
+    assertEqual(m.inv.length, 2, 'inventory rows');
+    assertEqual(m.inv[0].item_id, 0x80, 'inv first item');
+    assertEqual(m.inv[0].qty, 5, 'inv first qty');
+    assertEqual(m.sp.length, 3, 'spell rows');
+    assertEqual(m.jl.length, 2, 'job rows');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.740 mirror re-sync replaces (not appends) array tables', () => {
+    const UID = 88811, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    // Seed with 3 items, 2 spells.
+    _testMirrorSync(UID, SLOT, {
+      gil: 100,
+      inventory: { 0x80: 1, 0x81: 1, 0x82: 1 },
+      knownSpells: [0x01, 0x02],
+    });
+    let m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.inv.length, 3, 'pre: 3 inv rows');
+    assertEqual(m.sp.length, 2, 'pre: 2 spell rows');
+    // Re-sync with just 1 item, no spells.
+    _testMirrorSync(UID, SLOT, {
+      gil: 100,
+      inventory: { 0x90: 9 },
+      knownSpells: [],
+    });
+    m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.inv.length, 1, 'post: 1 inv row (replaced)');
+    assertEqual(m.inv[0].item_id, 0x90, 'post: new item');
+    assertEqual(m.sp.length, 0, 'post: 0 spell rows (replaced)');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.740 mirror sync ignores out-of-range item ids', () => {
+    const UID = 88812, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, {
+      gil: 0,
+      inventory: { 0x80: 1, '-1': 1, 256: 1, 'abc': 1, 0x99: 3 },
+    });
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.inv.length, 2, 'only valid item ids land');
+    assertEqual(m.inv[0].item_id, 0x80, 'first valid item');
+    assertEqual(m.inv[1].item_id, 0x99, 'second valid item');
+    _testMirrorClear(UID, SLOT);
   });
 }
 

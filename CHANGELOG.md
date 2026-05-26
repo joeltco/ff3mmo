@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.740 — 2026-05-26
+
+### Inventory mirror Phase 0 — read-only server-side mirror
+
+First phase of the inventory-mirror rollout from `docs/INVENTORY-MIRROR-PLAN.md`. **Zero user-facing change.** Pure backend instrumentation: server now tracks every player's canonical inventory / economy / equipment / spells / job levels in dedicated SQLite tables, populated from every `POST /api/save` + seeded at boot from existing saves. Mirror is read-only — not enforced anywhere yet. Future phases route mutations through wire events that validate against this state.
+
+**New tables** (all `inv_*` prefixed, all keyed on `(user_id, slot)`):
+- `inv_inventories (user_id, slot, item_id, qty, updated_at)`
+- `inv_economies (user_id, slot, gil, cp, exp, unlocked_jobs, updated_at)`
+- `inv_equipped (user_id, slot, weapon_r, weapon_l, head, body, arms, updated_at)`
+- `inv_known_spells (user_id, slot, spell_id, updated_at)`
+- `inv_job_levels (user_id, slot, job_id, level, jp, updated_at)`
+
+**Sync path:**
+- `mirrorSyncFromSave(userId, slot, data)` — atomic transaction, REPLACE-semantics for array tables (inventories / spells / jobs); UPSERT for the singleton tables (economy / equipped).
+- Called from `/api/save` after validation, fails non-fatally (logs but doesn't reject the save).
+- Called from `/api/save` DELETE to wipe the slot's mirror rows.
+- Boot seed: walks every existing `saves` row at module load, populates the mirror. Idempotent. Negligible cost.
+
+**Divergence telemetry:** `mirrorCheckDivergence` logs `[mirror divergence]` warnings when a save's gil jumps by more than 50000 vs the prior mirror state. Cheap, tunable, free since we're in the sync anyway. Phase 0 doesn't reject — just signals.
+
+**Operator visibility:** new `./prod.sh inv` subcommand. No arg = totals across all users/slots; with userId = per-slot detail (gil/cp/exp, equipped items hex, inventory contents, spell/job counts, last-updated). Lives next to `./prod.sh dup` as the second forensic surface.
+
+**Test coverage:** 3 new wire-sim tests in Suite 2 — sync populates all 5 tables, re-sync replaces (not appends), out-of-range item ids ignored. 59 tests total.
+
+This phase is the foundation. **Phase 1** will introduce the authoritative `inv-event` wire shape (chest open / shop buy / item use / equip swap all become server round-trips) — at which point mirror writes start REJECTING client claims that don't match. Plan + trigger conditions in `docs/INVENTORY-MIRROR-PLAN.md`.
+
+Files: `api.js`, `prod.sh`, `tools/pvp-wire-sim.js`.
+
 ## 1.7.739 — 2026-05-26
 
 ### Tooling: `./prod.sh dup [N]` — trade dup-spam detector

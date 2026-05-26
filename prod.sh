@@ -12,6 +12,7 @@
 #   ./prod.sh logs [N]        # last N pm2 lines (default 50)
 #   ./prod.sh tail            # live pm2 tail (Ctrl-C to stop)
 #   ./prod.sh dup [N]         # trade dup-spam detector (default threshold 5 same-item trades / sender / 7d)
+#   ./prod.sh inv [userId]    # inventory mirror summary (no arg = totals; userId = per-slot detail)
 #   ./prod.sh sql "<query>"   # arbitrary read-only SQLite query
 #
 # Host/path are pinned to match deploy.sh.
@@ -122,6 +123,50 @@ case "$CMD" in
         console.log('  sender=' + r.sender_user_id + ' (' + (r.sender_name||'?') + ')  item=' + itemHex + '  trades=' + r.n + '  span=' + spanStr + '  targets=[' + r.targets + ']');
       }
     "
+    ;;
+
+  inv)
+    # Inventory mirror visibility (Phase 0 of the inventory mirror —
+    # docs/INVENTORY-MIRROR-PLAN.md). No arg = totals across all users /
+    # slots. With a userId = per-slot detail for that user (inventory +
+    # gil + equipment + spell count). Read-only against the inv_* tables.
+    UID="${2:-}"
+    if [[ -z "$UID" ]]; then
+      echo "── mirror totals ──────────────────────────"
+      _sql "
+        const counts = {
+          inv_inventories: db.prepare('SELECT COUNT(*) AS n FROM inv_inventories').get().n,
+          inv_economies:   db.prepare('SELECT COUNT(*) AS n FROM inv_economies').get().n,
+          inv_equipped:    db.prepare('SELECT COUNT(*) AS n FROM inv_equipped').get().n,
+          inv_known_spells:db.prepare('SELECT COUNT(*) AS n FROM inv_known_spells').get().n,
+          inv_job_levels:  db.prepare('SELECT COUNT(*) AS n FROM inv_job_levels').get().n,
+        };
+        for (const [t, n] of Object.entries(counts)) console.log('  ' + t.padEnd(20) + ' ' + n);
+        const users = db.prepare('SELECT COUNT(DISTINCT user_id) AS n FROM inv_economies').get().n;
+        const slots = db.prepare('SELECT COUNT(*) AS n FROM inv_economies').get().n;
+        console.log('  users with mirror   ' + users);
+        console.log('  total (user, slot)  ' + slots);
+      "
+    else
+      echo "── mirror detail for user $UID ────────────"
+      _sql "
+        const uid = ${UID};
+        const econ = db.prepare('SELECT slot, gil, cp, exp, unlocked_jobs, updated_at FROM inv_economies WHERE user_id = ? ORDER BY slot').all(uid);
+        if (!econ.length) { console.log('  (no mirror data for user ' + uid + ')'); }
+        for (const e of econ) {
+          const eq = db.prepare('SELECT weapon_r, weapon_l, head, body, arms FROM inv_equipped WHERE user_id = ? AND slot = ?').get(uid, e.slot) || {};
+          const inv = db.prepare('SELECT item_id, qty FROM inv_inventories WHERE user_id = ? AND slot = ? ORDER BY item_id').all(uid, e.slot);
+          const sp  = db.prepare('SELECT COUNT(*) AS n FROM inv_known_spells WHERE user_id = ? AND slot = ?').get(uid, e.slot).n;
+          const jobs= db.prepare('SELECT COUNT(*) AS n FROM inv_job_levels WHERE user_id = ? AND slot = ?').get(uid, e.slot).n;
+          const ago = Math.round((now - e.updated_at) / 60) + 'm ago';
+          console.log('  slot ' + e.slot + '  gil=' + e.gil + '  cp=' + e.cp + '  exp=' + e.exp + '  jobs-unlocked=0x' + (e.unlocked_jobs>>>0).toString(16) + '  (' + ago + ')');
+          const hex = b => '0x' + (b|0).toString(16).toUpperCase().padStart(2,'0');
+          console.log('    equipped: R=' + hex(eq.weapon_r) + ' L=' + hex(eq.weapon_l) + ' head=' + hex(eq.head) + ' body=' + hex(eq.body) + ' arms=' + hex(eq.arms));
+          console.log('    inventory (' + inv.length + ' slots): ' + inv.map(i => hex(i.item_id) + 'x' + i.qty).join('  '));
+          console.log('    known_spells=' + sp + '  job_levels=' + jobs);
+        }
+      "
+    fi
     ;;
 
   sql)
