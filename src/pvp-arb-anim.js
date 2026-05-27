@@ -37,6 +37,8 @@ import { arbViewSt, drainPendingDeltas } from './pvp-arb-viewer.js';
 import { pvpSt } from './pvp.js';
 import { setEnemyDmgNum, setPlayerDamageNum, setSwDmgNum, createDmg, createMiss } from './damage-numbers.js';
 import { BATTLE_SHAKE_MS, battleSt } from './battle-state.js';
+import { queueBattleMsg } from './battle-msg.js';
+import { _nameToBytes } from './text-utils.js';
 
 // ── Per-delta dwell times ─────────────────────────────────────────────────
 // Each kind plays for a fixed window before the driver pops the next
@@ -128,6 +130,17 @@ function _applyDeathVisual(delta) {
   // P-6d: my-side allies + my-main death wipe.
 }
 
+// v1.7.756 P-8 — name strip set helper. The new spec says the strip
+// shows only the attacker (mid-turn) and the highlighted target
+// (during target-select). Per-delta hooks use this; the target-select
+// hook lives in `executeBattleCommand` / `_switchPVPTarget`.
+export function setArbStripName(cellId) {
+  if (!PVP_ARBITER) return;
+  const c = arbViewSt.combatants[cellId | 0];
+  if (!c || !c.name) return;
+  queueBattleMsg(_nameToBytes(c.name));
+}
+
 function _startDelta(delta) {
   _active = {
     delta,
@@ -135,7 +148,12 @@ function _startDelta(delta) {
     dwellMs: _DWELL_MS[delta.kind] || _DEFAULT_DWELL_MS,
   };
   switch (delta.kind) {
-    case 'attack':       _applyAttackVisual(delta); break;
+    case 'attack':
+      // Name strip cuts to the attacker just before the visual fires
+      // (matches the legacy lockstep pattern in pvp.js for opp casts).
+      setArbStripName(delta.actorCellId);
+      _applyAttackVisual(delta);
+      break;
     case 'death':        _applyDeathVisual(delta); break;
     case 'state':        /* P-6d: defend pose etc. */ break;
     case 'magic':        /* P-4c + P-6d */ break;

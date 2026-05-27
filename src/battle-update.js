@@ -22,6 +22,8 @@ import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getOnlineA
 // player's menu commit routes here instead of the lockstep _emitWirePVPAction
 // so the server (not the local engine) drives the next turn.
 import { arbViewSt } from './pvp-arb-viewer.js';
+// v1.7.756 P-8 — name strip helper for arbiter path.
+import { setArbStripName } from './pvp-arb-anim.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -147,6 +149,15 @@ export function executeBattleCommand(index) {
     }
     battleSt.battleState = 'target-select';
     battleSt.battleTimer = 0;
+    // v1.7.756 P-8 — under the arbiter, the strip cuts to the default
+    // target's name when target-select opens. pvpPlayerTargetIdx
+    // defaults to -1 (main opp); map to global cellId via yourSide.
+    if (PVP_ARBITER && arbViewSt.inBattle && pvpSt.isPVPBattle) {
+      const baseOpp = arbViewSt.yourSide === 'A' ? 4 : 0;
+      const tgtIdx = pvpSt.pvpPlayerTargetIdx;
+      const cellId = baseOpp + (tgtIdx < 0 ? 0 : (tgtIdx + 1));
+      setArbStripName(cellId);
+    }
   } else if (index === 1) {
     // Slot 1: Defend for non-mages, Magic for mages (jobs 3/4/5).
     const isMage = ps.jobIdx === 3 || ps.jobIdx === 4 || ps.jobIdx === 5;

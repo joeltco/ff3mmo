@@ -20,6 +20,12 @@ import { getSlashFramesForWeapon, setSlashOffsetForFrame } from './battle-sprite
 import { mapSt } from './map-state.js';
 import { pvpSt } from './pvp.js';
 import { getRosterVisible, ROSTER_MENU_ITEMS } from './roster.js';
+// v1.7.756 P-8 — under PVP_ARBITER, the message strip shows only the
+// highlighted target during target-select. setArbStripName is a no-op
+// when the flag is off so legacy lockstep behavior stays unchanged.
+import { arbViewSt } from './pvp-arb-viewer.js';
+import { setArbStripName } from './pvp-arb-anim.js';
+import { PVP_ARBITER } from './net.js';
 import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } from './pvp-search.js';
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
@@ -150,6 +156,17 @@ function _xPressed() {
 // Switch PVP target — just change the index; enemyHP getter/setter reads authoritative source
 function _switchPVPTarget(newIdx) {
   pvpSt.pvpPlayerTargetIdx = newIdx;
+  // v1.7.756 P-8 — name strip shows the target's name during target-
+  // select under the arbiter path. Legacy lockstep skips this (strip
+  // is driven by the legacy actor-cycle path; setArbStripName is a
+  // no-op when PVP_ARBITER is off).
+  if (PVP_ARBITER && arbViewSt.inBattle) {
+    // pvpPlayerTargetIdx convention: -1 = main opp, N >= 0 = enemy ally N.
+    // Map to global cellId via arbViewSt.yourSide.
+    const baseOpp = arbViewSt.yourSide === 'A' ? 4 : 0;
+    const cellId = baseOpp + (newIdx < 0 ? 0 : (newIdx + 1));
+    setArbStripName(cellId);
+  }
 }
 
 function _battleTargetNav() {
