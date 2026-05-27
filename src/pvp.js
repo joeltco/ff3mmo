@@ -58,6 +58,14 @@ function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 // orders on the two clients and every subsequent roll inherits the drift.
 // v1.7.408.
 function _buildAndProcessNextTurn() {
+  // v1.7.763 — under PVP_ARBITER, the server is the sole turn dispatcher.
+  // The legacy local FSM has multiple call sites that reach
+  // _buildAndProcessNextTurn (defend-anim completion, OppSWHit, etc.) —
+  // each would dereference inputSt.playerActionPending.command (now
+  // null after the arbiter fork consumed it) and crash the game loop.
+  // Short-circuit at the root so every legacy caller is a safe no-op
+  // when the arbiter is in charge.
+  if (PVP_ARBITER && arbViewSt.inBattle) return;
   if (pvpSt.isWirePVP && typeof pvpSt._wireSeed === 'number') {
     pvpSt._wireTurnIndex = (pvpSt._wireTurnIndex | 0) + 1;
     seedRng(((pvpSt._wireSeed >>> 0) + pvpSt._wireTurnIndex) >>> 0);

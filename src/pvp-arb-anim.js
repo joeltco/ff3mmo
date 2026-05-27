@@ -193,7 +193,11 @@ export function tickArbAnim(dt) {
         && arbViewSt.inBattle
         && arbViewSt.nextActor
         && arbViewSt.nextActor.cellId === arbViewSt.yourCellId) {
-      battleSt.battleState = 'menu';
+      // v1.7.763 — must be 'menu-open' (not 'menu'). 'menu-open' is the
+      // state the input handler waits for (input-handler.js line 749);
+      // 'menu' isn't a real state and silently dropped input, leaving
+      // the player unable to commit a second action.
+      battleSt.battleState = 'menu-open';
       battleSt.battleTimer = 0;
     }
     return;

@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.763 — 2026-05-27
+
+### PvP arbiter: HUD-disappear + post-round soft-lock fixes
+
+Two live-smoke bugs caught together.
+
+**Bug A — anim driver set wrong battleState.** P-7's "queue drained → return to menu" hook in `pvp-arb-anim.js` set `battleState = 'menu'`. The input handler waits for `'menu-open'` (input-handler.js:749) — `'menu'` isn't a real state and silently dropped all input, leaving the player unable to commit a second action.
+
+**Bug B — multiple legacy state paths call `_buildAndProcessNextTurn` → null-deref.** My v1.7.762 fix gated `_updatePVPMenuConfirm` against the arbiter, but `_buildAndProcessNextTurn` has OTHER callers in the legacy FSM: `_processPVPDefendAnim` (line 788), `_processPVPOppSWHit`, `_advancePVPTurnOrEnd`, etc. Each of those state-handler functions fires when the legacy engine enters its state, calls `_buildAndProcessNextTurn`, which calls `processNextTurn`, which dereferences `inputSt.playerActionPending.command` — and the arbiter cleared `playerActionPending` to null at intent submit. Game loop dies → player + HUD vanish on the side that committed first.
+
+How those legacy states got entered under arbiter is a known gap (the legacy `_processEnemyFlash` etc. fire on `battleState === 'enemy-flash'` which is set by `_processNextTurn` itself — once one local crash happens, the FSM gets into weird states). Root cause is one path; symptom is many.
+
+**Fix:** guard `_buildAndProcessNextTurn` at its root. Under `PVP_ARBITER && arbViewSt.inBattle`, every legacy caller becomes a safe no-op. The server is the sole turn dispatcher.
+
+Lint clean; pvp-wire-sim 104/104.
+
 ## 1.7.762 — 2026-05-27
 
 ### PvP arbiter: confirm-pause short-circuit must not require playerActionPending
