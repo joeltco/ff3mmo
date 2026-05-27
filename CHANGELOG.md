@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.761 — 2026-05-27
+
+### PvP arbiter: gate the PvP-specific menu confirm + clear challenger search state
+
+Two live-smoke fixes after v1.7.760.
+
+**Bug 1 — legacy engine ran in parallel with arbiter.**
+P-7 added the `PVP_ARBITER` gate in `battle-update.js#_updateBattleMenuConfirm`. But `updateBattle` early-returns to `updatePVPBattle` when `pvpSt.isPVPBattle` is true, and the PvP-specific menu confirm is `pvp.js#_updatePVPMenuConfirm` — totally separate function, never touched by my P-7 patch. Under arbiter, the player committed Fight, the legacy `_updatePVPMenuConfirm` ran, called `_buildAndProcessNextTurn`, the legacy turn dispatcher tried to simulate an opponent turn locally with no wire partner, undefined damage values flowed into `setEnemyDmgNum`, and `drawBattleNum` crashed on `set[NaN]` → `drawImage(undefined)` → `BATTLE DRAW ERROR` flooding the loop.
+
+Fixed by adding the arbiter gate to the PvP-specific confirm in pvp.js. Pattern matches the battle-update.js version: when `PVP_ARBITER && arbViewSt.inBattle`, route to a local `_emitArbIntentFromPending` helper (cell-id mapping duplicated since pvp.js is the only consumer), clear `playerActionPending`, return early. Legacy fallthrough preserved for `isWirePVP` path (which is now unreachable under arbiter but kept for any rollback).
+
+**Bug 2 — challenger search hung on "Searching..." forever.**
+Legacy `pvp-match` handler in `pvp-search.js` ran `_endSearch` + `cancelPendingPVPCheck` via the "Connecting..." prompt callback. The arbiter ships `pvp-battle-start` directly — no prompt — so the search msg box stayed up on the challenger's screen. Phone 1 stuck on "Finding...", Phone 2 stuck in soft-locked battle.
+
+Fixed in `pvp-arb-adapter.js#_bootstrapBattleScene`: on every new arbiter battleId, also call `cancelPVPSearch('server')` (idempotent if no search active) + `cancelPendingPVPCheck()` + `dismissMsgBox()`. Mirrors the legacy match handler's cleanup.
+
+**Wire-sim gap:** wire-sim doesn't exercise `updatePVPBattle` (browser-only) so both bugs slipped past 104/104. Caught by pm2 `[CLIENT ERROR]` stack-trace grep against the live two-phone smoke.
+
 ## 1.7.760 — 2026-05-27
 
 ### PvP arbiter: decode `save.name` bytes to string in wire frame

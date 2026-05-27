@@ -29,6 +29,14 @@ import { resetArbAnim } from './pvp-arb-anim.js';
 // arbViewSt populates but the player stays on the overworld.
 import { resetBattleVars } from './battle-update.js';
 import { playSFX, pauseMusic, SFX, TRACKS } from './music.js';
+// v1.7.761 — challenger-side search cleanup. Legacy pvp-match handler
+// did this via _endSearch / cancelPendingPVPCheck after the
+// "Connecting..." prompt; under the arbiter we hit pvp-battle-start
+// directly so we have to clear search state here or the "Searching..."
+// message box hangs forever on the challenger's screen.
+import { pvpSearchSt, cancelPVPSearch } from './pvp-search.js';
+import { cancelPendingPVPCheck } from './battle-encounter.js';
+import { dismissMsgBox } from './message-box.js';
 
 // ── Adapter ───────────────────────────────────────────────────────────────
 
@@ -130,6 +138,14 @@ function _syncToLegacy() {
 // `pvpSt.isPVPBattle = true` via _syncToLegacy by the time we run.
 function _bootstrapBattleScene() {
   if (!arbViewSt.combatants || arbViewSt.combatants.length === 0) return;
+  // v1.7.761 — challenger-side: cancel the active search + dismiss the
+  // "Searching..." prompt + clear the encounter-race guard. Idempotent
+  // when called on the target side (no search active there).
+  if (pvpSearchSt && pvpSearchSt.active) {
+    cancelPVPSearch('server');   // reason='server' suppresses extra wire cancel
+  }
+  cancelPendingPVPCheck();
+  dismissMsgBox();
   pvpSt.pvpOpponentShakeTimer = 0;
   pvpSt.pvpEnemyHitResults = [];
   pvpSt.pvpEnemyHitIdx = 0;

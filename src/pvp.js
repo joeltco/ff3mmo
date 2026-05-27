@@ -13,7 +13,11 @@ import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
 import { reseedFromEntropy, seed as seedRng, rand } from './rng.js';
 import { setNetPVPActionHandler, sendNetPVPEnd, sendNetPVPResult,
-         setNetPVPAllyJoinHandler, getMyUserId } from './net.js';
+         setNetPVPAllyJoinHandler, getMyUserId,
+         sendNetPvpIntent, PVP_ARBITER } from './net.js';
+// v1.7.761 — arbiter path takes over PvP menu confirm so the legacy
+// engine doesn't run a local turn the server is also resolving.
+import { arbViewSt } from './pvp-arb-viewer.js';
 import { dispatchDelta } from './deltas.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
@@ -433,6 +437,20 @@ function _updatePVPMenuConfirm() {
   const bs = battleSt.battleState;
   if (bs === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
+      // v1.7.761 P-7 (corrected) — arbiter path takes the commit FIRST.
+      // updatePVPBattle is the PvP-specific dispatcher, so the matching
+      // arbiter fork in battle-update.js#_updateBattleMenuConfirm is
+      // UNREACHABLE in PvP. Without this branch the legacy engine ran
+      // _buildAndProcessNextTurn → local opp turn → undefined damage →
+      // drawImage explodes (v1.7.760 live-smoke bug).
+      if (PVP_ARBITER && arbViewSt.inBattle && inputSt.playerActionPending) {
+        _emitArbIntentFromPending(inputSt.playerActionPending);
+        inputSt.playerActionPending = null;
+        // Stay in confirm-pause. The anim driver (pvp-arb-anim.js)
+        // transitions back to 'menu' once the server's pvp-turn deltas
+        // drain. Don't dispatch a local turn — server resolves.
+        return true;
+      }
       // Wire-PvP — relay the local player's confirmed action to the partner
       // BEFORE turn dispatch fires, so their client has time to queue it for
       // their opponent-side turn. Mirrors `_updateBattleMenuConfirm` in
@@ -451,6 +469,41 @@ function _updatePVPMenuConfirm() {
     }
   } else { return false; }
   return true;
+}
+
+// v1.7.761 — local copy of the cellId mapping + intent emit that
+// battle-update.js#_emitWirePVPArbAction uses. Duplicated here because
+// pvp.js is the only file that runs the PvP-specific menu-confirm
+// path, so the legacy code didn't expose its arbiter cousin as a
+// public helper. Mapping:
+//   yourSide='A': me cells 0-3, opp cells 4-7
+//   yourSide='B': me cells 4-7, opp cells 0-3
+function _emitArbIntentFromPending(pending) {
+  if (!arbViewSt.inBattle || !arbViewSt.battleId) return;
+  const cmd = pending && pending.command;
+  const baseMe  = arbViewSt.yourSide === 'A' ? 0 : 4;
+  const baseOpp = arbViewSt.yourSide === 'A' ? 4 : 0;
+  const args = { battleId: arbViewSt.battleId, turnIdx: arbViewSt.turnIdx };
+  if (cmd === 'defend') { sendNetPvpIntent({ ...args, kind: 'defend' }); return; }
+  if (cmd === 'run')    { sendNetPvpIntent({ ...args, kind: 'flee'   }); return; }
+  if (cmd === 'fight') {
+    const tgtIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+    sendNetPvpIntent({ ...args, kind: 'attack', targetCellId: baseOpp + tgtIdx });
+    return;
+  }
+  if (cmd === 'magic' || cmd === 'item') {
+    const isSelf = pending.target === 'player' && (pending.allyIndex == null || pending.allyIndex < 0);
+    const isAlly = pending.target === 'player' && pending.allyIndex >= 0;
+    let targetCellId;
+    if (isSelf)      targetCellId = baseMe + 0;
+    else if (isAlly) targetCellId = baseMe + (pending.allyIndex | 0) + 1;
+    else             targetCellId = baseOpp + (typeof pending.target === 'number' ? pending.target : 0);
+    if (cmd === 'magic') {
+      sendNetPvpIntent({ ...args, kind: 'magic', spellId: pending.spellId, targetCellId });
+    } else {
+      sendNetPvpIntent({ ...args, kind: 'item',  itemId:  pending.itemId,  targetCellId });
+    }
+  }
 }
 function _updatePVPAllyAppear() {
   if (battleSt.battleState !== 'pvp-ally-appear') return false;
