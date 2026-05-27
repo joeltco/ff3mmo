@@ -198,15 +198,20 @@ export function tickArbAnim(dt) {
     // player into 'menu' so they can pick again. The legacy turn
     // pump would do this via processNextTurn → battleState='menu';
     // under the arbiter we do it ourselves once the deltas finish.
+    // v1.7.765 — drop the nextActor.cellId check. Server's nextActor
+    // field is a single value pointing at ONE cell (the first alive
+    // human), but both phones receive the SAME pvp-turn frame and only
+    // one cellId can match. Under the round-based simultaneous-intent
+    // model (both humans submit per round), both phones must re-open
+    // their menus after every resolved round — gating on whose cell
+    // `nextActor` matches left the OTHER phone (cellId mismatch)
+    // stuck in confirm-pause forever.
     if (battleSt.battleState === 'confirm-pause'
         && arbViewSt.inBattle
-        && arbViewSt.nextActor
-        && arbViewSt.nextActor.cellId === arbViewSt.yourCellId
         // v1.7.764 — only transition if a NEW pvp-turn has been resolved
         // since the last time we returned to menu. Otherwise the very
-        // first frame after the user submits intent (state='confirm-pause',
-        // nextActor still pointing at us from the prior round) would
-        // bump us back to 'menu-open' before the server even responds.
+        // first frame after the user submits intent (state='confirm-pause')
+        // would bump us back to 'menu-open' before the server responds.
         && arbViewSt.turnIdx > _lastReturnedTurnIdx) {
       // v1.7.763 — must be 'menu-open' (not 'menu'). 'menu-open' is the
       // state the input handler waits for (input-handler.js line 749);
