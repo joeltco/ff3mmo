@@ -34,6 +34,11 @@ import { startPVPBattle } from './pvp.js';
 // until PVP_ARBITER flips on (P-9): without an arbiter-managed battle
 // in play, none of these frames arrive.
 import './pvp-arb-viewer.js';
+// v1.7.753 P-6b — render integration adapter. Registers as the viewer's
+// post-update callback; mirrors arbViewSt into the legacy pvpSt/ps/
+// battleAllies bags so the existing PvP draw code reads them unchanged.
+// Inert until PVP_ARBITER on.
+import './pvp-arb-adapter.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
 import { initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';

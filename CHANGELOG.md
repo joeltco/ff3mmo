@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.753 — 2026-05-27
+
+### PvP rewrite P-6b — render integration via legacy-state adapter
+
+Bridges the arbiter's `arbViewSt` to the existing `pvpSt` / `ps` / `battleSt.battleAllies` bags so the existing PvP draw code reads the server-authoritative state unchanged. No fork of `pvp-drawing.js` — the existing module is the single source of truth for cell layout, sprite positioning, HP bar math, target cursor placement, etc. Drift between "arbiter render" and "lockstep render" was a real risk if we duplicated the draw path; the adapter eliminates that risk by funneling both paths through the same draw code.
+
+**What landed:**
+- `src/pvp-arb-viewer.js` — `setArbViewUpdated(fn)` callback hook. Viewer fires `_fireUpdated()` after every handler (battle-start, pvp-turn, state-resync, cancel) so registered consumers can mirror state.
+- `src/pvp-arb-adapter.js` (NEW) — registers as the viewer's update callback. On every fire:
+  - Builds `pvpSt.pvpOpponentStats` + `pvpSt.pvpEnemyAllies` from `arbViewSt.combatants[oppSide]` via `_toLegacyShape()` (wire-format → `generateAllyStats()`-format conversion: `weaponR/L` → `weaponId/weaponL`, `statusMask` int → `status: {mask, poisonDmgTick}` object).
+  - Writes `ps.hp` / `ps.mp` / `ps.status.mask` from `arbViewSt.combatants[yourCellId]` (server is authoritative on combat HP/MP/status; ps.stats stays local-owned).
+  - Builds `battleSt.battleAllies` from `arbViewSt.combatants[mySide, non-main]`.
+- Flag-gated wrapper `_syncIfEnabled()` is the production callback — short-circuits on `!PVP_ARBITER`. Pure `_syncToLegacy()` is callable for tests; production never calls it directly.
+- `src/main.js` — imports the adapter so the callback registration fires at boot.
+
+**Deferred to P-6c:** animation queue runner. The viewer's `drainPendingDeltas()` still accumulates without driving anything visible — slash overlays, damage numbers, death wipes, shake FX all stay tied to the legacy FSM. P-6c lands the delta-driven animation FSM that produces the per-cell visuals players actually see during a turn.
+
+**Wire-sim coverage:** adapter not importable from wire-sim (pulls `pvp.js` → `ui-state.js` → browser-only DOM/Audio). Shape conversion is straightforward enough that production-only validation is acceptable; the 2-phone live smoke at P-9 is the eventual gate.
+
+**No production behavior change.** PVP_ARBITER still false; the adapter's callback short-circuits. Pre-existing 102 wire-sim tests still pass.
+
+**Gates:** lint 0, pvp-wire-sim 102/102, deploy smoke OK (catches any broken import chain).
+
 ## 1.7.752 — 2026-05-26
 
 ### PvP rewrite P-6 — client viewer module (state mirror)

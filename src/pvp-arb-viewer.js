@@ -165,6 +165,21 @@ function _applyDelta(d) {
   }
 }
 
+// v1.7.753 P-6b — post-update hook for the render adapter.
+// `src/pvp-arb-adapter.js` registers here; the viewer fires this
+// after every handler so the adapter can mirror state into the
+// legacy pvpSt/ps/battleSt bags that the existing draw code reads.
+// Null when no adapter registered (no render integration); safe to call.
+let _onUpdated = null;
+export function setArbViewUpdated(fn) {
+  _onUpdated = typeof fn === 'function' ? fn : null;
+}
+function _fireUpdated() {
+  if (!_onUpdated) return;
+  try { _onUpdated(); }
+  catch (e) { console.warn('[pvp-arb-view] updated handler error', e); }
+}
+
 // Walk every delta in a `pvp-turn` frame. Each delta mutates state
 // in-order — order matters for the animation queue (e.g. attack then
 // death must render in sequence) and for end-of-round status ticks.
@@ -199,10 +214,12 @@ function _applyTurn(msg) {
 
 setNetPvpArbStartHandler((msg) => {
   _seedFromStart(msg);
+  _fireUpdated();
 });
 
 setNetPvpArbTurnHandler((msg) => {
   _applyTurn(msg);
+  _fireUpdated();
 });
 
 setNetPvpArbStateResyncHandler((msg) => {
@@ -220,6 +237,7 @@ setNetPvpArbStateResyncHandler((msg) => {
       arbViewSt.pendingDeltas.push(d);
     }
   }
+  _fireUpdated();
 });
 
 setNetPvpArbCancelHandler((msg) => {
@@ -228,6 +246,7 @@ setNetPvpArbCancelHandler((msg) => {
   // Don't clear combatants — render layer may want to draw the cancel
   // banner over the existing battle scene. Caller can call clearArbView()
   // when teardown is complete.
+  _fireUpdated();
 });
 
 // ── Public API ────────────────────────────────────────────────────────────

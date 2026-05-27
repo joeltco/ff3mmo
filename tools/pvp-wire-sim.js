@@ -40,6 +40,11 @@ import {
   _testResetView  as arbViewReset,
   drainPendingDeltas, isMyTurn,
 } from '../src/pvp-arb-viewer.js';
+// v1.7.753 P-6b adapter not importable from wire-sim — it pulls in
+// pvp.js which pulls ui-state.js + audio modules that reference
+// browser-only APIs (window, document, Audio). The adapter's shape
+// mapping is straightforward; production validation happens via the
+// live game smoke test once PVP_ARBITER flips on.
 // calcDamage / rollHits / rollInitiative are already imported at line 24
 // (Suite 1 RNG determinism tests). Reuse those for the P-3 parity tests.
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
