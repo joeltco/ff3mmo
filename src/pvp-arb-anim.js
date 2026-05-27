@@ -34,11 +34,12 @@
 
 import { PVP_ARBITER } from './net.js';
 import { arbViewSt, drainPendingDeltas } from './pvp-arb-viewer.js';
-import { pvpSt } from './pvp.js';
+import { pvpSt, resetPVPState } from './pvp.js';
 import { setEnemyDmgNum, setPlayerDamageNum, setSwDmgNum, createDmg, createMiss } from './damage-numbers.js';
 import { BATTLE_SHAKE_MS, battleSt } from './battle-state.js';
 import { queueBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
+import { playTrack, TRACKS } from './music.js';
 
 // ── Per-delta dwell times ─────────────────────────────────────────────────
 // Each kind plays for a fixed window before the driver pops the next
@@ -191,6 +192,24 @@ export function tickArbAnim(dt) {
     _active = null;
   }
   if (arbViewSt.pendingDeltas.length === 0) {
+    // v1.7.766 — battle ended (victor delta arrived). Tear down the
+    // legacy PvP scene so the user returns to the overworld instead of
+    // sitting on a stale menu. Without this, the user picks Fight again
+    // on the "ended" scene → arbViewSt.inBattle is false → arbiter
+    // guards in _updatePVPMenuConfirm + _buildAndProcessNextTurn fail
+    // → legacy null-deref → crash. Mirrors what enemy-box-close +
+    // resetPVPState do for the legacy lockstep path. Reset
+    // _lastReturnedTurnIdx so a new battle starts clean.
+    if (arbViewSt.victor && pvpSt.isPVPBattle) {
+      resetPVPState();
+      battleSt.battleState = 'none';
+      battleSt.battleTimer = 0;
+      _lastReturnedTurnIdx = 0;
+      // Restore overworld music — bootstrap paused it on battle entry.
+      // playTrack with the same map track is the cheap restart.
+      playTrack(TRACKS.WORLD_MAP);
+      return;
+    }
     // v1.7.755 P-7 — queue drained. If P-7's input rewire left
     // battleState parked in 'confirm-pause' (player just committed
     // and we wired up no local turn dispatch), and the server has
