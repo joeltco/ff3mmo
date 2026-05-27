@@ -16,7 +16,12 @@ import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
-import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getOnlineAtLocation, sendNetInvEvent } from './net.js';
+import { sendNetPVPAction, sendNetPVPAllyJoin, getOnlinePlayerByName, getOnlineAtLocation, sendNetInvEvent,
+  sendNetPvpIntent, PVP_ARBITER } from './net.js';
+// v1.7.755 P-7 — arbiter intent emitter. When PVP_ARBITER is on, the
+// player's menu commit routes here instead of the lockstep _emitWirePVPAction
+// so the server (not the local engine) drives the next turn.
+import { arbViewSt } from './pvp-arb-viewer.js';
 import { rand } from './rng.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
@@ -422,6 +427,21 @@ export function tryJoinPlayerAlly(opts) {
 function _updateBattleMenuConfirm() {
   if (battleSt.battleState === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
+      // v1.7.755 P-7 — arbiter path takes the menu commit FIRST so we
+      // don't pre-roll legacy lockstep values (server is sole roller)
+      // and don't dispatch a local turn order (server resolves round).
+      // Returning early leaves battleState='confirm-pause'; the anim
+      // driver (P-6c) transitions back to 'menu' after the server's
+      // pvp-turn frame's deltas drain. Gated so the legacy path below
+      // is untouched in production (flag false).
+      if (PVP_ARBITER && pvpSt.isPVPBattle && inputSt.playerActionPending) {
+        _emitWirePVPArbAction(inputSt.playerActionPending);
+        inputSt.playerActionPending = null;
+        // Stay in confirm-pause; the pvp-turn frame + tickArbAnim
+        // will return us to 'menu'. Don't reset battleTimer — the
+        // pause prevents repeat commits from a bouncing input.
+        return true;
+      }
       // Pre-roll magic damage/heal BEFORE wire emit so the wire payload
       // carries the rolled value. Without this, receivers apply 0 (no
       // wire field → `action.healAmount | 0 = 0`) while sender's
@@ -448,6 +468,47 @@ function _updateBattleMenuConfirm() {
     }
   } else { return false; }
   return true;
+}
+
+// v1.7.755 P-7 — translate a legacy `playerActionPending` into the
+// arbiter wire shape and emit one pvp-intent. Cell-id mapping uses
+// arbViewSt.yourSide:
+//   yourSide='A': me=0..3, opp=4..7
+//   yourSide='B': me=4..7, opp=0..3
+// pending.command mapping:
+//   'defend' → kind:'defend'        (no target)
+//   'run'    → kind:'flee'          (server allowlists 'flee', not 'run')
+//   'fight'  → kind:'attack',       targetCellId from pvpPlayerTargetIdx
+//   'magic'  → kind:'magic',        spellId + targetCellId from pending.target
+//   'item'   → kind:'item',         itemId  + targetCellId from pending.target
+// Damage/heal pre-rolls are dropped — server is sole roller (P-3+P-4).
+function _emitWirePVPArbAction(pending) {
+  if (!arbViewSt.inBattle || !arbViewSt.battleId) return;
+  const cmd = pending && pending.command;
+  const baseMe  = arbViewSt.yourSide === 'A' ? 0 : 4;
+  const baseOpp = arbViewSt.yourSide === 'A' ? 4 : 0;
+  const args = { battleId: arbViewSt.battleId, turnIdx: arbViewSt.turnIdx };
+  if (cmd === 'defend') { sendNetPvpIntent({ ...args, kind: 'defend' }); return; }
+  if (cmd === 'run')    { sendNetPvpIntent({ ...args, kind: 'flee'   }); return; }
+  if (cmd === 'fight') {
+    const tgtIdx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
+    sendNetPvpIntent({ ...args, kind: 'attack', targetCellId: baseOpp + tgtIdx });
+    return;
+  }
+  if (cmd === 'magic' || cmd === 'item') {
+    const isSelf = pending.target === 'player' && (pending.allyIndex == null || pending.allyIndex < 0);
+    const isAlly = pending.target === 'player' && pending.allyIndex >= 0;
+    let targetCellId;
+    if (isSelf)      targetCellId = baseMe + 0;
+    else if (isAlly) targetCellId = baseMe + (pending.allyIndex | 0) + 1;
+    else             targetCellId = baseOpp + (typeof pending.target === 'number' ? pending.target : 0);
+    if (cmd === 'magic') {
+      sendNetPvpIntent({ ...args, kind: 'magic', spellId: pending.spellId, targetCellId });
+    } else {
+      sendNetPvpIntent({ ...args, kind: 'item',  itemId:  pending.itemId,  targetCellId });
+    }
+    return;
+  }
 }
 
 

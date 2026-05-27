@@ -18,6 +18,37 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.755 — 2026-05-27
+
+### PvP rewrite P-7 — input rewire to sendNetPvpIntent
+
+The player's menu commit now routes to the arbiter (one `pvp-intent` per round) instead of the lockstep `pvp-action` relay when `PVP_ARBITER` is on. Local turn dispatch is skipped on the arbiter path — the server is sole resolver, and the round returns to the player via the next `pvp-turn` frame walked by P-6c's anim driver.
+
+**What landed:**
+- `src/battle-update.js` — new `_emitWirePVPArbAction(pending)` helper. Translates `pending.command` + `pending.target` into the arbiter wire shape:
+  - `defend` → `{kind: 'defend'}`
+  - `run` → `{kind: 'flee'}` (server allowlists 'flee', not 'run')
+  - `fight` → `{kind: 'attack', targetCellId}` (cell ID from `pvpPlayerTargetIdx` + your-side base)
+  - `magic` → `{kind: 'magic', spellId, targetCellId}` (handles self / ally / enemy targets)
+  - `item` → `{kind: 'item', itemId, targetCellId}`
+  - All pre-rolled damage / heal amounts dropped — server is sole roller.
+- `src/battle-update.js#_updateBattleMenuConfirm` — at the top of the post-pause commit path: if `PVP_ARBITER && pvpSt.isPVPBattle`, call the arbiter helper, clear `inputSt.playerActionPending`, return early. Legacy lockstep path below is untouched (flag off in production).
+- `src/pvp-arb-anim.js#tickArbAnim` — when the delta queue drains and `arbViewSt.nextActor` matches the player's cell, transitions `battleSt.battleState` from `'confirm-pause'` back to `'menu'`. Mirrors what the legacy `processNextTurn` does at end-of-round; without it the player would softlock in `confirm-pause` after submitting.
+
+**Cell-id math** (server is single source of truth via `arbViewSt.yourSide`):
+- `yourSide='A'` → me cells 0-3, opp cells 4-7
+- `yourSide='B'` → me cells 4-7, opp cells 0-3
+- Helper computes `baseMe` + `baseOpp` once, then maps `idx` offsets.
+
+**Known limitations** (deferred to P-9 prep):
+- Battle ENTRY is still missing. Wire-sim drives `pvp-arb-start` directly; production matchmaking (`pvp-search` → encounter hook) still creates legacy lockstep battles. P-9 wires `pvpArbCreate` into the encounter path when both flags are on.
+- After server-pvp-turn drains, the player gets `'menu'` even if it's NOT their turn (e.g. an ally is up). Need a `'waiting-for-opponent'` state for completeness. Minor — gated by P-9 anyway.
+- Magic / item intents will be no-op until P-4c server-side magic resolution lands. Player can still pick them; arbiter just logs `[pvp-arb] kind=magic not yet implemented; skipped`.
+
+**No production behavior change.** PVP_ARBITER still false; the legacy `_emitWirePVPAction` path runs unchanged. Wire-sim 102/102.
+
+**Gates:** lint 0, pvp-wire-sim 102/102, deploy smoke OK.
+
 ## 1.7.754 — 2026-05-27
 
 ### PvP rewrite P-6c — delta-driven animation driver (attack + death)

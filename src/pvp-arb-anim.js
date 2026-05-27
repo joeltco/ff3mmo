@@ -36,7 +36,7 @@ import { PVP_ARBITER } from './net.js';
 import { arbViewSt, drainPendingDeltas } from './pvp-arb-viewer.js';
 import { pvpSt } from './pvp.js';
 import { setEnemyDmgNum, setPlayerDamageNum, setSwDmgNum, createDmg, createMiss } from './damage-numbers.js';
-import { BATTLE_SHAKE_MS } from './battle-state.js';
+import { BATTLE_SHAKE_MS, battleSt } from './battle-state.js';
 
 // ── Per-delta dwell times ─────────────────────────────────────────────────
 // Each kind plays for a fixed window before the driver pops the next
@@ -163,7 +163,23 @@ export function tickArbAnim(dt) {
     if (_active.timer < _active.dwellMs) return;
     _active = null;
   }
-  if (arbViewSt.pendingDeltas.length === 0) return;
+  if (arbViewSt.pendingDeltas.length === 0) {
+    // v1.7.755 P-7 — queue drained. If P-7's input rewire left
+    // battleState parked in 'confirm-pause' (player just committed
+    // and we wired up no local turn dispatch), and the server has
+    // resolved the round (nextActor points back at us), drop the
+    // player into 'menu' so they can pick again. The legacy turn
+    // pump would do this via processNextTurn → battleState='menu';
+    // under the arbiter we do it ourselves once the deltas finish.
+    if (battleSt.battleState === 'confirm-pause'
+        && arbViewSt.inBattle
+        && arbViewSt.nextActor
+        && arbViewSt.nextActor.cellId === arbViewSt.yourCellId) {
+      battleSt.battleState = 'menu';
+      battleSt.battleTimer = 0;
+    }
+    return;
+  }
   // Drain one at a time so the next frame can play it. Don't
   // drainPendingDeltas() wholesale — that would discard the queue
   // before we play it.
