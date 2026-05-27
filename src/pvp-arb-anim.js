@@ -59,6 +59,15 @@ const _DEFAULT_DWELL_MS = 250;
 // `_active` is the currently-playing delta + a countdown timer. `null`
 // when idle (queue empty or waiting for next pvp-turn).
 let _active = null;       // { delta, timer, dwellMs }
+// v1.7.764 — last arbViewSt.turnIdx we've already returned to 'menu-open'
+// for. Used to gate the "queue drained → back to menu" transition: it
+// must only fire AFTER a new pvp-turn has actually been processed
+// (turnIdx > _lastReturnedTurnIdx). Without this, after the player
+// commits Fight → 'confirm-pause', the anim driver bounced them
+// straight back to 'menu-open' the next frame because nextActor still
+// pointed at them from the previous round — soft-loop where the
+// cursor flickered between Fight and the target cursor.
+let _lastReturnedTurnIdx = 0;
 
 // ── Per-kind visual application ───────────────────────────────────────────
 // Convert a delta's target cellId into the right damage-num slot +
@@ -192,13 +201,20 @@ export function tickArbAnim(dt) {
     if (battleSt.battleState === 'confirm-pause'
         && arbViewSt.inBattle
         && arbViewSt.nextActor
-        && arbViewSt.nextActor.cellId === arbViewSt.yourCellId) {
+        && arbViewSt.nextActor.cellId === arbViewSt.yourCellId
+        // v1.7.764 — only transition if a NEW pvp-turn has been resolved
+        // since the last time we returned to menu. Otherwise the very
+        // first frame after the user submits intent (state='confirm-pause',
+        // nextActor still pointing at us from the prior round) would
+        // bump us back to 'menu-open' before the server even responds.
+        && arbViewSt.turnIdx > _lastReturnedTurnIdx) {
       // v1.7.763 — must be 'menu-open' (not 'menu'). 'menu-open' is the
       // state the input handler waits for (input-handler.js line 749);
       // 'menu' isn't a real state and silently dropped input, leaving
       // the player unable to commit a second action.
       battleSt.battleState = 'menu-open';
       battleSt.battleTimer = 0;
+      _lastReturnedTurnIdx = arbViewSt.turnIdx;
     }
     return;
   }
@@ -213,6 +229,7 @@ export function tickArbAnim(dt) {
 // stale `_active` doesn't bleed into the next battle.
 export function resetArbAnim() {
   _active = null;
+  _lastReturnedTurnIdx = 0;
 }
 
 // ── Test exports (wire-sim only) ──────────────────────────────────────
