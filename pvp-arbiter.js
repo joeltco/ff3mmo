@@ -29,6 +29,30 @@ import { rollHits, rollInitiative, summarizeHits } from './src/battle-math.js';
 import { processTurnStart } from './src/status-effects.js';
 import { pickWeakestEnemy, pickRandomLivingTarget } from './src/combatant-ai.js';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+// Decode an NES-encoded name (AWJ font byte atlas) back to a plain JS
+// string. Mirrors `_nesNameToString` in src/text-utils.js but Node-clean
+// (no canvas imports). Tolerates string input (passes through) and
+// undefined/empty (returns ''). v1.7.760 — fixes the v1.7.758 PvP arb
+// regression where the client crashed in `_nameToBytes(name)` because
+// the wire frame shipped raw bytes from the save row.
+function _decodeNesName(input) {
+  if (input == null) return '';
+  if (typeof input === 'string') return input;
+  // JSON-serialized Uint8Array shows up as a plain Array of numbers.
+  if (!Array.isArray(input) && !ArrayBuffer.isView(input)) return '';
+  let s = '';
+  for (const b of input) {
+    if (b >= 0xA4 && b <= 0xBD) s += String.fromCharCode(b - 0xA4 + 97);  // a-z
+    else if (b >= 0x8A && b <= 0xA3) s += String.fromCharCode(b - 0x8A + 65); // A-Z
+    else if (b >= 0x80 && b <= 0x89) s += String.fromCharCode(b - 0x80 + 48); // 0-9
+    // Skip everything else — bare-letters-only names match what the
+    // title-screen name-entry UI accepts. Trailing pad bytes (0xFF) drop.
+  }
+  return s;
+}
+
 // ── Configuration ──────────────────────────────────────────────────────────
 
 // Idle TTL for ended-or-stalled battles. P-1 ships with 5min — once the
@@ -100,10 +124,17 @@ function buildCombatantFromUser(userId, slot) {
     level: (save.stats?.level | 0) || 1,
   };
   const realized = computeRealizedStats({ stats, jobIdx, jobLevel, equipped });
+  // v1.7.760 — `save.name` is stored as NES-encoded bytes (Uint8Array
+  // serialized as Array of numbers in JSON) by save-state.js line 84.
+  // The wire frame ships strings — legacy `pvp-match` does the same via
+  // `_normalizeProfileField`. Decode here so the client receives a
+  // plain string and `_nameToBytes(name)` doesn't blow up at render.
+  // Codec mirrors `_nesNameToString` in text-utils.js (AWJ font atlas).
+  const nameStr = _decodeNesName(save.name) || ('user-' + userId);
   return {
     // Wire shape — matches the `update` profile + `generateAllyStats`
     // fast-path consumer fields exactly.
-    name:    save.name || ('user-' + userId),
+    name:    nameStr,
     userId,
     jobIdx,
     palIdx:  save.palIdx | 0,
