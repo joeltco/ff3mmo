@@ -27,6 +27,7 @@ import { computeRealizedStats } from './src/realized-stats.js';
 import { createRng } from './src/rng.js';
 import { rollHits, rollInitiative, summarizeHits } from './src/battle-math.js';
 import { processTurnStart } from './src/status-effects.js';
+import { pickWeakestEnemy, pickRandomLivingTarget } from './src/combatant-ai.js';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -140,16 +141,46 @@ function buildCombatantFromUser(userId, slot) {
   };
 }
 
-// ── AI intent picker (P-4 stub; P-5 replaces) ─────────────────────────────
+// ── AI intent picker (v1.7.751 P-5) ──────────────────────────────────────
 //
-// P-4 ships a minimal AI: pick a random alive enemy and attack. P-5 ports
-// the real `_pickAllyAction` logic from `battle-ally.js` (heal-when-low,
-// magic priority, target-selection by lowest HP, etc.).
+// Smart targeting + panic-defend gate. Replaces P-4's random-target stub.
+//
+// Decision tree:
+//   1. Panic defend — if self HP <= 20%, defend (the actor's incoming
+//      hit gets halved; the next turn the defender may have healed).
+//   2. Smart attack — pick the LOWEST-HP alive enemy ("finish the
+//      wounded"). Ties broken stably by cell order.
+//   3. Fallback defend — if no enemies alive (battle is about to end
+//      anyway), defend.
+//
+// Magic + items deferred to P-5b/c (lands after P-4c implements magic
+// intents on the server). Until then the AI has no `magic` / `item`
+// branch — choosing them would only waste turns under P-4's no-op
+// stub, so the AI stays attack-only. Doesn't make the AI worse than
+// P-4 — it just defers the smart-spell flow until magic actually
+// resolves.
+//
+// Random-target fallback still useful occasionally (anti-predictability
+// for human PvP) — gated to 20% of attack picks via the per-battle RNG.
+const _AI_PANIC_HP_PCT = 0.20;
+const _AI_RANDOM_TARGET_PCT = 0.20;
+
 function _pickAiIntent(actor, battle) {
+  // Panic defend.
+  if (actor.maxHP > 0 && actor.hp / actor.maxHP <= _AI_PANIC_HP_PCT) {
+    return { kind: 'defend' };
+  }
+  // Smart enemy pick.
   const enemySide = actor.side === 'A' ? 'B' : 'A';
   const enemies = battle.combatants.filter(c => c.side === enemySide && c.hp > 0);
   if (enemies.length === 0) return { kind: 'defend' };
-  const target = enemies[Math.floor(battle.rng.rand() * enemies.length)];
+  // 20% of the time, pick a random alive enemy instead of always the
+  // weakest — keeps human opponents guessing about which mate gets
+  // focused. Uses the per-battle RNG so behavior is reproducible.
+  const useRandom = battle.rng.rand() < _AI_RANDOM_TARGET_PCT;
+  const target = useRandom
+    ? pickRandomLivingTarget(enemies, { rand: battle.rng.rand })
+    : pickWeakestEnemy(enemies);
   return { kind: 'attack', targetCellId: target.cellId };
 }
 

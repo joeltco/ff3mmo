@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.751 — 2026-05-26
+
+### PvP rewrite P-5 — smart server-side AI
+
+Replaces P-4's random-target stub with a smart picker. Two behaviors:
+
+**Panic defend** — actor below 20% HP returns `defend` intent regardless of enemy state. The defender's incoming hit gets halved (`defendHalve: true` on `rollHits`), buying a round to potentially recover.
+
+**Smart attack targeting** — pick the LOWEST-HP alive enemy ("finish the wounded"). Ties broken stably by cell order. 20% of attack picks fall through to `pickRandomLivingTarget` — keeps human opponents guessing about which AI mate gets focused this round. Anti-predictability without diluting the heuristic.
+
+**Magic + items deferred** — AI doesn't pick `magic` or `item` kinds yet. Reason: P-4 still treats those intents as no-op stubs. If the AI chose them, the actor would waste their turn. Smart-magic AI lands in P-5b after P-4c implements magic intents on the server.
+
+**Implementation:**
+- `combatant-ai.js` — new `pickWeakestEnemy(enemies)` export (pure, takes opaque entries with `{hp, cellId}`). `pickRandomLivingTarget`, `pickOffensiveSpell`, `rollOffensiveDamage`, `rollCureAmount`, `rollActivation` all accept `opts.rand` for per-battle RNG injection (P-3 pattern). Singleton default preserved — every existing client caller unchanged.
+- `pvp-arbiter.js#_pickAiIntent(actor, battle)` rewritten: panic-defend gate at 20% HP, then 80% smart pick (weakest) / 20% random pick (`pickRandomLivingTarget` via `battle.rng.rand`), fall back to defend when no enemies alive.
+- 3 new wire-sim tests: `pickWeakestEnemy` correctness, `pickRandomLivingTarget opts.rand` parity, AI partymate fires attack delta in a 2-vs-1 battle. The full statistical "AI prefers weakest across many rounds" assertion is deferred — RNG variance + multi-round attrition makes it flaky without disabling the 20% random gate.
+
+**No production behavior change.** PVP_ARBITER still false; AI runs only inside the arbiter's resolveTurn loop.
+
+**Gates:** lint 0, pvp-wire-sim 98/98 (was 95; +3 P-5 tests).
+
 ## 1.7.750 — 2026-05-26
 
 ### PvP rewrite P-4 — turn resolution loop (physical attacks)

@@ -1965,17 +1965,24 @@ async function suiteWire() {
     const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
     A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7505 }));
     const start = await aStart;
-    // Round 1: A attacks B; with B at 1 HP and A's Longsword, A's
-    // attack KOs B → end delta with victor: 'A'.
-    const aTurn = once(A, m => m.type === 'pvp-turn' && m.deltas.some(d => d.kind === 'end'), 1500);
-    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 4 }));
-    B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'defend' }));
-    const t = await aTurn;
-    const endDelta = t.deltas.find(d => d.kind === 'end');
-    assertTrue(!!endDelta, 'end delta present');
+    // With B at 1 HP and A's Longsword, a single landed hit KOs B.
+    // A's hit rate is ~75-80% per weapon — occasionally A misses on
+    // round 1 and the battle continues. Loop up to 5 rounds and break
+    // on the first turn that carries an end delta. Far more reliable
+    // than gambling on a single hit roll.
+    let endFrame = null;
+    for (let round = 0; round < 5; round++) {
+      const turnFrame = once(A, m => m.type === 'pvp-turn', 1500);
+      A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: round, kind: 'attack', targetCellId: 4 }));
+      B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: round, kind: 'defend' }));
+      const t = await turnFrame;
+      if (t.deltas.some(d => d.kind === 'end')) { endFrame = t; break; }
+    }
+    assertTrue(!!endFrame, 'battle ended within 5 rounds');
+    const endDelta = endFrame.deltas.find(d => d.kind === 'end');
     assertEqual(endDelta.victor, 'A', 'A wins on B KO');
-    assertEqual(t.nextActor, null, 'nextActor cleared on end');
-    const deathDelta = t.deltas.find(d => d.kind === 'death');
+    assertEqual(endFrame.nextActor, null, 'nextActor cleared on end');
+    const deathDelta = endFrame.deltas.find(d => d.kind === 'death');
     assertTrue(!!deathDelta, 'death delta for KO');
     assertEqual(deathDelta.actorCellId, 4, 'B main cell died');
     A.close(); B.close();
@@ -2005,6 +2012,77 @@ async function suiteWire() {
     assertEqual(aAttackDeltas.length, 0, 'A did NOT attack (latest intent was defend)');
     const aDefendDelta = t.deltas.find(d => d.kind === 'state' && d.actorCellId === 0 && d.change === 'defend-on');
     assertTrue(!!aDefendDelta, 'A defended (latest intent wins)');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.751 P-5 — smart AI (target lowest-HP, panic defend) ───────────
+  // Unit + integration coverage. Multi-cell battles (1+3 vs 1+3) are
+  // where the AI's smart targeting actually fires, so we set up real
+  // parties via _testHooks.state.partyMemberships + seeded saves for
+  // each mate.
+
+  // Unit — picker correctness.
+  test('v1.7.751 P-5 pickWeakestEnemy picks lowest hp alive', async () => {
+    const { pickWeakestEnemy } = await import('../src/combatant-ai.js');
+    const enemies = [
+      { hp: 50, cellId: 4 },
+      { hp: 0,  cellId: 5 },  // dead — skipped
+      { hp: 10, cellId: 6 },  // weakest alive
+      { hp: 99, cellId: 7 },
+    ];
+    const pick = pickWeakestEnemy(enemies);
+    assertEqual(pick.cellId, 6, 'weakest alive is cell 6');
+    assertEqual(pickWeakestEnemy([{ hp: 0 }, { hp: 0 }]), null, 'no alive → null');
+    assertEqual(pickWeakestEnemy([]), null, 'empty → null');
+  });
+
+  // Unit — per-battle RNG injection on the helpers.
+  test('v1.7.751 P-5 pickRandomLivingTarget accepts opts.rand', async () => {
+    const { pickRandomLivingTarget } = await import('../src/combatant-ai.js');
+    const enemies = [
+      { hp: 10, id: 'a' }, { hp: 20, id: 'b' }, { hp: 30, id: 'c' },
+    ];
+    const rngA = createRng(99);
+    const rngB = createRng(99);
+    for (let i = 0; i < 5; i++) {
+      const pa = pickRandomLivingTarget(enemies, { rand: rngA.rand });
+      const pb = pickRandomLivingTarget(enemies, { rand: rngB.rand });
+      assertEqual(pa.id, pb.id, 'pick[' + i + '] parity');
+    }
+  });
+
+  // Integration — partymate AI cells spawn into the battle when their
+  // userId is in _partyMemberships. Verifies the smart picker is
+  // actually wired into resolveTurn (not just defined as an export).
+  // Asserts only the AI mate fires its first attack on a target —
+  // the WEAKEST-vs-RANDOM picking is covered by the pure unit tests
+  // above; integration test stays deterministic by checking that an
+  // AI attack delta appears at all for the partymate's cellId.
+  await asyncTest('v1.7.751 P-5 AI partymate fires an attack delta on round 1', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(7510); _testSeedSave(7510, 0);  // A main (human)
+    _testEnsureUser(7511); _testSeedSave(7511, 0);  // A's mate (AI)
+    _testEnsureUser(7512); _testSeedSave(7512, 0);  // B main (human)
+    // No B mate — just 2-vs-1. Tests AI fires; doesn't risk the multi-
+    // round attrition that masks intent rejection from dead humans.
+    _testHooks.state.partyMemberships.set(7511, 7510);
+    const A = await connectClient(port, 7510, { ...baseProfile, name: 'P5A', slot: 0 });
+    const B = await connectClient(port, 7512, { ...targetProfile, name: 'P5B', slot: 0 });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7512 }));
+    const start = await aStart;
+    assertEqual(start.sides.A.length, 2, 'side A has 2 combatants');
+    assertEqual(start.sides.B.length, 1, 'side B has 1 combatant');
+    // Both humans submit defend. AI mate at cellId 1 should still
+    // emit an attack delta (defends don't suppress AI auto-pick).
+    const turnFrame = once(A, m => m.type === 'pvp-turn', 1200);
+    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'defend' }));
+    B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'defend' }));
+    const t = await turnFrame;
+    const aiAttack = t.deltas.find(d => d.kind === 'attack' && d.actorCellId === 1);
+    assertTrue(!!aiAttack, 'AI mate (cell 1) attacked on round 1');
+    assertEqual(aiAttack.targetCellId, 4, 'AI targets B main (only alive enemy)');
     A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });

@@ -87,42 +87,62 @@ export function pickPoisonedTarget(team) {
 }
 
 // Pick a random living target from `enemies`. Returns the entry or null.
-export function pickRandomLivingTarget(enemies) {
+// v1.7.751 P-5 — `opts.rand` lets the PvP arbiter inject per-battle RNG.
+// Defaults to the singleton — existing client callers unchanged.
+export function pickRandomLivingTarget(enemies, opts = {}) {
+  const rng = opts.rand || rand;
   const living = enemies.filter(e => e && (e.hp || 0) > 0);
   if (living.length === 0) return null;
-  return living[Math.floor(rand() * living.length)];
+  return living[Math.floor(rng() * living.length)];
 }
 
 // Random offensive spell from the caster's known set, or null if none.
-export function pickOffensiveSpell(caster) {
+export function pickOffensiveSpell(caster, opts = {}) {
+  const rng = opts.rand || rand;
   if (!Array.isArray(caster?.knownSpells)) return null;
   const pool = caster.knownSpells.filter(s => OFFENSIVE_SPELLS.includes(s));
   if (pool.length === 0) return null;
-  return pool[Math.floor(rand() * pool.length)];
+  return pool[Math.floor(rng() * pool.length)];
 }
 
 // Damage roll for offensive cast — INT-based, NES FF3 black-magic formula:
 //   atk = floor(int/2) + spell.power
 //   dmg = atk + rand(0..floor(atk/2))
 // Sleep (power=0) returns 0; status spells have no damage roll.
-export function rollOffensiveDamage(caster, spell) {
+export function rollOffensiveDamage(caster, spell, opts = {}) {
+  const rng = opts.rand || rand;
   if (!spell || spell.power <= 0) return 0;
   const stat = (caster && caster.int) || 5;
   const baseAtk = Math.floor(stat / 2) + spell.power;
-  return Math.max(1, baseAtk + Math.floor(rand() * (Math.floor(baseAtk / 2) + 1)));
+  return Math.max(1, baseAtk + Math.floor(rng() * (Math.floor(baseAtk / 2) + 1)));
 }
 
 // Heal roll for Cure — MND-based, same formula:
 //   atk = floor(mnd/2) + 42 (Cure power)
 //   heal = atk + rand(0..floor(atk/2))
-export function rollCureAmount(caster) {
+export function rollCureAmount(caster, opts = {}) {
+  const rng = opts.rand || rand;
   const mnd = (caster && caster.mnd) || 5;
   const atk = Math.floor(mnd / 2) + 42;
-  return atk + Math.floor(rand() * (Math.floor(atk / 2) + 1));
+  return atk + Math.floor(rng() * (Math.floor(atk / 2) + 1));
 }
 
 // Activation roll — `rand() < pct`. Wraps the gates so a future "raise
 // aggression in low-HP boss fight" tweak lands in one place.
-export function rollActivation(pct) {
-  return rand() < pct;
+export function rollActivation(pct, opts = {}) {
+  const rng = opts.rand || rand;
+  return rng() < pct;
+}
+
+// v1.7.751 P-5 — pick the lowest-HP alive enemy. Used for "finish the
+// wounded one" smart-target heuristic on the PvP arbiter's physical
+// attacks. Ties broken by `enemies` array order (stable). Returns null
+// if no enemies alive.
+export function pickWeakestEnemy(enemies) {
+  let best = null;
+  for (const e of enemies) {
+    if (!e || (e.hp || 0) <= 0) continue;
+    if (!best || (e.hp | 0) < (best.hp | 0)) best = e;
+  }
+  return best;
 }
