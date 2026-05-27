@@ -437,18 +437,22 @@ function _updatePVPMenuConfirm() {
   const bs = battleSt.battleState;
   if (bs === 'confirm-pause') {
     if (battleSt.battleTimer >= 150) {
-      // v1.7.761 P-7 (corrected) — arbiter path takes the commit FIRST.
-      // updatePVPBattle is the PvP-specific dispatcher, so the matching
-      // arbiter fork in battle-update.js#_updateBattleMenuConfirm is
-      // UNREACHABLE in PvP. Without this branch the legacy engine ran
-      // _buildAndProcessNextTurn → local opp turn → undefined damage →
-      // drawImage explodes (v1.7.760 live-smoke bug).
-      if (PVP_ARBITER && arbViewSt.inBattle && inputSt.playerActionPending) {
-        _emitArbIntentFromPending(inputSt.playerActionPending);
-        inputSt.playerActionPending = null;
+      // v1.7.762 P-7 (corrected x2) — arbiter ALWAYS short-circuits when
+      // the battle's live, with or without playerActionPending. Pre-fix
+      // (v1.7.761) the guard required pending to be non-null; after the
+      // intent emit cleared pending, the NEXT tick saw confirm-pause +
+      // pending=null and fell through to the legacy path's
+      // `_buildAndProcessNextTurn()` which threw on
+      // `inputSt.playerActionPending.command`. Game loop died, player
+      // sprite + HUD vanished on phone 1.
+      if (PVP_ARBITER && arbViewSt.inBattle) {
+        if (inputSt.playerActionPending) {
+          _emitArbIntentFromPending(inputSt.playerActionPending);
+          inputSt.playerActionPending = null;
+        }
         // Stay in confirm-pause. The anim driver (pvp-arb-anim.js)
         // transitions back to 'menu' once the server's pvp-turn deltas
-        // drain. Don't dispatch a local turn — server resolves.
+        // drain. NEVER dispatch a local turn — server resolves.
         return true;
       }
       // Wire-PvP — relay the local player's confirmed action to the partner
