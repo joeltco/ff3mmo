@@ -29,6 +29,17 @@ import {
 import { generateAllyStats } from '../src/data/players.js';
 import { createRng } from '../src/rng.js';
 import { _testGetBattleRng as pvpArbGetBattleRng } from '../pvp-arbiter.js';
+// v1.7.752 P-6 — direct test hooks into the client viewer module, so
+// wire-sim can feed synthetic frames through the same handlers that
+// the live net.js dispatch invokes.
+import {
+  arbViewSt,
+  _testApplyStart as arbViewApplyStart,
+  _testApplyTurn  as arbViewApplyTurn,
+  _testApplyCancel as arbViewApplyCancel,
+  _testResetView  as arbViewReset,
+  drainPendingDeltas, isMyTurn,
+} from '../src/pvp-arb-viewer.js';
 // calcDamage / rollHits / rollInitiative are already imported at line 24
 // (Suite 1 RNG determinism tests). Reuse those for the P-3 parity tests.
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
@@ -2085,6 +2096,142 @@ async function suiteWire() {
     assertEqual(aiAttack.targetCellId, 4, 'AI targets B main (only alive enemy)');
     A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.752 P-6 — client viewer module (state mirroring) ──────────────
+  // The viewer consumes pvp-battle-start + pvp-turn + pvp-cancel +
+  // pvp-state-resync, mutates arbViewSt by walking deltas. Tests
+  // feed the SAME frames the arbiter ships at the wire layer; the
+  // viewer state must match a hand-computed expected outcome.
+  await asyncTest('v1.7.752 P-6 viewer mirrors a full battle from real arbiter frames', async () => {
+    _testHooks.resetState();
+    arbViewReset();
+    _testEnsureUser(7520); _testSeedSave(7520, 0);
+    _testEnsureUser(7521); _testSeedSave(7521, 0);
+    const A = await connectClient(port, 7520, { ...baseProfile, name: 'V6A', slot: 0 });
+    const B = await connectClient(port, 7521, { ...targetProfile, name: 'V6B', slot: 0 });
+    // Capture every PvP frame A receives + feed into viewer.
+    const captured = [];
+    A.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'pvp-battle-start') { captured.push(m); arbViewApplyStart(m); }
+      if (m.type === 'pvp-turn')         { captured.push(m); arbViewApplyTurn(m); }
+      if (m.type === 'pvp-cancel')       { captured.push(m); arbViewApplyCancel(m); }
+    });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7521 }));
+    const start = await aStart;
+    // Viewer's arbViewSt should now mirror the battle-start frame.
+    assertEqual(arbViewSt.battleId, start.battleId, 'viewer battleId from start');
+    assertEqual(arbViewSt.yourSide, 'A', 'viewer yourSide');
+    assertEqual(arbViewSt.yourCellId, 0, 'viewer yourCellId');
+    assertEqual(arbViewSt.combatants[0].userId, 7520, 'viewer cell 0 = A');
+    assertEqual(arbViewSt.combatants[4].userId, 7521, 'viewer cell 4 = B');
+    assertEqual(arbViewSt.inBattle, true, 'viewer inBattle');
+    // Run one round of attacks. Viewer's hp tracking must converge to
+    // server's hp tracking — verified by comparing post-turn HPs to
+    // the deltas the server emitted (which the viewer also received).
+    const aHpBefore = arbViewSt.combatants[0].hp;
+    const bHpBefore = arbViewSt.combatants[4].hp;
+    const aTurn = once(A, m => m.type === 'pvp-turn', 1200);
+    A.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 4 }));
+    B.send(JSON.stringify({ type: 'pvp-intent', battleId: start.battleId, turnIdx: 0, kind: 'attack', targetCellId: 0 }));
+    const turn = await aTurn;
+    // Find each side's attack delta — viewer should have applied them.
+    const aAttack = turn.deltas.find(d => d.kind === 'attack' && d.actorCellId === 0);
+    const bAttack = turn.deltas.find(d => d.kind === 'attack' && d.actorCellId === 4);
+    if (aAttack && aAttack.hit !== false) {
+      assertEqual(arbViewSt.combatants[4].hp, Math.max(0, bHpBefore - aAttack.damage),
+        'viewer hp[4] = bHpBefore - aDamage');
+    }
+    if (bAttack && bAttack.hit !== false) {
+      assertEqual(arbViewSt.combatants[0].hp, Math.max(0, aHpBefore - bAttack.damage),
+        'viewer hp[0] = aHpBefore - bDamage');
+    }
+    assertEqual(arbViewSt.turnIdx, 1, 'viewer turnIdx = 1');
+    assertEqual(arbViewSt.nextActor.cellId, 0, 'viewer nextActor.cellId is next alive human (A)');
+    A.close(); B.close();
+    arbViewReset();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.752 P-6 viewer clears inBattle on cancel frame', async () => {
+    _testHooks.resetState();
+    arbViewReset();
+    _testEnsureUser(7522); _testSeedSave(7522, 0);
+    _testEnsureUser(7523); _testSeedSave(7523, 0);
+    const A = await connectClient(port, 7522, { ...baseProfile, name: 'CancV6A', slot: 0 });
+    const B = await connectClient(port, 7523, { ...targetProfile, name: 'CancV6B', slot: 0 });
+    A.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'pvp-battle-start') arbViewApplyStart(m);
+      if (m.type === 'pvp-cancel')       arbViewApplyCancel(m);
+    });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7523 }));
+    await aStart;
+    assertEqual(arbViewSt.inBattle, true, 'inBattle after start');
+    // B disconnects — A should get pvp-cancel; viewer flips inBattle off.
+    B.close();
+    await new Promise(r => setTimeout(r, 120));
+    assertEqual(arbViewSt.inBattle, false, 'inBattle cleared on cancel');
+    assertEqual(arbViewSt.endReason, 'opponent-disconnect', 'endReason recorded');
+    A.close();
+    arbViewReset();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  test('v1.7.752 P-6 drainPendingDeltas pops + clears in order', () => {
+    arbViewReset();
+    // Pre-seed minimal state — turn handler needs a battleId to match.
+    arbViewApplyStart({
+      battleId: 1, yourSide: 'A', yourCellId: 0, rngSeed: 1,
+      sides: {
+        A: [{ cellId: 0, side: 'A', isHuman: true, userId: 1, hp: 30, maxHP: 30 }],
+        B: [{ cellId: 4, side: 'B', isHuman: true, userId: 2, hp: 30, maxHP: 30 }],
+      },
+    });
+    arbViewApplyTurn({
+      type: 'pvp-turn', battleId: 1, turnIdx: 1, nextActor: { cellId: 0, isHuman: true, userId: 1 },
+      deltas: [
+        { kind: 'attack', actorCellId: 0, targetCellId: 4, damage: 5, hit: true, crit: false },
+        { kind: 'attack', actorCellId: 4, targetCellId: 0, damage: 3, hit: true, crit: false },
+      ],
+    });
+    assertEqual(arbViewSt.pendingDeltas.length, 2, '2 deltas pending');
+    const drained = drainPendingDeltas();
+    assertEqual(drained.length, 2, 'drain returns both');
+    assertEqual(drained[0].actorCellId, 0, 'order preserved [0]');
+    assertEqual(drained[1].actorCellId, 4, 'order preserved [1]');
+    assertEqual(arbViewSt.pendingDeltas.length, 0, 'state cleared');
+    assertEqual(drainPendingDeltas().length, 0, 'second drain empty');
+    arbViewReset();
+  });
+
+  test('v1.7.752 P-6 isMyTurn gates on nextActor cellId match', () => {
+    arbViewReset();
+    arbViewApplyStart({
+      battleId: 1, yourSide: 'A', yourCellId: 0, rngSeed: 1,
+      sides: {
+        A: [{ cellId: 0, side: 'A', isHuman: true, userId: 1, hp: 30, maxHP: 30 }],
+        B: [{ cellId: 4, side: 'B', isHuman: true, userId: 2, hp: 30, maxHP: 30 }],
+      },
+    });
+    // nextActor not set after start — no turn resolved yet.
+    assertEqual(isMyTurn(), false, 'no nextActor → not my turn');
+    arbViewApplyTurn({
+      type: 'pvp-turn', battleId: 1, turnIdx: 1,
+      nextActor: { cellId: 0, isHuman: true, userId: 1 },
+      deltas: [],
+    });
+    assertEqual(isMyTurn(), true, 'nextActor cell 0 + yourCellId 0 → my turn');
+    arbViewApplyTurn({
+      type: 'pvp-turn', battleId: 1, turnIdx: 2,
+      nextActor: { cellId: 4, isHuman: true, userId: 2 },
+      deltas: [],
+    });
+    assertEqual(isMyTurn(), false, 'nextActor cell 4 → not my turn');
+    arbViewReset();
   });
 
   // ── P3 JWT rotation — refresh endpoint smoke ─────────────────────────────

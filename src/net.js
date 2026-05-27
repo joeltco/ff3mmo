@@ -41,6 +41,14 @@ let _onPVPFailed = null;     // ({reason}) → void — set via setNetPVPFailedH
 let _onPVPNone = null;       // () → void — set via setNetPVPEncounterNoneHandler
 let _onPVPAction = null;     // (action) → void — set via setNetPVPActionHandler
 let _onPVPAllyJoin = null;   // ({name}) → void — partner picked a fake-roster ally; mirror on our side
+// v1.7.752 P-6 — PvP server-arbiter wire handlers. Registered by
+// `src/pvp-arb-viewer.js` at module load. Pre-P-9 these don't fire in
+// production (PVP_ARBITER flag is false; server's pvp-arb-start handler
+// is reachable only from wire-sim).
+let _onPvpArbStart = null;       // (battle-start frame) → void
+let _onPvpArbTurn = null;        // (pvp-turn frame) → void
+let _onPvpArbCancel = null;      // ({battleId, reason}) → void
+let _onPvpArbStateResync = null; // (resync frame, same shape as start) → void
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
@@ -201,6 +209,41 @@ function _handleMessage(data) {
       if (_onPVPAllyJoin) {
         try { _onPVPAllyJoin(msg); }
         catch (e) { console.warn('[net] pvp-ally-join handler error', e); }
+      }
+      return;
+    case 'pvp-battle-start':
+      // v1.7.752 P-6 — server-arbitrated PvP battle start. Viewer module
+      // populates state from the combatant tables in msg.sides.
+      if (_onPvpArbStart) {
+        try { _onPvpArbStart(msg); }
+        catch (e) { console.warn('[net] pvp-battle-start handler error', e); }
+      }
+      return;
+    case 'pvp-turn':
+      // Per-round resolution from the arbiter. Viewer walks `msg.deltas`
+      // and mutates state; render layer (P-6b) reads pendingDeltas to
+      // queue animations.
+      if (_onPvpArbTurn) {
+        try { _onPvpArbTurn(msg); }
+        catch (e) { console.warn('[net] pvp-turn handler error', e); }
+      }
+      return;
+    case 'pvp-cancel':
+      // Battle ended unilaterally (opponent disconnect, server timeout).
+      // Distinct from the natural battle-end `kind:'end'` delta inside a
+      // pvp-turn frame — pvp-cancel means the battle never reaches end.
+      if (_onPvpArbCancel) {
+        try { _onPvpArbCancel(msg); }
+        catch (e) { console.warn('[net] pvp-cancel handler error', e); }
+      }
+      return;
+    case 'pvp-state-resync':
+      // Full wholesale snapshot from the server. Sent on hello when
+      // reconnecting mid-battle, or after an enforcement rejection.
+      // Same shape as pvp-battle-start + optional turnIdx + deltas.
+      if (_onPvpArbStateResync) {
+        try { _onPvpArbStateResync(msg); }
+        catch (e) { console.warn('[net] pvp-state-resync handler error', e); }
       }
       return;
     case 'party-invite-incoming':
@@ -568,6 +611,43 @@ export function sendNetPVPAllyJoin(profile) {
 
 export function setNetPVPAllyJoinHandler(fn) {
   _onPVPAllyJoin = typeof fn === 'function' ? fn : null;
+}
+
+// ── PvP arbiter (v1.7.752 P-6) ─────────────────────────────────────────
+// Wire-handler setters for the server-arbitrated PvP path. Registered
+// by `src/pvp-arb-viewer.js` at module load. See `docs/PVP-REWRITE-PLAN.md`
+// for the full wire contract.
+export function setNetPvpArbStartHandler(fn) {
+  _onPvpArbStart = typeof fn === 'function' ? fn : null;
+}
+export function setNetPvpArbTurnHandler(fn) {
+  _onPvpArbTurn = typeof fn === 'function' ? fn : null;
+}
+export function setNetPvpArbCancelHandler(fn) {
+  _onPvpArbCancel = typeof fn === 'function' ? fn : null;
+}
+export function setNetPvpArbStateResyncHandler(fn) {
+  _onPvpArbStateResync = typeof fn === 'function' ? fn : null;
+}
+
+// Submit one intent for the current round. Called by P-7's input rewire
+// when the player picks attack/magic/item/defend from the action menu.
+// Fire-and-forget — server validates (battleId match, turnIdx match,
+// kind allowlist, target alive). Rejections log server-side; the client
+// retries or gives up. Successful intent contributes to the round; when
+// all alive humans have submitted, server resolves + broadcasts pvp-turn.
+export function sendNetPvpIntent({ battleId, turnIdx, kind, targetCellId, spellId, itemId }) {
+  if (!_helloed) return false;
+  const payload = {
+    type: 'pvp-intent',
+    battleId: battleId | 0,
+    turnIdx:  turnIdx | 0,
+    kind: String(kind || ''),
+  };
+  if (targetCellId != null) payload.targetCellId = targetCellId | 0;
+  if (spellId != null)      payload.spellId      = spellId | 0;
+  if (itemId != null)       payload.itemId       = itemId | 0;
+  return _send(payload);
 }
 
 // Wire-give — sender used a heal / cure item on a roster target. Server

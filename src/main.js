@@ -28,6 +28,12 @@ import { initPVPSearch } from './pvp-search.js';
 import { shopSt } from './shop.js';
 import { setPlayerSprite } from './player-sprite.js';
 import { startPVPBattle } from './pvp.js';
+// v1.7.752 P-6 — server-arbitrated PvP viewer module. Importing it
+// registers the wire handlers (pvp-battle-start / pvp-turn /
+// pvp-cancel / pvp-state-resync) at module load. Behavior is inert
+// until PVP_ARBITER flips on (P-9): without an arbiter-managed battle
+// in play, none of these frames arrive.
+import './pvp-arb-viewer.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
 import { initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';

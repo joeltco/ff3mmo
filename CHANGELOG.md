@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.752 — 2026-05-26
+
+### PvP rewrite P-6 — client viewer module (state mirror)
+
+The client now has a dedicated module that consumes every server-arbitrated PvP wire frame, mutating a singleton state bag by walking the delta list. End-to-end wire-sim proof: synthetic round-trip A→server→B (and back) keeps `arbViewSt.combatants[*].hp` aligned with the server-rolled damage values exactly.
+
+**What landed:**
+- `src/pvp-arb-viewer.js` (NEW, ~200 lines) — viewer module + state bag (`arbViewSt`). Handles all four wire frames:
+  - `pvp-battle-start` → seed state from `msg.sides.A/B` (cellId-indexed combatants array with stable 0-3 / 4-7 ranges)
+  - `pvp-turn` → walk `msg.deltas`, mutate hp/mp/status/defending per kind, append to `pendingDeltas` queue for the future render layer to drain
+  - `pvp-cancel` → flip `inBattle=false`, record `endReason`. Combatants kept so render layer can play teardown
+  - `pvp-state-resync` → wholesale-replace state from snapshot (mid-battle reconnect path; will activate in P-9 hello sync)
+- `src/net.js` — four `setNetPvpArb*Handler` exports + `sendNetPvpIntent({battleId, turnIdx, kind, ...})` outbound helper. Dispatch cases for the new frame types.
+- `src/main.js` — imports the viewer module so its handler-registration calls fire at app boot. Inert until PVP_ARBITER flag flips in P-9.
+- Delta application coverage in `_applyDelta`: `attack` / `magic` / `item` / `status-tick` / `death` / `state` (defend-on/off, sleep-skip, wake) / `end`. Magic + item paths included even though P-4 still stubs them server-side — when P-4c lands magic intents, the viewer is already ready.
+- Convenience exports: `drainPendingDeltas()` (FIFO drain for the render layer), `isMyTurn()` (input prompt gate), `clearArbView()` (manual teardown).
+- 4 wire-sim tests (98 → 102):
+  - End-to-end battle from real arbiter frames — viewer hp tracking matches server-rolled damage exactly
+  - `pvp-cancel` triggers `inBattle=false` + records `endReason`
+  - `drainPendingDeltas` pops + clears in order
+  - `isMyTurn` gates on `nextActor.cellId === yourCellId`
+
+**Deferred to P-6b:** render integration. The viewer state populates correctly, but no draw site reads from it yet — that's a follow-up phase that maps `arbViewSt.combatants[*]` onto the existing battle-draw helpers (`pvp-drawing.js#_drawPVPEnemyCell` etc.) behind the PVP_ARBITER flag.
+
+**Deferred to P-7:** input rewire. Action menu / target selection still writes to the legacy `pvpSt.*` path. P-7 routes them through `sendNetPvpIntent` when the flag is on.
+
+**No production behavior change.** PVP_ARBITER still false; the viewer's handlers register but no `pvp-battle-start` frames arrive in production gameplay.
+
+**Gates:** lint 0, pvp-wire-sim 102/102.
+
 ## 1.7.751 — 2026-05-26
 
 ### PvP rewrite P-5 — smart server-side AI
