@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.754 — 2026-05-27
+
+### PvP rewrite P-6c — delta-driven animation driver (attack + death)
+
+Parallel animation driver that drains `arbViewSt.pendingDeltas` and fires the existing visible-effect primitives (shake timer, damage numbers, dying map) per delta kind. Runs alongside the legacy `updatePVPBattle` FSM — does not modify it. Gated on `PVP_ARBITER` so production behavior is fully unchanged.
+
+**Hard-rule alignment (CLAUDE.md):** This phase touches animation territory the project rules flag as a high-risk rewrite zone. Risk mitigations:
+- **No modification to existing animation code.** The legacy FSM is untouched; the new driver lives in its own file and only writes to the same primitives the legacy code already writes to (same `setEnemyDmgNum` / `setSwDmgNum` / `pvpDyingMap` / `pvpOpponentShakeTimer` slots).
+- **Full no-op when PVP_ARBITER is false.** Production today has the flag off, so the new tick path returns immediately. Zero engine footprint until P-9.
+- **No novel state transitions invented.** Each visible effect uses the same primitive call signature the legacy code uses for the same event.
+
+**What landed:**
+- `src/pvp-arb-anim.js` (NEW) — state machine `{ active: null | { delta, timer, dwellMs } }`. One delta plays at a time over its `_DWELL_MS` window (attack 750 ms, status-tick 600 ms, death 800 ms, defend/state 120 ms). Per-kind handlers:
+  - `attack` → for opponent main: shake (`BATTLE_SHAKE_MS`) + `setEnemyDmgNum(createDmg | createMiss)`. For opponent allies: `setSwDmgNum(allyIdx, ...)`. For my main: `setPlayerDamageNum(...)`. My-side allies deferred to P-6d.
+  - `death` → stamp `pvpSt.pvpDyingMap` for the opponent cell so the legacy death-wipe FSM picks it up.
+  - `state` / `magic` / `item` / `status-tick` / `end` → dwell only (no visual), stubbed for P-6d.
+- `src/game-loop.js` — single new call `tickArbAnim(dt)` immediately after `updateBattle(dt)`. No modifications to `updateBattle` or any existing tick. Flag-gated inside the tick so the caller doesn't need to know about the flag.
+- `src/pvp-arb-adapter.js` — calls `resetArbAnim()` when `arbViewSt.battleId` changes (new battle, post-cancel). Defensive — prevents stale `_active` from bleeding between back-to-back battles.
+
+**Known limitations (deferred to P-6d):**
+- HP bar snaps to post-round value while damage numbers play out (adapter writes pvpSt.HP at end-of-turn, anim runner doesn't gate HP writes). Recognizable as combat, not perfectly synced. The fix is non-trivial (would require splitting the adapter's HP write from its metadata write).
+- My-side ally damage numbers + death wipe still missing. Legacy code uses `allyDamageNums[idx]` shape; need to mirror.
+- `defend-on` doesn't trigger the existing defend pose visual.
+- Magic/item delta visuals (P-4c + P-6d together).
+
+**No production behavior change.** PVP_ARBITER still false. Wire-sim 102/102 (driver not unit-tested — pulls browser-only modules; same pragmatic call as P-6b).
+
+**Gates:** lint 0, pvp-wire-sim 102/102, deploy smoke OK (catches broken imports).
+
 ## 1.7.753 — 2026-05-27
 
 ### PvP rewrite P-6b — render integration via legacy-state adapter

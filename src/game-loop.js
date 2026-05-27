@@ -26,6 +26,7 @@ import { transSt, loadingSt, updateTransition, updateTopBoxScroll,
 import { handleInput, updateMovement } from './movement.js';
 import { updateNpcs, tickOpeningIntro } from './npc.js';
 import { updateBattle } from './battle-update.js';
+import { tickArbAnim } from './pvp-arb-anim.js';
 import { pvpSt } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
@@ -179,6 +180,10 @@ function _gameLoopUpdate(dt) {
   updateBed(dt);
   updateMsgBox(dt);
   updateBattle(dt);
+  // v1.7.754 P-6c — server-arbitrated PvP animation driver. Drains
+  // arbViewSt.pendingDeltas one at a time, fires shake / damage-num /
+  // dying-map per delta. No-op when PVP_ARBITER is false (production).
+  tickArbAnim(dt);
   updateMovement(dt);
   if (battleSt.battleState === 'none') updateNpcs(dt);
   updateTransition(dt);

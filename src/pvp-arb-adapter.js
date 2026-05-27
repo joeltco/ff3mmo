@@ -22,6 +22,7 @@ import { arbViewSt, setArbViewUpdated } from './pvp-arb-viewer.js';
 import { pvpSt } from './pvp.js';
 import { ps } from './player-stats.js';
 import { battleSt } from './battle-state.js';
+import { resetArbAnim } from './pvp-arb-anim.js';
 
 // ── Adapter ───────────────────────────────────────────────────────────────
 
@@ -119,8 +120,18 @@ function _syncToLegacy() {
 // Production callback — gates on PVP_ARBITER so the legacy lockstep
 // path stays unaffected when the flag is off. Wire-sim bypasses this
 // wrapper and calls `_syncToLegacy` directly.
+let _lastBattleId = 0;
 function _syncIfEnabled() {
   if (!PVP_ARBITER) return;
+  // Drop any in-flight animation when the battle changes (start of a
+  // new battle, or current battle teardown). Defensive — pendingDeltas
+  // is queue-cleared by the viewer on start, but `_active` in the anim
+  // driver outlives that and would mis-fire on the next battle's first
+  // round.
+  if (arbViewSt.battleId !== _lastBattleId) {
+    resetArbAnim();
+    _lastBattleId = arbViewSt.battleId;
+  }
   _syncToLegacy();
 }
 
