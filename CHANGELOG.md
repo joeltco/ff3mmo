@@ -18,6 +18,45 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.757 — 2026-05-27
+
+### PvP rewrite P-9 — matchmaking wire + client battle-scene bootstrap
+
+The arbiter is now reachable from the live `pvp-search` → encounter hook path, and the client bootstraps the battle scene (audio, FSM transitions) when `pvp-battle-start` arrives. Three flags still all default to false so production behavior is unchanged — the next step is a one-line deploy that flips them together for the 2-phone live smoke.
+
+**Flag landscape (post-P-9):**
+
+| Flag | Location | Purpose |
+|---|---|---|
+| `PVP_ENABLED` (server) | `ws-presence.js` | Hard kill switch for ALL PvP matchmaking. False = no hooks fire ever. |
+| `PVP_ENABLED` (client) | `src/pvp-search.js` | Client mirrors the server. Both must agree. |
+| `PVP_ARBITER_SERVER` | `ws-presence.js` | NEW. When true (and PVP_ENABLED true), hook spawns arbiter battle instead of legacy lockstep. |
+| `PVP_ARBITER` (client) | `src/net.js` | When true, client renders/inputs via arbiter path. **Must flip together with PVP_ARBITER_SERVER.** |
+
+**Server matchmaking fork** (`ws-presence.js#_resolveEncounterHook`):
+- Successful hook + `PVP_ARBITER_SERVER` → `pvpArbCreate(challenger, target, {sideAMates, sideBMates, slot})` via `_getPartyMates` for each side, then `pvp-battle-start` to both clients.
+- Successful hook + flag false → existing `pvp-match` path with shared seed (legacy lockstep, unchanged).
+- Other search-cancel / cleanup semantics identical between paths.
+
+**Client bootstrap** (`src/pvp-arb-adapter.js#_bootstrapBattleScene`):
+- Fires once per battle on the first `_syncIfEnabled` after `arbViewSt.battleId` transitions from 0 to nonzero.
+- Mirrors the audio + battleState kickoff that legacy `startPVPBattle` does: `setEnemyHP(opponentMain.maxHP)`, `battleSt.battleState = 'flash-strobe'`, `playSFX(BATTLE_SWIPE)`, `pauseMusic()`, `resetBattleVars()`.
+- Pure transition — doesn't touch the in-progress turn FSM, which the legacy lockstep code lives in.
+
+**Wire-sim coverage** (104/104, was 102):
+- `pvp-search → pvp-encounter` with both flags on → both clients receive `pvp-battle-start` (not `pvp-match`).
+- Same flow with `PVP_ARBITER_SERVER` off → legacy `pvp-match` + seed path intact.
+- Both tests retry up to 10 times to absorb the 30%/roll AGI-differential hook chance.
+
+**Next step (NOT in this deploy):**
+- One-line deploy that flips `PVP_ENABLED = true` (both), `PVP_ARBITER_SERVER = true`, `PVP_ARBITER = true`.
+- Live 2-phone smoke: search → hook → battle-start → submit intents → pvp-turn animation → end.
+- Expect rough edges (P-6d items deferred: HP snap mid-anim, my-side ally damage nums, defend pose, magic/item visuals).
+
+**No production behavior change in this deploy.** All flags still false.
+
+**Gates:** lint 0, pvp-wire-sim 104/104, deploy smoke OK.
+
 ## 1.7.756 — 2026-05-27
 
 ### PvP rewrite P-8 — name strip: attacker / target only under arbiter

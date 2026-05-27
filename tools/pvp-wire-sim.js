@@ -2239,6 +2239,68 @@ async function suiteWire() {
     arbViewReset();
   });
 
+  // ── v1.7.757 P-9 — matchmaking fork via PVP_ARBITER_SERVER ─────────────
+  // With both PVP_ENABLED and PVP_ARBITER_SERVER flipped on, a successful
+  // encounter hook spawns an arbiter battle via pvpArbCreate instead of
+  // the legacy pvp-match relay. Both clients receive pvp-battle-start
+  // (not pvp-match). Other matchmaking semantics (search-cancel, etc.)
+  // stay identical to the legacy path.
+  await asyncTest('v1.7.757 P-9 encounter hook spawns arbiter battle when both flags on', async () => {
+    _testHooks.resetState();
+    _testHooks.setPvpEnabled(true);
+    _testHooks.setPvpArbiterServer(true);
+    _testEnsureUser(7530); _testSeedSave(7530, 0);
+    _testEnsureUser(7531); _testSeedSave(7531, 0);
+    const A = await connectClient(port, 7530, { ...baseProfile, name: 'HookA', loc: 'world' });
+    const B = await connectClient(port, 7531, { ...targetProfile, name: 'HookB', loc: 'world' });
+    // A searches for B; B then steps into encounter, which should fire
+    // the hook (same-loc, default 100% hook for level-1 vs level-1).
+    A.send(JSON.stringify({ type: 'pvp-search', targetUserId: 7531 }));
+    await new Promise(r => setTimeout(r, 30));
+    // Hook chance is ~30% per roll (AGI-differential). On miss, search
+    // persists and we can retry. 10 retries → ≤3% chance of total miss.
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 4000);
+    const bStart = once(B, m => m.type === 'pvp-battle-start', 4000);
+    for (let i = 0; i < 10; i++) {
+      B.send(JSON.stringify({ type: 'pvp-encounter' }));
+      await new Promise(r => setTimeout(r, 60));
+    }
+    const [sa, sb] = await Promise.all([aStart, bStart]);
+    assertEqual(sa.battleId, sb.battleId, 'both sides see same arbiter battleId');
+    assertEqual(sa.yourSide, 'A', 'challenger is side A');
+    assertEqual(sb.yourSide, 'B', 'target is side B');
+    assertTrue(sa.sides.A.length >= 1, 'A has at least main combatant');
+    assertTrue(sa.sides.B.length >= 1, 'B has at least main combatant');
+    A.close(); B.close();
+    _testHooks.setPvpEnabled(false);
+    _testHooks.setPvpArbiterServer(false);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.757 P-9 hook falls through to legacy pvp-match when arbiter flag off', async () => {
+    _testHooks.resetState();
+    _testHooks.setPvpEnabled(true);
+    // PVP_ARBITER_SERVER stays false — legacy lockstep path runs.
+    _testEnsureUser(7532);
+    _testEnsureUser(7533);
+    const A = await connectClient(port, 7532, { ...baseProfile, name: 'LegA', loc: 'world' });
+    const B = await connectClient(port, 7533, { ...targetProfile, name: 'LegB', loc: 'world' });
+    A.send(JSON.stringify({ type: 'pvp-search', targetUserId: 7533 }));
+    await new Promise(r => setTimeout(r, 30));
+    const aMatch = once(A, m => m.type === 'pvp-match', 4000);
+    const bMatch = once(B, m => m.type === 'pvp-match', 4000);
+    for (let i = 0; i < 10; i++) {
+      B.send(JSON.stringify({ type: 'pvp-encounter' }));
+      await new Promise(r => setTimeout(r, 60));
+    }
+    const [ma, mb] = await Promise.all([aMatch, bMatch]);
+    assertTrue(!!ma.opponent && !!mb.opponent, 'legacy pvp-match path intact');
+    assertEqual(typeof ma.seed, 'number', 'legacy seed present');
+    A.close(); B.close();
+    _testHooks.setPvpEnabled(false);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── P3 JWT rotation — refresh endpoint smoke ─────────────────────────────
   await asyncTest('P3 /api/refresh returns a fresh token for a valid one', async () => {
     _testEnsureUser(2001);

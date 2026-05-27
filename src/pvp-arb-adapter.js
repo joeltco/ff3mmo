@@ -21,8 +21,14 @@ import { PVP_ARBITER } from './net.js';
 import { arbViewSt, setArbViewUpdated } from './pvp-arb-viewer.js';
 import { pvpSt } from './pvp.js';
 import { ps } from './player-stats.js';
-import { battleSt } from './battle-state.js';
+import { battleSt, setEnemyHP } from './battle-state.js';
 import { resetArbAnim } from './pvp-arb-anim.js';
+// v1.7.757 P-9 — battle-scene bootstrap. When a new arbiter battleId
+// arrives, the adapter has to mirror what legacy `startPVPBattle` does
+// for the local game shell (audio + battle FSM kickoff) — otherwise
+// arbViewSt populates but the player stays on the overworld.
+import { resetBattleVars } from './battle-update.js';
+import { playSFX, pauseMusic, SFX, TRACKS } from './music.js';
 
 // ── Adapter ───────────────────────────────────────────────────────────────
 
@@ -117,6 +123,33 @@ function _syncToLegacy() {
   battleSt.battleAllies = myMates.map(_toLegacyShape);
 }
 
+// v1.7.757 P-9 — local-game-shell bootstrap. Mirrors the audio +
+// battleState transitions that legacy `startPVPBattle` does (src/pvp.js).
+// Arbitrarily refuses to fire when arbViewSt has no main combatant
+// (corrupt frame; would softlock the battle). Caller has already set
+// `pvpSt.isPVPBattle = true` via _syncToLegacy by the time we run.
+function _bootstrapBattleScene() {
+  if (!arbViewSt.combatants || arbViewSt.combatants.length === 0) return;
+  pvpSt.pvpOpponentShakeTimer = 0;
+  pvpSt.pvpEnemyHitResults = [];
+  pvpSt.pvpEnemyHitIdx = 0;
+  pvpSt.pvpPendingAttack = null;
+  pvpSt.pvpPlayerTargetIdx = -1;
+  pvpSt.pvpBoxResizeStartTime = 0;
+  // setEnemyHP feeds the legacy HP display; mirror the opp main's maxHP.
+  if (pvpSt.pvpOpponentStats) setEnemyHP(pvpSt.pvpOpponentStats.maxHP);
+  battleSt.enemyDefeated = false;
+  battleSt.isRandomEncounter = false;
+  battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  battleSt.battleState = 'flash-strobe';
+  battleSt.battleTimer = 0;
+  playSFX(SFX.BATTLE_SWIPE);
+  resetBattleVars();
+  pauseMusic();
+  console.log('[pvp-arb] battle-scene bootstrap battleId=' + arbViewSt.battleId +
+    ' yourCellId=' + arbViewSt.yourCellId + ' cells=' + arbViewSt.combatants.length);
+}
+
 // Production callback — gates on PVP_ARBITER so the legacy lockstep
 // path stays unaffected when the flag is off. Wire-sim bypasses this
 // wrapper and calls `_syncToLegacy` directly.
@@ -128,11 +161,15 @@ function _syncIfEnabled() {
   // is queue-cleared by the viewer on start, but `_active` in the anim
   // driver outlives that and would mis-fire on the next battle's first
   // round.
+  const isNewBattle = (arbViewSt.battleId !== _lastBattleId) && (arbViewSt.battleId !== 0);
   if (arbViewSt.battleId !== _lastBattleId) {
     resetArbAnim();
     _lastBattleId = arbViewSt.battleId;
   }
   _syncToLegacy();
+  // Bootstrap AFTER _syncToLegacy so pvpSt.pvpOpponentStats is populated
+  // before setEnemyHP reads from it. Only fires once per battle.
+  if (isNewBattle) _bootstrapBattleScene();
 }
 
 // Wire the callback at module load. The viewer's _fireUpdated() invokes

@@ -91,6 +91,15 @@ const _pvpSearches = new Map();
 // to keep regression-testing the wire contract while prod stays off.
 let PVP_ENABLED = false;
 
+// v1.7.757 P-9 — server-side counterpart to the client's PVP_ARBITER flag
+// (src/net.js). When BOTH are true (and PVP_ENABLED is true), a successful
+// encounter hook spawns an arbiter battle via pvpArbCreate instead of the
+// legacy lockstep pvp-match relay. The two flags must flip together because
+// a server arbiter battle + legacy client (or vice versa) leaves one side
+// in a broken state. Mutable so the wire-sim can set independently.
+// Keep false in production until P-9 live smoke validates the path.
+let PVP_ARBITER_SERVER = false;
+
 // Active PvP battle partners — userId → partnerUserId. Set on pvp-match,
 // cleared on disconnect. The server relays `pvp-action` between partners
 // so each client drives its opponent's turn from the remote player's actual
@@ -504,6 +513,44 @@ function _resolveEncounterHook(targetEntry) {
     return;
   }
   console.log('[pvp-hook] HIT challenger=' + hookedChallenger.userId + ' target=' + targetUserId);
+  // v1.7.757 P-9 — when both PVP_ARBITER_SERVER and the client flag
+  // are flipped, the hook spawns a server-arbitrated battle instead of
+  // the legacy lockstep relay. Mates pulled from _getPartyMates; slot
+  // defaults to whichever the entry has cached at hello (api save-load
+  // path stamps entry.slot v1.7.741).
+  if (PVP_ARBITER_SERVER) {
+    const sideAMates = _getPartyMates(hookedChallenger.userId);
+    const sideBMates = _getPartyMates(targetUserId);
+    const slot = (hookedChallenger.slot | 0);
+    let battle;
+    try {
+      battle = pvpArbCreate(hookedChallenger.userId, targetUserId, {
+        sideAMates, sideBMates, slot,
+      });
+    } catch (e) {
+      console.log('[pvp-arb-hook] reject reason=' + e.message);
+      _send(hookedChallenger.ws, { type: 'pvp-search-failed', reason: 'arbiter-create-failed' });
+      _send(targetEntry.ws,      { type: 'pvp-encounter-none' });
+      return;
+    }
+    _send(hookedChallenger.ws, pvpArbStartFrame(battle, hookedChallenger.userId));
+    _send(targetEntry.ws,      pvpArbStartFrame(battle, targetUserId));
+    console.log('[pvp-arb-hook] battle=' + battle.battleId + ' A=' + hookedChallenger.userId +
+      ' B=' + targetUserId + ' cells=' + battle.combatants.length);
+    _clearSearch(hookedChallenger.userId);
+    // Cancel every other search like the legacy path does (below) — same logic, same cleanup.
+    for (const [chId, s] of [..._pvpSearches]) {
+      if (s.targetUserId === targetUserId || s.targetUserId === hookedChallenger.userId) {
+        _clearSearch(chId);
+        const otherCh = _connected.get(chId);
+        if (otherCh && otherCh.helloed) {
+          _send(otherCh.ws, { type: 'pvp-search-failed', reason: 'target-engaged' });
+        }
+      }
+    }
+    if (_pvpSearches.has(targetUserId)) _clearSearch(targetUserId);
+    return;
+  }
   // Match. Broadcast pvp-match to both parties with each other's profile.
   // MP Step 4 — also broadcast a shared 32-bit RNG seed. Both clients seed
   // their mulberry32 (`src/rng.js`) before `_startPVPBattle` runs, so
@@ -1919,6 +1966,7 @@ export function attachWebSocketPresence(httpServer) {
 export const _testHooks = {
   normalizeProfileField: _normalizeProfileField,
   setPvpEnabled(v) { PVP_ENABLED = !!v; },
+  setPvpArbiterServer(v) { PVP_ARBITER_SERVER = !!v; },
   pvpHookChance: _pvpHookChance,
   inSameParty: _inSameParty,
   rateAllow: _rateAllow,
