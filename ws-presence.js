@@ -89,7 +89,12 @@ const _pvpSearches = new Map();
 // Re-enable by flipping this AND the client `PVP_ENABLED` in pvp-search.js.
 // Mutable so the pvp-wire-sim can turn it on (via `_testHooks.setPvpEnabled`)
 // to keep regression-testing the wire contract while prod stays off.
-let PVP_ENABLED = false;
+// v1.7.758 — FLIPPED ON together with PVP_ARBITER_SERVER + the two client
+// flags. PvP is back, now running through the server-arbitrated path
+// (the legacy lockstep relay's `_emitWirePVPAction` is unreachable
+// because both arbiter flags route the hook to pvpArbCreate). To
+// roll back: set BOTH this and PVP_ARBITER_SERVER false + redeploy.
+let PVP_ENABLED = true;
 
 // v1.7.757 P-9 — server-side counterpart to the client's PVP_ARBITER flag
 // (src/net.js). When BOTH are true (and PVP_ENABLED is true), a successful
@@ -97,8 +102,9 @@ let PVP_ENABLED = false;
 // legacy lockstep pvp-match relay. The two flags must flip together because
 // a server arbiter battle + legacy client (or vice versa) leaves one side
 // in a broken state. Mutable so the wire-sim can set independently.
-// Keep false in production until P-9 live smoke validates the path.
-let PVP_ARBITER_SERVER = false;
+// v1.7.758 — FLIPPED ON. Paired with PVP_ENABLED (above) + the two
+// client flags. See [[ff3mmo-pvp-arbiter-rewrite]] memory.
+let PVP_ARBITER_SERVER = true;
 
 // Active PvP battle partners — userId → partnerUserId. Set on pvp-match,
 // cleared on disconnect. The server relays `pvp-action` between partners

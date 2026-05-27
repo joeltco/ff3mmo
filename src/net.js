@@ -722,7 +722,11 @@ export const INV_MIRROR_AUTHORITATIVE = true;
 //   - `pvp-arb-viewer.js` consumes server `pvp-turn` deltas + renders
 //   - Server is sole RNG source + arbiter
 // When false (now): existing lockstep / search path runs unchanged.
-export const PVP_ARBITER = false;
+// v1.7.758 — FLIPPED ON. Paired with PVP_ARBITER_SERVER on the
+// server side, plus both PVP_ENABLED flags. Client now routes PvP
+// input/render through the arbiter path (arbViewSt / pvp-arb-anim /
+// pvp-arb-adapter). To roll back: set all four flags false + deploy.
+export const PVP_ARBITER = true;
 
 // Send an inventory mutation event to the server. `kind` is one of
 // 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason

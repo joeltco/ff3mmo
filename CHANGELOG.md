@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.758 — 2026-05-27
+
+### PvP arbiter — FLAGS FLIPPED. PvP is back.
+
+All four flags on simultaneously:
+
+| Flag | File | New value |
+|---|---|---|
+| `PVP_ENABLED` (server) | `ws-presence.js` line 97 | `true` |
+| `PVP_ARBITER_SERVER` | `ws-presence.js` line 107 | `true` |
+| `PVP_ENABLED` (client) | `src/pvp-search.js` line 47 | `true` |
+| `PVP_ARBITER` (client) | `src/net.js` line 729 | `true` |
+
+PvP search → encounter hook → server-arbitrated battle → both clients render the same deltas. Legacy lockstep `_emitWirePVPAction` / `pvp-action` relay paths are now unreachable in production (every hook routes to `pvpArbCreate`).
+
+**What's expected to work:**
+- Roster Battle button starts a search (was "PvP is disabled" popup)
+- Target's next overworld encounter rolls the hook (~30% chance, AGI-differential)
+- On hit: both phones enter the PvP battle scene via `pvp-battle-start` + the adapter's bootstrap
+- Action menu Fight + Defend resolve through `sendNetPvpIntent` → server `resolveTurn` → broadcast `pvp-turn`
+- Per-delta animations: opponent main shake + damage number, per-cell damage numbers for opponent allies, dying fade on KO, end fanfare on victor
+- Name strip cuts to attacker name on attack delta, target name on cursor move during target-select
+
+**Known rough edges** (P-6d backlog — not blockers):
+- HP bar snaps to post-round value while damage numbers play out
+- My-side ally damage numbers missing (only opponent side animates)
+- Defend pose doesn't visibly fire
+- Magic/Item picks log `kind=magic not yet implemented` and waste the actor's turn (P-4c)
+
+**Rollback:** four-flag revert + redeploy. Active arbiter battles GC after 5min idle TTL.
+
+**Watch for:** any client-error reports filtered by `[pvp-arb]` in pm2 logs. The bootstrap path is the first time real users hit the arbiter; expect surprises.
+
+**Gates:** lint 0, pvp-wire-sim 104/104, deploy smoke OK. **Live 2-phone smoke pending user validation.**
+
 ## 1.7.757 — 2026-05-27
 
 ### PvP rewrite P-9 — matchmaking wire + client battle-scene bootstrap

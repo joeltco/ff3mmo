@@ -1,9 +1,54 @@
 # PvP rewrite — server-arbitrated battle architecture
 
-**Status:** Design landed 2026-05-26 after the inventory mirror project
-(v1.7.740-746) shipped the prerequisite — server-canonical equipped stats
-mean the server can spawn combatants with authoritative stat profiles for
-the first time.
+**Status:** Shipped P-0 through P-9 across v1.7.747–v1.7.757 (2026-05-26 → 2026-05-27). All code paths are live; all four flags are still `false` pending the next-step one-line flag-flip deploy + 2-phone live smoke. See "Current status" below.
+
+Design landed 2026-05-26 after the inventory mirror project (v1.7.740-746) shipped the prerequisite — server-canonical equipped stats mean the server can spawn combatants with authoritative stat profiles for the first time.
+
+## Current status
+
+| Phase | Version | Status |
+|---|---|---|
+| P-0 design doc | v1.7.747 | ✅ shipped |
+| P-1 server scaffold | v1.7.747 | ✅ shipped |
+| P-2 combatant generation | v1.7.748 | ✅ shipped |
+| P-3 Node-clean math + per-battle RNG | v1.7.749 | ✅ shipped |
+| P-4 turn resolution (physical only) | v1.7.750 | ✅ shipped |
+| P-4b multi-hit attacks | — | deferred |
+| P-4c magic + items (server-side resolve) | — | deferred (blocks P-5b smart-magic-AI + P-6d magic visuals) |
+| P-4d 15s intent watchdog | — | deferred |
+| P-5 smart AI (target weakest, panic defend) | v1.7.751 | ✅ shipped |
+| P-5b magic AI | — | deferred (waits for P-4c) |
+| P-6 client viewer state mirror | v1.7.752 | ✅ shipped |
+| P-6b legacy-state adapter (render bridge) | v1.7.753 | ✅ shipped |
+| P-6c anim driver (attack + death) | v1.7.754 | ✅ shipped |
+| P-6d anim polish (HP sync, ally dmg, defend pose, magic/item visuals) | — | deferred |
+| P-7 input rewire to `sendNetPvpIntent` | v1.7.755 | ✅ shipped |
+| P-8 name strip — attacker / target only | v1.7.756 | ✅ shipped |
+| P-9 matchmaking wire + client bootstrap | v1.7.757 | ✅ shipped |
+| **Flag-flip deploy** (1 line per file × 3 files) | — | **NEXT** |
+| Live 2-phone smoke | — | next |
+| P-10 cleanup (rip lockstep code) | — | post-soak |
+
+### Flag landscape (all false today; flip together)
+
+| Flag | File | Line |
+|---|---|---|
+| `PVP_ENABLED` (server) | `ws-presence.js` | 92 |
+| `PVP_ARBITER_SERVER` | `ws-presence.js` | 101 |
+| `PVP_ENABLED` (client) | `src/pvp-search.js` | 43 |
+| `PVP_ARBITER` (client) | `src/net.js` | 64 |
+
+**Hard rule:** mismatched server/client states softlock. Flip all four together.
+
+### Known visible roughness for live smoke (P-6d backlog)
+
+- HP bar snaps to post-round value while damage numbers play (adapter writes pvpSt.HP at end-of-round; anim driver doesn't gate per-delta)
+- My-side ally damage numbers missing (`allyDamageNums[idx]` shape unused)
+- Defend pose doesn't fire (the `state defend-on` delta dwells in silence)
+- Magic / item intents log `kind=magic not yet implemented` and waste the turn (P-4c gate)
+- Name strip cuts cleanly between attacker/target but FSM-driven text from legacy paths may briefly appear during transitions
+
+---
 
 PvP was disabled in v1.7.502 because client-side lockstep can't sync two
 phones (same disease as co-op, see [[ff3mmo-pvp-disabled]]). The co-op

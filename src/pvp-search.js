@@ -40,7 +40,11 @@ import { cancelPendingPVPCheck } from './battle-encounter.js';
 // deltas — no determinism required). To re-enable, flip BOTH this flag and the
 // server-side `PVP_ENABLED` in `ws-presence.js`. See the ff3mmo-pvp-disabled
 // memory for the full rationale.
-export const PVP_ENABLED = false;
+// v1.7.758 — FLIPPED ON. Paired with the server PVP_ENABLED, plus
+// PVP_ARBITER_SERVER + PVP_ARBITER. Clicking Battle on a roster row
+// now starts a real PvP search instead of showing the "disabled"
+// popup. See [[ff3mmo-pvp-arbiter-rewrite]].
+export const PVP_ENABLED = true;
 
 // Tuning constants. Surface them up here so they're easy to find.
 const BASE_HOOK     = 0.25;
