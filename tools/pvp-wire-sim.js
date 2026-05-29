@@ -2488,17 +2488,36 @@ async function suiteWire() {
     _testHooks.setServerEconomy(false);
   });
 
-  await asyncTest('Chest open returns server-rolled outcome', async () => {
+  await asyncTest('Chest validate-only accepts a claim in the pool', async () => {
     _testHooks.setServerEconomy(true);
     _testEnsureUser(3020);
     const ws = await connectClient(port, 3020, { name: 'Chest1', jobIdx: 0,
       level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
     await new Promise(r => setTimeout(r, 30));
-    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 114, x: 5, y: 5 }));
+    // Potion (0xA6) is in Ur (map 114) chest pool.
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 114, x: 5, y: 5,
+      claim: { type: 'item', itemId: 0xA6 } }));
     const result = await once(ws, m => m.type === 'chest-result', 1000);
-    assertEqual(result.status, 'ok', 'chest open rejected: ' + result.reason);
-    assertTrue(result.rolled && result.rolled.type, 'no rolled outcome');
+    assertEqual(result.status, 'ok', 'in-pool claim rejected: ' + result.reason);
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Chest validate-only rejects claim outside pool', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3021);
+    const ws = await connectClient(port, 3021, { name: 'Chest2', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // Longsword (0x24) is NOT in Ur chest pool — should reject.
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 114, x: 5, y: 5,
+      claim: { type: 'item', itemId: 0x24 } }));
+    const result = await once(ws, m => m.type === 'chest-result', 1000);
+    assertEqual(result.status, 'rejected', 'out-of-pool claim accepted');
+    assertTrue(result.reason && result.reason.startsWith('item-not-in-pool'),
+      'wrong reject reason: ' + result.reason);
     ws.close();
     _testHooks.setServerEconomy(false);
   });

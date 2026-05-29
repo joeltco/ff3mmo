@@ -21,7 +21,7 @@ import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
 import { addItem, canAddItem } from './inventory.js';
-import { sendNetInvEvent } from './net.js';
+import { sendNetInvEvent, SERVER_ECONOMY, sendNetChestOpen, sendNetVaseSearch, nextChestTxnId } from './net.js';
 import { saveSlotsToDB } from './save-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN } from './sprite.js';
@@ -251,6 +251,12 @@ export function handleChest(facedX, facedY) {
   // Chest mimic — "Monster appeared!", then (on dismiss) the normal battle
   // flash + one random monster from this floor's pool.
   if (entry && entry.monster) {
+    // v1.7.780 P-10b — notify server so it can audit-log + keep its mirror
+    // expectation in sync (no inv events for a mimic, just the claim).
+    if (SERVER_ECONOMY) {
+      sendNetChestOpen({ txnId: nextChestTxnId(), mapId: mapSt.currentMapId,
+        x: facedX, y: facedY, claim: { type: 'monster' } });
+    }
     showMsgBox(_nameToBytes('Monster appeared!'), () => startChestMimic());
     return;
   }
@@ -260,18 +266,24 @@ export function handleChest(facedX, facedY) {
     const [min, max] = entry.gil;
     const amount = min + Math.floor(Math.random() * (max - min + 1));
     grantGil(amount);
-    // v1.7.741 Phase 1a — fire inv-event for the gil grant. Server-side
-    // mirror records it; in 1a the local `grantGil` above is still the
-    // source of truth (`INV_MIRROR_AUTHORITATIVE = false`). Wire fires
-    // unconditionally so the server can detect divergence even in 1a.
-    sendNetInvEvent('gil-delta', 0, amount, 'chest');
+    // v1.7.780 P-10b — when SERVER_ECONOMY on, server is sole writer for
+    // chest gil via the chest-open validator. Otherwise (off): fire the
+    // legacy inv-event so the mirror stays in shadow-mode sync.
+    if (SERVER_ECONOMY) {
+      sendNetChestOpen({ txnId: nextChestTxnId(), mapId: mapSt.currentMapId,
+        x: facedX, y: facedY, claim: { type: 'gil', amount } });
+    } else {
+      sendNetInvEvent('gil-delta', 0, amount, 'chest');
+    }
     msg = foundGilMsg(amount);
   } else {
     addItem(entry, 1);
-    // v1.7.741 Phase 1a — fire inv-event for the item add. itemId here
-    // is the chest's loot pick (entry is a number for simple items).
-    // Server applies to mirror in shadow mode.
-    sendNetInvEvent('add', entry, 1, 'chest');
+    if (SERVER_ECONOMY) {
+      sendNetChestOpen({ txnId: nextChestTxnId(), mapId: mapSt.currentMapId,
+        x: facedX, y: facedY, claim: { type: 'item', itemId: entry } });
+    } else {
+      sendNetInvEvent('add', entry, 1, 'chest');
+    }
     msg = foundItemMsg(entry);
   }
   playSFX(SFX.TREASURE);
@@ -315,11 +327,23 @@ export function handleHiddenTreasure(facedX, facedY) {
     const [min, max] = entry.gil;
     const amount = min + Math.floor(Math.random() * (max - min + 1));
     grantGil(amount);
-    sendNetInvEvent('gil-delta', 0, amount, 'loot');   // v1.7.742 Phase 1c — hidden treasure gil
+    // v1.7.780 P-10b — SERVER_ECONOMY: vase-search validator is sole gil
+    // writer; otherwise legacy inv-event (shadow mode).
+    if (SERVER_ECONOMY) {
+      sendNetVaseSearch({ txnId: nextChestTxnId(), mapId, x: facedX, y: facedY,
+        claim: { type: 'gil', amount } });
+    } else {
+      sendNetInvEvent('gil-delta', 0, amount, 'loot');
+    }
     msg = foundGilMsg(amount);
   } else {
     addItem(entry, 1);
-    sendNetInvEvent('add', entry, 1, 'loot');          // v1.7.742 Phase 1c — hidden treasure item
+    if (SERVER_ECONOMY) {
+      sendNetVaseSearch({ txnId: nextChestTxnId(), mapId, x: facedX, y: facedY,
+        claim: { type: 'item', itemId: entry } });
+    } else {
+      sendNetInvEvent('add', entry, 1, 'loot');
+    }
     msg = foundItemMsg(entry);
   }
   playSFX(SFX.TREASURE);

@@ -11,8 +11,7 @@
 import { SHOPS, getShopType } from './src/data/shops.js';
 import { ITEMS } from './src/data/items.js';
 import { mirrorReadFullState } from './api.js';
-import { rollLootEntry, rollVaseLoot } from './src/data/loot-pools.js';
-import { createRng } from './src/rng.js';
+import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.js';
 
 const INV_CAP = 16;       // mirrors src/inventory.js#INV_CAP
 
@@ -88,91 +87,141 @@ export function validateShopTransaction(userId, slot, payload) {
   return { ok: false, reason: 'bad-action' };
 }
 
-// Roll a fresh chest at (mapId, x, y) and return the events to apply.
-// v1.7.777 P-10. Server is the sole roller — cheater can't fabricate the
-// drop. consumedTiles tracking stays client-side for v1 (re-opening an
-// already-opened chest would re-roll loot, but the client's tile-mutation
-// to OPENED_CHEST prevents this in the normal flow; a malicious client
-// could re-send chest-open, P-10b adds server-side consumed tracking).
+// Validate a chest-open claim. v1.7.780 P-10b switched from server-roll
+// to validate-only: client rolls locally (UX-clean — "Found X" message
+// matches actual outcome) and submits the rolled item/gil. Server checks
+// the claim is plausibly in the chest's loot pool, then applies via
+// mirror. Cheater can claim any item *in the pool* but not items outside
+// it. Re-opening the same chest is still possible (consumedTiles is
+// client-side for v1); the cheat surface there is bounded by the pool
+// contents.
 //
-// Returns:
-//   { ok: true, events: [...], rolled: { type: 'item'|'gil'|'monster', value } }
-//   { ok: false, reason: 'string' }
+// Payload: { mapId, x, y, claim: { type: 'item'|'gil'|'monster', itemId?, amount? } }
 export function validateChestOpen(userId, slot, payload) {
   if (!payload) return { ok: false, reason: 'no-payload' };
   const mapId = payload.mapId | 0;
-  // Per-open seed = client-suggested seed XOR coords XOR map. Server adds
-  // its own entropy bit so a replay attacker can't predict the exact roll
-  // by re-sending the same coords; same-coord re-open will get a different
-  // server-seed but the consumed-tile check (client-side for now) blocks
-  // legitimate re-opens. v1 acceptable.
-  const seed = ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) || 1;
-  const rng = createRng(seed).rand;
-  const entry = rollLootEntry(mapId, rng);
-  if (entry && entry.monster) {
-    return { ok: true, events: [], rolled: { type: 'monster' } };
-  }
-  if (entry && typeof entry === 'object' && 'gil' in entry) {
-    const amount = entry.gil | 0;
-    if (amount <= 0) return { ok: false, reason: 'bad-roll' };
-    return {
-      ok: true,
-      events: [{ kind: 'gil-delta', qty: amount, source: 'chest' }],
-      rolled: { type: 'gil', amount },
-    };
-  }
-  if (typeof entry === 'number') {
+  const claim = payload.claim || {};
+  const pool = _resolvedChestPool(mapId);
+  if (!pool) return { ok: false, reason: 'no-pool-for-map' };
+
+  if (claim.type === 'item') {
+    const itemId = claim.itemId | 0;
+    if (!pool.items.has(itemId)) {
+      return { ok: false, reason: 'item-not-in-pool item=0x' + itemId.toString(16) };
+    }
     const mirror = mirrorReadFullState(userId, slot);
     const inv = mirror.inventory || {};
-    const have = (inv[entry] | 0) > 0;
-    if (!have && Object.keys(inv).length >= 16) {
+    const have = (inv[itemId] | 0) > 0;
+    if (!have && Object.keys(inv).length >= INV_CAP) {
       return { ok: false, reason: 'inv-full' };
     }
-    return {
-      ok: true,
-      events: [{ kind: 'add', itemId: entry, qty: 1, source: 'chest' }],
-      rolled: { type: 'item', itemId: entry },
-    };
+    return { ok: true, events: [{ kind: 'add', itemId, qty: 1, source: 'chest' }] };
   }
-  return { ok: false, reason: 'empty-roll' };
+
+  if (claim.type === 'gil') {
+    const amount = claim.amount | 0;
+    if (amount <= 0) return { ok: false, reason: 'bad-gil' };
+    if (amount > pool.gilMax) {
+      return { ok: false, reason: 'gil-too-high claim=' + amount + ' max=' + pool.gilMax };
+    }
+    return { ok: true, events: [{ kind: 'gil-delta', qty: amount, source: 'chest' }] };
+  }
+
+  if (claim.type === 'monster') {
+    // Mimic — no events. Client starts the battle locally; PvE arbiter
+    // takes over. Validate the pool actually has a mimic tier so a
+    // cheater can't fake "no battle" on cave chests.
+    if (!pool.hasMonster) return { ok: false, reason: 'no-mimic-in-pool' };
+    return { ok: true, events: [] };
+  }
+
+  return { ok: false, reason: 'bad-claim-type' };
 }
 
-// Hidden-treasure (vase) search. 25% hit chance — same as client's
-// HIDDEN_TREASURE_HIT_CHANCE in src/map-triggers.js. Server rolls.
-const VASE_HIT_CHANCE = 0.25;
+// Validate a vase-search claim. Same pattern as chest but mimics excluded
+// (vase pool). v1.7.780 P-10b. Misses always pass with no events.
 export function validateVaseSearch(userId, slot, payload) {
   if (!payload) return { ok: false, reason: 'no-payload' };
   const mapId = payload.mapId | 0;
-  const seed = ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) || 1;
-  const rng = createRng(seed).rand;
-  if (rng() >= VASE_HIT_CHANCE) {
-    return { ok: true, events: [], rolled: { type: 'miss' } };
-  }
-  const entry = rollVaseLoot(mapId, rng);
-  if (!entry) return { ok: true, events: [], rolled: { type: 'miss' } };
-  if (entry && typeof entry === 'object' && 'gil' in entry) {
-    const amount = entry.gil | 0;
-    if (amount <= 0) return { ok: true, events: [], rolled: { type: 'miss' } };
-    return {
-      ok: true,
-      events: [{ kind: 'gil-delta', qty: amount, source: 'vase' }],
-      rolled: { type: 'gil', amount },
-    };
-  }
-  if (typeof entry === 'number') {
+  const claim = payload.claim || {};
+
+  if (claim.type === 'miss') return { ok: true, events: [] };
+
+  const pool = _resolvedVasePool(mapId);
+  if (!pool) return { ok: false, reason: 'no-pool-for-map' };
+
+  if (claim.type === 'item') {
+    const itemId = claim.itemId | 0;
+    if (!pool.items.has(itemId)) {
+      return { ok: false, reason: 'item-not-in-pool item=0x' + itemId.toString(16) };
+    }
     const mirror = mirrorReadFullState(userId, slot);
     const inv = mirror.inventory || {};
-    const have = (inv[entry] | 0) > 0;
-    if (!have && Object.keys(inv).length >= 16) {
+    const have = (inv[itemId] | 0) > 0;
+    if (!have && Object.keys(inv).length >= INV_CAP) {
       return { ok: false, reason: 'inv-full' };
     }
-    return {
-      ok: true,
-      events: [{ kind: 'add', itemId: entry, qty: 1, source: 'vase' }],
-      rolled: { type: 'item', itemId: entry },
-    };
+    return { ok: true, events: [{ kind: 'add', itemId, qty: 1, source: 'vase' }] };
   }
-  return { ok: true, events: [], rolled: { type: 'miss' } };
+
+  if (claim.type === 'gil') {
+    const amount = claim.amount | 0;
+    if (amount <= 0) return { ok: false, reason: 'bad-gil' };
+    if (amount > pool.gilMax) {
+      return { ok: false, reason: 'gil-too-high claim=' + amount + ' max=' + pool.gilMax };
+    }
+    return { ok: true, events: [{ kind: 'gil-delta', qty: amount, source: 'vase' }] };
+  }
+
+  return { ok: false, reason: 'bad-claim-type' };
+}
+
+// Resolve the chest pool for a mapId: union of all tier items + max gil +
+// whether a mimic tier is present. Mirrors src/map-triggers.js#rollLootEntry
+// fallback chain (Ur interior → 114; unknown → DEFAULT_LOOT). Locked-room
+// (mapId 1010) draws from any altar floor — union of all four.
+function _resolvedChestPool(mapId) {
+  let tiers;
+  if (mapId === 1010) {
+    tiers = [];
+    for (const id of [1000, 1001, 1002, 1003]) {
+      const t = LOOT_POOLS[id];
+      if (t) tiers = tiers.concat(t);
+    }
+  } else {
+    tiers = LOOT_POOLS[mapId];
+    if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
+    if (!tiers) tiers = DEFAULT_LOOT;
+  }
+  if (!tiers || !tiers.length) return null;
+  const items = new Set();
+  let gilMax = 0;
+  let hasMonster = false;
+  for (const t of tiers) {
+    if (t.monster) { hasMonster = true; continue; }
+    for (const entry of t.pool) {
+      if (typeof entry === 'number') items.add(entry);
+      else if (entry && entry.gil) gilMax = Math.max(gilMax, entry.gil[1] | 0);
+    }
+  }
+  return { items, gilMax, hasMonster };
+}
+
+function _resolvedVasePool(mapId) {
+  let tiers = LOOT_POOLS[mapId];
+  if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
+  if (!tiers) tiers = DEFAULT_LOOT;
+  if (!tiers || !tiers.length) return null;
+  const items = new Set();
+  let gilMax = 0;
+  for (const t of tiers) {
+    if (t.monster) continue;
+    for (const entry of t.pool) {
+      if (typeof entry === 'number') items.add(entry);
+      else if (entry && entry.gil) gilMax = Math.max(gilMax, entry.gil[1] | 0);
+    }
+  }
+  return { items, gilMax };
 }
 
 // Inn: deduct gil, restore HP/MP. v1.7.777 P-11. Inn registry currently

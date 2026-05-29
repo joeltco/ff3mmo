@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.780 — 2026-05-29
+
+### Economy arbiter — P-10b (chest + vase client gating)
+
+Switched chest/vase server endpoints from **server-roll** to **validate-only**: client rolls locally + apply locally (UX-clean — "Found Potion!" message matches actual outcome), then submits a `claim` describing the rolled value. Server checks the claim is in the canonical loot pool, applies via mirror. Cheater can claim any item *in the pool* but nothing outside it.
+
+- `economy-arbiter.js#validateChestOpen` + `validateVaseSearch` rewritten — pool resolution mirrors `src/map-triggers.js#rollLootEntry` (Ur interiors → 114, locked-room mapId 1010 → union of all 4 altar floors, mimic-tier check, gilMax bound). Removed the per-call `createRng` + `rollLootEntry` server roller.
+- `ws-presence.js` chest-open + vase-search handlers updated for the new shape (no `rolled` in response).
+- `src/net.js`: `sendNetChestOpen` + `sendNetVaseSearch` now accept `claim`.
+- `src/map-triggers.js`: `handleChest` + `handleHiddenTreasure` route through the new senders when `SERVER_ECONOMY` is on; legacy `sendNetInvEvent('add'/'gil-delta', …, 'chest'/'loot')` paths gated on `!SERVER_ECONOMY`. Mimic claim fires too so server gets audit signal.
+- Wire-sim coverage: replaced the old "server-rolled outcome" test with `Chest validate-only accepts a claim in the pool` + `Chest validate-only rejects claim outside pool`. 113/113.
+
+### Inn (bed-rest) intentionally not gated
+
+Beds in this game are free (`src/bed.js` — refills HP/MP, no gil cost). Zero currency leverage = no exploit vector, so no server-side gate is necessary. The `inn-rest` server endpoint stays armed for a future paid inn; `INN_REGISTRY` is empty.
+
 ## 1.7.779 — 2026-05-29
 
 ### PvE + economy — P-13 FLAG FLIP

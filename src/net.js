@@ -866,13 +866,15 @@ export function setNetShopResultHandler(fn) {
 // debug panel) and the eventual P-13 flag flip is a 4-flag edit only.
 let _chestTxnSeq = 1;
 export function nextChestTxnId() { return _chestTxnSeq++; }
-export function sendNetChestOpen({ txnId, mapId, x, y }) {
+export function sendNetChestOpen({ txnId, mapId, x, y, claim }) {
   if (!_helloed) return false;
-  return _send({ type: 'chest-open', txnId: txnId | 0, mapId: mapId | 0, x: x | 0, y: y | 0 });
+  return _send({ type: 'chest-open', txnId: txnId | 0, mapId: mapId | 0,
+    x: x | 0, y: y | 0, claim: claim || null });
 }
-export function sendNetVaseSearch({ txnId, mapId, x, y }) {
+export function sendNetVaseSearch({ txnId, mapId, x, y, claim }) {
   if (!_helloed) return false;
-  return _send({ type: 'vase-search', txnId: txnId | 0, mapId: mapId | 0, x: x | 0, y: y | 0 });
+  return _send({ type: 'vase-search', txnId: txnId | 0, mapId: mapId | 0,
+    x: x | 0, y: y | 0, claim: claim || null });
 }
 export function sendNetInnRest({ txnId, mapId, counterX, counterY }) {
   if (!_helloed) return false;

@@ -1188,11 +1188,10 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'chest-open': {
-      // v1.7.777 P-10 — server rolls loot from the canonical LOOT_POOLS;
-      // applies the gil/item via mirror; replies with the rolled value
-      // so client UI can show "Found X". Mimic rolls return without
-      // applying (client starts the battle locally; PvE arbiter then
-      // takes over).
+      // v1.7.780 P-10b — validate-only. Client rolls locally + submits
+      // `claim` (item id / gil amount / monster). Server checks the claim
+      // is in the pool, applies gil/item via mirror. Mimic claim → no
+      // event (client starts the battle locally; PvE arbiter takes over).
       if (!entry.helloed) return;
       if (!SERVER_ECONOMY) {
         _send(entry.ws, { type: 'chest-result', txnId: parsed.txnId | 0,
@@ -1202,6 +1201,8 @@ function _handleMessage(entry, msg) {
       const slot = (entry.slot | 0);
       const r = validateChestOpen(entry.userId, slot, parsed);
       if (!r.ok) {
+        console.log('[chest] reject user=' + entry.userId + ' map=' + parsed.mapId +
+          ' claim=' + JSON.stringify(parsed.claim) + ' reason=' + r.reason);
         _send(entry.ws, { type: 'chest-result', txnId: parsed.txnId | 0,
           status: 'rejected', reason: r.reason });
         return;
@@ -1212,16 +1213,14 @@ function _handleMessage(entry, msg) {
         type: 'chest-result',
         txnId: parsed.txnId | 0,
         status: 'ok',
-        rolled: r.rolled,
         gilAfter: fresh.gil | 0,
       });
-      console.log('[chest] user=' + entry.userId + ' map=' + parsed.mapId +
-        ' rolled=' + JSON.stringify(r.rolled));
       return;
     }
     case 'vase-search': {
-      // v1.7.777 P-10 — server runs the 25% hit roll + draws from the
-      // vase loot pool (mimic tiers filtered). Miss → no event, ok=true.
+      // v1.7.780 P-10b — validate-only. Client rolls hit/miss + loot
+      // locally, submits `claim`. Server validates against the vase pool
+      // (mimic tiers excluded).
       if (!entry.helloed) return;
       if (!SERVER_ECONOMY) {
         _send(entry.ws, { type: 'vase-result', txnId: parsed.txnId | 0,
@@ -1231,6 +1230,8 @@ function _handleMessage(entry, msg) {
       const slot = (entry.slot | 0);
       const r = validateVaseSearch(entry.userId, slot, parsed);
       if (!r.ok) {
+        console.log('[vase] reject user=' + entry.userId + ' map=' + parsed.mapId +
+          ' claim=' + JSON.stringify(parsed.claim) + ' reason=' + r.reason);
         _send(entry.ws, { type: 'vase-result', txnId: parsed.txnId | 0,
           status: 'rejected', reason: r.reason });
         return;
@@ -1241,11 +1242,8 @@ function _handleMessage(entry, msg) {
         type: 'vase-result',
         txnId: parsed.txnId | 0,
         status: 'ok',
-        rolled: r.rolled,
         gilAfter: fresh.gil | 0,
       });
-      console.log('[vase] user=' + entry.userId + ' map=' + parsed.mapId +
-        ' rolled=' + JSON.stringify(r.rolled));
       return;
     }
     case 'inn-rest': {
