@@ -205,6 +205,6 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_quest_npc',       x: 10, y: 28, spec: UR_QUEST_NPC },
     { key: 'ur_villager_maiden', x:  7, y: 19, spec: UR_VILLAGER_MAIDEN },
     { key: 'ur_hooded_sage',     x: 20, y: 18, spec: UR_HOODED_SAGE },
-    { key: 'ur_villager_red',    x:  3, y: 13, spec: UR_VILLAGER_RED },
+    { key: 'ur_villager_red',    x:  3, y: 12, spec: UR_VILLAGER_RED },
   ]],
 ]);

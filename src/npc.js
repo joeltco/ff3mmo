@@ -507,6 +507,7 @@ function _isWalkableForNpc(mapData, x, y) {
   const m = t < 128 ? t : t & 0x7F;
   const cb1 = mapData.collision[m];
   if ((cb1 & 0x07) === 3) return false;   // solid wall
+  if ((cb1 & 0x07) === 2) return false;   // water — NPCs don't swim (v1.7.714 RED-in-pond bug)
   if (cb1 & 0x80) return false;           // trigger — keep NPCs off doors/chests/passage tiles
   return true;
 }
