@@ -36,12 +36,12 @@ const ROSTER_FADE_STEP_MS = 100;
 const ROSTER_SLIDE_SPEED  = 0.15;  // px per ms
 const ROSTER_ROW_H        = 32;
 const ROSTER_VISIBLE      = 3;
-// v1.7.759 — Battle re-added with the v1.7.758 PvP arbiter flag-flip.
-// 'Battle' (PvP) was removed v1.7.502 when PvP went dark for the
-// authoritative-host rewrite (now [[ff3mmo-pvp-arbiter-rewrite]]).
-// Dispatch in input-handler.js was left intact through that window and
-// just becomes reachable again with the menu item present.
-export const ROSTER_MENU_ITEMS = ['Battle', 'Party', 'Trade', 'Message', 'Inspect'];
+// v1.7.770 — Battle removed AGAIN. PvP disabled while P-6d animation gaps +
+// P-4c magic/item land. v1.7.759 added it back with the arbiter flag-flip;
+// v1.7.502 originally removed it when PvP went dark. Dispatch in
+// input-handler.js stays intact — re-adding 'Battle' to this array is
+// sufficient when PVP_ENABLED flips back on.
+export const ROSTER_MENU_ITEMS = ['Party', 'Trade', 'Message', 'Inspect'];
 
 // ── Mutable state ─────────────────────────────────────────────────────────
 let rosterTimer        = 0;

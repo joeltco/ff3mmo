@@ -44,7 +44,11 @@ import { cancelPendingPVPCheck } from './battle-encounter.js';
 // PVP_ARBITER_SERVER + PVP_ARBITER. Clicking Battle on a roster row
 // now starts a real PvP search instead of showing the "disabled"
 // popup. See [[ff3mmo-pvp-arbiter-rewrite]].
-export const PVP_ENABLED = true;
+// v1.7.770 — OFF AGAIN. PvP disabled while P-6d animation gaps + P-4c
+// magic/item resolution land. Roster 'Battle' menu item also removed
+// for defense-in-depth (stale-cached clients still see this flag false
+// + server PVP_ENABLED false either way).
+export const PVP_ENABLED = false;
 
 // Tuning constants. Surface them up here so they're easy to find.
 const BASE_HOOK     = 0.25;

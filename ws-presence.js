@@ -94,7 +94,11 @@ const _pvpSearches = new Map();
 // (the legacy lockstep relay's `_emitWirePVPAction` is unreachable
 // because both arbiter flags route the hook to pvpArbCreate). To
 // roll back: set BOTH this and PVP_ARBITER_SERVER false + redeploy.
-let PVP_ENABLED = true;
+// v1.7.770 — OFF AGAIN. Disabling PvP while P-6d animation gaps + magic/item
+// P-4c land. PVP_ARBITER_SERVER stays on (no-op without PVP_ENABLED) so a
+// re-enable is just flipping this one flag + the client one + restoring the
+// roster 'Battle' menu item.
+let PVP_ENABLED = false;
 
 // v1.7.757 P-9 — server-side counterpart to the client's PVP_ARBITER flag
 // (src/net.js). When BOTH are true (and PVP_ENABLED is true), a successful
