@@ -16,6 +16,7 @@ import {
 } from './net.js';
 import { seed as seedRng } from './rng.js';
 import { battleSt } from './battle-state.js';
+import { ps } from './player-stats.js';
 
 // Per-battle local state — the battleId + intent buffer between
 // pve-battle-start arrival and pve-battle-end submission.
@@ -121,17 +122,23 @@ function _resetLocalBattle() {
 }
 
 function _buildStubClaim() {
-  // P-3 stub — captures the natural outcome of the local battle but
-  // doesn't yet itemize every delta. P-6 expands this into the full
-  // schema (party HP/MP/status, monster HP, drop, exp/cp/gil, level-ups,
-  // job-CP, spells-learned). Server's P-2 stub accepts whatever we
-  // send; the schema solidifies once the replay engine lands.
+  // v1.7.781 — derive victor from observable encounter state instead of
+  // battleSt.enemyDefeated, which is true in BOTH victory and player-KO
+  // paths (battle-update.js lines 799 + 824) and therefore can't
+  // distinguish the two. Reward-presence is the reliable signal:
+  //   - player dead          → wipe (no rewards)
+  //   - encounterExpGained>0 → party victory (rewards earned)
+  //   - otherwise (no rewards, player alive) → fled
+  const playerDead = ps.hp <= 0;
+  const earnedRewards = (battleSt.encounterExpGained | 0) > 0;
+  const victor = playerDead ? 'wipe' : (earnedRewards ? 'party' : 'fled');
+  const isVictory = victor === 'party';
   return {
-    victor: battleSt.enemyDefeated ? 'party' : 'wipe',
-    drop: battleSt.encounterDropItem,
-    expGained: battleSt.encounterExpGained | 0,
-    cpGained:  battleSt.encounterCpGained  | 0,
-    gilGained: battleSt.encounterGilGained | 0,
+    victor,
+    drop:      isVictory ? battleSt.encounterDropItem : null,
+    expGained: isVictory ? (battleSt.encounterExpGained | 0) : 0,
+    cpGained:  isVictory ? (battleSt.encounterCpGained  | 0) : 0,
+    gilGained: isVictory ? (battleSt.encounterGilGained | 0) : 0,
   };
 }
 
