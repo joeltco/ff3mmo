@@ -66,7 +66,7 @@ import {
   endPveBattle, cancelPveBattle,
 } from './pve-arbiter.js';
 // v1.7.776 P-8/P-9 — server economy validator. Shops first; chests/vases/inn follow.
-import { validateShopTransaction } from './economy-arbiter.js';
+import { validateShopTransaction, validateChestOpen, validateVaseSearch, validateInnRest } from './economy-arbiter.js';
 
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
@@ -1182,6 +1182,94 @@ function _handleMessage(entry, msg) {
       });
       console.log('[shop-txn] ok user=' + entry.userId + ' action=' + parsed.action +
         ' item=0x' + ((parsed.itemId|0).toString(16)) + ' qty=' + (parsed.qty|0));
+      return;
+    }
+    case 'chest-open': {
+      // v1.7.777 P-10 — server rolls loot from the canonical LOOT_POOLS;
+      // applies the gil/item via mirror; replies with the rolled value
+      // so client UI can show "Found X". Mimic rolls return without
+      // applying (client starts the battle locally; PvE arbiter then
+      // takes over).
+      if (!entry.helloed) return;
+      if (!SERVER_ECONOMY) {
+        _send(entry.ws, { type: 'chest-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: 'economy-disabled' });
+        return;
+      }
+      const slot = (entry.slot | 0);
+      const r = validateChestOpen(entry.userId, slot, parsed);
+      if (!r.ok) {
+        _send(entry.ws, { type: 'chest-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: r.reason });
+        return;
+      }
+      for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
+      const fresh = mirrorReadFullState(entry.userId, slot);
+      _send(entry.ws, {
+        type: 'chest-result',
+        txnId: parsed.txnId | 0,
+        status: 'ok',
+        rolled: r.rolled,
+        gilAfter: fresh.gil | 0,
+      });
+      console.log('[chest] user=' + entry.userId + ' map=' + parsed.mapId +
+        ' rolled=' + JSON.stringify(r.rolled));
+      return;
+    }
+    case 'vase-search': {
+      // v1.7.777 P-10 — server runs the 25% hit roll + draws from the
+      // vase loot pool (mimic tiers filtered). Miss → no event, ok=true.
+      if (!entry.helloed) return;
+      if (!SERVER_ECONOMY) {
+        _send(entry.ws, { type: 'vase-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: 'economy-disabled' });
+        return;
+      }
+      const slot = (entry.slot | 0);
+      const r = validateVaseSearch(entry.userId, slot, parsed);
+      if (!r.ok) {
+        _send(entry.ws, { type: 'vase-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: r.reason });
+        return;
+      }
+      for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
+      const fresh = mirrorReadFullState(entry.userId, slot);
+      _send(entry.ws, {
+        type: 'vase-result',
+        txnId: parsed.txnId | 0,
+        status: 'ok',
+        rolled: r.rolled,
+        gilAfter: fresh.gil | 0,
+      });
+      console.log('[vase] user=' + entry.userId + ' map=' + parsed.mapId +
+        ' rolled=' + JSON.stringify(r.rolled));
+      return;
+    }
+    case 'inn-rest': {
+      // v1.7.777 P-11 — server-validated gil deduction + party restore.
+      // HP/MP restore happens client-side; server only enforces gil.
+      if (!entry.helloed) return;
+      if (!SERVER_ECONOMY) {
+        _send(entry.ws, { type: 'inn-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: 'economy-disabled' });
+        return;
+      }
+      const slot = (entry.slot | 0);
+      const r = validateInnRest(entry.userId, slot, parsed);
+      if (!r.ok) {
+        _send(entry.ws, { type: 'inn-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: r.reason });
+        return;
+      }
+      for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
+      const fresh = mirrorReadFullState(entry.userId, slot);
+      _send(entry.ws, {
+        type: 'inn-result',
+        txnId: parsed.txnId | 0,
+        status: 'ok',
+        gilAfter: fresh.gil | 0,
+      });
+      console.log('[inn] user=' + entry.userId + ' map=' + parsed.mapId);
       return;
     }
     case 'inv-event': {

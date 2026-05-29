@@ -18,6 +18,21 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.777 — 2026-05-29
+
+### Economy arbiter — P-10 + P-11 (chest / vase / inn server endpoints)
+
+New `src/data/loot-pools.js` — extracted `LOOT_POOLS`, `DEFAULT_LOOT`, `UR_CHEST_MAPS` from `src/map-triggers.js` into a Node-clean shared module + a pure `rollLootEntry(mapId, rng)` / `rollVaseLoot(mapId, rng)` that take an injectable RNG so server and client share the canonical roller. `map-triggers.js`'s local copy of the data is unchanged in this deploy (a follow-on cleanup will dedupe to a single source).
+
+`economy-arbiter.js` got three new validators:
+- `validateChestOpen(userId, slot, payload)` — server rolls loot from the canonical pool, applies gil/item via mirror, returns the rolled value so the client UI can show the right "Found X" message. Chest mimics roll into a `{type:'monster'}` outcome (no event applied; client starts the battle locally, then the PvE arbiter takes over).
+- `validateVaseSearch(userId, slot, payload)` — 25% hit chance, draws from the mimic-filtered pool.
+- `validateInnRest(userId, slot, payload)` — gil deduction; HP/MP restore stays client (save column). `INN_REGISTRY` is empty placeholder until first inn lands.
+
+`ws-presence.js` got three new wire handlers (`chest-open` / `vase-search` / `inn-rest`) gated on `SERVER_ECONOMY`. `src/net.js` got the sender + result-handler scaffolding (`sendNetChestOpen` / `sendNetVaseSearch` / `sendNetInnRest` + setters + `nextChestTxnId`).
+
+**Client-side integration deferred.** `src/map-triggers.js#handleChest` + vase-search + bed-rest are not yet gated on the flag — server endpoints are callable from tools (wire-sim, debug panel) only. P-10b/P-11b will wire the gates. Flag flip at P-13 will only affect PvE arbiter + shops.
+
 ## 1.7.776 — 2026-05-29
 
 ### Economy arbiter — P-8 + P-9 (shop transactions)
