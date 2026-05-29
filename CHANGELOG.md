@@ -18,6 +18,23 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.775 — 2026-05-29
+
+### PvE arbiter — P-5 + P-6 + P-7 (outcome-validate engine + delta apply)
+
+New `pve-replay.js` — `validateBattleOutcome(battle, claim)` outcome-validates the client's claim against the server-canonical monster list:
+- `victor` must be `'party'` / `'wipe'` / `'fled'`
+- Victory: `expGained` / `gilGained` / `cpGained` must equal the server formula (`max(1, floor(sum/4))`); `drop` must be `null` or in the union of valid drops for the battle's monsters
+- Wipe / flee: all rewards must be zero
+
+Catches the biggest cheat surface — forged exp/gil/cp totals and fabricated drop items the monsters can't actually drop. Per-action HP/MP/status validation requires a full battle-FSM replay (P-5b deferred); the v1 model trusts client HP since it doesn't grant currency directly.
+
+`pve-arbiter.js#endPveBattle` now runs the validator; rejected outcomes log `[pve-divergence]` with the reason. Accepted outcomes pass through `_applyPveCanonical` in `ws-presence.js` which writes the gil delta + drop add via the inventory mirror as the sole server-side writer (single source). After apply, server pushes a fresh `inv-state` snapshot to the client so its mirror reconciles to canonical.
+
+`src/battle-update.js` gates the client-side `sendNetInvEvent('gil-delta', …, 'loot')` + `sendNetInvEvent('add', drop, …, 'loot')` calls behind `!(PVE_ARBITER && pveCurrentBattleId())` so the mirror isn't double-counted when the arbiter is on. Local `grantGil` + `addItem` calls stay (drives the UI); server's push reconciles.
+
+Flag still off — no behavior change. Enable path is the same 4-flag flip at P-13.
+
 ## 1.7.774 — 2026-05-29
 
 ### PvE arbiter — P-4 (per-turn intent buffer)

@@ -61,6 +61,8 @@ export default [
       'debug-server.js',
       'ws-presence.js',
       'pvp-arbiter.js',
+      'pve-arbiter.js',
+      'pve-replay.js',
       'tools/**/*.js',
       'tools/**/*.mjs',
       'tools/**/*.cjs',

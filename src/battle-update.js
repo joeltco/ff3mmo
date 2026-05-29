@@ -29,6 +29,7 @@ import { rand } from './rng.js';
 // the server releases the battle slot. P-6 expands this into the full
 // replay-validate flow (claim + intent buffer). No-op when PVE_ARBITER off.
 import { pveSubmitBattleEnd, pveCurrentBattleId, pveBufferIntent, pveBuildIntent } from './pve-client.js';
+import { PVE_ARBITER } from './net.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } from './spell-cast.js';
@@ -853,7 +854,14 @@ function _updateMonsterDeath() {
       battleSt.encounterGilGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.gil || 0), 0) / 4));
       battleSt.encounterCpGained = Math.max(1, Math.floor(battleSt.encounterMonsters.reduce((sum, m) => sum + (m.cp || 1), 0) / 4)); grantCP(battleSt.encounterCpGained);
       grantGil(battleSt.encounterGilGained);
-      sendNetInvEvent('gil-delta', 0, battleSt.encounterGilGained, 'loot');   // v1.7.742 Phase 1c — random encounter gil
+      // v1.7.775 P-6 — when PVE_ARBITER on, server applies gil via the
+      // mirror after validating pve-battle-end (single writer). Skip the
+      // client-side emit so the mirror doesn't double-count. Local
+      // ps.gil is set by grantGil above for UI; server's inv-state push
+      // (P-6 emit on `applied`) reconciles to the canonical value.
+      if (!(PVE_ARBITER && pveCurrentBattleId())) {
+        sendNetInvEvent('gil-delta', 0, battleSt.encounterGilGained, 'loot');
+      }
       battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
       battleSt.encounterDropItem = null;
@@ -883,7 +891,13 @@ function _updateMonsterDeath() {
         // v1.7.742 Phase 1c — only fire if the add actually landed (a
         // full-bag rejection sets `added === 0` and the mirror should
         // see no add either).
-        else sendNetInvEvent('add', battleSt.encounterDropItem, 1, 'loot');
+        // v1.7.775 P-6 — when PVE_ARBITER on, server applies drop via
+        // the mirror after validating pve-battle-end (same gate as gil
+        // above). Local addItem above keeps the UI in sync; server's
+        // inv-state push reconciles. v1.7.775.
+        else if (!(PVE_ARBITER && pveCurrentBattleId())) {
+          sendNetInvEvent('add', battleSt.encounterDropItem, 1, 'loot');
+        }
       }
       saveSlotsToDB();
       _queueVictoryRewards();

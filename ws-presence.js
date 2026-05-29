@@ -125,6 +125,31 @@ let PVP_ARBITER_SERVER = true;
 // engine (P-5) + delta-apply (P-6) are wired.
 let PVE_ARBITER = false;
 
+// v1.7.775 P-6 — apply a validated canonical outcome to the user's
+// inventory mirror. Gil + drop are the two server-owned writes when
+// PVE_ARBITER is on (client gates its own sendNetInvEvent for source='loot').
+// Exp / cp / level remain client-asserted via the save column — those
+// require the full battle FSM replay (P-5b deferred). v1 closes the
+// largest cheat vector (currency/drop fabrication).
+function _applyPveCanonical(userId, slot, canonical) {
+  if (!canonical) return;
+  if ((canonical.gilGained | 0) > 0) {
+    mirrorApplyInvEvent(userId, slot, {
+      kind: 'gil-delta',
+      qty:  canonical.gilGained | 0,
+      source: 'pve-loot',
+    });
+  }
+  if (canonical.drop != null) {
+    mirrorApplyInvEvent(userId, slot, {
+      kind:   'add',
+      itemId: canonical.drop | 0,
+      qty:    1,
+      source: 'pve-loot',
+    });
+  }
+}
+
 // Active PvP battle partners — userId → partnerUserId. Set on pvp-match,
 // cleared on disconnect. The server relays `pvp-action` between partners
 // so each client drives its opponent's turn from the remote player's actual
@@ -1068,13 +1093,19 @@ function _handleMessage(entry, msg) {
       return;
     }
     case 'pve-battle-end': {
-      // v1.7.772 P-2 — STUB validation. Echoes the client's claimedOutcome
-      // back as `applied` (no replay yet). P-6 wires the real replay +
-      // delta-apply. Client must NOT trust this `applied` status until
-      // P-6 ships — it's currently rubber-stamping.
+      // v1.7.775 P-5/P-6 — validate the client's claim against the
+      // server-canonical monster list (outcome-validate model). On accept,
+      // server applies the canonical gil + drop via the inventory mirror
+      // (sole writer for currency/inv when PVE_ARBITER on; client gates
+      // its own sendNetInvEvent for the 'loot' source). On reject, the
+      // client gets the reason + a corrective inv-state push.
       if (!entry.helloed) return;
       if (!PVE_ARBITER) return;
+      const slot = (entry.slot | 0);
       const result = endPveBattle(entry.userId, parsed);
+      if (result.status === 'applied' && result.canonical) {
+        _applyPveCanonical(entry.userId, slot, result.canonical);
+      }
       _send(entry.ws, {
         type: 'pve-battle-result',
         battleId: parsed.battleId,
@@ -1082,6 +1113,16 @@ function _handleMessage(entry, msg) {
         reason:   result.reason,
         canonical: result.canonical,
       });
+      // After apply, push the fresh mirror snapshot so the client's
+      // inv state matches server. This is the same protocol used for
+      // mirror-divergence pushes (case 'inv-event' above).
+      if (result.status === 'applied') {
+        _send(entry.ws, {
+          type: 'inv-state',
+          reason: 'pve-applied',
+          ...mirrorReadFullState(entry.userId, slot),
+        });
+      }
       console.log('[pve-end] battle=' + parsed.battleId + ' user=' + entry.userId +
         ' status=' + result.status + (result.reason ? ' reason=' + result.reason : ''));
       return;

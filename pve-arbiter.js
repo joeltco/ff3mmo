@@ -16,6 +16,7 @@ import { createRng } from './src/rng.js';
 import { MONSTERS } from './src/data/monsters.js';
 import { ENCOUNTERS } from './src/data/encounters.js';
 import { readSaveSlot, mirrorReadFullState } from './api.js';
+import { validateBattleOutcome } from './pve-replay.js';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -190,20 +191,27 @@ export function endPveBattle(userId, payload) {
   if (!battle) return { status: 'rejected', reason: 'no-battle' };
   if (battle.userId !== userId) return { status: 'rejected', reason: 'not-owner' };
 
-  // Stash the claim + intents on the battle so the next deploy's
-  // replay engine (P-5/P-6) can validate.
   battle.intents = payload.intents || battle.intents;
   battle.claimedOutcome = payload.claimedOutcome || null;
   battle.status = 'ended';
   battle.endedAt = Date.now();
 
-  // GC immediately on end — successful or otherwise.
+  // v1.7.775 P-5 — outcome-validate against the server-canonical monster
+  // list. Catches forged exp / gil / cp / drop. Per-action replay
+  // (full HP / status validation) deferred to P-5b. Caller (P-6) applies
+  // the canonical deltas to the save row when accepted.
+  const result = validateBattleOutcome(battle, payload.claimedOutcome);
+
   _battles.delete(battleId);
   if (_userBattle.get(userId) === battleId) _userBattle.delete(userId);
 
-  // P-2 stub: trust the client's claim. P-6 replaces this with the
-  // replay-validate result.
-  return { status: 'applied', canonical: payload.claimedOutcome || null };
+  if (!result.accepted) {
+    console.log('[pve-divergence] battle=' + battleId + ' user=' + userId +
+      ' reason=' + result.reason +
+      ' claim=' + JSON.stringify(payload.claimedOutcome));
+    return { status: 'rejected', reason: result.reason };
+  }
+  return { status: 'applied', canonical: result.canonical };
 }
 
 // Disconnect / explicit cancel. Cleans up tracking. Used by the WS
