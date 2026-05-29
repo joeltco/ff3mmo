@@ -273,10 +273,58 @@ export function placeOpeningScene() {
 // Town keepers (shop NPCs behind counters) — data-driven from TOWN_NPCS.
 // No-op for maps with no entry. Each keeper renders via the shared Sprite
 // class; counter-bound, so they idle-march facing down (never talk-faced).
+//
+// Wandering town NPCs (spec.wander === true) re-roll their spawn on every
+// map entry from a grass-tile pool, with `mapSt.encounterPatch` tiles
+// excluded so they never spawn in a random-encounter zone. Static keepers
+// (shops, quest_npc) keep their fixed `(n.x, n.y)`. v1.7.769.
+//
+// `TOWN_NPC_GRASS_TILES`: per-map metatile ids that count as "plain grass"
+// for the random spawn pool. Read from the existing wanderer placements
+// when adding a new map (e.g. Ur peach/quest/maiden land on 0x00 + sage
+// on 0x01 — both included).
+const TOWN_NPC_GRASS_TILES = new Map([
+  [114, new Set([0x00, 0x01])],
+]);
+
+function _collectRandomSpawnPool(mapData, encounterPatch, tileIds) {
+  const pool = [];
+  for (let y = 1; y <= 30; y++) {
+    for (let x = 1; x <= 30; x++) {
+      const t = mapData.tilemap[y * 32 + x];
+      if (!tileIds.has(t)) continue;
+      if (encounterPatch && encounterPatch.has(y * 32 + x)) continue;
+      if (!_isOpenAreaTile(mapData, x, y)) continue;
+      pool.push([x, y]);
+    }
+  }
+  return pool;
+}
+
+function _shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
 export function placeTownNpcs(mapId) {
   const list = TOWN_NPCS.get(mapId);
   if (!list) return;
-  for (const n of list) addSceneNpc(n.key, n.x, n.y, n.spec);
+  const grassTiles = TOWN_NPC_GRASS_TILES.get(mapId);
+  let pool = null;
+  if (grassTiles && mapSt.mapData) {
+    pool = _collectRandomSpawnPool(mapSt.mapData, mapSt.encounterPatch, grassTiles);
+    _shuffleInPlace(pool);
+  }
+  let pi = 0;
+  for (const n of list) {
+    let x = n.x, y = n.y;
+    if (pool && n.spec.wander && pi < pool.length) {
+      [x, y] = pool[pi++];
+    }
+    addSceneNpc(n.key, x, y, n.spec);
+  }
 }
 
 // ── Opening-scene intro ──────────────────────────────────────────────────

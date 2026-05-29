@@ -260,14 +260,15 @@ function _loadRegularMap(mapId, returnX, returnY) {
   clearNpcs();
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
   if (mapId === 7) placeOpeningScene();
-  placeTownNpcs(mapId);
   // Ur (114) has a dark-tile patch in the town that spawns wild
   // grasslands encounters (Werewolves + Bees). Flood-fill from the seed
-  // tile so adding/extending the patch in the ROM just works.
+  // tile so adding/extending the patch in the ROM just works. Computed
+  // BEFORE placeTownNpcs so the wanderer random-spawn pool can exclude it.
   if (mapId === 114) {
     mapSt.encounterPatch = _floodFillTilePatch(mapData.tilemap, 22, 8);
     mapSt.encounterPatchZone = 'grasslands_wild';
   }
+  placeTownNpcs(mapId);
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
