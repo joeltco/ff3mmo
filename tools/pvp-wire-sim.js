@@ -2375,6 +2375,47 @@ async function suiteWire() {
     _testHooks.setPveArbiter(false);
   });
 
+  await asyncTest('PvE happy path: victor=party with correct rewards is applied', async () => {
+    _testHooks.setPveArbiter(true);
+    _testEnsureUser(3004);
+    _testSeedSave(3004, 0, { stats: { level: 5, hp: 100, maxHP: 100 } });
+    const ws = await connectClient(port, 3004, { name: 'PveOK', jobIdx: 0, level: 5,
+      palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'pve-encounter-request',
+      zoneKey: 'grasslands_valley', mapId: 0 }));
+    const start = await once(ws, m => m.type === 'pve-battle-start', 2000);
+    // Compute the CORRECT rewards from the actual monsters the server picked.
+    // Mirrors the formula in src/battle-update.js#_updateVictoryFsm.
+    const expSum = start.monsters.reduce((s, m) => s + (m.exp | 0), 0);
+    const gilSum = start.monsters.reduce((s, m) => s + (m.gil | 0), 0);
+    const cpSum  = start.monsters.reduce((s, m) => s + ((m.cp != null ? m.cp : 1) | 0), 0);
+    ws.send(JSON.stringify({ type: 'pve-battle-end', battleId: start.battleId,
+      intents: [], claimedOutcome: {
+        victor: 'party',
+        expGained: Math.max(1, Math.floor(expSum / 4)),
+        gilGained: Math.max(1, Math.floor(gilSum / 4)),
+        cpGained:  Math.max(1, Math.floor(cpSum  / 4)),
+        drop: null,
+      } }));
+    const result = await once(ws, m => m.type === 'pve-battle-result', 1000);
+    assertEqual(result.status, 'applied', 'happy-path victory rejected: ' + result.reason);
+    assertTrue(result.canonical && result.canonical.victor === 'party',
+      'canonical victor missing or wrong: ' + JSON.stringify(result.canonical));
+    // Mirror gil should reflect the granted gilGained. inv-state arrives
+    // right after pve-battle-result; ws._earlyMessages collector captures
+    // both for retrospective inspection (the once() helper can race past
+    // the inv-state when chained after pve-battle-result).
+    await new Promise(r => setTimeout(r, 50));
+    const invState = ws._earlyMessages.find(m =>
+      m.type === 'inv-state' && m.reason === 'pve-applied');
+    assertTrue(invState, 'inv-state push missing after applied victory');
+    assertTrue(invState.gil > 0, 'mirror gil did not increase after applied victory');
+    ws.close();
+    _testHooks.setPveArbiter(false);
+  });
+
   await asyncTest('PvE battle-end rejects forged exp', async () => {
     _testHooks.setPveArbiter(true);
     _testEnsureUser(3002);
