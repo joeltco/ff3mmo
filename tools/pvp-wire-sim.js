@@ -2347,6 +2347,178 @@ async function suiteWire() {
     assertEqual(r.status, 401, 't1 still works after logout-all (watermark not enforced)');
   });
 
+  // ── PvE + economy arbiters (v1.7.778 P-12) ────────────────────────────
+  // Boots a fresh user, flips PVE_ARBITER + SERVER_ECONOMY, exercises the
+  // wire paths. Covers happy + reject for each surface. Each test cleans
+  // its own state so order doesn't matter.
+
+  await asyncTest('PvE encounter request returns battle-start with monsters + seed', async () => {
+    _testHooks.setPveArbiter(true);
+    _testEnsureUser(3001);
+    _testSeedSave(3001, 0, { stats: { level: 5, hp: 100, maxHP: 100 } });
+    const ws = await connectClient(port, 3001, { name: 'Pve1', jobIdx: 0, level: 5,
+      palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'pve-encounter-request',
+      zoneKey: 'grasslands_valley', mapId: 0 }));
+    const start = await once(ws, m => m.type === 'pve-battle-start', 2000);
+    assertTrue(start.battleId > 0, 'battleId not set');
+    assertTrue(start.rngSeed > 0, 'rngSeed not set');
+    assertTrue(start.monsters.length >= 1, 'monsters empty');
+    assertEqual(start.monsters[0].monsterId, 0, 'expected Goblin');
+    // Cleanup: end the battle so the slot is released.
+    ws.send(JSON.stringify({ type: 'pve-battle-end', battleId: start.battleId,
+      intents: [], claimedOutcome: { victor: 'fled' } }));
+    await once(ws, m => m.type === 'pve-battle-result', 1000);
+    ws.close();
+    _testHooks.setPveArbiter(false);
+  });
+
+  await asyncTest('PvE battle-end rejects forged exp', async () => {
+    _testHooks.setPveArbiter(true);
+    _testEnsureUser(3002);
+    _testSeedSave(3002, 0, { stats: { level: 5, hp: 100, maxHP: 100 } });
+    const ws = await connectClient(port, 3002, { name: 'Pve2', jobIdx: 0, level: 5,
+      palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'pve-encounter-request',
+      zoneKey: 'grasslands_valley', mapId: 0 }));
+    const start = await once(ws, m => m.type === 'pve-battle-start', 2000);
+    ws.send(JSON.stringify({ type: 'pve-battle-end', battleId: start.battleId,
+      intents: [], claimedOutcome: { victor: 'party',
+        expGained: 99999, gilGained: 1, cpGained: 1, drop: null } }));
+    const result = await once(ws, m => m.type === 'pve-battle-result', 1000);
+    assertEqual(result.status, 'rejected', 'forged exp accepted');
+    assertTrue(result.reason && result.reason.startsWith('exp-mismatch'),
+      'wrong reject reason: ' + result.reason);
+    ws.close();
+    _testHooks.setPveArbiter(false);
+  });
+
+  await asyncTest('PvE battle-end rejects drop not in monster pool', async () => {
+    _testHooks.setPveArbiter(true);
+    _testEnsureUser(3003);
+    _testSeedSave(3003, 0, { stats: { level: 5, hp: 100, maxHP: 100 } });
+    const ws = await connectClient(port, 3003, { name: 'Pve3', jobIdx: 0, level: 5,
+      palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'pve-encounter-request',
+      zoneKey: 'grasslands_valley', mapId: 0 }));
+    const start = await once(ws, m => m.type === 'pve-battle-start', 2000);
+    // Goblin drops Potion (0xA6) only; claiming a Hi-Potion (0xA7) = cheat.
+    const expSum = start.monsters.reduce((s, m) => s + (m.exp | 0), 0);
+    const gilSum = start.monsters.reduce((s, m) => s + (m.gil | 0), 0);
+    const cpSum = start.monsters.reduce((s, m) => s + ((m.cp != null ? m.cp : 1) | 0), 0);
+    ws.send(JSON.stringify({ type: 'pve-battle-end', battleId: start.battleId,
+      intents: [], claimedOutcome: { victor: 'party',
+        expGained: Math.max(1, Math.floor(expSum / 4)),
+        gilGained: Math.max(1, Math.floor(gilSum / 4)),
+        cpGained:  Math.max(1, Math.floor(cpSum  / 4)),
+        drop: 0xA7 } }));
+    const result = await once(ws, m => m.type === 'pve-battle-result', 1000);
+    assertEqual(result.status, 'rejected', 'fake drop accepted');
+    assertTrue(result.reason && result.reason.startsWith('drop-not-in-pool'),
+      'wrong reject reason: ' + result.reason);
+    ws.close();
+    _testHooks.setPveArbiter(false);
+  });
+
+  await asyncTest('Shop buy succeeds + mirror gil decreases', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3010);
+    _testSeedSave(3010, 0, { stats: { level: 1 } });
+    // Mint gil into the mirror so the shop has something to debit.
+    _testHooks.setMirrorAuthoritative
+      ? _testHooks.setMirrorAuthoritative(true) : null;
+    // Direct mirror seed via test helper.
+    _testSetMirrorAuthoritative(true);
+    _testEnsureUser(3010);
+    const ws = await connectClient(port, 3010, { name: 'Shop1', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // Seed mirror gil via gil-delta event (shadow mode).
+    ws.send(JSON.stringify({ type: 'inv-event', kind: 'gil-delta', qty: 1000, source: 'test' }));
+    await new Promise(r => setTimeout(r, 30));
+    // Potion (0xA6) costs 50g in Ur item shop.
+    ws.send(JSON.stringify({ type: 'shop-transaction', txnId: 1,
+      shopId: 'ur_item', action: 'buy', itemId: 0xA6, qty: 1 }));
+    const result = await once(ws, m => m.type === 'shop-result', 1000);
+    assertEqual(result.status, 'ok', 'buy was rejected: ' + result.reason);
+    assertTrue(result.gilAfter < 1000, 'gil did not decrease');
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Shop buy rejected when item not in shop catalog', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3011);
+    const ws = await connectClient(port, 3011, { name: 'Shop2', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // Try to buy a Longsword (0x24) from the item shop (has Potion only).
+    ws.send(JSON.stringify({ type: 'shop-transaction', txnId: 1,
+      shopId: 'ur_item', action: 'buy', itemId: 0x24, qty: 1 }));
+    const result = await once(ws, m => m.type === 'shop-result', 1000);
+    assertEqual(result.status, 'rejected', 'unauthorized buy accepted');
+    assertEqual(result.reason, 'item-not-in-shop', 'wrong reject reason');
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Shop buy rejected on insufficient gil', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3012);
+    const ws = await connectClient(port, 3012, { name: 'Shop3', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // Mirror gil defaults to 0 for fresh user. Try to buy a Potion (50g).
+    ws.send(JSON.stringify({ type: 'shop-transaction', txnId: 1,
+      shopId: 'ur_item', action: 'buy', itemId: 0xA6, qty: 1 }));
+    const result = await once(ws, m => m.type === 'shop-result', 1000);
+    assertEqual(result.status, 'rejected', 'broke player got the item');
+    assertTrue(result.reason && result.reason.startsWith('insufficient-gil'),
+      'wrong reject reason: ' + result.reason);
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Chest open returns server-rolled outcome', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3020);
+    const ws = await connectClient(port, 3020, { name: 'Chest1', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 114, x: 5, y: 5 }));
+    const result = await once(ws, m => m.type === 'chest-result', 1000);
+    assertEqual(result.status, 'ok', 'chest open rejected: ' + result.reason);
+    assertTrue(result.rolled && result.rolled.type, 'no rolled outcome');
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Inn rest rejects unknown counter', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3030);
+    const ws = await connectClient(port, 3030, { name: 'Inn1', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'inn-rest', txnId: 1, mapId: 999,
+      counterX: 0, counterY: 0 }));
+    const result = await once(ws, m => m.type === 'inn-result', 1000);
+    assertEqual(result.status, 'rejected', 'unknown inn accepted');
+    assertEqual(result.reason, 'unknown-inn', 'wrong reject reason');
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
   // ── teardown ─────────────────────────────────────────────────────────────
   await new Promise(r => httpServer.close(r));
 }
