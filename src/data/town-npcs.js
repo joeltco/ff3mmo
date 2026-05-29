@@ -163,12 +163,11 @@ export const UR_HOODED_SAGE = {
   ],
 };
 
-// NW corner, spawn (3, 13). Same body as UR_VILLAGER_PEACH but magenta
-// hair — so it reads as a different person despite sharing the bundle.
-// Spawn moved in v1.7.714 from (11, 28) — was one tile east of
-// UR_QUEST_NPC (10, 28), and both had similar-tone hair, so it read as a
-// duplicate. NW corner puts them in a completely separate zone for
-// visual breathing room.
+// South plaza east, spawn (27, 25). Same body as UR_VILLAGER_PEACH but
+// magenta hair — so it reads as a different person despite sharing the
+// bundle. Spawn history: (11,28) → v1.7.714 NW corner (3,13) which
+// landed ON the pond → v1.7.767 NW dry tile (3,12) → v1.7.768 east
+// plaza for visual spread against peach (15,25) + quest (10,28).
 export const UR_VILLAGER_RED = {
   romOffset: 0x01DF10,
   palTop: VILLAGER_HAIR_MAGENTA,
@@ -205,6 +204,6 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_quest_npc',       x: 10, y: 28, spec: UR_QUEST_NPC },
     { key: 'ur_villager_maiden', x:  7, y: 19, spec: UR_VILLAGER_MAIDEN },
     { key: 'ur_hooded_sage',     x: 20, y: 18, spec: UR_HOODED_SAGE },
-    { key: 'ur_villager_red',    x:  3, y: 12, spec: UR_VILLAGER_RED },
+    { key: 'ur_villager_red',    x: 27, y: 25, spec: UR_VILLAGER_RED },
   ]],
 ]);
