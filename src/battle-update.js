@@ -25,6 +25,10 @@ import { arbViewSt } from './pvp-arb-viewer.js';
 // v1.7.756 P-8 — name strip helper for arbiter path.
 import { setArbStripName } from './pvp-arb-anim.js';
 import { rand } from './rng.js';
+// v1.7.773 P-3 — submit pve-battle-end at natural encounter terminus so
+// the server releases the battle slot. P-6 expands this into the full
+// replay-validate flow (claim + intent buffer). No-op when PVE_ARBITER off.
+import { pveSubmitBattleEnd, pveCurrentBattleId } from './pve-client.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } from './spell-cast.js';
@@ -1057,6 +1061,10 @@ function _updateBoxClose() {
   if (battleSt.battleState === 'encounter-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       const playerDead = ps.hp <= 0;
+      // v1.7.773 P-3 — fire pve-battle-end before the local tear-down so
+      // claim builder can still read battleSt.encounter* fields. No-op
+      // when PVE_ARBITER off or no active arbiter battleId.
+      if (pveCurrentBattleId()) pveSubmitBattleEnd();
       battleSt.runSlideBack = false;
       sprite.setDirection(DIR_DOWN); battleSt.isRandomEncounter = false; battleSt.encounterMonsters = null;
       battleSt.dyingMonsterIndices = new Map(); battleSt.battleAllies = []; battleSt.allyJoinRound = 0;

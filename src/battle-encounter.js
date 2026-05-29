@@ -11,8 +11,13 @@ import { createStatusState } from './status-effects.js';
 import { mapSt } from './map-state.js';
 import { inputSt } from './input-handler.js';
 import { getMonsterCanvas } from './monster-sprites.js';
-import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler } from './net.js';
+import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler, PVE_ARBITER } from './net.js';
 import { reseedFromEntropy } from './rng.js';
+// v1.7.773 P-3 — PvE arbiter client. Gated on PVE_ARBITER flag (off in
+// production through P-3). pve-client owns the encounter handshake;
+// startRandomEncounterFromServer below is the receiver for the server's
+// monster list + seed (server seeded battleSt.rand already on hello).
+import { pveRequestEncounter, initPveClient } from './pve-client.js';
 
 const TILE_SIZE = 16;
 
@@ -90,22 +95,40 @@ export function isEncounterCheckPending() { return _pendingPVPCheck; }
 export function cancelPendingPVPCheck() { _pendingPVPCheck = false; }
 function _triggerEncounterWithPVPCheck() {
   if (!sendNetPVPEncounter()) {
-    startRandomEncounter();
+    _startEncounterRoutingArbiter();
     return;
   }
   _pendingPVPCheck = true;
   setTimeout(() => {
     if (!_pendingPVPCheck) return;
     _pendingPVPCheck = false;
-    if (battleSt.battleState === 'none') startRandomEncounter();
+    if (battleSt.battleState === 'none') _startEncounterRoutingArbiter();
   }, 2500);
 }
 
 setNetPVPEncounterNoneHandler(() => {
   if (!_pendingPVPCheck) return;
   _pendingPVPCheck = false;
-  if (battleSt.battleState === 'none') startRandomEncounter();
+  if (battleSt.battleState === 'none') _startEncounterRoutingArbiter();
 });
+
+// v1.7.773 P-3 — route encounters through the PvE arbiter when its flag
+// is on (server picks monsters + seed); fall back to local-roll otherwise.
+// pve-client's setNetPveBattleStartHandler will call back into
+// startRandomEncounterFromServer when the server replies; pve-cancel
+// causes the call to no-op and the client stays unencountered (no
+// auto-fallback to local in P-3 — that opens a "double-encounter" race
+// if the request was actually delivered).
+function _startEncounterRoutingArbiter() {
+  if (PVE_ARBITER) {
+    const zoneKey = currentEncounterZoneKey();
+    const ok = pveRequestEncounter({ zoneKey, mapId: mapSt.currentMapId | 0 });
+    if (ok) return;
+    // Send failed (WS not open) — local fallback so the user isn't
+    // stuck step-cycling without any encounter.
+  }
+  startRandomEncounter();
+}
 
 // ── Spawn encounter monsters ───────────────────────────────────────────────
 // Build one encounter-monster object from a monster id. Shared by random
@@ -160,6 +183,35 @@ export function startChestMimic() {
   // in battle-update.js for the rationale. v1.7.686.
   _tryJoinPlayerAlly({ initial: true });
 }
+
+// v1.7.773 P-3 — receive a server-rolled encounter from the PvE arbiter.
+// Same setup as startRandomEncounter() but skips the local formation +
+// monster-count rolls (server supplies the canonical `encounterMonsters`
+// array). Reseed is NOT called — pve-client already seeded the singleton
+// RNG with the server's `rngSeed` so subsequent drop/AI rolls converge
+// with the replay engine (P-5). Sort + presentation match the local path.
+export function startRandomEncounterFromServer(serverMonsters) {
+  battleSt.isRandomEncounter = true;
+  inputSt.battleActionCount = 0;
+  forceCloseMsgBox();
+  battleSt.encounterMonsters = (serverMonsters || []).slice(0, 4);
+  battleSt.encounterMonsters.sort((a, b) => {
+    const ha = getMonsterCanvas(a.monsterId, battleSt.goblinBattleCanvas)?.height || 32;
+    const hb = getMonsterCanvas(b.monsterId, battleSt.goblinBattleCanvas)?.height || 32;
+    return hb - ha;
+  });
+  battleSt.preBattleTrack = TRACKS.CRYSTAL_CAVE;
+  _resetBattleVars();
+  battleSt.battleState = 'flash-strobe';
+  battleSt.battleTimer = 0;
+  playSFX(SFX.BATTLE_SWIPE);
+  _tryJoinPlayerAlly({ initial: true });
+}
+
+// pve-client needs a ref to startRandomEncounterFromServer to dispatch
+// pve-battle-start frames. Cycle-safe: pve-client doesn't read this at
+// import time; it stashes via initPveClient and calls later.
+initPveClient({ startRandomEncounterFromServer });
 
 export function startRandomEncounter() {
   battleSt.isRandomEncounter = true;

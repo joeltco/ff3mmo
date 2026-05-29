@@ -49,6 +49,11 @@ let _onPvpArbStart = null;       // (battle-start frame) → void
 let _onPvpArbTurn = null;        // (pvp-turn frame) → void
 let _onPvpArbCancel = null;      // ({battleId, reason}) → void
 let _onPvpArbStateResync = null; // (resync frame, same shape as start) → void
+// v1.7.773 P-3 — PvE replay-validate wire handlers. Registered by
+// `src/pve-client.js` at module load. See `docs/PVE-REWRITE-PLAN.md`.
+let _onPveBattleStart = null;    // ({battleId, rngSeed, monsters}) → void
+let _onPveBattleResult = null;   // ({battleId, status, canonical, reason?}) → void
+let _onPveCancel = null;         // ({reason}) → void
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
@@ -244,6 +249,30 @@ function _handleMessage(data) {
       if (_onPvpArbStateResync) {
         try { _onPvpArbStateResync(msg); }
         catch (e) { console.warn('[net] pvp-state-resync handler error', e); }
+      }
+      return;
+    case 'pve-battle-start':
+      // v1.7.773 P-3 — server replied to pve-encounter-request with the
+      // monster list + seed. pve-client mirrors them into battleSt.
+      if (_onPveBattleStart) {
+        try { _onPveBattleStart(msg); }
+        catch (e) { console.warn('[net] pve-battle-start handler error', e); }
+      }
+      return;
+    case 'pve-battle-result':
+      // v1.7.773 P-3 — server's replay-validate verdict. P-3 logs but
+      // does NOT yet overwrite ps (validation is stubbed P-2 → P-6).
+      if (_onPveBattleResult) {
+        try { _onPveBattleResult(msg); }
+        catch (e) { console.warn('[net] pve-battle-result handler error', e); }
+      }
+      return;
+    case 'pve-cancel':
+      // Server refused the encounter request (arbiter disabled, no save,
+      // unknown zone, etc.). Client falls back to local startRandomEncounter.
+      if (_onPveCancel) {
+        try { _onPveCancel(msg); }
+        catch (e) { console.warn('[net] pve-cancel handler error', e); }
       }
       return;
     case 'party-invite-incoming':
@@ -630,6 +659,39 @@ export function setNetPvpArbStateResyncHandler(fn) {
   _onPvpArbStateResync = typeof fn === 'function' ? fn : null;
 }
 
+// v1.7.773 P-3 — PvE wire setters + emitters. See pve-client.js for the
+// per-handler contracts. See docs/PVE-REWRITE-PLAN.md for the wire shapes.
+export function setNetPveBattleStartHandler(fn) {
+  _onPveBattleStart = typeof fn === 'function' ? fn : null;
+}
+export function setNetPveBattleResultHandler(fn) {
+  _onPveBattleResult = typeof fn === 'function' ? fn : null;
+}
+export function setNetPveCancelHandler(fn) {
+  _onPveCancel = typeof fn === 'function' ? fn : null;
+}
+export function sendNetPveEncounterRequest({ zoneKey, mapId }) {
+  if (!_helloed) return false;
+  return _send({
+    type: 'pve-encounter-request',
+    zoneKey: String(zoneKey || ''),
+    mapId:   mapId | 0,
+  });
+}
+export function sendNetPveIntent(intent) {
+  if (!_helloed || !intent) return false;
+  return _send({ type: 'pve-intent', ...intent });
+}
+export function sendNetPveBattleEnd({ battleId, intents, claimedOutcome }) {
+  if (!_helloed) return false;
+  return _send({
+    type: 'pve-battle-end',
+    battleId: battleId | 0,
+    intents:  intents || [],
+    claimedOutcome: claimedOutcome || null,
+  });
+}
+
 // Submit one intent for the current round. Called by P-7's input rewire
 // when the player picks attack/magic/item/defend from the action menu.
 // Fire-and-forget — server validates (battleId match, turnIdx match,
@@ -727,6 +789,17 @@ export const INV_MIRROR_AUTHORITATIVE = true;
 // input/render through the arbiter path (arbViewSt / pvp-arb-anim /
 // pvp-arb-adapter). To roll back: set all four flags false + deploy.
 export const PVP_ARBITER = true;
+
+// v1.7.773 P-3 — PvE replay-validate arbiter feature flag (client side).
+// Full plan: docs/PVE-REWRITE-PLAN.md. When true, encounter generation
+// rolls through the server (pve-encounter-request → pve-battle-start)
+// instead of being client-rolled; battle plays out locally using the
+// server-supplied seed + monster list; at battle end, client sends
+// claimed outcome + intents (P-4) and server replays (P-5) + applies
+// deltas (P-6). When false, encounter generation stays fully local
+// (current production behavior). Stays false through P-3 + P-4 until
+// the replay engine + delta-apply land.
+export const PVE_ARBITER = false;
 
 // Send an inventory mutation event to the server. `kind` is one of
 // 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason
