@@ -58,6 +58,13 @@ import {
   handleDisconnect as pvpArbDisconnect, getActiveCount as pvpArbActiveCount,
   _testReset as pvpArbTestReset,
 } from './pvp-arbiter.js';
+// v1.7.772 P-2 — PvE replay-validate arbiter. Server picks monsters + seed,
+// client runs battle locally, server replays + validates on end. See
+// docs/PVE-REWRITE-PLAN.md. Module is self-contained.
+import {
+  createPveBattle, recordIntent as pveRecordIntent,
+  endPveBattle, cancelPveBattle,
+} from './pve-arbiter.js';
 
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
@@ -109,6 +116,14 @@ let PVP_ENABLED = false;
 // v1.7.758 — FLIPPED ON. Paired with PVP_ENABLED (above) + the two
 // client flags. See [[ff3mmo-pvp-arbiter-rewrite]] memory.
 let PVP_ARBITER_SERVER = true;
+
+// v1.7.772 P-2 — PvE replay-validate gate. When true, the server accepts
+// `pve-encounter-request` frames + spawns server-rolled monsters with a
+// seed; when false, the wire handlers reject so the client stays on the
+// existing local-encounter path. Mutable so the wire-sim (P-12) can flip.
+// Stays off through P-2/P-3/P-4 until the client wire lands + the replay
+// engine (P-5) + delta-apply (P-6) are wired.
+let PVE_ARBITER = false;
 
 // Active PvP battle partners — userId → partnerUserId. Set on pvp-match,
 // cleared on disconnect. The server relays `pvp-action` between partners
@@ -1011,6 +1026,66 @@ function _handleMessage(entry, msg) {
         (turnFrame.deltas.some(d => d.kind === 'end') ? ' END' : ''));
       return;
     }
+    case 'pve-encounter-request': {
+      // v1.7.772 P-2 — server-rolled encounter. Gated on PVE_ARBITER (off
+      // through P-2, flips at P-13). Replies `pve-battle-start` with the
+      // chosen monsters + seed; client mirrors them into battleSt and
+      // runs the battle locally. P-3 wires the client side.
+      if (!entry.helloed) return;
+      if (!PVE_ARBITER) {
+        _send(entry.ws, { type: 'pve-cancel', reason: 'arbiter-disabled' });
+        return;
+      }
+      const slot = (entry.slot | 0);
+      const result = createPveBattle(entry.userId, {
+        slot,
+        zoneKey: parsed.zoneKey,
+        mapId:   parsed.mapId | 0,
+      });
+      if (result.error) {
+        console.log('[pve-encounter] reject user=' + entry.userId + ' reason=' + result.error);
+        _send(entry.ws, { type: 'pve-cancel', reason: result.error });
+        return;
+      }
+      _send(entry.ws, {
+        type: 'pve-battle-start',
+        battleId: result.battleId,
+        rngSeed:  result.rngSeed,
+        monsters: result.monsters,
+      });
+      console.log('[pve-start] battle=' + result.battleId + ' user=' + entry.userId +
+        ' zone=' + parsed.zoneKey + ' mons=' + result.monsters.length);
+      return;
+    }
+    case 'pve-intent': {
+      // v1.7.772 P-2 — buffer per-turn intents. No validation in P-2;
+      // replay (P-5) consumes the buffer. Silent on success — failures
+      // log for forensics.
+      if (!entry.helloed) return;
+      if (!PVE_ARBITER) return;
+      const ok = pveRecordIntent(entry.userId, parsed);
+      if (!ok) console.log('[pve-intent] reject user=' + entry.userId + ' battle=' + parsed.battleId);
+      return;
+    }
+    case 'pve-battle-end': {
+      // v1.7.772 P-2 — STUB validation. Echoes the client's claimedOutcome
+      // back as `applied` (no replay yet). P-6 wires the real replay +
+      // delta-apply. Client must NOT trust this `applied` status until
+      // P-6 ships — it's currently rubber-stamping.
+      if (!entry.helloed) return;
+      if (!PVE_ARBITER) return;
+      const result = endPveBattle(entry.userId, parsed);
+      _send(entry.ws, {
+        type: 'pve-battle-result',
+        battleId: parsed.battleId,
+        status:   result.status,
+        reason:   result.reason,
+        canonical: result.canonical,
+      });
+      console.log('[pve-end] battle=' + parsed.battleId + ' user=' + entry.userId +
+        ' status=' + result.status + (result.reason ? ' reason=' + result.reason : ''));
+      return;
+    }
     case 'inv-event': {
       // v1.7.741 Phase 1a — inventory mirror authoritative-write scaffold.
       // Client emits an event for every inventory mutation; server
@@ -1880,6 +1955,10 @@ export function attachWebSocketPresence(httpServer) {
         } catch (e) {
           console.warn('[pvp-arb] disconnect handler failed user=' + userId + ': ' + e.message);
         }
+        // v1.7.772 P-2 — release the user's PvE battle slot on drop. No
+        // peer to notify (PvE is single-player); just frees the tracking.
+        try { cancelPveBattle(userId, 'disconnect'); }
+        catch (e) { console.warn('[pve-arb] disconnect cleanup failed user=' + userId + ': ' + e.message); }
         // Clean up pending party invites involving this user.
         // Gap A (v1.7.734) — if this user had an OUTGOING invite pending,
         // tell the target so their `party-invite-incoming` modal dismisses.
@@ -1977,6 +2056,7 @@ export const _testHooks = {
   normalizeProfileField: _normalizeProfileField,
   setPvpEnabled(v) { PVP_ENABLED = !!v; },
   setPvpArbiterServer(v) { PVP_ARBITER_SERVER = !!v; },
+  setPveArbiter(v) { PVE_ARBITER = !!v; },
   pvpHookChance: _pvpHookChance,
   inSameParty: _inSameParty,
   rateAllow: _rateAllow,

@@ -18,6 +18,16 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.772 — 2026-05-29
+
+### PvE arbiter — P-2 (server skeleton + encounter gen)
+
+New `pve-arbiter.js` module (Node-clean ESM, root) — server-side battle FSM tracker. `createPveBattle(userId, {slot, zoneKey, mapId})` picks a monster formation with a seeded RNG, snapshots the user's pre-state (save row + inventory mirror), and returns the battle-start payload (`battleId`, `rngSeed`, `monsters`). `recordIntent`/`endPveBattle`/`cancelPveBattle` complete the surface. Idempotent on re-request (reconnect mid-battle = same battleId). 5-minute idle TTL on stale entries.
+
+`ws-presence.js` got three new wire handlers — `pve-encounter-request` → emit `pve-battle-start`; `pve-intent` → buffer; `pve-battle-end` → emit `pve-battle-result`. All gated on the new `PVE_ARBITER` flag (server-side, default `false`). Disconnect handler now releases the user's PvE battle slot in parallel with the existing pvp-arb cleanup. `_testHooks.setPveArbiter(v)` exposed for the wire-sim.
+
+**P-2 is a STUB:** `endPveBattle` rubber-stamps the client's claimed outcome as `applied`. The replay engine (P-5) + delta-apply (P-6) finish the validation contract. Flag stays off — nothing changes for end users in this deploy. See `docs/PVE-REWRITE-PLAN.md`.
+
 ## 1.7.771 — 2026-05-29
 
 ### PvE + economy server-validation arc — P-0 + P-1
