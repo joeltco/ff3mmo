@@ -123,16 +123,19 @@ let PVP_ARBITER_SERVER = true;
 // `pve-encounter-request` frames + spawns server-rolled monsters with a
 // seed; when false, the wire handlers reject so the client stays on the
 // existing local-encounter path. Mutable so the wire-sim (P-12) can flip.
-// Stays off through P-2/P-3/P-4 until the client wire lands + the replay
-// engine (P-5) + delta-apply (P-6) are wired.
-let PVE_ARBITER = false;
+// v1.7.779 P-13 — FLIPPED ON. Paired with SERVER_ECONOMY + the two client
+// flags. Encounter rewards (exp/gil/cp/drop) now server-validated.
+// To roll back: set this + SERVER_ECONOMY + both client flags back to false.
+let PVE_ARBITER = true;
 
 // v1.7.776 P-8 — server-side economy validation gate (shops + chests +
 // vases + inn). When true, client sends transaction requests + waits for
-// server's authoritative ok/reject; when false, client owns the writes
-// (current production behavior). Stays off through P-8 + P-11 until the
-// full economy surface is wired + smoke tested.
-let SERVER_ECONOMY = false;
+// server's authoritative ok/reject; when false, client owns the writes.
+// v1.7.779 P-13 — FLIPPED ON. Shops route through server-validate. Chest /
+// vase / inn server endpoints exist but client doesn't call them yet
+// (P-10b/P-11b). To roll back: set this + PVE_ARBITER + both client
+// flags back to false.
+let SERVER_ECONOMY = true;
 
 // v1.7.775 P-6 — apply a validated canonical outcome to the user's
 // inventory mirror. Gil + drop are the two server-owned writes when

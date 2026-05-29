@@ -825,18 +825,21 @@ export const PVP_ARBITER = true;
 // rolls through the server (pve-encounter-request → pve-battle-start)
 // instead of being client-rolled; battle plays out locally using the
 // server-supplied seed + monster list; at battle end, client sends
-// claimed outcome + intents (P-4) and server replays (P-5) + applies
-// deltas (P-6). When false, encounter generation stays fully local
-// (current production behavior). Stays false through P-3 + P-4 until
-// the replay engine + delta-apply land.
-export const PVE_ARBITER = false;
+// claimed outcome + intents and server validates outcome (exp/gil/cp/drop)
+// + applies via mirror.
+// v1.7.779 P-13 — FLIPPED ON. Paired with SERVER_ECONOMY + the two server
+// flags. To roll back: set this + SERVER_ECONOMY + both server flags false.
+export const PVE_ARBITER = true;
 
 // v1.7.776 P-8/P-9 — server-side economy validation flag. When true,
 // shop / chest / vase / inn transactions route to the server for
 // authoritative validation + apply (gil + inv via mirror, single
-// writer). When false, client owns the writes (current behavior).
-// Stays false through P-8 + P-11 until the full economy surface is wired.
-export const SERVER_ECONOMY = false;
+// writer). When false, client owns the writes.
+// v1.7.779 P-13 — FLIPPED ON. Shops route through server-validate.
+// Chest / vase / inn client integration (src/map-triggers.js gating)
+// is deferred to P-10b/P-11b. To roll back: set this + PVE_ARBITER +
+// both server flags false.
+export const SERVER_ECONOMY = true;
 
 let _shopTxnSeq = 1;
 export function nextShopTxnId() { return _shopTxnSeq++; }
