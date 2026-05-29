@@ -28,7 +28,7 @@ import { rand } from './rng.js';
 // v1.7.773 P-3 — submit pve-battle-end at natural encounter terminus so
 // the server releases the battle slot. P-6 expands this into the full
 // replay-validate flow (claim + intent buffer). No-op when PVE_ARBITER off.
-import { pveSubmitBattleEnd, pveCurrentBattleId } from './pve-client.js';
+import { pveSubmitBattleEnd, pveCurrentBattleId, pveBufferIntent, pveBuildIntent } from './pve-client.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { updateBattleEnemyTurn } from './battle-enemy.js';
 import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } from './spell-cast.js';
@@ -456,6 +456,16 @@ function _updateBattleMenuConfirm() {
         // will return us to 'menu'. Don't reset battleTimer — the
         // pause prevents repeat commits from a bouncing input.
         return true;
+      }
+      // v1.7.774 P-4 — buffer the player's intent for the PvE arbiter
+      // replay log. No-op when PVE_ARBITER off or not in a server-rolled
+      // encounter. `inputSt.battleActionCount` is the round counter
+      // (bumped per player action below); use it as turnIdx so server
+      // replay can correlate. Buffer happens BEFORE the action dispatches
+      // so a fail-fast can capture even commits that crash mid-resolve.
+      if (battleSt.isRandomEncounter && pveCurrentBattleId() && inputSt.playerActionPending) {
+        const intent = pveBuildIntent(inputSt.playerActionPending, inputSt.battleActionCount | 0);
+        if (intent) pveBufferIntent(intent);
       }
       // Pre-roll magic damage/heal BEFORE wire emit so the wire payload
       // carries the rolled value. Without this, receivers apply 0 (no

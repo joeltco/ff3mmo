@@ -68,6 +68,46 @@ export function pveBufferIntent(intent) {
   _localBattle.intents.push(intent);
 }
 
+// Public — translate a legacy `playerActionPending` shape into the
+// PvE-arbiter intent wire shape. Mirrors the PvP arbiter's mapping
+// (see battle-update.js#_emitWirePVPArbAction) but for PvE: actor is
+// always the player (no PvP cell map); targetMonsterIdx is a 0..3
+// index into battleSt.encounterMonsters. v1.7.774 P-4.
+//
+// Note: ally-target intents (magic/item used on a party member) carry
+// targetSlot = 1..3 (allyIndex+1); player-self is targetSlot=0. Replay
+// engine (P-5) maps these back to combatants.
+export function pveBuildIntent(pending, turnIdx) {
+  if (!pending) return null;
+  const out = { battleId: _localBattle.battleId, turnIdx: turnIdx | 0, actorSlot: 0 };
+  switch (pending.command) {
+    case 'defend': out.kind = 'defend'; break;
+    case 'run':    out.kind = 'flee';   break;
+    case 'skip':   out.kind = 'defend'; break;          // ATB-era stub; treat as defend
+    case 'fight':
+      out.kind = 'attack';
+      out.targetMonsterIdx = pending.targetIndex | 0;
+      break;
+    case 'magic':
+      out.kind = 'magic';
+      out.spellId = pending.spellId | 0;
+      if (pending.target === 'monster') out.targetMonsterIdx = pending.targetIndex | 0;
+      else if (pending.target === 'ally') out.targetSlot = (pending.allyIndex | 0) + 1;
+      else out.targetSlot = 0;                          // self
+      break;
+    case 'item':
+      out.kind = 'item';
+      out.itemId = pending.itemId | 0;
+      if (pending.target === 'monster') out.targetMonsterIdx = pending.targetIndex | 0;
+      else if (pending.target === 'ally') out.targetSlot = (pending.allyIndex | 0) + 1;
+      else out.targetSlot = 0;
+      break;
+    default:
+      out.kind = String(pending.command || 'defend');
+  }
+  return out;
+}
+
 // Public — read current arbiter battleId. Returns 0 when not in an
 // arbiter battle. Lets battle-update tell pve-arbiter end vs local end.
 export function pveCurrentBattleId() {
