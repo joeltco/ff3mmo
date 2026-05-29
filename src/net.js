@@ -54,6 +54,7 @@ let _onPvpArbStateResync = null; // (resync frame, same shape as start) → void
 let _onPveBattleStart = null;    // ({battleId, rngSeed, monsters}) → void
 let _onPveBattleResult = null;   // ({battleId, status, canonical, reason?}) → void
 let _onPveCancel = null;         // ({reason}) → void
+let _onShopResult = null;        // ({txnId, status, ...}) → void — v1.7.776 P-9
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
@@ -273,6 +274,13 @@ function _handleMessage(data) {
       if (_onPveCancel) {
         try { _onPveCancel(msg); }
         catch (e) { console.warn('[net] pve-cancel handler error', e); }
+      }
+      return;
+    case 'shop-result':
+      // v1.7.776 P-9 — server's shop-transaction verdict.
+      if (_onShopResult) {
+        try { _onShopResult(msg); }
+        catch (e) { console.warn('[net] shop-result handler error', e); }
       }
       return;
     case 'party-invite-incoming':
@@ -800,6 +808,32 @@ export const PVP_ARBITER = true;
 // (current production behavior). Stays false through P-3 + P-4 until
 // the replay engine + delta-apply land.
 export const PVE_ARBITER = false;
+
+// v1.7.776 P-8/P-9 — server-side economy validation flag. When true,
+// shop / chest / vase / inn transactions route to the server for
+// authoritative validation + apply (gil + inv via mirror, single
+// writer). When false, client owns the writes (current behavior).
+// Stays false through P-8 + P-11 until the full economy surface is wired.
+export const SERVER_ECONOMY = false;
+
+let _shopTxnSeq = 1;
+export function nextShopTxnId() { return _shopTxnSeq++; }
+
+export function sendNetShopTransaction({ txnId, shopId, action, itemId, qty }) {
+  if (!_helloed) return false;
+  return _send({
+    type: 'shop-transaction',
+    txnId: txnId | 0,
+    shopId: String(shopId || ''),
+    action: String(action || ''),
+    itemId: itemId | 0,
+    qty:    qty | 0,
+  });
+}
+
+export function setNetShopResultHandler(fn) {
+  _onShopResult = typeof fn === 'function' ? fn : null;
+}
 
 // Send an inventory mutation event to the server. `kind` is one of
 // 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason

@@ -63,6 +63,7 @@ export default [
       'pvp-arbiter.js',
       'pve-arbiter.js',
       'pve-replay.js',
+      'economy-arbiter.js',
       'tools/**/*.js',
       'tools/**/*.mjs',
       'tools/**/*.cjs',

@@ -65,6 +65,8 @@ import {
   createPveBattle, recordIntent as pveRecordIntent,
   endPveBattle, cancelPveBattle,
 } from './pve-arbiter.js';
+// v1.7.776 P-8/P-9 — server economy validator. Shops first; chests/vases/inn follow.
+import { validateShopTransaction } from './economy-arbiter.js';
 
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
@@ -124,6 +126,13 @@ let PVP_ARBITER_SERVER = true;
 // Stays off through P-2/P-3/P-4 until the client wire lands + the replay
 // engine (P-5) + delta-apply (P-6) are wired.
 let PVE_ARBITER = false;
+
+// v1.7.776 P-8 — server-side economy validation gate (shops + chests +
+// vases + inn). When true, client sends transaction requests + waits for
+// server's authoritative ok/reject; when false, client owns the writes
+// (current production behavior). Stays off through P-8 + P-11 until the
+// full economy surface is wired + smoke tested.
+let SERVER_ECONOMY = false;
 
 // v1.7.775 P-6 — apply a validated canonical outcome to the user's
 // inventory mirror. Gil + drop are the two server-owned writes when
@@ -1127,6 +1136,54 @@ function _handleMessage(entry, msg) {
         ' status=' + result.status + (result.reason ? ' reason=' + result.reason : ''));
       return;
     }
+    case 'shop-transaction': {
+      // v1.7.776 P-9 — atomic buy/sell. Server validates against the
+      // shop catalog + ITEMS price + current mirror state; on ok,
+      // applies the gil + inv events via mirrorApplyInvEvent (single
+      // writer). Reply carries `gilAfter` + `invDelta` so the client
+      // can reconcile its UI without a follow-up inv-state-request.
+      if (!entry.helloed) return;
+      if (!SERVER_ECONOMY) {
+        _send(entry.ws, { type: 'shop-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: 'economy-disabled' });
+        return;
+      }
+      const slot = (entry.slot | 0);
+      const result = validateShopTransaction(entry.userId, slot, parsed);
+      if (!result.ok) {
+        console.log('[shop-txn] reject user=' + entry.userId +
+          ' action=' + parsed.action + ' item=0x' + ((parsed.itemId|0).toString(16)) +
+          ' qty=' + (parsed.qty|0) + ' reason=' + result.reason);
+        _send(entry.ws, { type: 'shop-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: result.reason });
+        return;
+      }
+      let applyOk = true;
+      let applyReason = null;
+      for (const ev of result.events) {
+        const r = mirrorApplyInvEvent(entry.userId, slot, ev);
+        if (!r.ok) { applyOk = false; applyReason = r.reason; break; }
+      }
+      if (!applyOk) {
+        console.warn('[shop-txn] mirror apply failed user=' + entry.userId + ' reason=' + applyReason);
+        _send(entry.ws, { type: 'shop-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: 'mirror-' + applyReason });
+        return;
+      }
+      const fresh = mirrorReadFullState(entry.userId, slot);
+      _send(entry.ws, {
+        type: 'shop-result',
+        txnId: parsed.txnId | 0,
+        status: 'ok',
+        action: parsed.action,
+        itemId: parsed.itemId | 0,
+        qty:    parsed.qty | 0,
+        gilAfter: fresh.gil | 0,
+      });
+      console.log('[shop-txn] ok user=' + entry.userId + ' action=' + parsed.action +
+        ' item=0x' + ((parsed.itemId|0).toString(16)) + ' qty=' + (parsed.qty|0));
+      return;
+    }
     case 'inv-event': {
       // v1.7.741 Phase 1a — inventory mirror authoritative-write scaffold.
       // Client emits an event for every inventory mutation; server
@@ -2098,6 +2155,7 @@ export const _testHooks = {
   setPvpEnabled(v) { PVP_ENABLED = !!v; },
   setPvpArbiterServer(v) { PVP_ARBITER_SERVER = !!v; },
   setPveArbiter(v) { PVE_ARBITER = !!v; },
+  setServerEconomy(v) { SERVER_ECONOMY = !!v; },
   pvpHookChance: _pvpHookChance,
   inSameParty: _inSameParty,
   rateAllow: _rateAllow,
