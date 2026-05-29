@@ -843,7 +843,10 @@ function _updateMonsterDeath() {
       battleSt.encounterJobLevelUp = gainJobJP(inputSt.battleActionCount || 1);
       inputSt.battleActionCount = 0;
       battleSt.encounterDropItem = null;
-      const _dropRand = Math.random;
+      // Use seeded RNG (rng.js singleton) — v1.7.771 P-1. Drop roll is the
+      // outcome-side fact that the upcoming PvE arbiter must replay; raw
+      // Math.random would diverge between client and server replay.
+      const _dropRand = rand;
       for (const m of battleSt.encounterMonsters) {
         const mData = MONSTERS.get(m.monsterId);
         // Filter null drops first — ROM-extracted drop tables include null placeholder

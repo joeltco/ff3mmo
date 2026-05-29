@@ -129,7 +129,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
             if (battleSt.encounterMonsters[i].hp > 0) pool.push({ type: 'monster', index: i });
           }
         }
-        const pick = pool[Math.floor(Math.random() * pool.length)];
+        const pick = pool[Math.floor(rand() * pool.length)];
         const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
         const effHitRate = (ps.hitRate || 80) * blindMult;
         const lv = ps.stats?.level || 1;
@@ -211,7 +211,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
       const living = battleSt.encounterMonsters.map((m, i) => m.hp > 0 ? i : -1).filter(i => i >= 0);
       if (living.length === 0) { processNextTurn(); return; }
-      battleSt.allyTargetIndex = living[Math.floor(Math.random() * living.length)];
+      battleSt.allyTargetIndex = living[Math.floor(rand() * living.length)];
     } else { battleSt.allyTargetIndex = -1; }
     const monTgt = battleSt.allyTargetIndex >= 0 ? battleSt.encounterMonsters[battleSt.allyTargetIndex] : null;
     const pvpTgt = !monTgt && pvpSt.isPVPBattle

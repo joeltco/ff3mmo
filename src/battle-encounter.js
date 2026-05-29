@@ -12,6 +12,7 @@ import { mapSt } from './map-state.js';
 import { inputSt } from './input-handler.js';
 import { getMonsterCanvas } from './monster-sprites.js';
 import { sendNetPVPEncounter, setNetPVPEncounterNoneHandler } from './net.js';
+import { reseedFromEntropy } from './rng.js';
 
 const TILE_SIZE = 16;
 
@@ -140,6 +141,10 @@ export function startChestMimic() {
   battleSt.isRandomEncounter = true;
   inputSt.battleActionCount = 0;
   forceCloseMsgBox();
+  // v1.7.771 P-1 — every battle reseeds so the seeded RNG sequence is
+  // bounded by the battle (boss path already did this; mimics/encounters
+  // didn't). Required for the PvE arbiter's replay-validate to converge.
+  reseedFromEntropy();
   const zone = ENCOUNTERS.get(currentEncounterZoneKey());
   const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 1 }]];
   const ids = [];
@@ -162,6 +167,8 @@ export function startRandomEncounter() {
   // v1.7.446 — drop any in-flight overworld msg box ("Found Potion!" from a
   // chest, NPC dialogue, etc.) so it doesn't bleed through the battle wipe.
   forceCloseMsgBox();
+  // v1.7.771 P-1 — see startChestMimic note. Reseed at battle inception.
+  reseedFromEntropy();
 
   // Zone selection (valley vs wild by bounding box, indoor patch, or cave
   // floor) is shared with the rate lookup — see currentEncounterZoneKey.
