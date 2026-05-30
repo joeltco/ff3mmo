@@ -17,7 +17,7 @@ import { reseedFromEntropy } from './rng.js';
 // production through P-3). pve-client owns the encounter handshake;
 // startRandomEncounterFromServer below is the receiver for the server's
 // monster list + seed (server seeded battleSt.rand already on hello).
-import { pveRequestEncounter, initPveClient } from './pve-client.js';
+import { pveRequestEncounter, pveEncounterPending, initPveClient } from './pve-client.js';
 
 const TILE_SIZE = 16;
 
@@ -89,7 +89,11 @@ export function tickRandomEncounter() {
 // fallback immediately on resolve; the long timeout is just dropped-packet
 // insurance on top of that.
 let _pendingPVPCheck = false;
-export function isEncounterCheckPending() { return _pendingPVPCheck; }
+// v1.7.783 — also gate movement while the PvE arbiter request is in flight
+// (server picks monsters → ~50-200ms round-trip → pve-battle-start fires
+// the battle wipe). Without this branch, the player can keep stepping
+// during the window between encounter trigger and battle-start arrival.
+export function isEncounterCheckPending() { return _pendingPVPCheck || pveEncounterPending(); }
 // Called by pvp-search.js the instant a `pvp-match` resolves on this client,
 // so the optimistic monster-encounter fallback can't pre-empt the PvP battle.
 export function cancelPendingPVPCheck() { _pendingPVPCheck = false; }

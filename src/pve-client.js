@@ -26,6 +26,14 @@ const _localBattle = {
   intents:  [],
 };
 
+// v1.7.783 — true between pveRequestEncounter() and the server's
+// pve-battle-start / pve-cancel reply. movement.js gates on this so the
+// player can't walk during the request round-trip (which lands the
+// battle-flash). Without it, the 50-200ms WS window let the player keep
+// stepping after the encounter trigger fired.
+let _requestPending = false;
+const REQUEST_TIMEOUT_MS = 2500;
+
 // Injected at boot to avoid a circular import with battle-encounter.js.
 let _startFromServer = null;
 export function initPveClient({ startRandomEncounterFromServer }) {
@@ -38,8 +46,21 @@ export function initPveClient({ startRandomEncounterFromServer }) {
 // pve-battle-start (handled below) or pve-cancel (fallback to local).
 export function pveRequestEncounter({ zoneKey, mapId }) {
   if (!PVE_ARBITER) return false;
-  return sendNetPveEncounterRequest({ zoneKey, mapId });
+  const ok = sendNetPveEncounterRequest({ zoneKey, mapId });
+  if (ok) {
+    _requestPending = true;
+    // Watchdog — if the server drops the reply, release the input gate
+    // so the player isn't permanently frozen. Battle handlers below
+    // clear the flag the moment they fire.
+    setTimeout(() => { _requestPending = false; }, REQUEST_TIMEOUT_MS);
+  }
+  return ok;
 }
+
+// Public — true while a pve-encounter-request is in flight (no battle-start
+// or pve-cancel received yet). movement.js gates on this so the player
+// can't take steps during the WS round-trip. v1.7.783.
+export function pveEncounterPending() { return _requestPending; }
 
 // Public — call from battle-update.js when the encounter naturally ends
 // (victory, defeat, fled). P-3 ships a STUB claim — intents are empty,
@@ -146,6 +167,7 @@ function _buildStubClaim() {
 
 setNetPveBattleStartHandler((msg) => {
   if (!PVE_ARBITER) return;
+  _requestPending = false;
   if (!msg || !msg.battleId || !msg.rngSeed) {
     console.warn('[pve] battle-start missing fields', msg);
     return;
@@ -180,6 +202,7 @@ setNetPveBattleResultHandler((msg) => {
 
 setNetPveCancelHandler((msg) => {
   if (!PVE_ARBITER) return;
+  _requestPending = false;
   // Server refused (arbiter-disabled / no-save / unknown-zone / etc).
   // Reset local arbiter state. Caller in battle-encounter.js falls
   // back to the local startRandomEncounter path by checking that
