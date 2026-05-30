@@ -6,7 +6,7 @@ Design landed 2026-05-29 after the inventory mirror (v1.7.740-746) closed the it
 
 ## Current status
 
-**SHIPPED + LIVE** v1.7.779. Outcome-validate model. Hotfixes v1.7.781 + v1.7.783.
+**SHIPPED + LIVE** v1.7.779. Outcome-validate model. Chest + vase client gating landed v1.7.780 (validate-only model, swapped from server-roll). Happy-path regression added v1.7.782 (wire-sim 114/114). Hotfixes v1.7.781 (victor derivation) + v1.7.783 (movement gate during request).
 
 | Phase | Version | Status |
 |---|---|---|
