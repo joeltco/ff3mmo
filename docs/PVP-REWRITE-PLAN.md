@@ -1,6 +1,6 @@
 # PvP rewrite — server-arbitrated battle architecture
 
-**Status:** Shipped P-0 through P-9 across v1.7.747–v1.7.757 (2026-05-26 → 2026-05-27). All code paths are live; all four flags are still `false` pending the next-step one-line flag-flip deploy + 2-phone live smoke. See "Current status" below.
+**Status:** Shipped P-0 through P-9 across v1.7.747–v1.7.757. Flags went LIVE v1.7.758, then PvP was **DISABLED again v1.7.770** pending P-6d anim polish + P-4c magic/items — `PVP_ENABLED` flipped back to `false` (both server + client) + "Battle" removed from the roster action menu. Arbiter path stays armed (`PVP_ARBITER_SERVER` + `PVP_ARBITER` remain `true`) so re-enable is a 3-edit flip: both `PVP_ENABLED` flags + restoring the menu item. See "Current status" below.
 
 Design landed 2026-05-26 after the inventory mirror project (v1.7.740-746) shipped the prerequisite — server-canonical equipped stats mean the server can spawn combatants with authoritative stat profiles for the first time.
 
@@ -25,20 +25,25 @@ Design landed 2026-05-26 after the inventory mirror project (v1.7.740-746) shipp
 | P-7 input rewire to `sendNetPvpIntent` | v1.7.755 | ✅ shipped |
 | P-8 name strip — attacker / target only | v1.7.756 | ✅ shipped |
 | P-9 matchmaking wire + client bootstrap | v1.7.757 | ✅ shipped |
-| **Flag-flip deploy** (1 line per file × 3 files) | — | **NEXT** |
-| Live 2-phone smoke | — | next |
-| P-10 cleanup (rip lockstep code) | — | post-soak |
+| Flag-flip deploy | v1.7.758 | ✅ shipped (all 4 → true) |
+| Live 2-phone smoke | v1.7.758-770 | ✅ ran — surfaced P-6d/P-4c roughness as blockers |
+| **DISABLED again** | **v1.7.770** | **both `PVP_ENABLED` → false; arbiter flags stay true** |
+| P-6d anim polish (HP sync, ally dmg, defend pose, magic visuals) | — | NEXT — gates re-enable |
+| P-4c magic + items (server-side resolve) | — | NEXT — gates re-enable |
+| P-10 cleanup (rip lockstep code) | — | post-re-enable + soak |
 
-### Flag landscape (all false today; flip together)
+### Flag landscape (current as of v1.7.785)
 
-| Flag | File | Line |
+| Flag | File | Current value |
 |---|---|---|
-| `PVP_ENABLED` (server) | `ws-presence.js` | 92 |
-| `PVP_ARBITER_SERVER` | `ws-presence.js` | 101 |
-| `PVP_ENABLED` (client) | `src/pvp-search.js` | 43 |
-| `PVP_ARBITER` (client) | `src/net.js` | 64 |
+| `PVP_ENABLED` (server) | `ws-presence.js:110` | `false` (v1.7.770) |
+| `PVP_ARBITER_SERVER` | `ws-presence.js:120` | `true` (v1.7.758) |
+| `PVP_ENABLED` (client) | `src/pvp-search.js:51` | `false` (v1.7.770) |
+| `PVP_ARBITER` (client) | `src/net.js:821` | `true` (v1.7.758) |
 
-**Hard rule:** mismatched server/client states softlock. Flip all four together.
+**Re-enable = 3 edits:** flip both `PVP_ENABLED` flags back to `true` + restore the `'Battle'` row in the roster action menu. Arbiter wires are already armed; no other changes needed.
+
+**Hard rule:** mismatched `PVP_ENABLED` states softlock — keep the two in sync. Arbiter flags can stay on even when `PVP_ENABLED` is off (no-op without a battle to start).
 
 ### Known visible roughness for live smoke (P-6d backlog)
 

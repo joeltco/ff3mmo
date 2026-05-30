@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.786 — 2026-05-30
+
+### Docs — second sweep: PvP plan + MULTIPLAYER + README + inventory-mirror plan
+
+Living docs that had status drift since the v1.7.770 PvP re-disable + the PvE arbiter arc:
+
+- `docs/PVP-REWRITE-PLAN.md` — status header was claiming "all four flags still `false` pending the next-step flag-flip" but flags went LIVE v1.7.758 then were DISABLED again v1.7.770 pending P-6d/P-4c. Rewrote the status block + phase table tail + flag landscape table to current actual values (arbiter flags stay `true`; only the two `PVP_ENABLED` flags + the menu item are off; re-enable = 3 edits).
+- `MULTIPLAYER.md` — opening status block was at v1.7.500-502 and missing the inventory mirror + PvE arbiter + PvP arbiter rewrite + co-op rebuild + party persistence + trade hardening. Replaced with a current-state status list pointing at the relevant plan docs.
+- `README.md` — opening status callout was the same v1.7.500-502 snapshot. Rewrote to current-state. Historical narrative below (1.7.398-1.7.456) preserved as history.
+- `docs/INVENTORY-MIRROR-PLAN.md` — status was "Audit complete (2026-05-26). No code shipped." but the mirror shipped v1.7.740-746 and the PvE arbiter extended the closure v1.7.779-783. Updated header to SHIPPED + LIVE with cross-links.
+
+No code change.
+
 ## 1.7.785 — 2026-05-29
 
 ### Docs — Mobile vs PC audit + PvE doc cleanup

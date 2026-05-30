@@ -1,11 +1,6 @@
 # Inventory mirror — dup-vector audit + rollout plan
 
-**Status:** Audit complete (2026-05-26). No code shipped. This doc captures
-the dup-vector surface and a phased path to a server-canonical inventory
-mirror, the only mechanism that genuinely closes the holes. Smaller
-hardening fixes (rate limits, audit logs, save delta sanity checks) are
-catalogued below but explicitly out of scope for this plan — they're
-forensic and detection-grade, not preventive.
+**Status:** SHIPPED + LIVE v1.7.740-746. All 5 original dup vectors closed (V-A/V-B via Phase 1b mirror rejects + corrective pushes; V-C/V-E via Phase 4 `GET /api/saves` overlay; V-D via Phase 5 `case 'update'` cross-check). Secondary surfaces (cp/exp/level/jobs/spells/jobLevels) extended via the PvE arbiter rewrite (v1.7.779-783, `docs/PVE-REWRITE-PLAN.md`). See `[[ff3mmo-dup-vectors]]`. This doc is preserved as the long-form architectural reference for the audit + rollout.
 
 Reference: this doc is the long-form for the [[ff3mmo-beta-hardening]]
 note. Pre-existing limitations (trade trust model v1.7.598, save trust
