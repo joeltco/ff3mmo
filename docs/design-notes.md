@@ -349,6 +349,35 @@ Two SQLite tables in `api.js` survive disconnect + pm2 restart so the world does
 
 - **Party-always-join battle (v1.7.594):** `tryJoinPlayerAlly` in `src/battle-update.js` drops the same-room gate for party members. They join battle on `online`-only; non-party roster (auto-assist) is still room-scoped. Wire-PvP path unchanged. Reconcile + fill share one `partyNames = new Set(partyInviteSt.partyMembers)` so the leave-check and the join-fill agree.
 
+## PvE arbiter + economy validation (v1.7.771–783)
+
+The server validates encounter rewards (exp/gil/cp/drop) and shop / chest / vase transactions to close the client-trusts-itself surface that survived the inventory mirror. Beds (free, no leverage) intentionally not gated. Plan doc: `docs/PVE-REWRITE-PLAN.md`. Memory: `[[ff3mmo-pve-arbiter-rewrite]]`.
+
+**Why two different shapes — replay-validate vs full FSM:** PvP arbiter is a full server FSM because both players are adversaries. PvE is single-player + frequent (~50 fights/session), so a full FSM would add unacceptable WS round-trip latency per turn. Replay-validate keeps the battle local for native-speed UX, then server-validates the claimed outcome against the canonical monster list at battle-end.
+
+- **`pve-arbiter.js`** (root, Node-clean) — per-battle tracking. `createPveBattle(userId, {slot, zoneKey, mapId})` picks monsters via `_pickFormation` (seeded RNG, mirrors `startRandomEncounter`'s formation pick), snapshots pre-state from `users` + inv mirror, assigns a stable `battleId` (idempotent on reconnect). 5-min idle TTL.
+- **`pve-replay.js`** (root, Node-clean) — pure `validateBattleOutcome(battle, claim)`. Outcome-validate model: `victor in ['party'|'wipe'|'fled']`; on victory, `expGained`/`gilGained`/`cpGained` must equal `max(1, floor(sum/4))` from the actual monsters; drop must be in the union of monster drop pools; on wipe/flee all rewards must be 0. **Does NOT validate per-action HP/MP/status** — those are client-trusted (no currency leverage; full per-action replay deferred to P-5b which would require porting battle-turn/ally to Node-clean).
+- **`economy-arbiter.js`** (root, Node-clean) — `validateShopTransaction` (against `src/data/shops.js` catalog + ITEMS price, sell price = `floor(buy/2)`); `validateChestOpen` / `validateVaseSearch` (validate-only model — client rolls + applies locally for UX, server checks the claim is in `_resolvedChestPool(mapId)` / `_resolvedVasePool(mapId)`, Ur-interiors → 114 fallback, locked-room 1010 → union of altar floors); `validateInnRest` (gil deduct; `INN_REGISTRY` empty since beds are free).
+- **`src/data/loot-pools.js`** — Node-clean extraction of `LOOT_POOLS` + `rollLootEntry(mapId, rng)` / `rollVaseLoot(mapId, rng)` (RNG-injectable). Original copy still lives in `src/map-triggers.js` (cleanup-deferred to avoid same-deploy refactor risk).
+- **`src/pve-client.js`** — client wrapper. `pveRequestEncounter` emits the request + flips `_requestPending` (movement gate); `startRandomEncounterFromServer` (in `battle-encounter.js`) receives the monster list, seeds the singleton RNG, runs the battle locally. Intent buffer + `pveSubmitBattleEnd` fire at `encounter-box-close`.
+
+**Critical bug surfaced in live fire (v1.7.781):** the stub `_buildStubClaim` derived `victor` from `battleSt.enemyDefeated`, but that flag is set true in BOTH the victory path (`battle-update.js:824`) AND the player-KO path (`battle-update.js:799`) — it tracks "encounter ended", not "party won". Fix: derive `victor` from observable state — `ps.hp<=0 → wipe`; `encounterExpGained > 0 → party victory`; else → `fled`. Drop/exp/gil/cp only carry on `party`. Test for the happy path added to `tools/pvp-wire-sim.js` so future regressions of this class fail the build instead of silently rejecting real wins.
+
+**Movement gate fix (v1.7.783):** `isEncounterCheckPending()` in `battle-encounter.js` also ORs in `pveEncounterPending()` from pve-client. Without it, the 50-200ms `pve-encounter-request` round-trip left the player free to step during what should've been the screen-strobe freeze.
+
+**Flag landscape (LIVE):**
+
+| Flag | File | State |
+|---|---|---|
+| `PVE_ARBITER` (server) | `ws-presence.js` | `true` v1.7.779 |
+| `PVE_ARBITER` (client) | `src/net.js` | `true` v1.7.779 |
+| `SERVER_ECONOMY` (server) | `ws-presence.js` | `true` v1.7.779 |
+| `SERVER_ECONOMY` (client) | `src/net.js` | `true` v1.7.779 |
+
+Rollback = flip all four to `false` + redeploy. Mirror state forward-compatible.
+
+**Telemetry:** `[pve-start]` / `[pve-end] status=applied|rejected` / `[pve-divergence]` / `[shop-txn]` / `[chest]` / `[vase]` / `[inn]` in pm2 logs. `_testHooks.setPveArbiter(v)` + `setServerEconomy(v)` for the wire-sim.
+
 ## Roster Trade (real multiplayer)
 
 Roster → Trade is a real-MP item transfer (v1.7.598). The original v1.7.237 implementation was a single-player sim that destroyed items on accept-roll regardless of whether the target was a real player — that was a black-hole bug with the post-fake-player roster, fixed pre-gate-flip.

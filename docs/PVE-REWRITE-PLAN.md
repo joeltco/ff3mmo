@@ -6,33 +6,40 @@ Design landed 2026-05-29 after the inventory mirror (v1.7.740-746) closed the it
 
 ## Current status
 
+**SHIPPED + LIVE** v1.7.779. Outcome-validate model. Hotfixes v1.7.781 + v1.7.783.
+
 | Phase | Version | Status |
 |---|---|---|
-| P-0 design doc | v1.7.771 | 🟡 in progress |
-| P-1 seed remaining RNG sites | — | pending |
-| P-2 pve-arbiter.js skeleton + encounter gen | — | pending |
-| P-3 client encounter handshake | — | pending |
-| P-4 per-turn intent buffer | — | pending |
-| P-5 server replay engine | — | pending |
-| P-6 end-of-battle validation + delta apply | — | pending |
-| P-7 drop validation | — | pending |
-| P-8 server shop catalog | — | pending |
-| P-9 shop-transaction wire | — | pending |
-| P-10 chest + vase server rolls | — | pending |
-| P-11 inn-rest wire | — | pending |
-| P-12 wire-sim regression coverage | — | pending |
-| P-13 FLAG FLIP + ship | — | pending |
+| P-0 design doc | v1.7.771 | ✅ shipped |
+| P-1 seed remaining RNG sites | v1.7.771 | ✅ shipped |
+| P-2 pve-arbiter.js skeleton + encounter gen | v1.7.772 | ✅ shipped |
+| P-3 client encounter handshake | v1.7.773 | ✅ shipped |
+| P-4 per-turn intent buffer | v1.7.774 | ✅ shipped |
+| P-5 server replay engine (outcome-validate) | v1.7.775 | ✅ shipped |
+| P-6 end-of-battle validation + delta apply | v1.7.775 | ✅ shipped |
+| P-7 drop validation | v1.7.775 | ✅ folded into P-5/P-6 |
+| P-8 server shop catalog | v1.7.776 | ✅ shipped |
+| P-9 shop-transaction wire | v1.7.776 | ✅ shipped |
+| P-10 chest + vase server endpoints | v1.7.777 | ✅ shipped (server-roll model — superseded) |
+| P-11 inn-rest endpoint | v1.7.777 | ✅ shipped (`INN_REGISTRY` empty; bed-rest is free) |
+| P-12 wire-sim regression coverage | v1.7.778 / v1.7.782 | ✅ shipped (114/114) |
+| **P-13 FLAG FLIP** | **v1.7.779** | **✅ LIVE — all 4 flags ON** |
+| P-10b chest + vase client gating (validate-only) | v1.7.780 | ✅ shipped — swapped server-roll → claim-validate |
+| HOTFIX victor derivation | v1.7.781 | ✅ shipped (live-fire fix) |
+| HOTFIX movement gate during request | v1.7.783 | ✅ shipped |
 
-### Flag landscape (target — none of these exist yet)
+**Bed-rest deliberately skipped.** Beds in this game are free (`src/bed.js` — refills HP/MP, no gil). Zero currency leverage = no exploit surface; `INN_REGISTRY` stays empty until a paid inn lands.
 
-| Flag | File | Purpose |
+### Flag landscape (LIVE as of v1.7.779)
+
+| Flag | File | State |
 |---|---|---|
-| `PVE_ARBITER` (server) | `ws-presence.js` | Gate server-side encounter-gen + replay-validate |
-| `PVE_ARBITER` (client) | `src/net.js` | Gate client encounter-handshake + intent submit |
-| `SERVER_ECONOMY` (server) | `ws-presence.js` | Gate shop / chest / vase / inn server validation |
-| `SERVER_ECONOMY` (client) | `src/net.js` | Gate client economy-transaction emits |
+| `PVE_ARBITER` (server) | `ws-presence.js` | `true` |
+| `PVE_ARBITER` (client) | `src/net.js` | `true` |
+| `SERVER_ECONOMY` (server) | `ws-presence.js` | `true` |
+| `SERVER_ECONOMY` (client) | `src/net.js` | `true` |
 
-Flip all four together at P-13. Mismatched states will softlock encounters or transactions.
+**Rollback** = flip all four back to `false` + redeploy. Mirror + saves are forward-compatible.
 
 ---
 
