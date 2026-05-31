@@ -10,10 +10,18 @@
 
 import { SHOPS, getShopType } from './src/data/shops.js';
 import { ITEMS } from './src/data/items.js';
-import { mirrorReadFullState } from './api.js';
+import { mirrorReadFullState, consumedTileConsumedAt } from './api.js';
 import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.js';
 
 const INV_CAP = 16;       // mirrors src/inventory.js#INV_CAP
+
+// v1.7.787 replay-block cooldowns. Both share 24h today for a single
+// bounded policy; chest can be promoted to permanent if dungeon-regen
+// re-grind isn't worth preserving. Vase 24h matches the client v1.7.618
+// design.
+const CHEST_TTL_SEC = 24 * 3600;
+const VASE_TTL_SEC  = 24 * 3600;
+function _nowSec() { return Math.floor(Date.now() / 1000); }
 
 // FF3 NES sell ratio — matches src/shop.js#sellPrice. Items without a
 // price aren't sellable (returns 0 → reject).
@@ -100,9 +108,19 @@ export function validateShopTransaction(userId, slot, payload) {
 export function validateChestOpen(userId, slot, payload) {
   if (!payload) return { ok: false, reason: 'no-payload' };
   const mapId = payload.mapId | 0;
+  const x     = payload.x     | 0;
+  const y     = payload.y     | 0;
   const claim = payload.claim || {};
   const pool = _resolvedChestPool(mapId);
   if (!pool) return { ok: false, reason: 'no-pool-for-map' };
+
+  // v1.7.787 — server-side replay block. Pre-fix, `consumedTiles` was
+  // client-side only and a scripted client could re-claim the same chest
+  // indefinitely.
+  const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'chest');
+  if (lastAt != null && (_nowSec() - lastAt) < CHEST_TTL_SEC) {
+    return { ok: false, reason: 'already-opened' };
+  }
 
   if (claim.type === 'item') {
     const itemId = claim.itemId | 0;
@@ -115,7 +133,7 @@ export function validateChestOpen(userId, slot, payload) {
     if (!have && Object.keys(inv).length >= INV_CAP) {
       return { ok: false, reason: 'inv-full' };
     }
-    return { ok: true, events: [{ kind: 'add', itemId, qty: 1, source: 'chest' }] };
+    return { ok: true, mark: true, events: [{ kind: 'add', itemId, qty: 1, source: 'chest' }] };
   }
 
   if (claim.type === 'gil') {
@@ -124,15 +142,16 @@ export function validateChestOpen(userId, slot, payload) {
     if (amount > pool.gilMax) {
       return { ok: false, reason: 'gil-too-high claim=' + amount + ' max=' + pool.gilMax };
     }
-    return { ok: true, events: [{ kind: 'gil-delta', qty: amount, source: 'chest' }] };
+    return { ok: true, mark: true, events: [{ kind: 'gil-delta', qty: amount, source: 'chest' }] };
   }
 
   if (claim.type === 'monster') {
     // Mimic — no events. Client starts the battle locally; PvE arbiter
     // takes over. Validate the pool actually has a mimic tier so a
-    // cheater can't fake "no battle" on cave chests.
+    // cheater can't fake "no battle" on cave chests. Mark consumed so a
+    // cheater can't re-trigger the mimic fight either.
     if (!pool.hasMonster) return { ok: false, reason: 'no-mimic-in-pool' };
-    return { ok: true, events: [] };
+    return { ok: true, mark: true, events: [] };
   }
 
   return { ok: false, reason: 'bad-claim-type' };
@@ -143,12 +162,24 @@ export function validateChestOpen(userId, slot, payload) {
 export function validateVaseSearch(userId, slot, payload) {
   if (!payload) return { ok: false, reason: 'no-payload' };
   const mapId = payload.mapId | 0;
+  const x     = payload.x     | 0;
+  const y     = payload.y     | 0;
   const claim = payload.claim || {};
 
-  if (claim.type === 'miss') return { ok: true, events: [] };
+  // Miss is silent + no cooldown (matches client v1.7.618 design — players
+  // can keep searching until they hit). The replay block guards the HIT
+  // path below; miss spam doesn't grant anything.
+  if (claim.type === 'miss') return { ok: true, mark: false, events: [] };
 
   const pool = _resolvedVasePool(mapId);
   if (!pool) return { ok: false, reason: 'no-pool-for-map' };
+
+  // v1.7.787 — server-side 24h cooldown. Matches the client design from
+  // v1.7.618 but enforced authoritatively.
+  const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'vase');
+  if (lastAt != null && (_nowSec() - lastAt) < VASE_TTL_SEC) {
+    return { ok: false, reason: 'on-cooldown' };
+  }
 
   if (claim.type === 'item') {
     const itemId = claim.itemId | 0;
@@ -161,7 +192,7 @@ export function validateVaseSearch(userId, slot, payload) {
     if (!have && Object.keys(inv).length >= INV_CAP) {
       return { ok: false, reason: 'inv-full' };
     }
-    return { ok: true, events: [{ kind: 'add', itemId, qty: 1, source: 'vase' }] };
+    return { ok: true, mark: true, events: [{ kind: 'add', itemId, qty: 1, source: 'vase' }] };
   }
 
   if (claim.type === 'gil') {
@@ -170,7 +201,7 @@ export function validateVaseSearch(userId, slot, payload) {
     if (amount > pool.gilMax) {
       return { ok: false, reason: 'gil-too-high claim=' + amount + ' max=' + pool.gilMax };
     }
-    return { ok: true, events: [{ kind: 'gil-delta', qty: amount, source: 'vase' }] };
+    return { ok: true, mark: true, events: [{ kind: 'gil-delta', qty: amount, source: 'vase' }] };
   }
 
   return { ok: false, reason: 'bad-claim-type' };

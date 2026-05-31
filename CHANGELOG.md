@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.787 — 2026-05-30
+
+### Server-side hardening — chest/vase replay block + PvP friendly-fire guard
+
+Three HIGH-severity audit findings from the server-side review closed:
+
+- **Chest replay.** `economy-arbiter.js#validateChestOpen` had no per-tile single-open enforcement — the v1.7.780 P-10b comment acknowledged "consumedTiles is client-side for v1." A scripted client could replay `chest-open` to claim any item in the pool indefinitely; amplified for locked rooms (mapId 1010 unions all four altar floor pools, so a replayed F1 locked-room chest could yield F4 endgame items). Now gated by a 24h cooldown via a new `consumed_tiles` SQLite table.
+- **Vase replay.** Same shape — 24h `on-cooldown` rejection on the new row. Miss claims still pass without consuming the cooldown, matching the v1.7.618 client design (players keep searching until they hit).
+- **PvP friendly-fire.** `pvp-arbiter.js#handleIntent` validated kind/turn/liveness but didn't check `targetCellId.side ≠ actor.side`. `_resolveActorIntent` only re-targets when the cell is dead, so an `attack` against an own-side mate would land and damage them. Same-side targets now reject as `same-side-target`. PvP is currently flag-disabled (`PVP_ENABLED = false`) but the arbiter is armed; this was a pre-flip blocker.
+
+`consumed_tiles` is keyed `(user_id, slot, map_id, x, y, kind)` and lives alongside the inventory mirror tables in `api.js`. `ws-presence.js` marks the row only after `mirrorApplyInvEvent` succeeds, so a partial failure (inv-full mid-loop) doesn't leave half-consumed state.
+
+Regression coverage: 3 new tests in `tools/pvp-wire-sim.js` (`already-opened`, `on-cooldown` + miss-doesn't-consume, friendly-fire silently rejected via the round-doesn't-resolve pattern). Wire-sim now 117/117. New `_testConsumedTilesClear(userId, slot)` helper in `api.js` keeps the regression tests reproducible across runs since `consumed_tiles` is persistent.
+
+Audit notes deferred — smaller bound or pre-flip blockers: per-tier gil cap (currently union-max across tiers), PvP RNG seed predictability (`Date.now() ^ battleId * 0x9E3779B1` is brute-forceable from the broadcast battleId), PvE intent-buffer sparse-array DoS (`turnIdx | 0` accepts `0x7FFFFFFF`), `_snapshotPreState` dead-weight memory.
+
 ## 1.7.786 — 2026-05-30
 
 ### Docs — second sweep: PvP plan + MULTIPLAYER + README + inventory-mirror plan

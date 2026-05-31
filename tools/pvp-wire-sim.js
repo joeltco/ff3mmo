@@ -52,7 +52,8 @@ import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testMirrorSync, _testMirrorSyncRuntime,
          _testMirrorRead, _testMirrorClear,
          _testSetMirrorAuthoritative, _testGetMirrorAuthoritative,
-         _testSeedSave } from '../api.js';
+         _testSeedSave,
+         _testConsumedTilesClear } from '../api.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -1684,6 +1685,43 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
+  await asyncTest('v1.7.787 friendly-fire attack on same-side cell rejected silently', async () => {
+    _testHooks.resetState();
+    // 7560/7561 are not used elsewhere — pvp-arbiter._userBattle isn't
+    // cleared by resetState (5s delayed GC inside the arbiter), so picking
+    // colliding uids will leak battle state into later tests.
+    _testEnsureUser(7560); _testSeedSave(7560, 0);
+    _testEnsureUser(7561); _testSeedSave(7561, 0);
+    const A = await connectClient(port, 7560, { ...baseProfile, name: 'FFA' });
+    const B = await connectClient(port, 7561, { ...targetProfile, name: 'FFB' });
+    const aStart = once(A, m => m.type === 'pvp-battle-start', 800);
+    A.send(JSON.stringify({ type: 'pvp-arb-start', opponentUserId: 7561 }));
+    const start = await aStart;
+    // B submits first so the round is ONE-intent-away-from-resolving. If
+    // A's friendly-fire intent (targetCellId=0 = A's own cell, side A)
+    // were wrongly accepted, the round would resolve and a pvp-turn frame
+    // would arrive on both sides. With the v1.7.787 same-side-target
+    // guard, A's intent rejects silently and no pvp-turn fires.
+    let unexpected = false;
+    A.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'pvp-turn') unexpected = true;
+    });
+    B.send(JSON.stringify({
+      type: 'pvp-intent', battleId: start.battleId, turnIdx: 0,
+      kind: 'defend',
+    }));
+    await new Promise(r => setTimeout(r, 30));
+    A.send(JSON.stringify({
+      type: 'pvp-intent', battleId: start.battleId, turnIdx: 0,
+      kind: 'attack', targetCellId: 0,    // A's OWN main cell — friendly fire
+    }));
+    await new Promise(r => setTimeout(r, 200));
+    assertTrue(!unexpected, 'friendly-fire intent wrongly resolved a turn');
+    A.close(); B.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   await asyncTest('v1.7.747 P-1 pvp-intent stale-turn rejected silently', async () => {
     _testHooks.resetState();
     _testEnsureUser(7477); _testSeedSave(7477, 0);
@@ -2532,6 +2570,9 @@ async function suiteWire() {
   await asyncTest('Chest validate-only accepts a claim in the pool', async () => {
     _testHooks.setServerEconomy(true);
     _testEnsureUser(3020);
+    // v1.7.787 — consumed_tiles is persistent; clear so a prior run's row
+    // for (114, 5, 5) doesn't pre-block the open.
+    _testConsumedTilesClear(3020, 0);
     const ws = await connectClient(port, 3020, { name: 'Chest1', jobIdx: 0,
       level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
@@ -2559,6 +2600,64 @@ async function suiteWire() {
     assertEqual(result.status, 'rejected', 'out-of-pool claim accepted');
     assertTrue(result.reason && result.reason.startsWith('item-not-in-pool'),
       'wrong reject reason: ' + result.reason);
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Chest replay is rejected as already-opened (v1.7.787)', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3022);
+    // consumed_tiles persists in SQLite across test runs — wipe before so
+    // a prior run's row at (114, 9, 9) doesn't pre-block the first open.
+    _testConsumedTilesClear(3022, 0);
+    const ws = await connectClient(port, 3022, { name: 'ChestRep', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // First open succeeds.
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 114, x: 9, y: 9,
+      claim: { type: 'item', itemId: 0xA6 } }));
+    const first = await once(ws, m => m.type === 'chest-result' && m.txnId === 1, 1000);
+    assertEqual(first.status, 'ok', 'first chest open rejected: ' + first.reason);
+    // Replay against same (mapId, x, y) is the exploit; server must reject.
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 2, mapId: 114, x: 9, y: 9,
+      claim: { type: 'item', itemId: 0xA6 } }));
+    const second = await once(ws, m => m.type === 'chest-result' && m.txnId === 2, 1000);
+    assertEqual(second.status, 'rejected', 'replay accepted — exploit open');
+    assertEqual(second.reason, 'already-opened', 'wrong reject reason: ' + second.reason);
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Vase replay is rejected as on-cooldown; miss does not consume (v1.7.787)', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3023);
+    _testConsumedTilesClear(3023, 0);
+    const ws = await connectClient(port, 3023, { name: 'VaseRep', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // Two miss claims at (7, 7) must NOT consume the cooldown (per the
+    // client v1.7.618 design — players keep searching until they hit).
+    ws.send(JSON.stringify({ type: 'vase-search', txnId: 1, mapId: 114, x: 7, y: 7,
+      claim: { type: 'miss' } }));
+    const miss1 = await once(ws, m => m.type === 'vase-result' && m.txnId === 1, 1000);
+    assertEqual(miss1.status, 'ok', 'first miss rejected: ' + miss1.reason);
+    ws.send(JSON.stringify({ type: 'vase-search', txnId: 2, mapId: 114, x: 7, y: 7,
+      claim: { type: 'miss' } }));
+    const miss2 = await once(ws, m => m.type === 'vase-result' && m.txnId === 2, 1000);
+    assertEqual(miss2.status, 'ok', 'second miss rejected (cooldown wrongly consumed): ' + miss2.reason);
+    // First hit succeeds.
+    ws.send(JSON.stringify({ type: 'vase-search', txnId: 3, mapId: 114, x: 7, y: 7,
+      claim: { type: 'gil', amount: 1 } }));
+    const hit1 = await once(ws, m => m.type === 'vase-result' && m.txnId === 3, 1000);
+    assertEqual(hit1.status, 'ok', 'first hit rejected: ' + hit1.reason);
+    // Second hit on the same tile must be blocked.
+    ws.send(JSON.stringify({ type: 'vase-search', txnId: 4, mapId: 114, x: 7, y: 7,
+      claim: { type: 'gil', amount: 1 } }));
+    const hit2 = await once(ws, m => m.type === 'vase-result' && m.txnId === 4, 1000);
+    assertEqual(hit2.status, 'rejected', 'vase replay accepted — exploit open');
+    assertEqual(hit2.reason, 'on-cooldown', 'wrong reject reason: ' + hit2.reason);
     ws.close();
     _testHooks.setServerEconomy(false);
   });

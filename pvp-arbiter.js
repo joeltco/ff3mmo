@@ -605,6 +605,18 @@ function handleIntent(userId, parsed) {
   if (myCellId == null) return { ok: false, reason: 'not-human' };
   const myCell = battle.combatants.find(c => c.cellId === myCellId);
   if (!myCell || myCell.hp <= 0) return { ok: false, reason: 'dead' };
+  // v1.7.787 — friendly-fire guard. Pre-fix, handleIntent validated kind
+  // + turn + liveness but never checked that `targetCellId` was on the
+  // OPPOSITE side; _resolveActorIntent looks up the target by cellId
+  // directly and only re-targets if dead, so an `attack` against a same-
+  // side mate would land. Magic + item intents will need the same check
+  // (with a heal-vs-damage allowance) once P-4c implements them.
+  if (kind === 'attack' && parsed.targetCellId != null) {
+    const targetCellId = parsed.targetCellId | 0;
+    const target = battle.combatants.find(c => c.cellId === targetCellId);
+    if (!target) return { ok: false, reason: 'unknown-target' };
+    if (target.side === myCell.side) return { ok: false, reason: 'same-side-target' };
+  }
   const intent = {
     kind,
     targetCellId: parsed.targetCellId != null ? (parsed.targetCellId | 0) : null,

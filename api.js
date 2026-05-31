@@ -393,6 +393,26 @@ db.exec(`
     PRIMARY KEY (user_id, slot, job_id),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  -- Consumed-tile tracker (v1.7.787). Server-side gate for chest open +
+  -- vase search replay attacks. The economy arbiter validators read this
+  -- on every chest-open / vase-search; ws-presence.js marks the row after
+  -- a successful mirror apply. kind = 'chest' | 'vase'; same row shape so
+  -- one table covers both. Both kinds share a 24h cooldown today
+  -- (economy-arbiter.js#CHEST_TTL_SEC / VASE_TTL_SEC); chest can be made
+  -- permanent later if dungeon-regen replay becomes a real concern.
+  CREATE TABLE IF NOT EXISTS consumed_tiles (
+    user_id     INTEGER NOT NULL,
+    slot        INTEGER NOT NULL,
+    map_id      INTEGER NOT NULL,
+    x           INTEGER NOT NULL,
+    y           INTEGER NOT NULL,
+    kind        TEXT NOT NULL,
+    consumed_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, slot, map_id, x, y, kind),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_consumed_tiles_consumed_at ON consumed_tiles(consumed_at);
 `);
 
 // v1.7.736 — hook for `/api/logout-all` so it can kick stale WS connections
@@ -852,6 +872,47 @@ export function presenceLoadRecent(sinceSec) {
 }
 export function presenceReap(beforeSec) {
   return _presenceReapStmt.run(beforeSec | 0).changes;
+}
+
+// Consumed-tile tracking (v1.7.787). Server-side enforcement of chest
+// "opened once" + vase 24h cooldown. Closes the replay vector that the
+// v1.7.780 P-10b validate-only model left open (consumedTiles was
+// client-side only). Read by economy-arbiter.js validators; written by
+// ws-presence.js after a successful mirror apply.
+const _consumedTileGetStmt = db.prepare(
+  'SELECT consumed_at AS consumedAt FROM consumed_tiles' +
+  ' WHERE user_id = ? AND slot = ? AND map_id = ? AND x = ? AND y = ? AND kind = ?'
+);
+const _consumedTileMarkStmt = db.prepare(
+  'INSERT OR REPLACE INTO consumed_tiles (user_id, slot, map_id, x, y, kind, consumed_at)' +
+  ' VALUES (?, ?, ?, ?, ?, ?, ?)'
+);
+const _consumedTilesReapStmt = db.prepare(
+  'DELETE FROM consumed_tiles WHERE kind = ? AND consumed_at < ?'
+);
+
+export function consumedTileConsumedAt(userId, slot, mapId, x, y, kind) {
+  const row = _consumedTileGetStmt.get(userId | 0, slot | 0, mapId | 0, x | 0, y | 0, String(kind));
+  return row ? (row.consumedAt | 0) : null;
+}
+export function consumedTileMark(userId, slot, mapId, x, y, kind) {
+  _consumedTileMarkStmt.run(
+    userId | 0, slot | 0, mapId | 0, x | 0, y | 0, String(kind),
+    Math.floor(Date.now() / 1000)
+  );
+}
+export function consumedTilesReap(kind, beforeSec) {
+  return _consumedTilesReapStmt.run(String(kind), beforeSec | 0).changes;
+}
+
+// Test helper — wipe every consumed_tiles row for a user/slot. NOT used
+// in production; lets pvp-wire-sim run repeatably without stale rows from
+// prior runs poisoning the chest/vase replay-block tests.
+const _consumedTilesClearForSlotStmt = db.prepare(
+  'DELETE FROM consumed_tiles WHERE user_id = ? AND slot = ?'
+);
+export function _testConsumedTilesClear(userId, slot) {
+  _consumedTilesClearForSlotStmt.run(userId | 0, slot | 0);
 }
 
 function readBody(req) {

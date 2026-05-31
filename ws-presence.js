@@ -46,6 +46,7 @@ import {
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
   mirrorApplyInvEvent, mirrorReadFullState,    // v1.7.741 Phase 1a
   mirrorReadEquippedBroadcast,                  // v1.7.746 Phase 5
+  consumedTileMark,                             // v1.7.787 chest/vase replay block
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS } from './src/data/items.js';
@@ -1208,6 +1209,10 @@ function _handleMessage(entry, msg) {
         return;
       }
       for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
+      if (r.mark) {
+        consumedTileMark(entry.userId, slot,
+          parsed.mapId | 0, parsed.x | 0, parsed.y | 0, 'chest');
+      }
       const fresh = mirrorReadFullState(entry.userId, slot);
       _send(entry.ws, {
         type: 'chest-result',
@@ -1237,6 +1242,10 @@ function _handleMessage(entry, msg) {
         return;
       }
       for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
+      if (r.mark) {
+        consumedTileMark(entry.userId, slot,
+          parsed.mapId | 0, parsed.x | 0, parsed.y | 0, 'vase');
+      }
       const fresh = mirrorReadFullState(entry.userId, slot);
       _send(entry.ws, {
         type: 'vase-result',
