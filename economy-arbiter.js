@@ -15,12 +15,23 @@ import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.j
 
 const INV_CAP = 16;       // mirrors src/inventory.js#INV_CAP
 
-// v1.7.787 replay-block cooldowns. Both share 24h today for a single
-// bounded policy; chest can be promoted to permanent if dungeon-regen
-// re-grind isn't worth preserving. Vase 24h matches the client v1.7.618
-// design.
-const CHEST_TTL_SEC = 24 * 3600;
-const VASE_TTL_SEC  = 24 * 3600;
+// Replay-block cooldowns. Town chests (mapId < 1000) stay 24h — towns
+// don't regenerate, so collisions can't false-block a legitimate
+// re-open. Dungeon chests (mapId >= 1000) get a much shorter window:
+// Altar Cave regenerates with a `Date.now()` seed every entry
+// (src/map-triggers.js#_checkWorldMapTrigger), so a new layout WILL
+// sometimes place a chest on a previously-consumed coord — a long TTL
+// would falsely block those over time. 5 min is long enough to block
+// scripted replay-spam, short enough that legitimate re-running between
+// runs lands on fresh state. Vase 24h matches the client v1.7.618
+// design (vases live in towns today). v1.7.787 / v1.7.788.
+const CHEST_TTL_TOWN_SEC    = 24 * 3600;
+const CHEST_TTL_DUNGEON_SEC = 5 * 60;
+const VASE_TTL_SEC          = 24 * 3600;
+const DUNGEON_MAPID_MIN     = 1000;
+function _chestTtlSec(mapId) {
+  return mapId >= DUNGEON_MAPID_MIN ? CHEST_TTL_DUNGEON_SEC : CHEST_TTL_TOWN_SEC;
+}
 function _nowSec() { return Math.floor(Date.now() / 1000); }
 
 // FF3 NES sell ratio — matches src/shop.js#sellPrice. Items without a
@@ -114,11 +125,12 @@ export function validateChestOpen(userId, slot, payload) {
   const pool = _resolvedChestPool(mapId);
   if (!pool) return { ok: false, reason: 'no-pool-for-map' };
 
-  // v1.7.787 — server-side replay block. Pre-fix, `consumedTiles` was
+  // Server-side replay block. Pre-fix (v1.7.787), `consumedTiles` was
   // client-side only and a scripted client could re-claim the same chest
-  // indefinitely.
+  // indefinitely. v1.7.788 split the TTL so dungeon-regen layouts don't
+  // false-block legitimate chests at coords that recur in a new layout.
   const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'chest');
-  if (lastAt != null && (_nowSec() - lastAt) < CHEST_TTL_SEC) {
+  if (lastAt != null && (_nowSec() - lastAt) < _chestTtlSec(mapId)) {
     return { ok: false, reason: 'already-opened' };
   }
 

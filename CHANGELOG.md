@@ -18,6 +18,16 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.788 — 2026-05-30
+
+### Hotfix — split chest replay-block TTL so dungeon regen doesn't false-block
+
+v1.7.787 used a single 24h TTL for the chest replay block. Altar Cave regenerates with a fresh `Date.now()` seed on every entry (per `src/map-triggers.js#_checkWorldMapTrigger` + the v1.7.276 design), so over many runs a player's marked-coord set on map 1000-1003 grows and the chance a new chest spawns on a previously-consumed coord climbs (~30% after ~20 runs given 4 chests on ~784 playable tiles). That would falsely block real chests.
+
+Fix: split the TTL in `economy-arbiter.js`. Town chests (`mapId < 1000`) stay 24h. Dungeon chests (`mapId >= 1000`) drop to 5 min — long enough to block scripted replay-spam, short enough that legitimate re-entry between sessions lands on a fresh window. New regression test in `tools/pvp-wire-sim.js` exercises the dungeon-path (mapId 1000) replay-within-window rejection. Wire-sim now 118/118. Cheater bound on dungeon coords: ~12 dupes/hour/coord — soft, but bounded; revisit with per-instance tracking if abuse shows.
+
+Vase TTL unchanged (24h; vases live in towns today).
+
 ## 1.7.787 — 2026-05-30
 
 ### Server-side hardening — chest/vase replay block + PvP friendly-fire guard
