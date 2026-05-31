@@ -2629,7 +2629,7 @@ async function suiteWire() {
     _testHooks.setServerEconomy(false);
   });
 
-  await asyncTest('Dungeon chest replay within 5min window is rejected (v1.7.788)', async () => {
+  await asyncTest('Dungeon chests are NOT server-tracked (regen by design, v1.7.789)', async () => {
     _testHooks.setServerEconomy(true);
     _testEnsureUser(3024);
     _testConsumedTilesClear(3024, 0);
@@ -2637,9 +2637,10 @@ async function suiteWire() {
       level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
     await new Promise(r => setTimeout(r, 30));
-    // Altar Cave F1 (mapId 1000). Potion (0xA6) is in the F1 chest pool
-    // via DEFAULT_LOOT. The short 5-min dungeon TTL still blocks immediate
-    // replay; long-window dungeon-regen replay is the design trade-off.
+    // Altar Cave F1 (mapId 1000). Dungeon chests skip the replay block
+    // because the dungeon regenerates per re-entry — a coord-keyed gate
+    // would falsely block legit chests at recurring coords. Both opens
+    // must succeed (proper per-instance tracking is on the queue).
     ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 1000, x: 4, y: 4,
       claim: { type: 'item', itemId: 0xA6 } }));
     const first = await once(ws, m => m.type === 'chest-result' && m.txnId === 1, 1000);
@@ -2647,8 +2648,7 @@ async function suiteWire() {
     ws.send(JSON.stringify({ type: 'chest-open', txnId: 2, mapId: 1000, x: 4, y: 4,
       claim: { type: 'item', itemId: 0xA6 } }));
     const second = await once(ws, m => m.type === 'chest-result' && m.txnId === 2, 1000);
-    assertEqual(second.status, 'rejected', 'dungeon replay accepted within window');
-    assertEqual(second.reason, 'already-opened', 'wrong reject reason: ' + second.reason);
+    assertEqual(second.status, 'ok', 'dungeon replay was wrongly blocked: ' + second.reason);
     ws.close();
     _testHooks.setServerEconomy(false);
   });

@@ -15,23 +15,20 @@ import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.j
 
 const INV_CAP = 16;       // mirrors src/inventory.js#INV_CAP
 
-// Replay-block cooldowns. Town chests (mapId < 1000) stay 24h — towns
-// don't regenerate, so collisions can't false-block a legitimate
-// re-open. Dungeon chests (mapId >= 1000) get a much shorter window:
-// Altar Cave regenerates with a `Date.now()` seed every entry
-// (src/map-triggers.js#_checkWorldMapTrigger), so a new layout WILL
-// sometimes place a chest on a previously-consumed coord — a long TTL
-// would falsely block those over time. 5 min is long enough to block
-// scripted replay-spam, short enough that legitimate re-running between
-// runs lands on fresh state. Vase 24h matches the client v1.7.618
-// design (vases live in towns today). v1.7.787 / v1.7.788.
-const CHEST_TTL_TOWN_SEC    = 24 * 3600;
-const CHEST_TTL_DUNGEON_SEC = 5 * 60;
-const VASE_TTL_SEC          = 24 * 3600;
-const DUNGEON_MAPID_MIN     = 1000;
-function _chestTtlSec(mapId) {
-  return mapId >= DUNGEON_MAPID_MIN ? CHEST_TTL_DUNGEON_SEC : CHEST_TTL_TOWN_SEC;
-}
+// Replay-block cooldowns. v1.7.789: dungeon chests are NOT server-tracked
+// because Altar Cave regenerates with a fresh seed on every entry
+// (src/map-triggers.js#_checkWorldMapTrigger + the v1.7.276 design); the
+// client already wipes its `ps.consumedTiles[mapId>=1000]` on cave re-entry,
+// so a server tracker keyed on coord falsely blocks legitimate chests at
+// recurring coords across regens. Town chests + vases (no regen) keep
+// 24h tracking. Proper per-instance dungeon tracking is the right
+// long-term answer (server-side wipe tied to dungeon-entry location
+// transition); deferred. Dungeon chest replay exploit is reopened by
+// this commit and accepted until the per-instance fix lands.
+const CHEST_TTL_SEC        = 24 * 3600;
+const VASE_TTL_SEC         = 24 * 3600;
+const DUNGEON_MAPID_MIN    = 1000;
+function _isDungeonMap(mapId) { return mapId >= DUNGEON_MAPID_MIN; }
 function _nowSec() { return Math.floor(Date.now() / 1000); }
 
 // FF3 NES sell ratio — matches src/shop.js#sellPrice. Items without a
@@ -125,13 +122,15 @@ export function validateChestOpen(userId, slot, payload) {
   const pool = _resolvedChestPool(mapId);
   if (!pool) return { ok: false, reason: 'no-pool-for-map' };
 
-  // Server-side replay block. Pre-fix (v1.7.787), `consumedTiles` was
-  // client-side only and a scripted client could re-claim the same chest
-  // indefinitely. v1.7.788 split the TTL so dungeon-regen layouts don't
-  // false-block legitimate chests at coords that recur in a new layout.
-  const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'chest');
-  if (lastAt != null && (_nowSec() - lastAt) < _chestTtlSec(mapId)) {
-    return { ok: false, reason: 'already-opened' };
+  // Server-side replay block — town chests only. Dungeon chests skip the
+  // check + mark because the dungeon regenerates per re-entry; tracking
+  // by coord falsely blocks legitimate chests at recurring coords.
+  const trackChest = !_isDungeonMap(mapId);
+  if (trackChest) {
+    const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'chest');
+    if (lastAt != null && (_nowSec() - lastAt) < CHEST_TTL_SEC) {
+      return { ok: false, reason: 'already-opened' };
+    }
   }
 
   if (claim.type === 'item') {
@@ -145,7 +144,7 @@ export function validateChestOpen(userId, slot, payload) {
     if (!have && Object.keys(inv).length >= INV_CAP) {
       return { ok: false, reason: 'inv-full' };
     }
-    return { ok: true, mark: true, events: [{ kind: 'add', itemId, qty: 1, source: 'chest' }] };
+    return { ok: true, mark: trackChest, events: [{ kind: 'add', itemId, qty: 1, source: 'chest' }] };
   }
 
   if (claim.type === 'gil') {
@@ -154,16 +153,15 @@ export function validateChestOpen(userId, slot, payload) {
     if (amount > pool.gilMax) {
       return { ok: false, reason: 'gil-too-high claim=' + amount + ' max=' + pool.gilMax };
     }
-    return { ok: true, mark: true, events: [{ kind: 'gil-delta', qty: amount, source: 'chest' }] };
+    return { ok: true, mark: trackChest, events: [{ kind: 'gil-delta', qty: amount, source: 'chest' }] };
   }
 
   if (claim.type === 'monster') {
     // Mimic — no events. Client starts the battle locally; PvE arbiter
     // takes over. Validate the pool actually has a mimic tier so a
-    // cheater can't fake "no battle" on cave chests. Mark consumed so a
-    // cheater can't re-trigger the mimic fight either.
+    // cheater can't fake "no battle" on cave chests.
     if (!pool.hasMonster) return { ok: false, reason: 'no-mimic-in-pool' };
-    return { ok: true, mark: true, events: [] };
+    return { ok: true, mark: trackChest, events: [] };
   }
 
   return { ok: false, reason: 'bad-claim-type' };
