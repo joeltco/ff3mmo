@@ -2686,6 +2686,30 @@ async function suiteWire() {
     _testHooks.setServerEconomy(false);
   });
 
+  await asyncTest('Dungeon vases are NOT server-tracked (regen by design, v1.7.790)', async () => {
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3025);
+    _testConsumedTilesClear(3025, 0);
+    const ws = await connectClient(port, 3025, { name: 'CaveVase', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    // mapId 1000 = Altar Cave F1, gil pool 20-60. No dungeon today places
+    // hidden-treasure tiles (0x78-0x7B), but the validator mirrors the
+    // chest exemption so a future cave tileset that adds vases doesn't
+    // re-introduce the v1.7.787 false-block. Both hits must succeed.
+    ws.send(JSON.stringify({ type: 'vase-search', txnId: 1, mapId: 1000, x: 6, y: 6,
+      claim: { type: 'gil', amount: 1 } }));
+    const first = await once(ws, m => m.type === 'vase-result' && m.txnId === 1, 1000);
+    assertEqual(first.status, 'ok', 'first dungeon vase hit rejected: ' + first.reason);
+    ws.send(JSON.stringify({ type: 'vase-search', txnId: 2, mapId: 1000, x: 6, y: 6,
+      claim: { type: 'gil', amount: 1 } }));
+    const second = await once(ws, m => m.type === 'vase-result' && m.txnId === 2, 1000);
+    assertEqual(second.status, 'ok', 'dungeon vase replay wrongly blocked: ' + second.reason);
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
   await asyncTest('Inn rest rejects unknown counter', async () => {
     _testHooks.setServerEconomy(true);
     _testEnsureUser(3030);

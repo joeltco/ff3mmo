@@ -184,11 +184,18 @@ export function validateVaseSearch(userId, slot, payload) {
   const pool = _resolvedVasePool(mapId);
   if (!pool) return { ok: false, reason: 'no-pool-for-map' };
 
-  // v1.7.787 — server-side 24h cooldown. Matches the client design from
-  // v1.7.618 but enforced authoritatively.
-  const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'vase');
-  if (lastAt != null && (_nowSec() - lastAt) < VASE_TTL_SEC) {
-    return { ok: false, reason: 'on-cooldown' };
+  // Server-side 24h cooldown for town vases (v1.7.787). Dungeon-range
+  // mapIds skip the gate for the same reason as chest (v1.7.789): caves
+  // regenerate per re-entry, so a coord-keyed gate falsely blocks legit
+  // hits at recurring coords. No dungeon today places hidden-treasure
+  // tiles (0x78-0x7B), but mirror the chest exemption so a future cave
+  // tileset that adds vases doesn't re-introduce the v1.7.787 bug.
+  const trackVase = !_isDungeonMap(mapId);
+  if (trackVase) {
+    const lastAt = consumedTileConsumedAt(userId, slot, mapId, x, y, 'vase');
+    if (lastAt != null && (_nowSec() - lastAt) < VASE_TTL_SEC) {
+      return { ok: false, reason: 'on-cooldown' };
+    }
   }
 
   if (claim.type === 'item') {
@@ -202,7 +209,7 @@ export function validateVaseSearch(userId, slot, payload) {
     if (!have && Object.keys(inv).length >= INV_CAP) {
       return { ok: false, reason: 'inv-full' };
     }
-    return { ok: true, mark: true, events: [{ kind: 'add', itemId, qty: 1, source: 'vase' }] };
+    return { ok: true, mark: trackVase, events: [{ kind: 'add', itemId, qty: 1, source: 'vase' }] };
   }
 
   if (claim.type === 'gil') {
@@ -211,7 +218,7 @@ export function validateVaseSearch(userId, slot, payload) {
     if (amount > pool.gilMax) {
       return { ok: false, reason: 'gil-too-high claim=' + amount + ' max=' + pool.gilMax };
     }
-    return { ok: true, mark: true, events: [{ kind: 'gil-delta', qty: amount, source: 'vase' }] };
+    return { ok: true, mark: trackVase, events: [{ kind: 'gil-delta', qty: amount, source: 'vase' }] };
   }
 
   return { ok: false, reason: 'bad-claim-type' };

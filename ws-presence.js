@@ -46,7 +46,7 @@ import {
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
   mirrorApplyInvEvent, mirrorReadFullState,    // v1.7.741 Phase 1a
   mirrorReadEquippedBroadcast,                  // v1.7.746 Phase 5
-  consumedTileMark,                             // v1.7.787 chest/vase replay block
+  consumedTileMark, consumedTilesReap,          // v1.7.787 chest/vase replay block
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS } from './src/data/items.js';
@@ -290,6 +290,13 @@ function _getPartyMates(userId) {
 const PRESENCE_TTL_SEC   = 10 * 60;    // shadows older than this drop
 const PRESENCE_FLUSH_MS  = 30 * 1000;  // periodic write of helloed users
 const PRESENCE_REAP_MS   = 60 * 1000;  // periodic stale-shadow cull
+
+// Consumed-tile reap: chest + vase rows are gated by a 24h TTL in
+// economy-arbiter.js. Once past TTL the row is just dead weight (still
+// indexed via idx_consumed_tiles_consumed_at). Reap hourly; one cutoff
+// covers both kinds since they share the same TTL.
+const CONSUMED_TILE_TTL_SEC = 24 * 3600;
+const CONSUMED_TILE_REAP_MS = 60 * 60 * 1000;
 const _shadows = new Map();   // userId → { userId, profile, loc, lastSeen }
 
 // SIGTERM flag — pm2 restart sends SIGTERM, we set the flag and DON'T exit;
@@ -357,6 +364,12 @@ function _reapPresence() {
   // SQLite has its own retention — rows for users we evicted via `hello`
   // get overwritten on the next flush, but stale ones must be cleaned.
   presenceReap(cutoff);
+}
+
+function _reapConsumedTiles() {
+  const cutoff = Math.floor(Date.now() / 1000) - CONSUMED_TILE_TTL_SEC;
+  consumedTilesReap('chest', cutoff);
+  consumedTilesReap('vase',  cutoff);
 }
 
 
@@ -2045,8 +2058,9 @@ export function attachWebSocketPresence(httpServer) {
   // Periodic presence snapshot + stale-shadow reap. Started here (not at
   // module load) so a Node test that imports this file without attaching
   // the server doesn't have a timer running forever. v1.7.596.
-  setInterval(_flushPresence, PRESENCE_FLUSH_MS).unref?.();
-  setInterval(_reapPresence,  PRESENCE_REAP_MS).unref?.();
+  setInterval(_flushPresence,     PRESENCE_FLUSH_MS).unref?.();
+  setInterval(_reapPresence,      PRESENCE_REAP_MS).unref?.();
+  setInterval(_reapConsumedTiles, CONSUMED_TILE_REAP_MS).unref?.();
 
   httpServer.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, 'http://localhost');
