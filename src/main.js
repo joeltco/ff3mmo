@@ -185,10 +185,14 @@ export function init() {
   // fields first). See `docs/INVENTORY-MIRROR-PLAN.md`.
   setNetInvStateHandler((msg) => {
     if (!msg || msg.slot == null) return;
-    // Inventory wholesale-replace. Server inventory is { itemId: qty } shape.
-    const inv = {};
-    const order = [];
+    // Inventory wholesale-replace, GATED on the field being present. Pre-v1.7.801
+    // the build+apply ran unconditionally — a future server frame that omitted
+    // `inventory` (or an error response that just carried `slot`) would call
+    // setPlayerInventory({}, []) and wipe the bag. Same defensive pattern as
+    // `equipped` below: only touch ps when the server actually shipped the field.
     if (msg.inventory && typeof msg.inventory === 'object') {
+      const inv = {};
+      const order = [];
       for (const [k, v] of Object.entries(msg.inventory)) {
         const id = parseInt(k, 10);
         if (!Number.isFinite(id) || id < 0 || id > 255) continue;
@@ -197,8 +201,8 @@ export function init() {
         inv[id] = qty;
         order.push(id);
       }
+      setPlayerInventory(inv, order);
     }
-    setPlayerInventory(inv, order);
     // Economy.
     if (typeof msg.gil === 'number') ps.gil = msg.gil | 0;
     // Equipment.
