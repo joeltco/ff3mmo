@@ -416,8 +416,15 @@ function _battleEnemyName() {
     if (pvpSt.pvpOpponentStats) return _nameToBytes(pvpSt.pvpOpponentStats.name);
   }
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    // Use targeted monster's name (or first alive if no target)
-    const ti = (inputSt.targetIndex >= 0 && inputSt.targetIndex < battleSt.encounterMonsters.length && battleSt.encounterMonsters[inputSt.targetIndex].hp > 0)
+    // Prefer the targeted monster — even when its hp hit 0. The victory name-out
+    // calls this after all monsters are dead; pre-v1.7.799 the `hp > 0` gate on
+    // targetIndex made it fall through to `findIndex(... hp > 0)` which returns
+    // -1 (all dead), then defaulted to encounterMonsters[0]. In a mixed encounter
+    // like [Eye Fang, Carbuncle] where the player killed Carbuncle last, the
+    // victory header showed "Eye Fang" — the slot-0 monster, not the kill.
+    // Now targetIndex sticks through the death frame so the victory name
+    // matches the monster the player just defeated.
+    const ti = (inputSt.targetIndex >= 0 && inputSt.targetIndex < battleSt.encounterMonsters.length)
       ? inputSt.targetIndex
       : battleSt.encounterMonsters.findIndex(m => m.hp > 0);
     const monsterId = battleSt.encounterMonsters[ti >= 0 ? ti : 0].monsterId;
