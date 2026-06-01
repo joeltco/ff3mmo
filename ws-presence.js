@@ -129,6 +129,27 @@ let PVP_ARBITER_SERVER = true;
 // To roll back: set this + SERVER_ECONOMY + both client flags back to false.
 let PVE_ARBITER = true;
 
+// v1.7.794 — loc → allowed zoneKeys for pve-encounter-request. `entry.loc`
+// is set from the client's `location` wire and broadcast in the roster,
+// so a cheater who fakes zoneKey must also fake loc to slip past this
+// gate — and that lie is visible to every peer. Default {} → reject.
+// Mirrors the client zone resolution in `currentEncounterZoneKey()`:
+//   - world  → grasslands_valley (Ur choke valley) OR grasslands_wild (south)
+//   - ur     → grasslands_wild (the dark-tile patch in the town overworld)
+//   - cave-N → the matching altar_cave_fN
+// `altar_cave_boss` is intentionally absent — the boss is server-triggered,
+// not client-requested. New zones / new encounter patches must update
+// this table alongside `currentEncounterZoneKey` and the loc table in
+// src/roster.js#rosterLocForMapId.
+const _LOC_ZONE_ALLOWLIST = new Map([
+  ['world',  new Set(['grasslands_valley', 'grasslands_wild'])],
+  ['ur',     new Set(['grasslands_wild'])],
+  ['cave-0', new Set(['altar_cave_f1'])],
+  ['cave-1', new Set(['altar_cave_f2'])],
+  ['cave-2', new Set(['altar_cave_f3'])],
+  ['cave-3', new Set(['altar_cave_f4'])],
+]);
+
 // v1.7.776 P-8 — server-side economy validation gate (shops + chests +
 // vases + inn). When true, client sends transaction requests + waits for
 // server's authoritative ok/reject; when false, client owns the writes.
@@ -1098,6 +1119,18 @@ function _handleMessage(entry, msg) {
       if (!entry.helloed) return;
       if (!PVE_ARBITER) {
         _send(entry.ws, { type: 'pve-cancel', reason: 'arbiter-disabled' });
+        return;
+      }
+      // v1.7.794 — gate zoneKey against the user's tracked loc. Pre-fix
+      // a cheater could claim `zoneKey: 'altar_cave_f4'` from anywhere
+      // and farm high-tier monster rewards. `entry.loc` is set from the
+      // location wire and broadcast on the roster, so the cheater would
+      // have to also lie about loc to bypass — visible to peers.
+      const allowed = _LOC_ZONE_ALLOWLIST.get(entry.loc);
+      if (!allowed || !allowed.has(String(parsed.zoneKey || ''))) {
+        console.log('[pve-encounter] reject user=' + entry.userId +
+          ' loc=' + entry.loc + ' zone=' + parsed.zoneKey + ' reason=wrong-zone');
+        _send(entry.ws, { type: 'pve-cancel', reason: 'wrong-zone' });
         return;
       }
       const slot = (entry.slot | 0);

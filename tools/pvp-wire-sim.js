@@ -2492,6 +2492,9 @@ async function suiteWire() {
     const ws = await connectClient(port, 3001, { name: 'Pve1', jobIdx: 0, level: 5,
       palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    // v1.7.794 — pve-encounter-request gates zoneKey against entry.loc;
+    // grasslands_valley requires loc='world'.
+    ws.send(JSON.stringify({ type: 'location', loc: 'world' }));
     await new Promise(r => setTimeout(r, 30));
     ws.send(JSON.stringify({ type: 'pve-encounter-request',
       zoneKey: 'grasslands_valley', mapId: 0 }));
@@ -2515,6 +2518,9 @@ async function suiteWire() {
     const ws = await connectClient(port, 3004, { name: 'PveOK', jobIdx: 0, level: 5,
       palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    // v1.7.794 — pve-encounter-request gates zoneKey against entry.loc;
+    // grasslands_valley requires loc='world'.
+    ws.send(JSON.stringify({ type: 'location', loc: 'world' }));
     await new Promise(r => setTimeout(r, 30));
     ws.send(JSON.stringify({ type: 'pve-encounter-request',
       zoneKey: 'grasslands_valley', mapId: 0 }));
@@ -2556,6 +2562,9 @@ async function suiteWire() {
     const ws = await connectClient(port, 3002, { name: 'Pve2', jobIdx: 0, level: 5,
       palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    // v1.7.794 — pve-encounter-request gates zoneKey against entry.loc;
+    // grasslands_valley requires loc='world'.
+    ws.send(JSON.stringify({ type: 'location', loc: 'world' }));
     await new Promise(r => setTimeout(r, 30));
     ws.send(JSON.stringify({ type: 'pve-encounter-request',
       zoneKey: 'grasslands_valley', mapId: 0 }));
@@ -2578,6 +2587,9 @@ async function suiteWire() {
     const ws = await connectClient(port, 3003, { name: 'Pve3', jobIdx: 0, level: 5,
       palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
     ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    // v1.7.794 — pve-encounter-request gates zoneKey against entry.loc;
+    // grasslands_valley requires loc='world'.
+    ws.send(JSON.stringify({ type: 'location', loc: 'world' }));
     await new Promise(r => setTimeout(r, 30));
     ws.send(JSON.stringify({ type: 'pve-encounter-request',
       zoneKey: 'grasslands_valley', mapId: 0 }));
@@ -2596,6 +2608,36 @@ async function suiteWire() {
     assertEqual(result.status, 'rejected', 'fake drop accepted');
     assertTrue(result.reason && result.reason.startsWith('drop-not-in-pool'),
       'wrong reject reason: ' + result.reason);
+    ws.close();
+    _testHooks.setPveArbiter(false);
+  });
+
+  await asyncTest('v1.7.794 pve-encounter-request rejects zoneKey not allowed for entry.loc', async () => {
+    _testHooks.setPveArbiter(true);
+    _testEnsureUser(3005);
+    _testSeedSave(3005, 0, { stats: { level: 5, hp: 100, maxHP: 100 } });
+    const ws = await connectClient(port, 3005, { name: 'PveZone', jobIdx: 0, level: 5,
+      palIdx: 0, hp: 100, maxHP: 100, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    // hello defaulted entry.loc to 'ur'. Claiming altar_cave_f4 (allowed
+    // only for cave-3) must reject with wrong-zone — closes the v1.7.794
+    // zoneKey-claim exploit.
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'pve-encounter-request',
+      zoneKey: 'altar_cave_f4', mapId: 1003 }));
+    const cancel = await once(ws, m => m.type === 'pve-cancel', 1000);
+    assertEqual(cancel.reason, 'wrong-zone', 'wrong reject reason: ' + cancel.reason);
+    // After updating loc to cave-3, the same zoneKey should now succeed.
+    ws.send(JSON.stringify({ type: 'location', loc: 'cave-3' }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'pve-encounter-request',
+      zoneKey: 'altar_cave_f4', mapId: 1003 }));
+    const start = await once(ws, m => m.type === 'pve-battle-start', 1000);
+    assertTrue(start.battleId > 0, 'legit request still works after loc switch');
+    // Cleanup: end the battle.
+    ws.send(JSON.stringify({ type: 'pve-battle-end', battleId: start.battleId,
+      intents: [], claimedOutcome: { victor: 'fled' } }));
+    await once(ws, m => m.type === 'pve-battle-result', 1000);
     ws.close();
     _testHooks.setPveArbiter(false);
   });

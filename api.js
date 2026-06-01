@@ -7,6 +7,13 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ff3mmo-dev-secret-change-in-prod';
+if (!process.env.JWT_SECRET) {
+  // v1.7.794 — surface a missed env var loudly so a sloppy deploy that
+  // skips `JWT_SECRET=$(cat /root/.ff3mmo_jwt_secret)` doesn't silently
+  // boot with the well-known dev secret (forge-able tokens).
+  console.warn('[security] JWT_SECRET env var not set — using dev fallback. ' +
+    'Tokens are forge-able. Set JWT_SECRET in production.');
+}
 const SALT_ROUNDS = 10;
 
 // Per-IP rate-limit buckets. Auth endpoints (login + register) are bcrypt-
