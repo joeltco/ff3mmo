@@ -53,7 +53,11 @@ import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testMirrorRead, _testMirrorClear,
          _testSetMirrorAuthoritative, _testGetMirrorAuthoritative,
          _testSeedSave,
-         _testConsumedTilesClear } from '../api.js';
+         _testConsumedTilesClear,
+         consumedTileMark, consumedTileConsumedAt, consumedTilesReap,
+       } from '../api.js';
+import { createPveBattle, recordIntent, _testReset as _pveTestReset }
+       from '../pve-arbiter.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -445,6 +449,50 @@ function suiteServer() {
     assertEqual(m.inv[0].item_id, 0x80, 'first valid item');
     assertEqual(m.inv[1].item_id, 0x99, 'second valid item');
     _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.791 recordIntent rejects out-of-range turnIdx', () => {
+    const UID = 88820, SLOT = 0;
+    _testEnsureUser(UID);
+    _testSeedSave(UID, SLOT, { stats: { level: 1, hp: 50, maxHP: 50 } });
+    _pveTestReset();
+    const start = createPveBattle(UID, { slot: SLOT, zoneKey: 'grasslands_valley', mapId: 0 });
+    assertTrue(start && start.battleId != null, 'battle should create');
+    // Honest small index is accepted.
+    assertEqual(recordIntent(UID, { battleId: start.battleId, turnIdx: 0, kind: 'attack' }), true);
+    // Honest in-bound large index is accepted.
+    assertEqual(recordIntent(UID, { battleId: start.battleId, turnIdx: 999, kind: 'attack' }), true);
+    // Out-of-bound indices reject silently — sparse-array DoS guard.
+    assertEqual(recordIntent(UID, { battleId: start.battleId, turnIdx: 1000, kind: 'attack' }), false);
+    assertEqual(recordIntent(UID, { battleId: start.battleId, turnIdx: 0x7FFFFFFF, kind: 'attack' }), false);
+    assertEqual(recordIntent(UID, { battleId: start.battleId, turnIdx: -1, kind: 'attack' }), false);
+    _pveTestReset();
+  });
+
+  test('v1.7.791 consumedTilesReap drops rows past the cutoff', () => {
+    const UID = 88821, SLOT = 0;
+    _testEnsureUser(UID);
+    _testConsumedTilesClear(UID, SLOT);
+    // Backdate a row by overwriting `consumed_at` via a fresh mark, then
+    // reap with a cutoff that's newer than that mark.
+    consumedTileMark(UID, SLOT, 114, 1, 1, 'chest');
+    const stamp = consumedTileConsumedAt(UID, SLOT, 114, 1, 1, 'chest');
+    assertTrue(stamp != null, 'mark should land');
+    // Reap with a cutoff well in the future → row drops. We don't assert
+    // the changes count because other tests in the same suite run can
+    // leave their own stale chest rows behind — verify the SPECIFIC row
+    // is gone instead.
+    const changes = consumedTilesReap('chest', stamp + 1);
+    assertTrue(changes >= 1, 'reap should drop at least our row');
+    assertEqual(consumedTileConsumedAt(UID, SLOT, 114, 1, 1, 'chest'), null,
+      'reaped row should be gone');
+    // Vase rows are NOT reaped by the chest kind selector.
+    consumedTileMark(UID, SLOT, 114, 2, 2, 'vase');
+    const vstamp = consumedTileConsumedAt(UID, SLOT, 114, 2, 2, 'vase');
+    consumedTilesReap('chest', vstamp + 1);
+    assertEqual(consumedTileConsumedAt(UID, SLOT, 114, 2, 2, 'vase'), vstamp,
+      'vase row survives a chest reap');
+    _testConsumedTilesClear(UID, SLOT);
   });
 }
 

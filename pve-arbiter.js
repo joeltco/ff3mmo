@@ -162,15 +162,23 @@ export function createPveBattle(userId, opts) {
 
 // Record an intent for a battle's per-turn log. Tolerates duplicates
 // (same turnIdx) by overwriting — clients may resend on reconnect.
-// Returns true on success, false on unknown battle.
+// Returns true on success, false on unknown battle or out-of-range turn.
+//
+// `turnIdx` is bounded to keep `battle.intents` from growing unbounded
+// when a misbehaving client sends `0x7FFFFFFF` — `| 0` would accept it
+// and V8 would hold the sparse array in dictionary mode for the life of
+// the battle. Real battles never exceed ~30 turns; MAX_TURN_IDX leaves
+// 30× headroom and still bounds per-battle memory.
+const MAX_TURN_IDX = 999;
 export function recordIntent(userId, intent) {
   const battleId = intent?.battleId;
   const battle = _battles.get(battleId);
   if (!battle) return false;
   if (battle.userId !== userId) return false;
   if (battle.status !== 'in-progress') return false;
-  battle.lastTouchedAt = Date.now();
   const turnIdx = intent.turnIdx | 0;
+  if (turnIdx < 0 || turnIdx > MAX_TURN_IDX) return false;
+  battle.lastTouchedAt = Date.now();
   battle.intents[turnIdx] = intent;
   return true;
 }
@@ -224,15 +232,6 @@ export function cancelPveBattle(userId) {
   _battles.delete(battleId);
   _userBattle.delete(userId);
   return true;
-}
-
-// Debug + reconnect-resync getter. Returns null if no active battle.
-export function getPveBattle(userIdOrBattleId, opts) {
-  if (opts && opts.byUser) {
-    const id = _userBattle.get(userIdOrBattleId);
-    return id ? _battles.get(id) || null : null;
-  }
-  return _battles.get(userIdOrBattleId) || null;
 }
 
 // Test-only — drain the maps between unit tests so per-test state stays
