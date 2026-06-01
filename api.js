@@ -495,7 +495,16 @@ let INV_MIRROR_AUTHORITATIVE_SERVER = true;
 function mirrorSyncFromSave(userId, slot, data, opts) {
   const now = Math.floor(Date.now() / 1000);
   const bootSeed = !!(opts && opts.bootSeed);
-  const skipWire = INV_MIRROR_AUTHORITATIVE_SERVER && !bootSeed;
+  // First-save detect: no `inv_economies` row means this (userId, slot) has
+  // never been mirrored. Treat as a seed write — the wire isn't authoritative
+  // for state that doesn't exist yet. Without this, a brand-new user under
+  // `INV_MIRROR_AUTHORITATIVE_SERVER` skips inventory + equipment writes on
+  // their first POST /api/save, leaving inv_inventories / inv_equipped empty
+  // until the next server boot reseeds them. A wire `equip` event in that
+  // window would land on an empty `inv_equipped` row and overwrite the other
+  // four slots with 0 (see `mirrorApplyInvEvent` `case 'equip'`). v1.7.800.
+  const firstSync = !_invEconReadStmt.get(userId, slot);
+  const skipWire = INV_MIRROR_AUTHORITATIVE_SERVER && !bootSeed && !firstSync;
   const tx = db.transaction(() => {
     // Inventory — wipe and replace. Skipped when wire is authoritative
     // (the wire handler owns this table; see `mirrorApplyInvEvent`).
@@ -511,9 +520,10 @@ function mirrorSyncFromSave(userId, slot, data, opts) {
         }
       }
     }
-    // Economy. When wire-authoritative, preserve the wire-managed `gil`
-    // but still let cp/exp/unlocked_jobs sync from the save — no wire
-    // events carry those fields yet.
+    // Economy. When wire-authoritative AND a row already exists, preserve
+    // the wire-managed `gil` and only sync cp/exp/unlocked_jobs from save.
+    // On first sync (no prior row) and on bootSeed, take everything from
+    // the save — the wire has nothing to defer to.
     if (skipWire) {
       const prior = _invEconReadStmt.get(userId, slot);
       _invEconUpsertStmt.run(
@@ -663,7 +673,16 @@ function mirrorApplyInvEvent(userId, slot, ev) {
       const slotMap = ['weapon_r', 'weapon_l', 'head', 'body', 'arms'];
       const slotName = slotMap[qty];
       if (!slotName) return { ok: false, reason: 'bad-slot' };
-      const eq = _invEquipReadStmt.get(userId, slot) || {};
+      // No prior row → refuse to write. Pre-v1.7.800 the `|| {}` fallback
+      // meant every other slot got `undefined | 0 = 0` on the INSERT,
+      // silently wiping any save-loaded equipment the mirror hadn't seen
+      // yet. The first-save seed in `mirrorSyncFromSave` populates this
+      // row before any normal wire flow can land here, so a missing row
+      // is now either a fresh-registration race (client emits equip
+      // before the first /api/save round-trips) or a crafted frame —
+      // both are safer rejected than silently zeroed. v1.7.800.
+      const eq = _invEquipReadStmt.get(userId, slot);
+      if (!eq) return { ok: false, reason: 'no-equipped-row' };
       const before = (eq[slotName] | 0);
       // SQL injection-safe — slotName from whitelist only.
       db.prepare('INSERT OR REPLACE INTO inv_equipped (user_id, slot, weapon_r, weapon_l, head, body, arms, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(

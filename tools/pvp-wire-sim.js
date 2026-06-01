@@ -456,6 +456,9 @@ function suiteServer() {
     const UID = 88822, SLOT = 0;
     _testEnsureUser(UID);
     _testMirrorClear(UID, SLOT);
+    // Seed an inv_equipped row so the v1.7.800 no-row defense doesn't
+    // reject the legitimate `equip itemId=0` (unequip) case below.
+    _testMirrorSync(UID, SLOT, { stats: { weaponR: 0x1E, head: 0x62 } });
     // add with itemId=0 → bad-itemId (would seed a phantom item_id=0 row).
     let r = mirrorApplyInvEvent(UID, SLOT, { kind: 'add', itemId: 0, qty: 1 });
     assertEqual(r.ok, false, 'add itemId=0 should reject');
@@ -471,6 +474,42 @@ function suiteServer() {
     r = mirrorApplyInvEvent(UID, SLOT, { kind: 'gil-delta', qty: 10 });
     assertEqual(r.ok, true, 'gil-delta should pass without itemId');
     _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.800 mirrorApplyInvEvent equip rejects when no inv_equipped row', () => {
+    const UID = 88823, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    // No prior row → must reject; otherwise the INSERT would write 0 to
+    // every other equipment slot, silently wiping save-loaded gear.
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip', itemId: 0x1F, qty: 1 });
+    assertEqual(r.ok, false, 'equip without prior row should reject');
+    assertEqual(r.reason, 'no-equipped-row', 'wrong reject reason: ' + r.reason);
+  });
+
+  test('v1.7.800 first /api/save seeds inv_equipped even with wire flag on', () => {
+    const UID = 88824, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    const prev = _testSetMirrorAuthoritative(true);
+    try {
+      // Pre-fix: skipWire=true on first save meant equipment + inventory
+      // never landed in the mirror — wire equip events would then hit an
+      // empty `inv_equipped` row and zero the unmentioned slots.
+      _testMirrorSyncRuntime(UID, SLOT, {
+        gil: 100, inventory: { 0x80: 3 },
+        stats: { weaponR: 0x1E, weaponL: 0, head: 0x62, body: 0x73, arms: 0 },
+      });
+      const m = _testMirrorRead(UID, SLOT);
+      assertEqual(m.eq.weapon_r, 0x1E, 'weaponR seeded on first sync');
+      assertEqual(m.eq.head,    0x62, 'head seeded on first sync');
+      assertEqual(m.eq.body,    0x73, 'body seeded on first sync');
+      assertEqual(m.inv.length, 1,    'inventory seeded on first sync');
+      assertEqual(m.econ.gil,   100,  'gil seeded on first sync');
+    } finally {
+      _testSetMirrorAuthoritative(prev);
+      _testMirrorClear(UID, SLOT);
+    }
   });
 
   test('v1.7.791 recordIntent rejects out-of-range turnIdx', () => {

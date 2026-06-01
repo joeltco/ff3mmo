@@ -18,6 +18,26 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.800 — 2026-06-01
+
+### Mirror seed gap for new users since v1.7.745 + equip-handler 0-fill defense
+
+Audit follow-up. Two paired gaps in the wire-authoritative mirror path:
+
+**Gap A — `mirrorSyncFromSave` skips inventory/equipment on first save**
+
+Under `INV_MIRROR_AUTHORITATIVE_SERVER = true`, every `/api/save` POST runs with `skipWire=true`, which skips writes to `inv_inventories` and `inv_equipped`. The boot seed re-populates everything on each server start, so the gap is only visible to users who register AND save AND emit a wire event BETWEEN deploys. All 12 prod saves currently have matching `inv_equipped` rows (every pm2 restart re-seeds), so no live damage today — but the window exists.
+
+Fix: `mirrorSyncFromSave` now detects "no prior `inv_economies` row" → treats this call as a seed write (writes everything from save data) regardless of the flag. Subsequent saves are still skip-wire as designed. Bootstrap parity with the boot-seed path without touching the live save flow for established users.
+
+**Gap B — `equip` handler wrote 0 to other slots when `inv_equipped` row was missing**
+
+`api.js#mirrorApplyInvEvent` `case 'equip'` read `_invEquipReadStmt.get(...) || {}` and did `eq.weapon_r | 0` etc. for the four slots not being changed. With no row, `undefined | 0 = 0` → the INSERT wrote 0 to every untouched slot. Combined with Gap A, a wire-equip from a brand-new user would silently zero their save-loaded gear in the mirror.
+
+Fix: drop the `|| {}` fallback. If `_invEquipReadStmt.get` returns nothing, reject with `reason: 'no-equipped-row'`. Gap A's first-save seed makes this impossible to hit under the normal new-game flow, but it's a defense-in-depth — a crafted frame or pre-seed race now rejects instead of corrupting.
+
+**Tests.** Two new tests in `tools/pvp-wire-sim.js`: equip-without-row rejects with the new reason; first sync with the flag on now writes equipment + inventory + gil. Existing `v1.7.793` test was updated to seed an `inv_equipped` row before its legitimate `equip itemId=0` (unequip) call. Suite 125/125.
+
 ## 1.7.799 — 2026-06-01
 
 ### Victory name-out flashed slot-0 monster's name on mixed-encounter wins
