@@ -327,15 +327,21 @@ export function spendGil(amount) {
 }
 
 // Cost to switch from current job to newJobIdx.
-// NES formula (disasm 3D/AD85): cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, min 0.
+// Formula: cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, MIN 1.
 // Alignment byte: high nibble = physical/magical index, low nibble = lawful/chaotic index.
+// Min-1 floor (not 0) so a change ALWAYS costs at least one CP, even when the
+// target job's level fully eats the alignment-distance cost. Pre-v1.7.797 the
+// floor was 0 — meaning a high-level same-alignment swap (e.g. Red Mage lv 15
+// ↔ Fighter lv 11) was effectively free, letting any 0-CP player hop between
+// their leveled jobs without spending. Pause-menu's draw layer hid the "0"
+// digit too, so the menu looked like there was no cost.
 export function jobSwitchCost(newJobIdx) {
   const currAlign = JOBS[ps.jobIdx]?.alignment ?? 0;
   const newAlign = JOBS[newJobIdx]?.alignment ?? 0;
   const physDiff = Math.abs((currAlign >> 4) - (newAlign >> 4));
   const chaosDiff = Math.abs((currAlign & 0xF) - (newAlign & 0xF));
   const newJobLv = getJobLevel(newJobIdx);
-  return Math.max(0, (physDiff + chaosDiff) * 4 - newJobLv);
+  return Math.max(1, (physDiff + chaosDiff) * 4 - newJobLv);
 }
 
 export function changeJob(newJobIdx) {
