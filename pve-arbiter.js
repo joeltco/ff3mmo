@@ -199,7 +199,11 @@ export function endPveBattle(userId, payload) {
   if (!battle) return { status: 'rejected', reason: 'no-battle' };
   if (battle.userId !== userId) return { status: 'rejected', reason: 'not-owner' };
 
-  battle.intents = payload.intents || battle.intents;
+  // Don't accept the client's `payload.intents` — the server-tracked log
+  // written by `recordIntent` is the authoritative forensics record.
+  // Overwriting it with client-supplied data made the "forensics" claim
+  // in pve-replay.js worthless; payloads from cheating clients could lie.
+  // v1.7.792.
   battle.claimedOutcome = payload.claimedOutcome || null;
   battle.status = 'ended';
   battle.endedAt = Date.now();

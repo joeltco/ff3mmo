@@ -25,6 +25,7 @@ import { sendNetInvEvent, SERVER_ECONOMY, sendNetChestOpen, sendNetVaseSearch, n
 import { saveSlotsToDB } from './save-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN } from './sprite.js';
+import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './data/loot-pools.js';
 
 const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
@@ -32,12 +33,12 @@ const BATTLE_FLASH_FRAME_MS = 16.67;
 
 // Chest tiles: 0x7C closed (walk-up trigger), 0x7D opened (post-loot).
 const OPENED_CHEST = 0x7D;
-// Ur town respawns its chests 24h after they're looted. Map set = Ur overworld
-// (114) + every Ur interior room (see project_ff3mmo_ur_buildout). Dungeon
-// chests (mapId >= 1000) are NOT in here — those reset on cave re-entry via
-// the procedural-regen wipe in _checkWorldMapTrigger.
+// Ur town respawns its chests 24h after they're looted. The Ur map set
+// (overworld 114 + every Ur interior room) is the shared `UR_CHEST_MAPS`
+// imported above. Dungeon chests (mapId >= 1000) are NOT in there —
+// those reset on cave re-entry via the procedural-regen wipe in
+// _checkWorldMapTrigger.
 const CHEST_RESET_MS = 24 * 60 * 60 * 1000;
-const UR_CHEST_MAPS = new Set([114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147]);
 
 // Hidden-treasure tiles (`0x78-0x7B`) are the ROM's universal "search here"
 // markers (trigger-type 2 in TRIGGER_TYPE_TABLE) — visually they render as
@@ -72,55 +73,13 @@ function rollHiddenTreasureLoot(mapId) {
   return tier.pool[Math.floor(Math.random() * tier.pool.length)];
 }
 
-// Chest loot pools, keyed by map ID. Each tier has a `weight` and a `pool` of
-// either item IDs (numbers) or `{ gil: [min, max] }` entries.
-// Crystal room (1004) is a boss room and has no chests.
-const GIL = (min, max) => ({ gil: [min, max] });
-const LOOT_POOLS = {
-  114: [ // Ur (town)
-    { weight: 70, pool: [0xA6, 0xA6, 0xAF] },                     // Potion(2x), Antidote
-    { weight: 30, pool: [GIL(10, 30)] },
-  ],
-  1000: [ // Altar Cave F1
-    { weight: 16, pool: [0xA6] },                                 // Potion (rarer — was 52)
-    { weight: 30, pool: [GIL(20, 60)] },
-    { weight: 15, pool: [0x62] },                                 // Leather Cap
-    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
-    { weight:  3, pool: [0x98] },                                 // Magic Key (rare — unlocks chamber doors). v1.7.670.
-    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
-  ],
-  1001: [ // Altar Cave F2
-    { weight: 12, pool: [0xA6] },                                 // Potion (rarer — was 42)
-    { weight: 30, pool: [GIL(40, 100)] },
-    { weight: 20, pool: [0x62, 0x1F, 0x06, 0x0E] },               // Leather Cap, Dagger, Nunchuck, Staff
-    { weight:  5, pool: [0x58] },                                 // Leather Shield
-    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
-    { weight:  3, pool: [0x98] },                                 // Magic Key (rare). v1.7.670.
-    { weight:  2, pool: [0xA9] },                                 // Phoenix Down (very rare revive)
-    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
-  ],
-  1002: [ // Altar Cave F3
-    { weight: 9, pool: [0xA6] },                                  // Potion (rarer — was 32)
-    { weight: 30, pool: [GIL(75, 175)] },
-    { weight: 25, pool: [0x58, 0x1F] },                           // Leather Shield, Dagger
-    { weight: 10, pool: [0x73] },                                 // Leather Armor
-    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
-    { weight:  3, pool: [0x98] },                                 // Magic Key (rare). v1.7.670.
-    { weight:  2, pool: [0xA9] },                                 // Phoenix Down (very rare revive)
-    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
-  ],
-  1003: [ // Altar Cave F4
-    { weight: 6, pool: [0xA6] },                                  // Potion (rarer — was 22)
-    { weight: 30, pool: [GIL(125, 275)] },
-    { weight: 25, pool: [0x73, 0x1F] },                           // Leather Armor, Dagger
-    { weight: 20, pool: [0x8B, 0x24] },                           // Bronze Bracers (mage arm), Longsword
-    { weight:  3, pool: [0xE3, 0xE1] },                           // Cure scroll, Ice scroll (rare)
-    { weight:  3, pool: [0x98] },                                 // Magic Key (rare). v1.7.670.
-    { weight:  3, pool: [0xA9] },                                 // Phoenix Down (rare revive — best floor odds)
-    { weight: 12, monster: true },                                // Chest mimic — 1 random monster
-  ],
-};
-const DEFAULT_LOOT = LOOT_POOLS[1000];
+// Chest loot pools live in `./data/loot-pools.js` (imported above) so the
+// server-side PvE economy arbiter can validate claims against the same
+// table. Crystal room (1004) is a boss room and has no chests. The data
+// file also exports a pure `rollLootEntry` that resolves gil to a single
+// amount — we keep our own resolver below because we want the raw
+// `{ gil: [min, max] }` tuple back so the caller can roll the amount
+// with the same RNG it uses for everything else.
 
 function rollLootEntry(mapId) {
   // Ur interior maps (1-9, 147) don't have their own LOOT_POOLS entry; route
