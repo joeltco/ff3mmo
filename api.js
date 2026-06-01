@@ -745,6 +745,40 @@ function mirrorReadFullState(userId, slot) {
   };
 }
 
+// Wire-managed-only snapshot — gil + inventory + equipped. Use this when
+// pushing `inv-state` over the wire (post-pve-end resync, inv-event reject
+// resync, inv-state-request response).
+//
+// v1.7.796 — pre-fix `mirrorReadFullState` shipped cp/exp/unlockedJobs/
+// knownSpells/jobLevels in those pushes too. But those fields are not
+// wire-managed (the mirror only snapshots them at /api/save time —
+// `_applyPveCanonical` never writes them). Stale mirror values were
+// silently clobbering the client's authoritative `ps.cp` / `ps.unlockedJobs`
+// after every PvE battle, then `setNetInvStateHandler`'s trailing
+// `saveSlotsToDB()` POSTed the zeroed state back, locking the loop. Four
+// players ended up with `unlockedJobs=0` + `cp=0` despite jobIdx > 0.
+// `mirrorReadFullState` stays for in-process arbiter callers that legitimately
+// need the full row.
+function mirrorReadWireState(userId, slot) {
+  const econ  = _invEconReadStmt.get(userId, slot) || {};
+  const eqRow = _invEquipReadStmt.get(userId, slot) || {};
+  const invRows = db.prepare('SELECT item_id, qty FROM inv_inventories WHERE user_id = ? AND slot = ?').all(userId, slot);
+  const inventory = {};
+  for (const r of invRows) inventory[r.item_id] = r.qty;
+  return {
+    slot,
+    inventory,
+    gil: econ.gil | 0,
+    equipped: {
+      weaponR: eqRow.weapon_r | 0,
+      weaponL: eqRow.weapon_l | 0,
+      head:    eqRow.head     | 0,
+      body:    eqRow.body     | 0,
+      arms:    eqRow.arms     | 0,
+    },
+  };
+}
+
 // Read mirror's equipped state, shaped to match the `update` broadcast's
 // field names (helmId / armorId / shieldId instead of mirror's
 // head / body / arms). v1.7.746 Phase 5 uses this to overwrite cheated
@@ -776,7 +810,8 @@ function readSaveSlot(userId, slot) {
 
 // Exports — the wire handler in ws-presence.js calls these.
 export {
-  mirrorApplyInvEvent, mirrorReadFullState, mirrorReadEquippedBroadcast,
+  mirrorApplyInvEvent, mirrorReadFullState, mirrorReadWireState,
+  mirrorReadEquippedBroadcast,
   readSaveSlot,
 };
 

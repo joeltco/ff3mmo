@@ -1204,7 +1204,12 @@ async function suiteWire() {
     await new Promise(r => setTimeout(r, 40));
   });
 
-  await asyncTest('v1.7.741 inv-state-request returns full mirror snapshot', async () => {
+  await asyncTest('v1.7.796 inv-state-request returns wire-only mirror snapshot', async () => {
+    // v1.7.796 — inv-state pushes ONLY carry wire-managed fields (gil,
+    // inventory, equipped). cp/exp/unlockedJobs/knownSpells/jobLevels
+    // are intentionally omitted — they're still save-sync managed, and
+    // shipping the mirror's stale copy was clobbering the client's
+    // authoritative ps values.
     _testHooks.resetState();
     _testEnsureUser(7416);
     _testMirrorClear(7416, 0);
@@ -1224,7 +1229,13 @@ async function suiteWire() {
     assertEqual(snap.inventory[0x90], 1, 'inventory elixir qty');
     assertEqual(snap.equipped.weaponR, 0x1E, 'equipped weaponR');
     assertEqual(snap.equipped.head, 0x62, 'equipped head');
-    assertTrue(Array.isArray(snap.knownSpells) && snap.knownSpells.length === 2, 'spells array');
+    // Non-wire-managed fields MUST NOT be in the push (would clobber
+    // the client's authoritative copy with a stale mirror snapshot).
+    assertTrue(snap.cp === undefined,           'cp omitted');
+    assertTrue(snap.exp === undefined,          'exp omitted');
+    assertTrue(snap.unlockedJobs === undefined, 'unlockedJobs omitted');
+    assertTrue(snap.knownSpells === undefined,  'knownSpells omitted');
+    assertTrue(snap.jobLevels === undefined,    'jobLevels omitted');
     A.close();
     _testMirrorClear(7416, 0);
     await new Promise(r => setTimeout(r, 40));

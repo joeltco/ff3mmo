@@ -199,11 +199,8 @@ export function init() {
       }
     }
     setPlayerInventory(inv, order);
-    // Economy / progression.
+    // Economy.
     if (typeof msg.gil === 'number') ps.gil = msg.gil | 0;
-    if (typeof msg.cp === 'number') ps.cp = msg.cp | 0;
-    if (typeof msg.exp === 'number' && ps.stats) ps.stats.exp = msg.exp | 0;
-    if (typeof msg.unlockedJobs === 'number') ps.unlockedJobs = msg.unlockedJobs >>> 0;
     // Equipment.
     if (msg.equipped && typeof msg.equipped === 'object') {
       if (typeof msg.equipped.weaponR === 'number') ps.weaponR = msg.equipped.weaponR | 0;
@@ -212,16 +209,10 @@ export function init() {
       if (typeof msg.equipped.body === 'number')    ps.body    = msg.equipped.body    | 0;
       if (typeof msg.equipped.arms === 'number')    ps.arms    = msg.equipped.arms    | 0;
     }
-    // Spells.
-    if (Array.isArray(msg.knownSpells)) ps.knownSpells = msg.knownSpells.slice();
-    // Job levels.
-    if (msg.jobLevels && typeof msg.jobLevels === 'object') {
-      ps.jobLevels = {};
-      for (const [k, v] of Object.entries(msg.jobLevels)) {
-        if (!v || typeof v !== 'object') continue;
-        ps.jobLevels[k] = { level: v.level | 0, jp: v.jp | 0 };
-      }
-    }
+    // v1.7.796 — cp / exp / unlockedJobs / knownSpells / jobLevels are NOT
+    // wire-managed; the mirror only snapshots them at /api/save time. If a
+    // pre-fix server (or future divergence) sends them here, ignore — the
+    // local `ps` value is canonical until the next save round-trip.
     saveSlotsToDB();
   });
 

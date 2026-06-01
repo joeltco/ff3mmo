@@ -45,6 +45,7 @@ import {
   tradeLog,
   presenceFlushBatch, presenceDelete, presenceLoadRecent, presenceReap,
   mirrorApplyInvEvent, mirrorReadFullState,    // v1.7.741 Phase 1a
+  mirrorReadWireState,                          // v1.7.796 wire-managed-only snapshot
   mirrorReadEquippedBroadcast,                  // v1.7.746 Phase 5
   consumedTileMark, consumedTilesReap,          // v1.7.787 chest/vase replay block
 } from './api.js';
@@ -1192,7 +1193,7 @@ function _handleMessage(entry, msg) {
         _send(entry.ws, {
           type: 'inv-state',
           reason: 'pve-applied',
-          ...mirrorReadFullState(entry.userId, slot),
+          ...mirrorReadWireState(entry.userId, slot),
         });
       }
       console.log('[pve-end] battle=' + parsed.battleId + ' user=' + entry.userId +
@@ -1351,7 +1352,7 @@ function _handleMessage(entry, msg) {
             reason: 'rejected',
             rejectedKind: parsed.kind || null,
             rejectedItemId: (parsed.itemId | 0),
-            ...mirrorReadFullState(entry.userId, slot),
+            ...mirrorReadWireState(entry.userId, slot),
           });
         }
         return;
@@ -1372,7 +1373,7 @@ function _handleMessage(entry, msg) {
       _send(entry.ws, {
         type: 'inv-state',
         reason: 'requested',
-        ...mirrorReadFullState(entry.userId, slot),
+        ...mirrorReadWireState(entry.userId, slot),
       });
       return;
     }
