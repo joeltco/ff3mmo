@@ -326,22 +326,24 @@ export function spendGil(amount) {
   return true;
 }
 
-// Cost to switch from current job to newJobIdx.
-// Formula: cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, MIN 1.
+// Cost to switch from current job to newJobIdx. NES canon.
+// Formula: cost = (|physDiff| + |chaosDiff|) * 4 - newJobLevel, MIN 0.
 // Alignment byte: high nibble = physical/magical index, low nibble = lawful/chaotic index.
-// Min-1 floor (not 0) so a change ALWAYS costs at least one CP, even when the
-// target job's level fully eats the alignment-distance cost. Pre-v1.7.797 the
-// floor was 0 — meaning a high-level same-alignment swap (e.g. Red Mage lv 15
-// ↔ Fighter lv 11) was effectively free, letting any 0-CP player hop between
-// their leveled jobs without spending. Pause-menu's draw layer hid the "0"
-// digit too, so the menu looked like there was no cost.
+//
+// Disasm $3D/AD85 (ROM file offset 0x7AD95) — verified v1.7.798. The NES
+// clamps underflow to literal 0 via `BCS +2 / LDA #$00`, so when the level
+// discount exceeds the alignment-distance base, the cost truly is 0 and the
+// pause-menu's `cost > 0` draw skip is intentional ROM behavior. High-level
+// same-alignment swaps (e.g. Red Mage lv 15 ↔ Fighter lv 11) are free —
+// the only gate is having UNLOCKED the target job. Briefly forced to min 1
+// in v1.7.797 on a misread of canon; reverted here after disassembling.
 export function jobSwitchCost(newJobIdx) {
   const currAlign = JOBS[ps.jobIdx]?.alignment ?? 0;
   const newAlign = JOBS[newJobIdx]?.alignment ?? 0;
   const physDiff = Math.abs((currAlign >> 4) - (newAlign >> 4));
   const chaosDiff = Math.abs((currAlign & 0xF) - (newAlign & 0xF));
   const newJobLv = getJobLevel(newJobIdx);
-  return Math.max(1, (physDiff + chaosDiff) * 4 - newJobLv);
+  return Math.max(0, (physDiff + chaosDiff) * 4 - newJobLv);
 }
 
 export function changeJob(newJobIdx) {

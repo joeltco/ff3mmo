@@ -18,9 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.798 — 2026-06-01
+
+### Revert v1.7.797 — `jobSwitchCost` min 0 is NES canon
+
+v1.7.797 floored the formula at min 1 on the assumption the original min-0 floor was a bug. Disassembled `$3D/AD85` (ROM file offset `0x7AD95` in `ff3-jp.nes`) to verify:
+
+```
+$ADD6: 38 E5 83       SEC; SBC $83       ; (alignSum × 4) − newJobLevel
+$ADD9: B0 02          BCS +2             ; if no underflow (result ≥ 0), skip
+$ADDB: A9 00          LDA #$00           ; UNDERFLOW → literal 0
+$ADDD: A6 8F          LDX $8F
+$ADDF: 9D 00 72       STA $7200,X        ; store
+```
+
+The NES truly stores 0 in the cost table when the level discount exceeds the alignment base. High-level same-alignment job swaps are free in canon — the only real gate is having unlocked the target job in the first place. Formula floor reverted from `Math.max(1, …)` back to `Math.max(0, …)`; comment now cites the verified disasm location explicitly. Follow-up to the [`canon-first-not-existing-comment` memory](https://github.com/anthropics/) pattern — except this time the existing comment was right and I broke it for a turn.
+
 ## 1.7.797 — 2026-06-01
 
-### Job switch with 0 CP was possible between high-level same-alignment jobs
+### Job switch with 0 CP was possible between high-level same-alignment jobs (REVERTED v1.7.798)
 
 `jobSwitchCost` floor was `Math.max(0, …)` — meaning when `newJobLevel` ≥ the alignment-distance base cost, the result collapsed to 0. Red Mage (0x8A) ↔ Fighter (0x79) is a `(1+1)×4 = 8` base, so once Fighter reaches lv 9+ the discount eats it. The pause-menu draw layer hides the "0" digit on cost (only renders `cost > 0`), so to the player there was no cost shown AND the affordability check `ps.cp >= 0` always passed. Player at 0 CP could happily ping-pong between their two leveled jobs forever.
 
