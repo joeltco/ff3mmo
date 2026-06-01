@@ -67,7 +67,7 @@ import {
   endPveBattle, cancelPveBattle,
 } from './pve-arbiter.js';
 // v1.7.776 P-8/P-9 — server economy validator. Shops first; chests/vases/inn follow.
-import { validateShopTransaction, validateChestOpen, validateVaseSearch, validateInnRest } from './economy-arbiter.js';
+import { validateShopTransaction, validateChestOpen, validateVaseSearch } from './economy-arbiter.js';
 
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
@@ -479,6 +479,19 @@ const PER_KIND_RATES = {
   // legitimately exceed ~1/s. Tight cap (3 burst, 1/s sustained) so a
   // misbehaving client can't grief the FSM by spamming intents.
   'pvp-intent':                { cap: 3,  refill: 1 },
+  // v1.7.793 — economy wires landed in the v1.7.598 / v1.7.779 / v1.7.780
+  // arcs without per-kind caps. The dungeon-chest replay exploit (v1.7.789
+  // accepted) lets a cheater claim repeatedly inside a regenerating cave;
+  // capping `chest-open` here bounds the abuse rate. `vase-search` shares
+  // the same shape. Shop transactions are slower (qty-driven UI). PvE
+  // battle wires are once-per-encounter / once-per-turn legitimately.
+  // Trade-offer matches the existing party-invite cap.
+  'chest-open':                { cap: 8,  refill: 4 },
+  'vase-search':               { cap: 8,  refill: 4 },
+  'shop-transaction':          { cap: 6,  refill: 2 },
+  'pve-encounter-request':     { cap: 4,  refill: 1 },
+  'pve-battle-end':            { cap: 4,  refill: 1 },
+  'trade-offer':               { cap: 6,  refill: 1 },
 };
 function _rateAllowKind(entry, kind) {
   const rate = PER_KIND_RATES[kind];
@@ -1268,33 +1281,6 @@ function _handleMessage(entry, msg) {
       });
       return;
     }
-    case 'inn-rest': {
-      // v1.7.777 P-11 — server-validated gil deduction + party restore.
-      // HP/MP restore happens client-side; server only enforces gil.
-      if (!entry.helloed) return;
-      if (!SERVER_ECONOMY) {
-        _send(entry.ws, { type: 'inn-result', txnId: parsed.txnId | 0,
-          status: 'rejected', reason: 'economy-disabled' });
-        return;
-      }
-      const slot = (entry.slot | 0);
-      const r = validateInnRest(entry.userId, slot, parsed);
-      if (!r.ok) {
-        _send(entry.ws, { type: 'inn-result', txnId: parsed.txnId | 0,
-          status: 'rejected', reason: r.reason });
-        return;
-      }
-      for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
-      const fresh = mirrorReadFullState(entry.userId, slot);
-      _send(entry.ws, {
-        type: 'inn-result',
-        txnId: parsed.txnId | 0,
-        status: 'ok',
-        gilAfter: fresh.gil | 0,
-      });
-      console.log('[inn] user=' + entry.userId + ' map=' + parsed.mapId);
-      return;
-    }
     case 'inv-event': {
       // v1.7.741 Phase 1a — inventory mirror authoritative-write scaffold.
       // Client emits an event for every inventory mutation; server
@@ -1370,6 +1356,22 @@ function _handleMessage(entry, msg) {
       if (!targetUserId || targetUserId === entry.userId) return;
       const itemId = parsed.itemId | 0;
       if (itemId <= 0 || itemId > 255) return;
+      // Mirror the trade-offer type whitelist (v1.7.616) — key items aren't
+      // give-able. Receiver's give-item handler in pause-menu.js silently
+      // drops anything without a heal/cure effect today, so a key item
+      // wouldn't apply anyway; we reject at the relay so the sender's
+      // local "consume before send" doesn't burn the key on a no-op. The
+      // refund channel (`give-item-failed`) re-grants the item. v1.7.793.
+      const itemMeta = ITEMS.get(itemId);
+      if (!itemMeta || NON_TRADEABLE_ITEM_TYPES.has(itemMeta.type)) {
+        _send(entry.ws, {
+          type:         'give-item-failed',
+          targetUserId,
+          itemId,
+          reason:       'blocked',
+        });
+        return;
+      }
       const target = _connected.get(targetUserId);
       if (!target || !target.helloed) {
         // GI-1 (v1.7.735) — sender already consumed the item locally

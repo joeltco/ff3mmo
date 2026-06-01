@@ -272,30 +272,3 @@ function _resolvedVasePool(mapId) {
   return { items, gilMax };
 }
 
-// Inn: deduct gil, restore HP/MP. v1.7.777 P-11. Inn registry currently
-// has just one entry; expandable via the table below. Server validates
-// gil; HP/MP restore tracking stays client-side (save column).
-const INN_REGISTRY = new Map([
-  // mapId|counterX|counterY → price
-  // Ur inn placeholder — adjust when actual inn lands. For now, no inns
-  // are validated server-side.
-]);
-function _innKey(mapId, x, y) { return mapId + '|' + x + '|' + y; }
-
-export function validateInnRest(userId, slot, payload) {
-  if (!payload) return { ok: false, reason: 'no-payload' };
-  const mapId = payload.mapId | 0;
-  const x = payload.counterX | 0;
-  const y = payload.counterY | 0;
-  const price = INN_REGISTRY.get(_innKey(mapId, x, y));
-  if (price == null) return { ok: false, reason: 'unknown-inn' };
-  const mirror = mirrorReadFullState(userId, slot);
-  if ((mirror.gil | 0) < price) {
-    return { ok: false, reason: 'insufficient-gil have=' + (mirror.gil|0) + ' need=' + price };
-  }
-  return {
-    ok: true,
-    events: [{ kind: 'gil-delta', qty: -price, source: 'inn' }],
-    meta: { price },
-  };
-}

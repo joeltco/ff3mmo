@@ -55,6 +55,7 @@ import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testSeedSave,
          _testConsumedTilesClear,
          consumedTileMark, consumedTileConsumedAt, consumedTilesReap,
+         mirrorApplyInvEvent,
        } from '../api.js';
 import { createPveBattle, recordIntent, _testReset as _pveTestReset }
        from '../pve-arbiter.js';
@@ -448,6 +449,27 @@ function suiteServer() {
     assertEqual(m.inv.length, 2, 'only valid item ids land');
     assertEqual(m.inv[0].item_id, 0x80, 'first valid item');
     assertEqual(m.inv[1].item_id, 0x99, 'second valid item');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.793 mirrorApplyInvEvent rejects itemId=0 for add/remove', () => {
+    const UID = 88822, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    // add with itemId=0 → bad-itemId (would seed a phantom item_id=0 row).
+    let r = mirrorApplyInvEvent(UID, SLOT, { kind: 'add', itemId: 0, qty: 1 });
+    assertEqual(r.ok, false, 'add itemId=0 should reject');
+    assertEqual(r.reason, 'bad-itemId', 'wrong reject reason: ' + r.reason);
+    // remove with itemId=0 → bad-itemId.
+    r = mirrorApplyInvEvent(UID, SLOT, { kind: 'remove', itemId: 0, qty: 1 });
+    assertEqual(r.ok, false, 'remove itemId=0 should reject');
+    assertEqual(r.reason, 'bad-itemId', 'wrong reject reason: ' + r.reason);
+    // equip with itemId=0 (unequip) is still legitimate. qty=2 = head slot.
+    r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip', itemId: 0, qty: 2 });
+    assertEqual(r.ok, true, 'equip itemId=0 (unequip head) should pass');
+    // gil-delta ignores itemId; itemId=0 still passes.
+    r = mirrorApplyInvEvent(UID, SLOT, { kind: 'gil-delta', qty: 10 });
+    assertEqual(r.ok, true, 'gil-delta should pass without itemId');
     _testMirrorClear(UID, SLOT);
   });
 
@@ -929,6 +951,31 @@ async function suiteWire() {
     assertEqual(fail.itemId, 0x80, 'failed message carries item id for refund');
     assertEqual(fail.reason, 'offline', 'reason flagged offline');
     A.close();
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  // ── v1.7.793 — give-item with key item rejected via type whitelist ──
+  await asyncTest('v1.7.793 give-item with key item is blocked by type whitelist', async () => {
+    _testHooks.resetState();
+    const A = await connectClient(port, 7361, { ...baseProfile, name: 'KeyGiver' });
+    const B = await connectClient(port, 7362, { ...targetProfile, name: 'KeyTarget' });
+    // Item 0x98 = Magic Key (type 'key' in src/data/items.js). Server's
+    // give-item handler now mirrors trade-offer's NON_TRADEABLE_ITEM_TYPES
+    // filter — should respond with `give-item-failed reason='blocked'`
+    // and NOT relay to B.
+    let bGotRelay = false;
+    B.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'give-item') bGotRelay = true;
+    });
+    const got = once(A, m => m.type === 'give-item-failed', 800);
+    A.send(JSON.stringify({ type: 'give-item', targetUserId: 7362, itemId: 0x98 }));
+    const fail = await got;
+    assertEqual(fail.reason, 'blocked', 'key item should reject as blocked');
+    assertEqual(fail.itemId, 0x98, 'failed message carries item id for refund');
+    await new Promise(r => setTimeout(r, 80));
+    assertTrue(!bGotRelay, 'blocked give-item must not relay to target');
+    A.close(); B.close();
     await new Promise(r => setTimeout(r, 40));
   });
 
@@ -2754,22 +2801,6 @@ async function suiteWire() {
       claim: { type: 'gil', amount: 1 } }));
     const second = await once(ws, m => m.type === 'vase-result' && m.txnId === 2, 1000);
     assertEqual(second.status, 'ok', 'dungeon vase replay wrongly blocked: ' + second.reason);
-    ws.close();
-    _testHooks.setServerEconomy(false);
-  });
-
-  await asyncTest('Inn rest rejects unknown counter', async () => {
-    _testHooks.setServerEconomy(true);
-    _testEnsureUser(3030);
-    const ws = await connectClient(port, 3030, { name: 'Inn1', jobIdx: 0,
-      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
-    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
-    await new Promise(r => setTimeout(r, 30));
-    ws.send(JSON.stringify({ type: 'inn-rest', txnId: 1, mapId: 999,
-      counterX: 0, counterY: 0 }));
-    const result = await once(ws, m => m.type === 'inn-result', 1000);
-    assertEqual(result.status, 'rejected', 'unknown inn accepted');
-    assertEqual(result.reason, 'unknown-inn', 'wrong reject reason');
     ws.close();
     _testHooks.setServerEconomy(false);
   });

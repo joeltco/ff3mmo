@@ -57,7 +57,6 @@ let _onPveCancel = null;         // ({reason}) → void
 let _onShopResult = null;        // ({txnId, status, ...}) → void — v1.7.776 P-9
 let _onChestResult = null;       // v1.7.777 P-10
 let _onVaseResult = null;
-let _onInnResult = null;
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
@@ -297,12 +296,6 @@ function _handleMessage(data) {
       if (_onVaseResult) {
         try { _onVaseResult(msg); }
         catch (e) { console.warn('[net] vase-result handler error', e); }
-      }
-      return;
-    case 'inn-result':
-      if (_onInnResult) {
-        try { _onInnResult(msg); }
-        catch (e) { console.warn('[net] inn-result handler error', e); }
       }
       return;
     case 'party-invite-incoming':
@@ -876,14 +869,8 @@ export function sendNetVaseSearch({ txnId, mapId, x, y, claim }) {
   return _send({ type: 'vase-search', txnId: txnId | 0, mapId: mapId | 0,
     x: x | 0, y: y | 0, claim: claim || null });
 }
-export function sendNetInnRest({ txnId, mapId, counterX, counterY }) {
-  if (!_helloed) return false;
-  return _send({ type: 'inn-rest', txnId: txnId | 0, mapId: mapId | 0,
-    counterX: counterX | 0, counterY: counterY | 0 });
-}
 export function setNetChestResultHandler(fn) { _onChestResult = typeof fn === 'function' ? fn : null; }
 export function setNetVaseResultHandler(fn)  { _onVaseResult  = typeof fn === 'function' ? fn : null; }
-export function setNetInnResultHandler(fn)   { _onInnResult   = typeof fn === 'function' ? fn : null; }
 
 // Send an inventory mutation event to the server. `kind` is one of
 // 'add' | 'remove' | 'equip' | 'gil-delta'. `source` is a free-text reason

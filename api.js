@@ -619,6 +619,10 @@ function mirrorApplyInvEvent(userId, slot, ev) {
   switch (kind) {
     case 'add': {
       if (qty <= 0 || qty > 99) return { ok: false, reason: 'bad-qty' };
+      // itemId=0 is "no item" — legitimate for unequip (the `equip` case
+      // below) but never for inventory writes. Reject so a crafted frame
+      // can't seed a phantom row at item_id=0. v1.7.793.
+      if (itemId === 0) return { ok: false, reason: 'bad-itemId' };
       const cur = _invInvReadOneStmt.get(userId, slot, itemId);
       const before = cur ? (cur.qty | 0) : 0;
       const after = Math.min(99, before + qty);
@@ -627,6 +631,7 @@ function mirrorApplyInvEvent(userId, slot, ev) {
     }
     case 'remove': {
       if (qty <= 0 || qty > 99) return { ok: false, reason: 'bad-qty' };
+      if (itemId === 0) return { ok: false, reason: 'bad-itemId' };
       const cur = _invInvReadOneStmt.get(userId, slot, itemId);
       const before = cur ? (cur.qty | 0) : 0;
       // Shadow mode: log divergence + apply anyway (client is source of

@@ -1582,16 +1582,22 @@ setNetGiveItemHandler((msg) => {
   saveSlotsToDB();
 });
 
-// GI-1 (v1.7.735) — outgoing give-item couldn't be delivered (target offline
-// in the race window after our client's online-check). We already consumed
-// the item locally; re-grant it and let the user know. `addItem` uses the
-// bypass flag in case the trash slot is otherwise full (it's our item coming
-// back, not a new acquisition).
+// GI-1 (v1.7.735) — outgoing give-item couldn't be delivered. We already
+// consumed the item locally; re-grant it and let the user know. `addItem`
+// uses the bypass flag in case the trash slot is otherwise full (it's our
+// item coming back, not a new acquisition).
+// Reasons: 'offline' (target left in the race window after our online-check)
+// or 'blocked' (server type-whitelist rejected — only fires for key/quest
+// items, which the pause menu's giveable filter normally hides; defensive
+// path for client bugs). v1.7.793.
 setNetGiveItemFailedHandler((msg) => {
   if (!msg || !msg.itemId) return;
   addItem(msg.itemId, 1, { bypass: true });
   sendNetInvEvent('add', msg.itemId, 1, 'other');   // v1.7.742 Phase 1c — give-item refund
   const itemName = ITEM_NAMES_SHRINES.get(msg.itemId) || 'item';
-  addChatMessage('* ' + itemName + ' returned — recipient is offline', 'system');
+  const tail = msg.reason === 'blocked'
+    ? "can't be given"
+    : 'recipient is offline';
+  addChatMessage('* ' + itemName + ' returned — ' + tail, 'system');
   saveSlotsToDB();
 });
