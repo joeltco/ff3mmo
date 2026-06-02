@@ -1497,19 +1497,139 @@ function _handleMessage(entry, msg) {
       if (!pending || pending.targetUserId !== entry.userId) return;
       _pendingTrades.delete(fromUserId);
       const offerer = _connected.get(fromUserId);
-      // Audit log every response, accepted or declined, BEFORE the relay so
-      // we have an authoritative record even if the relay fails (v1.7.616).
+      // Decline path — log + relay, no mirror touch.
+      if (!accept) {
+        tradeLog(
+          fromUserId, offerer?.profile?.name,
+          entry.userId, entry.profile.name,
+          pending.itemId, false, 'decline',
+        );
+        if (offerer && offerer.helloed) {
+          _send(offerer.ws, {
+            type: 'trade-result',
+            targetUserId: entry.userId,
+            targetName: entry.profile.name,
+            accept: false,
+          });
+        }
+        return;
+      }
+      // v1.7.802 — server-atomic accept. Pre-fix the clients drove their
+      // own inv-events: receiver's `add` always landed before sender's
+      // `remove`, so a crafted sender with inflated local qty could trade
+      // away N items while their mirror only had 1 — mirror rejected the
+      // 2nd+ removes, but the 2nd+ receivers had already added to their
+      // mirrors. V-A wasn't actually closed by v1.7.745 like the changelog
+      // claimed. Now the server validates sender ownership via the mirror,
+      // applies both sides via `mirrorApplyInvEvent`, and pushes the fresh
+      // wire state to both clients. Clients no longer emit `inv-event` for
+      // trades (see `src/trade.js` v1.7.802).
+      if (!offerer || !offerer.helloed) {
+        // Offerer disconnected mid-prompt. Receiver doesn't preempt the
+        // mirror anymore, so nothing to roll back.
+        tradeLog(
+          fromUserId, offerer?.profile?.name,
+          entry.userId, entry.profile.name,
+          pending.itemId, false, 'offerer-gone',
+        );
+        return;
+      }
+      const senderSlot   = (offerer.slot | 0);
+      const receiverSlot = (entry.slot | 0);
+      // Try the sender's remove first. The mirror's authoritative-mode
+      // reject (`divergent-remove`) is the ownership check — if sender
+      // doesn't have it, this fails BEFORE any add lands on the receiver.
+      const rm = mirrorApplyInvEvent(fromUserId, senderSlot, {
+        kind: 'remove', itemId: pending.itemId, qty: 1, source: 'trade',
+      });
+      if (!rm.ok) {
+        console.warn('[trade] sender lacks item user=' + fromUserId +
+          ' slot=' + senderSlot + ' item=0x' + pending.itemId.toString(16) +
+          ' reason=' + rm.reason);
+        tradeLog(
+          fromUserId, offerer.profile?.name,
+          entry.userId, entry.profile.name,
+          pending.itemId, false, 'no-item',
+        );
+        _send(offerer.ws, {
+          type: 'trade-result',
+          targetUserId: entry.userId,
+          targetName: entry.profile.name,
+          accept: false,
+          reason: 'no-item',
+        });
+        _send(offerer.ws, {
+          type: 'inv-state',
+          reason: 'trade-rejected',
+          ...mirrorReadWireState(fromUserId, senderSlot),
+        });
+        return;
+      }
+      // Add to receiver. On failure or stack-cap (`add.after === add.before`
+      // means the bag-stack was at 99 and the qty=1 add was clamped),
+      // roll back sender's remove and bail.
+      const add = mirrorApplyInvEvent(entry.userId, receiverSlot, {
+        kind: 'add', itemId: pending.itemId, qty: 1, source: 'trade',
+      });
+      if (!add.ok || add.after === add.before) {
+        // Roll back the remove. mirrorApplyInvEvent 'add' with qty=1
+        // restores the slot. If that fails too (it shouldn't), log loud.
+        const rb = mirrorApplyInvEvent(fromUserId, senderSlot, {
+          kind: 'add', itemId: pending.itemId, qty: 1, source: 'trade-rollback',
+        });
+        if (!rb.ok) {
+          console.error('[trade] rollback FAILED — sender lost item! user=' + fromUserId +
+            ' item=0x' + pending.itemId.toString(16) + ' reason=' + rb.reason);
+        }
+        const reason = !add.ok ? 'mirror-error' : 'receiver-full';
+        console.warn('[trade] receiver apply rejected receiver=' + entry.userId +
+          ' add=' + (add.reason || 'cap') + ' → ' + reason);
+        tradeLog(
+          fromUserId, offerer.profile?.name,
+          entry.userId, entry.profile.name,
+          pending.itemId, false, reason,
+        );
+        _send(offerer.ws, {
+          type: 'trade-result',
+          targetUserId: entry.userId,
+          targetName: entry.profile.name,
+          accept: false,
+          reason,
+        });
+        _send(offerer.ws, {
+          type: 'inv-state',
+          reason: 'trade-rejected',
+          ...mirrorReadWireState(fromUserId, senderSlot),
+        });
+        _send(entry.ws, {
+          type: 'inv-state',
+          reason: 'trade-rejected',
+          ...mirrorReadWireState(entry.userId, receiverSlot),
+        });
+        return;
+      }
+      // Success — log accept, tell sender, push fresh state to both so
+      // clients re-render local inventory from the mirror.
       tradeLog(
-        fromUserId, offerer?.profile?.name,
+        fromUserId, offerer.profile?.name,
         entry.userId, entry.profile.name,
-        pending.itemId, accept, accept ? 'accept' : 'decline',
+        pending.itemId, true, 'accept',
       );
-      if (!offerer || !offerer.helloed) return;
       _send(offerer.ws, {
         type: 'trade-result',
         targetUserId: entry.userId,
         targetName: entry.profile.name,
-        accept,
+        accept: true,
+      });
+      _send(offerer.ws, {
+        type: 'inv-state',
+        reason: 'trade-applied',
+        ...mirrorReadWireState(fromUserId, senderSlot),
+      });
+      _send(entry.ws, {
+        type: 'inv-state',
+        reason: 'trade-applied',
+        ...mirrorReadWireState(entry.userId, receiverSlot),
       });
       return;
     }

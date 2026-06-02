@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.802 — 2026-06-01
+
+### Server-atomic trade — V-A actually closed
+
+The v1.7.745 changelog claimed "Closes V-A (trade dup at runtime — sender's `remove` now rejected if mirror lacks the item)." It didn't. The mirror-reject pattern only catches the **sender's** side; the **receiver's** add had already been written by the time the sender's remove came in and got rejected. A crafted client with inflated local qty could trade `N` items while the mirror only had 1 — the first trade landed cleanly, every subsequent trade's sender-remove rejected (and pushed corrective state), but the receivers had already added.
+
+**The walkthrough that proves it:**
+
+1. Bob's mirror: SwordX qty=1. Bob's crafted local: qty=2.
+2. Bob → trade-offer(Carol1, SwordX). Carol1 accepts → her client `addItem` + wire `add`. Mirror Carol1.X: 0→1.
+3. Bob's `_resolveAsAccept` removes locally, wire `remove`. Mirror Bob.X: 1→0. ✓
+4. Bob → trade-offer(Carol2, SwordX). Carol2 accepts → wire `add`. Mirror Carol2.X: 0→1.
+5. Bob's `_resolveAsAccept` removes locally, wire `remove`. Mirror Bob.X: 0, qty=1 → REJECT (`divergent-remove`).
+6. Server pushes corrective `inv-state` to Bob — Bob's local resets to mirror 0.
+
+End: Bob = 0, Carol1 = 1, Carol2 = 1. **One item became two.** Repeat for free dupes.
+
+**The fix.** `case 'trade-response'` in `ws-presence.js` now owns the transaction:
+- Validates sender ownership by attempting `mirrorApplyInvEvent({kind: 'remove'})` first — under the authoritative gate this rejects on `divergent-remove` BEFORE any add lands on the receiver.
+- On success, applies the receiver's `add` via `mirrorApplyInvEvent({kind: 'add'})`.
+- If the add fails OR clamps (receiver's stack at 99), rolls back the sender's remove and tells both sides.
+- Pushes fresh `mirrorReadWireState` to both clients via `inv-state` so their local inventory re-renders from the canonical mirror.
+
+`src/trade.js` drops its `addItem` + `removeItem` + `sendNetInvEvent` for trades. Local state updates when the server's `inv-state` arrives (`setNetInvStateHandler` wholesale-replaces inventory). The 800ms "Accepted" hold on the sender's side rides while the inv-state arrives — UX unchanged.
+
+**Tests.** Three new wire tests: honest transfer (both sides' mirrors + wire state correct), sender-lacks-item reject (receiver mirror untouched — the headline assertion), receiver-stack-at-cap rollback (sender qty restored). Suite 128/128.
+
+**Decline reason mapping.** The server now sends `accept: false` with new `reason` values: `no-item` / `mirror-error` / `receiver-full` / `offerer-gone`. The client's `setNetTradeResultHandler` only branches on `offline` / `blocked`; everything else falls through to a generic "declined" message. That's acceptable for v1 — refining the UX later when the reasons actually fire in practice.
+
 ## 1.7.801 — 2026-06-01
 
 ### `inv-state` handler wiped client inventory on missing `inventory` field

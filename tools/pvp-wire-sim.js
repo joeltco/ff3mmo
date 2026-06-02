@@ -2897,6 +2897,105 @@ async function suiteWire() {
     _testHooks.setServerEconomy(false);
   });
 
+  // ── v1.7.802 server-atomic trade ────────────────────────────────────────
+  // Pre-v1.7.802: clients drove inv-events; receiver's `add` always landed
+  // before sender's `remove`, so a crafted sender could trade beyond their
+  // mirror qty (V-A wasn't actually closed by v1.7.745).
+  await asyncTest('v1.7.802 trade-accept atomically transfers via mirror + pushes inv-state', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(4001);
+    _testEnsureUser(4002);
+    _testMirrorClear(4001, 0); _testMirrorClear(4002, 0);
+    // Sender has 1 of item 0x80, receiver has none.
+    _testMirrorSync(4001, 0, { gil: 100, inventory: { 0x80: 1 }, stats: { weaponR: 0x1E, head: 0x62 } });
+    _testMirrorSync(4002, 0, { gil: 100, inventory: {},          stats: { weaponR: 0x1E, head: 0x62 } });
+    const A = await connectClient(port, 4001, { ...baseProfile, name: 'SenderA', slot: 0 });
+    const B = await connectClient(port, 4002, { ...targetProfile, name: 'ReceiverB', slot: 0 });
+    // Sender offers.
+    const incoming = once(B, m => m.type === 'trade-offer-incoming', 1000);
+    A.send(JSON.stringify({ type: 'trade-offer', targetUserId: 4002, itemId: 0x80 }));
+    const inc = await incoming;
+    assertEqual(inc.itemId, 0x80, 'offer relayed');
+    // Receiver accepts. Capture: trade-result (to A) + inv-state (to A) +
+    // inv-state (to B). Order: result then state pushes.
+    const aResult = once(A, m => m.type === 'trade-result', 1000);
+    const aState  = once(A, m => m.type === 'inv-state' && m.reason === 'trade-applied', 1000);
+    const bState  = once(B, m => m.type === 'inv-state' && m.reason === 'trade-applied', 1000);
+    B.send(JSON.stringify({ type: 'trade-response', fromUserId: 4001, accept: true }));
+    const r = await aResult;
+    assertEqual(r.accept, true, 'sender got accept');
+    const sa = await aState;
+    assertEqual(sa.inventory[0x80] || 0, 0, 'sender mirror cleared');
+    const sb = await bState;
+    assertEqual(sb.inventory[0x80], 1, 'receiver mirror has item');
+    // Mirror tables match.
+    const senderMirror   = _testMirrorRead(4001, 0);
+    const receiverMirror = _testMirrorRead(4002, 0);
+    assertEqual(senderMirror.inv.length, 0,   'sender row removed');
+    assertEqual(receiverMirror.inv[0].qty, 1, 'receiver row qty=1');
+    A.close(); B.close();
+    _testMirrorClear(4001, 0); _testMirrorClear(4002, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.802 trade-accept rejects when sender has no item in mirror', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(4003);
+    _testEnsureUser(4004);
+    _testMirrorClear(4003, 0); _testMirrorClear(4004, 0);
+    // Sender mirror empty (the V-A scenario: crafted local says qty=1
+    // but mirror has 0). Receiver mirror empty.
+    _testMirrorSync(4003, 0, { gil: 0, inventory: {}, stats: { weaponR: 0x1E, head: 0x62 } });
+    _testMirrorSync(4004, 0, { gil: 0, inventory: {}, stats: { weaponR: 0x1E, head: 0x62 } });
+    const A = await connectClient(port, 4003, { ...baseProfile, name: 'SenderC', slot: 0 });
+    const B = await connectClient(port, 4004, { ...targetProfile, name: 'ReceiverD', slot: 0 });
+    const incoming = once(B, m => m.type === 'trade-offer-incoming', 1000);
+    A.send(JSON.stringify({ type: 'trade-offer', targetUserId: 4004, itemId: 0x80 }));
+    await incoming;
+    const aResult = once(A, m => m.type === 'trade-result', 1000);
+    const aState  = once(A, m => m.type === 'inv-state' && m.reason === 'trade-rejected', 1000);
+    B.send(JSON.stringify({ type: 'trade-response', fromUserId: 4003, accept: true }));
+    const r = await aResult;
+    assertEqual(r.accept, false, 'sender got reject');
+    assertEqual(r.reason, 'no-item', 'reject reason is no-item');
+    await aState;
+    // Receiver mirror MUST be untouched — the whole point of the fix.
+    const receiverMirror = _testMirrorRead(4004, 0);
+    assertEqual(receiverMirror.inv.length, 0, 'receiver mirror unchanged on sender-no-item');
+    A.close(); B.close();
+    _testMirrorClear(4003, 0); _testMirrorClear(4004, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
+  await asyncTest('v1.7.802 trade rolls back sender remove when receiver stack at cap', async () => {
+    _testHooks.resetState();
+    _testEnsureUser(4005);
+    _testEnsureUser(4006);
+    _testMirrorClear(4005, 0); _testMirrorClear(4006, 0);
+    // Sender has 2 of item; receiver already has 99 (max stack).
+    _testMirrorSync(4005, 0, { gil: 0, inventory: { 0x80: 2  }, stats: { weaponR: 0x1E, head: 0x62 } });
+    _testMirrorSync(4006, 0, { gil: 0, inventory: { 0x80: 99 }, stats: { weaponR: 0x1E, head: 0x62 } });
+    const A = await connectClient(port, 4005, { ...baseProfile, name: 'SenderE', slot: 0 });
+    const B = await connectClient(port, 4006, { ...targetProfile, name: 'ReceiverF', slot: 0 });
+    const incoming = once(B, m => m.type === 'trade-offer-incoming', 1000);
+    A.send(JSON.stringify({ type: 'trade-offer', targetUserId: 4006, itemId: 0x80 }));
+    await incoming;
+    const aResult = once(A, m => m.type === 'trade-result', 1000);
+    B.send(JSON.stringify({ type: 'trade-response', fromUserId: 4005, accept: true }));
+    const r = await aResult;
+    assertEqual(r.accept, false, 'trade rejected when receiver at cap');
+    assertEqual(r.reason, 'receiver-full', 'reject reason is receiver-full');
+    await new Promise(r => setTimeout(r, 80));   // let rollback land
+    // Sender qty restored to 2 (no net change).
+    const senderMirror   = _testMirrorRead(4005, 0);
+    const receiverMirror = _testMirrorRead(4006, 0);
+    assertEqual(senderMirror.inv[0].qty, 2,    'sender qty restored after rollback');
+    assertEqual(receiverMirror.inv[0].qty, 99, 'receiver qty unchanged at cap');
+    A.close(); B.close();
+    _testMirrorClear(4005, 0); _testMirrorClear(4006, 0);
+    await new Promise(r => setTimeout(r, 40));
+  });
+
   // ── teardown ─────────────────────────────────────────────────────────────
   await new Promise(r => httpServer.close(r));
 }

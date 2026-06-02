@@ -15,7 +15,7 @@
 // server-side inventory mirror if abuse surfaces. v1.7.598.
 
 import { ITEMS } from './data/items.js';
-import { playerInventory, removeItem, addItem, buildItemSelectList, canAddItem } from './inventory.js';
+import { playerInventory, buildItemSelectList, canAddItem } from './inventory.js';
 import { ps } from './player-stats.js';
 import { battleSt } from './battle-state.js';
 import { _nameToBytes, _nesNameToString } from './text-utils.js';
@@ -28,7 +28,6 @@ import { ui } from './ui-state.js';
 import {
   sendNetTradeOffer, sendNetTradeResponse, sendNetTradeCancel,
   setNetTradeOfferHandler, setNetTradeResultHandler, setNetTradeCancelledHandler,
-  sendNetInvEvent,    // v1.7.742 Phase 1c
 } from './net.js';
 
 // HUD viewport (duplicated where needed — canonical source in pvp-math.js)
@@ -174,14 +173,16 @@ export function commitOffer(itemId) {
 
 function _resolveAsAccept() {
   const target = tradeSt.target;
-  const itemId = tradeSt.itemId;
   tradeSt.state = 'resolving';
   tradeSt.acceptedHoldMs = ACCEPTED_HOLD_MS;
   replaceMsgBoxText(_nameToBytes('Accepted'), () => {
-    // Sender side of the inventory mutation. Receiver's client adds the
-    // item via `applyTradeOfferIncoming`'s accept closure (addItem there).
-    removeItem(itemId, 1);
-    sendNetInvEvent('remove', itemId, 1, 'trade');   // v1.7.742 Phase 1c
+    // v1.7.802 — server applies the remove + add atomically and pushes a
+    // fresh `inv-state` to both sides. Don't preempt with a local
+    // removeItem / sendNetInvEvent — receiver's add used to land first
+    // and a crafted sender could trade beyond their actual qty before
+    // the mirror reject fired. Local bag updates when the server's
+    // inv-state arrives (`setNetInvStateHandler` in main.js wholesale-
+    // replaces inventory).
     _endTrade(target ? target.name : null);
   });
 }
@@ -237,8 +238,9 @@ setNetTradeOfferHandler((msg) => {
     _nameToBytes(fromName + ' offers ' + itemName + ' ' + yesNoLabels()),
     () => {
       tradeSt.recvFromUserId = null;
-      addItem(itemId, 1);
-      sendNetInvEvent('add', itemId, 1, 'trade');   // v1.7.742 Phase 1c
+      // v1.7.802 — server applies the add and pushes inv-state. Don't
+      // preempt with local addItem / sendNetInvEvent; the bag updates
+      // when the server's inv-state arrives.
       sendNetTradeResponse(fromUserId, true);
       playSFX(SFX.CONFIRM);
     },
