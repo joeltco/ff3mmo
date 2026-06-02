@@ -34,8 +34,10 @@ export function initBattleEncounter({ resetBattleVars, tryJoinPlayerAlly }) {
 // formation pick when an encounter fires. Matches the gate in
 // tickRandomEncounter: world-map grass splits into valley/wild by bounding
 // box; an indoor flood-fill patch uses its own zone (e.g. the Ur dark-tile
-// patch); otherwise the current Altar Cave floor.
-function currentEncounterZoneKey() {
+// patch); otherwise the current Altar Cave floor. Exported for
+// map-triggers.js so the chest-mimic claim can ship the same zoneKey
+// the server's `_LOC_ZONE_ALLOWLIST` gate expects (v1.7.804).
+export function currentEncounterZoneKey() {
   if (mapSt.onWorldMap) {
     const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
     const tileY = Math.floor(mapSt.worldY / TILE_SIZE);

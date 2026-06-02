@@ -10,7 +10,7 @@ import { clearDungeonCache } from './dungeon-generator.js';
 import { transSt, topBoxSt, startWipeTransition } from './transitions.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { showMsgBox } from './message-box.js';
-import { startChestMimic } from './battle-encounter.js';
+import { startChestMimic, currentEncounterZoneKey } from './battle-encounter.js';
 import { _nameToBytes } from './text-utils.js';
 import { POND_RESTORED } from './data/strings.js';
 import { openBed } from './bed.js';
@@ -21,7 +21,7 @@ import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
 import { addItem, canAddItem } from './inventory.js';
-import { sendNetInvEvent, SERVER_ECONOMY, sendNetChestOpen, sendNetVaseSearch, nextChestTxnId } from './net.js';
+import { sendNetInvEvent, SERVER_ECONOMY, PVE_ARBITER, sendNetChestOpen, sendNetVaseSearch, nextChestTxnId } from './net.js';
 import { saveSlotsToDB } from './save-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN } from './sprite.js';
@@ -207,16 +207,27 @@ export function handleChest(facedX, facedY) {
   resetIndoorWaterCache();
   saveSlotsToDB();   // chest is consumed regardless of outcome
 
-  // Chest mimic — "Monster appeared!", then (on dismiss) the normal battle
-  // flash + one random monster from this floor's pool.
+  // Chest mimic — "Monster appeared!", then (on dismiss) the battle flash.
+  // v1.7.804 — when PVE_ARBITER+SERVER_ECONOMY are on, send the chest-open
+  // AFTER the player dismisses the msgbox so the server's `pve-battle-start`
+  // doesn't clobber the "Monster appeared!" line mid-read. Server picks the
+  // monster from the zone pool and pushes the battle start; the existing
+  // `setNetPveBattleStartHandler` routes to `startRandomEncounterFromServer`.
+  // Skips the local pick — pre-fix the client rolled the monster itself
+  // and the server saw none of it, so a crafted client could lie about
+  // the kill at pve-battle-end claim time.
   if (entry && entry.monster) {
-    // v1.7.780 P-10b — notify server so it can audit-log + keep its mirror
-    // expectation in sync (no inv events for a mimic, just the claim).
-    if (SERVER_ECONOMY) {
-      sendNetChestOpen({ txnId: nextChestTxnId(), mapId: mapSt.currentMapId,
-        x: facedX, y: facedY, claim: { type: 'monster' } });
-    }
-    showMsgBox(_nameToBytes('Monster appeared!'), () => startChestMimic());
+    const zoneKey = currentEncounterZoneKey();
+    showMsgBox(_nameToBytes('Monster appeared!'), () => {
+      if (SERVER_ECONOMY) {
+        sendNetChestOpen({ txnId: nextChestTxnId(), mapId: mapSt.currentMapId,
+          x: facedX, y: facedY, claim: { type: 'monster', zoneKey } });
+      }
+      // Legacy local-pick path runs whenever the server isn't owning the
+      // mimic battle (either economy off OR PVE_ARBITER off — both flag
+      // flips are needed for the new flow).
+      if (!(SERVER_ECONOMY && PVE_ARBITER)) startChestMimic();
+    });
     return;
   }
 

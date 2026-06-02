@@ -2897,6 +2897,65 @@ async function suiteWire() {
     _testHooks.setServerEconomy(false);
   });
 
+  // ── v1.7.804 chest mimic via PvE arbiter ─────────────────────────────────
+  // Pre-v1.7.804: client called `startChestMimic` locally; server never
+  // saw the monster choice, so a crafted client could lie about which
+  // mimic they fought and claim the biggest pool reward at battle-end.
+  await asyncTest('v1.7.804 chest mimic claim spawns server-rolled pve-battle-start', async () => {
+    _testHooks.setPveArbiter(true);
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(4101);
+    _testSeedSave(4101, 0, { stats: { level: 1, hp: 50, maxHP: 50 } });
+    _testConsumedTilesClear(4101, 0);
+    const ws = await connectClient(port, 4101, { name: 'Mimic', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    ws.send(JSON.stringify({ type: 'location', loc: 'cave-3' }));
+    await new Promise(r => setTimeout(r, 30));
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 1003,
+      x: 4, y: 4, claim: { type: 'monster', zoneKey: 'altar_cave_f4' } }));
+    // Both responses arrive ms apart; the `once` predicate-listener race
+    // loses the second one, so collect from ws._earlyMessages after a
+    // short settle (same pattern as the v1.7.775 P-6 inv-state test).
+    await new Promise(r => setTimeout(r, 80));
+    const result = ws._earlyMessages.find(m => m.type === 'chest-result' && m.txnId === 1);
+    const start  = ws._earlyMessages.find(m => m.type === 'pve-battle-start');
+    assertTrue(!!result, 'no chest-result frame received');
+    assertEqual(result.status, 'ok', 'chest claim rejected: ' + result.reason);
+    assertTrue(!!start, 'no pve-battle-start frame received');
+    assertTrue(start.battleId > 0,  'battleId missing');
+    assertTrue(start.rngSeed > 0,   'rngSeed missing');
+    assertTrue(Array.isArray(start.monsters) && start.monsters.length === 1,
+      'mimic battle must have exactly one monster, got ' + (start.monsters?.length | 0));
+    ws.close();
+    _testHooks.setServerEconomy(false);
+    _testHooks.setPveArbiter(false);
+  });
+
+  await asyncTest('v1.7.804 chest mimic rejects zoneKey not allowed for entry.loc', async () => {
+    _testHooks.setPveArbiter(true);
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(4102);
+    _testSeedSave(4102, 0, { stats: { level: 1, hp: 50, maxHP: 50 } });
+    _testConsumedTilesClear(4102, 0);
+    const ws = await connectClient(port, 4102, { name: 'WrongZone', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    ws.send(JSON.stringify({ type: 'location', loc: 'ur' }));
+    await new Promise(r => setTimeout(r, 30));
+    // Claim a cave mimic from Ur — chest-result still returns ok (the
+    // claim is in the local pool's mimic tier), but the v1.7.794-style
+    // zoneKey gate refuses to start a battle.
+    ws.send(JSON.stringify({ type: 'chest-open', txnId: 1, mapId: 1003,
+      x: 4, y: 4, claim: { type: 'monster', zoneKey: 'altar_cave_f4' } }));
+    await new Promise(r => setTimeout(r, 120));
+    const start = ws._earlyMessages.find(m => m.type === 'pve-battle-start');
+    assertTrue(!start, 'server must refuse mimic battle when zoneKey not allowed for loc');
+    ws.close();
+    _testHooks.setServerEconomy(false);
+    _testHooks.setPveArbiter(false);
+  });
+
   // ── v1.7.802 server-atomic trade ────────────────────────────────────────
   // Pre-v1.7.802: clients drove inv-events; receiver's `add` always landed
   // before sender's `remove`, so a crafted sender could trade beyond their

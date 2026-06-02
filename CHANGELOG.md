@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.804 — 2026-06-02
+
+### Chest mimic routed through PvE arbiter — closes the last bypass
+
+`startChestMimic` ran locally with no server validation. The client rolled the monster from the current floor's encounter pool, kicked off the battle, and emitted `gil-delta` + `add` inv-events at battle-end. The server saw none of the monster choice — so a crafted client could fight Goblin (1 gil) and claim a Sahagin (50 gil) reward and the mirror would accept it (bounded only by per-kind rate cap + per-event ±999999 clamp). The last known-deferred item from the v1.7.787-794 audit arc.
+
+**Server.** New `createMimicBattle(userId, opts)` in `pve-arbiter.js` mirrors the client's pool-union pick (uniform random monster id across the zone's formations). `chest-open` handler in `ws-presence.js` extends the existing monster-claim branch: after the mimic-tier validation passes, server picks the monster + creates a PvE battle + sends `pve-battle-start` with `{battleId, rngSeed, monsters: [<server-chosen>]}`. zoneKey ships in `claim.zoneKey` and is gated against `_LOC_ZONE_ALLOWLIST[entry.loc]` — same v1.7.794 gate the regular `pve-encounter-request` uses, so a player in Ur can't claim an Altar Cave F4 mimic for the fat reward pool.
+
+**Client.** `src/map-triggers.js` no longer fires `startChestMimic` locally when `PVE_ARBITER && SERVER_ECONOMY`. Instead, the "Monster appeared!" msgbox dismiss sends `chest-open` with `claim: { type: 'monster', zoneKey: currentEncounterZoneKey() }`, then waits. The server's `pve-battle-start` routes through the existing `setNetPveBattleStartHandler` → `startRandomEncounterFromServer`, which forces the msgbox closed (it's already gone) and kicks off the battle flash with the server's monster. Battle-end fires `pve-battle-end` per the normal arbiter flow — claim now validates against a canonical monster, gil/cp/exp/drop are server-enforced.
+
+`currentEncounterZoneKey` is now exported from `battle-encounter.js` so map-triggers can ship the same zoneKey the server expects.
+
+**Legacy path preserved.** If either flag is off, the client falls back to the pre-v1.7.804 local-pick flow. Same kill switch as the rest of the PvE arbiter / economy rollout.
+
+**Tests.** Two new wire tests: happy-path (cave-3 + altar_cave_f4 → pve-battle-start with one monster), and zone-mismatch reject (Ur + altar_cave_f4 → server logs `wrong-zone` and refuses to start a battle). Suite 130/130.
+
 ## 1.7.803 — 2026-06-02
 
 ### Victory name-out: track `lastKilledMonsterId`, not just `targetIndex`

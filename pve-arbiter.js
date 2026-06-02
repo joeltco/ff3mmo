@@ -226,6 +226,58 @@ export function endPveBattle(userId, payload) {
   return { status: 'applied', canonical: result.canonical };
 }
 
+// Mimic battle — one random monster from the zone's encounter pool.
+// Mirrors the legacy `startChestMimic` in src/battle-encounter.js so the
+// pick converges with the replay engine (P-5) once it lands. Used by
+// ws-presence's chest-open handler when `claim.type === 'monster'` —
+// pre-v1.7.804 the client picked the mimic monster locally and the
+// server never saw the choice, so a crafted client could lie about
+// which mimic they fought and claim the biggest reward in the pool.
+export function createMimicBattle(userId, opts) {
+  _gcStaleBattles();
+  const { slot, zoneKey, mapId } = opts || {};
+  if (_userBattle.has(userId)) {
+    const existingId = _userBattle.get(userId);
+    const existing = _battles.get(existingId);
+    if (existing) {
+      return { battleId: existing.battleId, rngSeed: existing.rngSeed, monsters: existing.monsters };
+    }
+    _userBattle.delete(userId);
+  }
+  const preState = _snapshotPreState(userId, slot);
+  if (!preState) return { error: 'no-save' };
+  if (!ENCOUNTERS.has(zoneKey)) return { error: 'unknown-zone' };
+
+  const rngSeed = ((Date.now() ^ (Math.random() * 0x7fffffff | 0)) >>> 0) || 1;
+  const rng = createRng(rngSeed).rand;
+
+  // Union of monster ids across the zone's formations, pick one uniformly.
+  // Same shape as the client-side `startChestMimic` resolution.
+  const zone = ENCOUNTERS.get(zoneKey);
+  const ids = [];
+  for (const f of zone.formations) for (const g of f) if (!ids.includes(g.id)) ids.push(g.id);
+  if (!ids.length) return { error: 'no-monsters' };
+  const id = ids[Math.floor(rng() * ids.length)];
+  const monsters = [_makeEncounterMonster(id)];
+
+  const battleId = _nextBattleId++;
+  const battle = {
+    battleId, userId, slot,
+    zoneKey, mapId,
+    rngSeed,
+    monsters,
+    preState,
+    intents: [],
+    status: 'in-progress',
+    createdAt: Date.now(),
+    lastTouchedAt: Date.now(),
+    isMimic: true,
+  };
+  _battles.set(battleId, battle);
+  _userBattle.set(userId, battleId);
+  return { battleId, rngSeed, monsters };
+}
+
 // Disconnect / explicit cancel. Cleans up tracking. Used by the WS
 // close handler so a dropped client doesn't leak a battle slot.
 export function cancelPveBattle(userId) {

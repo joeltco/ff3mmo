@@ -64,7 +64,7 @@ import {
 // client runs battle locally, server replays + validates on end. See
 // docs/PVE-REWRITE-PLAN.md. Module is self-contained.
 import {
-  createPveBattle, recordIntent as pveRecordIntent,
+  createPveBattle, createMimicBattle, recordIntent as pveRecordIntent,
   endPveBattle, cancelPveBattle,
 } from './pve-arbiter.js';
 // v1.7.776 P-8/P-9 — server economy validator. Shops first; chests/vases/inn follow.
@@ -1280,6 +1280,41 @@ function _handleMessage(entry, msg) {
         status: 'ok',
         gilAfter: fresh.gil | 0,
       });
+      // v1.7.804 — mimic claim: server picks the monster + creates an
+      // arbiter battle so the battle-end claim validates against a
+      // canonical monster instead of whatever the client invented.
+      // zoneKey passed in the claim is validated against the same
+      // `_LOC_ZONE_ALLOWLIST[entry.loc]` map as `pve-encounter-request`
+      // (v1.7.794) so a cheater can't claim `altar_cave_f4` mimics from
+      // Ur for the fat reward pool. If PVE_ARBITER is off, fall back to
+      // the legacy local-pick flow on the client side.
+      if (parsed.claim?.type === 'monster' && PVE_ARBITER) {
+        const zoneKey = String(parsed.claim?.zoneKey || '');
+        const loc = entry.loc;
+        const allowed = _LOC_ZONE_ALLOWLIST.get(loc);
+        if (!allowed || !allowed.has(zoneKey)) {
+          console.log('[chest-mimic] reject user=' + entry.userId +
+            ' loc=' + loc + ' zone=' + zoneKey + ' reason=wrong-zone');
+          return;
+        }
+        const battle = createMimicBattle(entry.userId, {
+          slot, zoneKey, mapId: parsed.mapId | 0,
+        });
+        if (battle.error) {
+          console.log('[chest-mimic] battle-create-failed user=' + entry.userId +
+            ' zone=' + zoneKey + ' reason=' + battle.error);
+          return;
+        }
+        console.log('[chest-mimic] start battle=' + battle.battleId +
+          ' user=' + entry.userId + ' zone=' + zoneKey +
+          ' mon=0x' + (battle.monsters[0]?.monsterId | 0).toString(16));
+        _send(entry.ws, {
+          type: 'pve-battle-start',
+          battleId: battle.battleId,
+          rngSeed:  battle.rngSeed,
+          monsters: battle.monsters,
+        });
+      }
       return;
     }
     case 'vase-search': {
