@@ -705,7 +705,13 @@ function _drawPauseJob(ctx) {
     // Name occupies tx (24) .. lvRx-16 (88) = 64 px = 8 chars.
     const lvRx = valRx - 24;
     drawText(ctx, lvRx - jlvBytes.length * 8, ry, jlvBytes, pal);
-    if (!isCurrentJob && cost > 0) {
+    // v1.7.805 — always render the cost for non-current rows, including the
+    // literal "0". Pre-fix the column was blank when the level discount
+    // fully ate the alignment cost (Fighter lv 11 ↔ Red Mage lv 15 under
+    // NES `max(0, …)`), so players read the LEFT-column job level as the
+    // cost and wondered why they could swap with 0 CP. Showing "0"
+    // disambiguates: the swap genuinely IS free.
+    if (!isCurrentJob) {
       const costBytes = _nameToBytes(String(cost));
       drawText(ctx, valRx - costBytes.length * 8, ry, costBytes, pal);
     }
