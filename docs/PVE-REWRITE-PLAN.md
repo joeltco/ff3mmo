@@ -30,9 +30,9 @@ Design landed 2026-05-29 after the inventory mirror (v1.7.740-746) closed the it
 
 **Bed-rest deliberately skipped.** Beds in this game are free (`src/bed.js` — refills HP/MP, no gil). Zero currency leverage = no exploit surface; the dead inn-rest infrastructure (validator + wire handler + sender) was removed in v1.7.793 — re-add when the first paid inn lands.
 
-### Post-arc audit (v1.7.787 – v1.7.794)
+### Post-arc audit (v1.7.787 – v1.7.805)
 
-Multi-deploy hardening arc that closed deferred items + new findings surfaced during a full audit. The v1.7.787 chest/vase replay block shipped sloppily — ignored the documented dungeon-regen design and false-blocked legitimate dungeon chests, triggering two hotfixes (v1.7.788, v1.7.789). The audit that followed found ~10 additional issues; all closed across v1.7.790-794. See `[[ff3mmo-audit-790-794]]` for the full story.
+Multi-deploy hardening arc that closed deferred items + new findings surfaced during a full audit. The v1.7.787 chest/vase replay block shipped sloppily — ignored the documented dungeon-regen design and false-blocked legitimate dungeon chests, triggering two hotfixes (v1.7.788, v1.7.789). The audit that followed found ~10 additional issues; closed across v1.7.790-794, then a second audit pass on 2026-06-01/02 closed a further set including the previously-deferred chest-mimic bypass and the trade dup vector V-A (v1.7.802) that v1.7.745 had only partially closed. See `[[ff3mmo-audit-790-794]]` for the full story.
 
 | Version | What |
 |---|---|
@@ -44,13 +44,22 @@ Multi-deploy hardening arc that closed deferred items + new findings surfaced du
 | v1.7.792 | `endPveBattle` no longer accepts client's `payload.intents` overwrite — server-tracked log is sole forensics. `LOOT_POOLS` deduped: `src/map-triggers.js` now imports from `src/data/loot-pools.js`. |
 | v1.7.793 | Stripped dead inn-rest infrastructure end-to-end. `give-item` now honors the same `NON_TRADEABLE_ITEM_TYPES` whitelist as `trade-offer`. `mirrorApplyInvEvent` rejects `itemId=0` for `add`/`remove`. Per-kind rate caps for `chest-open` / `vase-search` / `shop-transaction` / `pve-encounter-request` / `pve-battle-end` / `trade-offer` (bounds the v1.7.789-accepted dungeon-chest replay from ~16,500 gil/s → ~1,100 gil/s in F4). |
 | v1.7.794 | `pve-encounter-request` gates `zoneKey` against `entry.loc` via `_LOC_ZONE_ALLOWLIST` — a cheater claiming `altar_cave_f4` from Ur (or `altar_cave_boss` from anywhere) now rejects with `wrong-zone`. `JWT_SECRET` fallback now warns loudly at startup. |
+| v1.7.796 | `inv-state` push strips `cp` / `exp` / `unlockedJobs` / `knownSpells` / `jobLevels` (not wire-managed). Pre-fix the post-PvE-battle push clobbered the client with stale mirror snapshots → 4 prod accounts ended up with `unlockedJobs=0` despite `jobIdx>0`. Data-restored (`unlockedJobs=0x3F` for users 2/4/6/9). |
+| v1.7.797–798 | Brief `jobSwitchCost` floor change to `Math.max(1, …)` (deviation from NES) → reverted after verifying canon via disasm `$3D/AD85` (ROM file offset `0x7AD95`). Min 0 is correct: high-level same-alignment swaps are intentionally free. See `[[ff3mmo-job-switch-cost]]`. |
+| v1.7.799 / .803 | Victory `name-out` no longer falls through to `encounterMonsters[0]` after a mixed-encounter win. v1.7.799 covered Fight kills; v1.7.803 added `battleSt.lastKilledMonsterId` so Magic AOE / item / ally kills also resolve correctly. |
+| v1.7.800 | `mirrorSyncFromSave` detects "no prior `inv_economies` row" and treats that first save as a seed write (writes everything from save). Closes a window where new users between deploys had empty `inv_inventories` / `inv_equipped`. Paired with: `equip` handler now rejects with `no-equipped-row` instead of writing 0 to the four untouched slots when no row exists. |
+| v1.7.801 | `setNetInvStateHandler` only calls `setPlayerInventory` when `msg.inventory` is present (same defensive pattern as `equipped`). Hardening for the v1.7.796 contract leak. |
+| v1.7.802 | **V-A trade dup actually closed.** v1.7.745's claim was partial — mirror-reject only caught the sender's `remove`, the receiver's `add` had already landed. Now `case 'trade-response'` calls `mirrorApplyInvEvent({kind:'remove'})` FIRST (rejects on `divergent-remove` before any add) then applies the receiver's `add`, rolls back on receiver-bag-cap, pushes `inv-state` to both. Clients dropped their inv-events for trades. |
+| v1.7.804 | **Chest mimic now routes through the PvE arbiter.** New `createMimicBattle` in `pve-arbiter.js` picks the monster server-side; `chest-open`'s monster-claim branch gates `claim.zoneKey` against `_LOC_ZONE_ALLOWLIST[entry.loc]` and sends `pve-battle-start`. Closes the last item-mutation surface that wasn't server-validated. |
+| v1.7.805 | Job menu draws "0" explicitly in the cost column for free-swap rows. Pre-fix the column was blank when `cost === 0` and players read the left-column job level as the cost ("Fighter Lv 11" looked like cost = 11). |
 
 **Remaining audit items (not yet shipped):**
 - Equip ownership check (cheater can `equip` items they don't own → inflates `mirrorReadEquippedBroadcast` → other players' AI-ally derivation uses inflated stats). Needs wire-shape design (atomic `equip-from-inv` to avoid races with the existing `remove` + `equip` pair).
 - `_validateSaveData` doesn't enforce `hp ≤ maxHP`. PvP re-enable blocker (`pvp-arbiter.js:143` reads `save.stats?.hp` directly). Belongs in the P-6d backlog.
-- Chest mimic battles bypass the PvE arbiter — `startChestMimic` runs locally without `pveRequestEncounter`; `pveSubmitBattleEnd` short-circuits. Mimic exp/gil/drop is 100% client-authoritative. Bounded by chest spawn rate; needs a real fix to close.
 - Per-tier gil cap (validator uses `Math.max` across all tiers — only theoretical today; no map has multiple gil tiers).
 - PvP friendly-fire guard only covers `kind === 'attack'`. Magic + items still vulnerable when P-4c re-enables them.
+- `inv-state-request` has no per-kind rate cap (theoretical SQLite-read amplification).
+- `consumedTilesAt` field validator is pass-through (relies on the 16KB total save-size cap for defense).
 
 ### Flag landscape (LIVE as of v1.7.779)
 
