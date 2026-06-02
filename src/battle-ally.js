@@ -44,6 +44,7 @@ function _finalizeAllyCombo() {
 function _updateAllyDamageShow() {
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters && battleSt.allyTargetIndex >= 0 && battleSt.encounterMonsters[battleSt.allyTargetIndex].hp <= 0) {
     battleSt.dyingMonsterIndices = new Map([[battleSt.allyTargetIndex, 0]]);
+    battleSt.lastKilledMonsterId = battleSt.encounterMonsters[battleSt.allyTargetIndex].monsterId;
     battleSt.battleState = 'monster-death'; battleSt.battleTimer = 0; playSFX(SFX.MONSTER_DEATH);
   } else if (!battleSt.isRandomEncounter && getEnemyHP() <= 0) {
     if (pvpSt.isPVPBattle) {
@@ -373,6 +374,7 @@ function _updateAllyMagicCast(dt) {
         if (m && m.hp <= 0) {
           replaceBattleMsg(BATTLE_SLAIN);
           battleSt.dyingMonsterIndices = new Map([[tgtIdx, 0]]);
+          battleSt.lastKilledMonsterId = m.monsterId;
           battleSt.battleState = 'monster-death';
           battleSt.battleTimer = 0;
           playSFX(SFX.MONSTER_DEATH);

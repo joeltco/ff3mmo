@@ -97,6 +97,7 @@ export function resetBattleVars() {
   inputSt.battleCursor = 0;
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.encounterDropItemRejected = false; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
+  battleSt.lastKilledMonsterId = null;   // v1.7.803 — fresh battle, no prior kill
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1;
@@ -757,6 +758,8 @@ function _updatePreMonsterDeath() {
   if (battleSt.battleState !== 'pre-monster-death') return false;
   if (battleSt.battleTimer >= PRE_DEATH_PAUSE_MS) {
     battleSt.dyingMonsterIndices = new Map([[inputSt.targetIndex, 0]]);
+    const killed = battleSt.encounterMonsters?.[inputSt.targetIndex];
+    if (killed) battleSt.lastKilledMonsterId = killed.monsterId;
     battleSt.battleState = 'monster-death';
     battleSt.battleTimer = 0;
     playSFX(SFX.MONSTER_DEATH);

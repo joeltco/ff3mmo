@@ -53,6 +53,11 @@ export const battleSt = {
   // ── Enemy (non-PVP) ───────────────────────────────────────────────
   enemyHP: _BOSS_DATA.hp,
   dyingMonsterIndices: new Map(), // index → startDelayMs
+  // Monster ID of the most recently killed encounter monster. Set wherever
+  // hp transitions to 0 (Fight, ally Fight, spell apply, item cast). Read
+  // by `_battleEnemyName` during `victory-name-out` so the box shows the
+  // monster the player actually defeated, not encounterMonsters[0]. v1.7.803.
+  lastKilledMonsterId: null,
 
   // ── Allies ────────────────────────────────────────────────────────
   battleAllies: [],         // [{name, palIdx, level, hp, maxHP, atk, def, agi, fadeStep}]

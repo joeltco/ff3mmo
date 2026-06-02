@@ -881,6 +881,11 @@ function _finishMagicHit() {
   if (killedEnemyIndices.length > 0) {
     replaceBattleMsg(BATTLE_SLAIN);
     battleSt.dyingMonsterIndices = new Map(killedEnemyIndices.map(i => [i, 0]));
+    // Last entry wins for multi-kill (AOE Fire on all enemies); for single-kill
+    // it's the one killed monster. Either way the victory-name-out shows
+    // a monster the player actually defeated, not encounterMonsters[0].
+    const lastKilled = battleSt.encounterMonsters?.[killedEnemyIndices[killedEnemyIndices.length - 1]];
+    if (lastKilled) battleSt.lastKilledMonsterId = lastKilled.monsterId;
     battleSt.battleState = 'monster-death';
     battleSt.battleTimer = 0;
     playSFX(SFX.MONSTER_DEATH);

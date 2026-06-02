@@ -416,18 +416,26 @@ function _battleEnemyName() {
     if (pvpSt.pvpOpponentStats) return _nameToBytes(pvpSt.pvpOpponentStats.name);
   }
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    // Prefer the targeted monster — even when its hp hit 0. The victory name-out
-    // calls this after all monsters are dead; pre-v1.7.799 the `hp > 0` gate on
-    // targetIndex made it fall through to `findIndex(... hp > 0)` which returns
-    // -1 (all dead), then defaulted to encounterMonsters[0]. In a mixed encounter
-    // like [Eye Fang, Carbuncle] where the player killed Carbuncle last, the
-    // victory header showed "Eye Fang" — the slot-0 monster, not the kill.
-    // Now targetIndex sticks through the death frame so the victory name
-    // matches the monster the player just defeated.
-    const ti = (inputSt.targetIndex >= 0 && inputSt.targetIndex < battleSt.encounterMonsters.length)
-      ? inputSt.targetIndex
-      : battleSt.encounterMonsters.findIndex(m => m.hp > 0);
-    const monsterId = battleSt.encounterMonsters[ti >= 0 ? ti : 0].monsterId;
+    // Pick the right monster to name. v1.7.803 ordering:
+    //   1. If `lastKilledMonsterId` is set (any monster has died), use it —
+    //      handles Magic AOE kills where `inputSt.targetIndex` is stale from
+    //      a prior battle's Fight selection.
+    //   2. Otherwise the targeted monster, regardless of hp — handles the
+    //      v1.7.799 Fight-targeted-and-killed case where targetIndex is
+    //      already pointing at the right monster.
+    //   3. Otherwise first alive — defaults during the in-battle window
+    //      before anyone has died or been targeted.
+    //   4. Otherwise slot 0 — last-resort. Should be unreachable when this
+    //      function is called from victory-name-out (something died).
+    let monsterId;
+    if (battleSt.lastKilledMonsterId != null) {
+      monsterId = battleSt.lastKilledMonsterId;
+    } else {
+      const ti = (inputSt.targetIndex >= 0 && inputSt.targetIndex < battleSt.encounterMonsters.length)
+        ? inputSt.targetIndex
+        : battleSt.encounterMonsters.findIndex(m => m.hp > 0);
+      monsterId = battleSt.encounterMonsters[ti >= 0 ? ti : 0].monsterId;
+    }
     const baseName = getMonsterNameShrines(monsterId) || BATTLE_GOBLIN_NAME;
     // Count how many of this same type are alive
     const aliveOfType = battleSt.encounterMonsters.filter(m => m.hp > 0 && m.monsterId === monsterId).length;
