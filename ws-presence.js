@@ -1373,15 +1373,18 @@ function _handleMessage(entry, msg) {
       if (!result.ok) {
         // Bad event — log. Two categories:
         //   bounds violations (`bad-qty`, `bad-itemId`, `bad-kind`,
-        //     `bad-slot`, `use-equip-with-itemId-0`) → developer bug;
-        //     don't push corrective state, client local is canonical.
-        //   divergence rejections (`divergent-remove`, `divergent-gil`)
-        //     → only emitted when INV_MIRROR_AUTHORITATIVE_SERVER is on
-        //     (v1.7.745 Phase 1b); push the full mirror snapshot back
-        //     so the client wholesale-replaces its state to match.
+        //     `bad-slot`, `use-equip-from-inv`, `no-equipped-row`) →
+        //     developer bug or stale-client legacy frame; don't push
+        //     corrective state, client local is canonical.
+        //   divergence rejections (`divergent-remove`, `divergent-gil`,
+        //     `divergent-equip`) → only emitted when
+        //     INV_MIRROR_AUTHORITATIVE_SERVER is on (v1.7.745 Phase 1b /
+        //     v1.7.808 for equip); push the full mirror snapshot back so
+        //     the client wholesale-replaces its state to match.
         console.warn('[inv-event] reject user=' + entry.userId + ' slot=' + slot +
           ' kind=' + (parsed.kind || '?') + ' reason=' + result.reason);
-        if (result.reason === 'divergent-remove' || result.reason === 'divergent-gil') {
+        if (result.reason === 'divergent-remove' || result.reason === 'divergent-gil' ||
+            result.reason === 'divergent-equip') {
           _send(entry.ws, {
             type: 'inv-state',
             reason: 'rejected',

@@ -499,24 +499,102 @@ function suiteServer() {
     r = mirrorApplyInvEvent(UID, SLOT, { kind: 'remove', itemId: 0, qty: 1 });
     assertEqual(r.ok, false, 'remove itemId=0 should reject');
     assertEqual(r.reason, 'bad-itemId', 'wrong reject reason: ' + r.reason);
-    // equip with itemId=0 (unequip) is still legitimate. qty=2 = head slot.
-    r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip', itemId: 0, qty: 2 });
-    assertEqual(r.ok, true, 'equip itemId=0 (unequip head) should pass');
+    // equip-from-inv with itemId=0 (unequip) is legitimate. qty=2 = head slot.
+    r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip-from-inv', itemId: 0, qty: 2 });
+    assertEqual(r.ok, true, 'equip-from-inv itemId=0 (unequip head) should pass');
     // gil-delta ignores itemId; itemId=0 still passes.
     r = mirrorApplyInvEvent(UID, SLOT, { kind: 'gil-delta', qty: 10 });
     assertEqual(r.ok, true, 'gil-delta should pass without itemId');
     _testMirrorClear(UID, SLOT);
   });
 
-  test('v1.7.800 mirrorApplyInvEvent equip rejects when no inv_equipped row', () => {
+  test('v1.7.800 mirrorApplyInvEvent equip-from-inv rejects when no inv_equipped row', () => {
     const UID = 88823, SLOT = 0;
     _testEnsureUser(UID);
     _testMirrorClear(UID, SLOT);
     // No prior row → must reject; otherwise the INSERT would write 0 to
     // every other equipment slot, silently wiping save-loaded gear.
-    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip', itemId: 0x1F, qty: 1 });
-    assertEqual(r.ok, false, 'equip without prior row should reject');
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip-from-inv', itemId: 0x1F, qty: 1 });
+    assertEqual(r.ok, false, 'equip-from-inv without prior row should reject');
     assertEqual(r.reason, 'no-equipped-row', 'wrong reject reason: ' + r.reason);
+  });
+
+  // ── v1.7.808 atomic equip-from-inv (ownership-checked) ──────────────
+  // Closes the equip-ownership hole: the legacy `equip` kind set the
+  // equipped slot without verifying the item was owned (the paired
+  // `remove` frame couldn't be correlated). `equip-from-inv` does the
+  // whole swap server-side in one transaction.
+  test('v1.7.808 equip-from-inv moves item inv→slot and returns old to inv', () => {
+    const UID = 88830, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, {
+      stats: { weaponR: 0x1E },
+      inventory: { 0x20: 1 },
+    });
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip-from-inv', itemId: 0x20, qty: 0 });
+    assertEqual(r.ok, true, 'equip-from-inv should pass');
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.eq.weapon_r, 0x20, 'new item not equipped');
+    const newRow = m.inv.find(x => x.item_id === 0x20);
+    assertEqual(newRow, undefined, 'equipped item not removed from inv');
+    const oldRow = m.inv.find(x => x.item_id === 0x1E);
+    assertEqual(oldRow && oldRow.qty, 1, 'displaced item not returned to inv');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.808 equip-from-inv rejects an item not owned in the mirror', () => {
+    const UID = 88831, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, { stats: { weaponR: 0x1E }, inventory: {} });
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip-from-inv', itemId: 0x99, qty: 0 });
+    assertEqual(r.ok, false, 'equip-from-inv of unowned item should reject');
+    assertEqual(r.reason, 'divergent-equip', 'wrong reject reason: ' + r.reason);
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.eq.weapon_r, 0x1E, 'rejected equip mutated the slot');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.808 equip-from-inv itemId=0 unequips and returns gear to inv', () => {
+    const UID = 88832, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, { stats: { head: 0x62 }, inventory: {} });
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip-from-inv', itemId: 0, qty: 2 });
+    assertEqual(r.ok, true, 'unequip should pass');
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.eq.head, 0, 'head not cleared');
+    const row = m.inv.find(x => x.item_id === 0x62);
+    assertEqual(row && row.qty, 1, 'unequipped item not returned to inv');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.808 legacy equip kind is rejected (conjuring hole closed)', () => {
+    const UID = 88833, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, { stats: { weaponR: 0x1E }, inventory: {} });
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip', itemId: 0x99, qty: 0 });
+    assertEqual(r.ok, false, 'legacy equip should be rejected');
+    assertEqual(r.reason, 'use-equip-from-inv', 'wrong reject reason: ' + r.reason);
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.eq.weapon_r, 0x1E, 'rejected legacy equip mutated the slot');
+    _testMirrorClear(UID, SLOT);
+  });
+
+  test('v1.7.808 equip-swap-hands permutes weapon_r ↔ weapon_l only', () => {
+    const UID = 88834, SLOT = 0;
+    _testEnsureUser(UID);
+    _testMirrorClear(UID, SLOT);
+    _testMirrorSync(UID, SLOT, { stats: { weaponR: 0x1E, weaponL: 0x20, head: 0x62 } });
+    const r = mirrorApplyInvEvent(UID, SLOT, { kind: 'equip-swap-hands', itemId: 0, qty: 0 });
+    assertEqual(r.ok, true, 'swap-hands should pass');
+    const m = _testMirrorRead(UID, SLOT);
+    assertEqual(m.eq.weapon_r, 0x20, 'weapon_r not swapped');
+    assertEqual(m.eq.weapon_l, 0x1E, 'weapon_l not swapped');
+    assertEqual(m.eq.head, 0x62, 'head should be untouched');
+    _testMirrorClear(UID, SLOT);
   });
 
   test('v1.7.800 first /api/save seeds inv_equipped even with wire flag on', () => {

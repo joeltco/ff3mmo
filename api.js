@@ -675,40 +675,95 @@ function mirrorApplyInvEvent(userId, slot, ev) {
       else _invInvUpsertStmt.run(userId, slot, itemId, after, now);
       return { ok: true, before, after, kind, itemId, diverged: before < qty };
     }
-    case 'equip': {
-      // qty here is repurposed as the slot index: 0=weaponR, 1=weaponL,
-      // 2=head, 3=body, 4=arms. itemId=0 → unequip.
+    case 'equip-from-inv': {
+      // Atomic equip: move `itemId` from inventory into equip slot `qty`
+      // (0=weaponR, 1=weaponL, 2=head, 3=body, 4=arms) and return the
+      // previously-equipped item (if any) to inventory — all in one
+      // transaction. Ownership-checked: a nonzero `itemId` must exist in
+      // the mirror inventory. Replaces the legacy `equip` kind whose
+      // separate `remove` frame couldn't be correlated for ownership (by
+      // equip-time the inventory was already zeroed), leaving a hole where
+      // a crafted `equip` frame conjured unowned gear into the equipped
+      // row. itemId=0 = unequip. v1.7.808.
       const slotMap = ['weapon_r', 'weapon_l', 'head', 'body', 'arms'];
       const slotName = slotMap[qty];
       if (!slotName) return { ok: false, reason: 'bad-slot' };
-      // No prior row → refuse to write. Pre-v1.7.800 the `|| {}` fallback
-      // meant every other slot got `undefined | 0 = 0` on the INSERT,
-      // silently wiping any save-loaded equipment the mirror hadn't seen
-      // yet. The first-save seed in `mirrorSyncFromSave` populates this
-      // row before any normal wire flow can land here, so a missing row
-      // is now either a fresh-registration race (client emits equip
-      // before the first /api/save round-trips) or a crafted frame —
-      // both are safer rejected than silently zeroed. v1.7.800.
+      // No prior equipped row → refuse (same v1.7.800 defense as the old
+      // `equip` kind: a blind INSERT would zero the other four slots).
       const eq = _invEquipReadStmt.get(userId, slot);
       if (!eq) return { ok: false, reason: 'no-equipped-row' };
-      const before = (eq[slotName] | 0);
-      // SQL injection-safe — slotName from whitelist only.
-      db.prepare('INSERT OR REPLACE INTO inv_equipped (user_id, slot, weapon_r, weapon_l, head, body, arms, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      const oldId = (eq[slotName] | 0);
+      // Ownership: a nonzero incoming item must be present in the mirror
+      // inventory. Shadow mode logs + applies anyway (client is source of
+      // truth); authoritative mode rejects and the caller pushes corrective
+      // inv-state. Mirrors the `remove` divergence handling.
+      if (itemId !== 0) {
+        const cur = _invInvReadOneStmt.get(userId, slot, itemId);
+        const have = cur ? (cur.qty | 0) : 0;
+        if (have < 1) {
+          console.warn('[mirror divergence] user=' + userId + ' slot=' + slot +
+            ' equip-from-inv item=0x' + itemId.toString(16) +
+            ' but mirror has 0 (src=' + (ev.source || '?') + ')');
+          if (INV_MIRROR_AUTHORITATIVE_SERVER) {
+            return { ok: false, reason: 'divergent-equip', itemId };
+          }
+        }
+      }
+      const tx = db.transaction(() => {
+        // Pull the incoming item out of inventory.
+        if (itemId !== 0) {
+          const cur = _invInvReadOneStmt.get(userId, slot, itemId);
+          const before = cur ? (cur.qty | 0) : 0;
+          const after = Math.max(0, before - 1);
+          if (after === 0) _invInvDeleteOneStmt.run(userId, slot, itemId);
+          else _invInvUpsertStmt.run(userId, slot, itemId, after, now);
+        }
+        // Write the equip slot — slotName from whitelist, SQLi-safe.
+        db.prepare('INSERT OR REPLACE INTO inv_equipped (user_id, slot, weapon_r, weapon_l, head, body, arms, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+          userId, slot,
+          slotName === 'weapon_r' ? itemId : (eq.weapon_r | 0),
+          slotName === 'weapon_l' ? itemId : (eq.weapon_l | 0),
+          slotName === 'head'     ? itemId : (eq.head | 0),
+          slotName === 'body'     ? itemId : (eq.body | 0),
+          slotName === 'arms'     ? itemId : (eq.arms | 0),
+          now,
+        );
+        // Return the displaced item to inventory (capped at 99).
+        if (oldId !== 0) {
+          const curOld = _invInvReadOneStmt.get(userId, slot, oldId);
+          const beforeOld = curOld ? (curOld.qty | 0) : 0;
+          _invInvUpsertStmt.run(userId, slot, oldId, Math.min(99, beforeOld + 1), now);
+        }
+      });
+      tx();
+      return { ok: true, kind, equipSlot: slotName, before: oldId, after: itemId };
+    }
+    case 'equip-swap-hands': {
+      // Permute weapon_r ↔ weapon_l in the equipped row. Both items are
+      // already equipped (already owned), so swapping conserves the owned
+      // multiset and exposes no injection surface — the handler only reads
+      // existing slot values and writes them back swapped. v1.7.808.
+      const eq = _invEquipReadStmt.get(userId, slot);
+      if (!eq) return { ok: false, reason: 'no-equipped-row' };
+      _invEquipUpsertStmt.run(
         userId, slot,
-        slotName === 'weapon_r' ? itemId : (eq.weapon_r | 0),
-        slotName === 'weapon_l' ? itemId : (eq.weapon_l | 0),
-        slotName === 'head'     ? itemId : (eq.head | 0),
-        slotName === 'body'     ? itemId : (eq.body | 0),
-        slotName === 'arms'     ? itemId : (eq.arms | 0),
+        (eq.weapon_l | 0),   // weapon_r ← old weapon_l
+        (eq.weapon_r | 0),   // weapon_l ← old weapon_r
+        (eq.head | 0), (eq.body | 0), (eq.arms | 0),
         now,
       );
-      return { ok: true, before, after: itemId, kind, equipSlot: slotName };
+      return { ok: true, kind, before: (eq.weapon_r | 0), after: (eq.weapon_l | 0) };
     }
+    case 'equip':
+      // Legacy non-atomic equip. Its paired `remove` frame couldn't be
+      // correlated for ownership, so a crafted `equip` could conjure
+      // unowned gear into the equipped row. Superseded by the atomic,
+      // ownership-checked `equip-from-inv` kind. Reject. v1.7.808.
+      return { ok: false, reason: 'use-equip-from-inv' };
     case 'unequip':
-      // Equivalent to equip with itemId=0 + qty=slotIdx; client should
-      // just send 'equip' with itemId=0. Reject for now to keep the
-      // dispatch table small.
-      return { ok: false, reason: 'use-equip-with-itemId-0' };
+      // Equivalent to equip-from-inv with itemId=0. Reject — point clients
+      // at the new atomic kind. v1.7.808.
+      return { ok: false, reason: 'use-equip-from-inv-with-itemId-0' };
     case 'gil-delta': {
       // qty is signed for gil. Bound to ±999999 per event to defend
       // against int overflow.

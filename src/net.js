@@ -888,20 +888,36 @@ export function sendNetInvEvent(kind, itemId, qty, source) {
   });
 }
 
-// Convenience wrapper for equip mutations — translates player-stats'
-// eqIdx constants (-100..-104) to the wire's slot-index integer
-// (0=weapon_r, 1=weapon_l, 2=head, 3=body, 4=arms) which is what the
-// `equip` kind's `qty` field carries. v1.7.742 Phase 1c.
-export function sendNetInvEquip(eqIdx, itemId, source) {
-  const slotIdx = (
+// Translate player-stats' eqIdx constants (-100..-104) to the wire's
+// slot-index integer (0=weapon_r, 1=weapon_l, 2=head, 3=body, 4=arms),
+// which rides the inv-event `qty` field for equip kinds.
+function _eqIdxToSlotIdx(eqIdx) {
+  return (
     eqIdx === -100 ? 0 :
     eqIdx === -101 ? 1 :
     eqIdx === -102 ? 2 :
     eqIdx === -103 ? 3 :
     eqIdx === -104 ? 4 : -1
   );
+}
+
+// Atomic equip — server moves `newItemId` from inventory into equip slot
+// `eqIdx`, returns the previously-equipped item (if any) to inventory, all
+// in one ownership-checked transaction. newItemId=0 unequips. Replaces the
+// old remove+equip+add three-frame sequence whose `equip` frame couldn't be
+// ownership-validated (the paired `remove` had already zeroed the inventory
+// by equip-time). v1.7.808.
+export function sendNetEquipFromInv(eqIdx, newItemId, source) {
+  const slotIdx = _eqIdxToSlotIdx(eqIdx);
   if (slotIdx < 0) return false;
-  return sendNetInvEvent('equip', itemId | 0, slotIdx, source);
+  return sendNetInvEvent('equip-from-inv', newItemId | 0, slotIdx, source);
+}
+
+// Atomic right↔left hand weapon swap — permutes the two already-equipped
+// weapon slots server-side. No inventory involved, no injection surface.
+// v1.7.808.
+export function sendNetEquipSwapHands(source) {
+  return sendNetInvEvent('equip-swap-hands', 0, 0, source);
 }
 
 // Request a fresh mirror snapshot for the active slot. Phase 1a exposes
