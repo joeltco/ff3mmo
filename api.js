@@ -173,6 +173,14 @@ function _validateSaveData(data) {
       body:    _clamp(data.stats.body, 0, 255),
       arms:    _clamp(data.stats.arms, 0, 255),
     };
+    // Cross-field: hp can never exceed maxHP. The two are clamped to
+    // independent ranges above, so a modded client could otherwise save
+    // hp:9999 against maxHP:28 and survive any damage. Closes the deferred
+    // "save validator hp ≤ maxHP" item from the v1.7.790-794 audit and
+    // unblocks PvP (`pvp-arbiter.js` reads `save.stats.hp` directly). The
+    // top-level `out.hp` (a legacy mirror of stats.hp) gets the same clamp.
+    if (out.stats.hp > out.stats.maxHP) out.stats.hp = out.stats.maxHP;
+    if (typeof out.hp === 'number' && out.hp > out.stats.maxHP) out.hp = out.stats.maxHP;
   }
   if (data.inventory && typeof data.inventory === 'object' && !Array.isArray(data.inventory)) {
     const inv = {};

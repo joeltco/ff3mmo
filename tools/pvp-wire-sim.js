@@ -381,6 +381,38 @@ function suiteServer() {
     assertEqual(data.stats.head, 255, 'head 256 not clamped');
   });
 
+  // v1.7.807 — hp ≤ maxHP cross-field clamp. A modded client could save
+  // hp:9999 against a real maxHP, then never die. Closes the deferred
+  // save-integrity item from the v1.7.790-794 audit.
+  test('save validator clamps hp down to maxHP', () => {
+    const input = {
+      hp: 9999,
+      stats: {
+        level: 5, exp: 0, hp: 9999, maxHP: 120, maxMP: 0,
+        str: 1, agi: 1, vit: 1, int: 1, mnd: 1,
+        weaponR: 0, weaponL: 0, head: 0, body: 0, arms: 0,
+      },
+    };
+    const { data } = _testValidateSaveData(input);
+    assertEqual(data.stats.hp, 120, 'stats.hp not clamped to maxHP');
+    assertEqual(data.hp, 120, 'top-level hp not clamped to maxHP');
+  });
+
+  // hp at or below maxHP must pass through untouched.
+  test('save validator leaves valid hp ≤ maxHP alone', () => {
+    const input = {
+      hp: 80,
+      stats: {
+        level: 5, exp: 0, hp: 80, maxHP: 120, maxMP: 0,
+        str: 1, agi: 1, vit: 1, int: 1, mnd: 1,
+        weaponR: 0, weaponL: 0, head: 0, body: 0, arms: 0,
+      },
+    };
+    const { data } = _testValidateSaveData(input);
+    assertEqual(data.stats.hp, 80, 'valid hp altered');
+    assertEqual(data.hp, 80, 'valid top-level hp altered');
+  });
+
   // ── Inventory mirror Phase 0 (v1.7.740) ────────────────────────────
   // Pure-API unit tests — no WS / network. mirrorSyncFromSave is the
   // sole writer in Phase 0 (called from /api/save), so every assert on
