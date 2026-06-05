@@ -1,0 +1,17 @@
+.git
+.gitignore
+node_modules
+npm-debug.log
+*.log
+# Local/runtime artifacts (mirror .gitignore)
+*.nes
+*.nes.bak
+*.zip
+ff3mmo.db
+*.fc0
+*.fc8
+*.fc9
+deploy.sh
+# Don't copy the Docker files into the image
+Dockerfile
+.dockerignore
