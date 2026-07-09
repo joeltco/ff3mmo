@@ -4,6 +4,17 @@ A browser-based NES Final Fantasy III engine that extracts all assets from user-
 
 **Live at [ff3mmo.com](https://ff3mmo.com)**
 
+## Using this code — please do!
+
+Want to use any of this for your own project? **Please, go right ahead.**
+Take whatever's useful — the combat engine, the multiplayer wire protocol,
+the ROM-extraction pipeline, any of it. No permission needed, no strings
+attached. I'd genuinely rather see this stuff get used than have it sit here.
+
+And if you get stuck or just want a hand, I'm more than happy to help — open
+an issue or reach out and I'll answer questions, walk you through how any part
+works, or share examples and code. Seriously, ask away. 🙂
+
 ## Status
 
 > **Current status (v1.7.805):** PvE solo combat is **fully server-validated** — encounter rewards (exp/gil/cp/drop) + shops + chests + vases + **chest mimics** all flow through the PvE arbiter + economy arbiter (`docs/PVE-REWRITE-PLAN.md`, shipped + LIVE v1.7.771-783, hardened v1.7.787-794, extended v1.7.796-805 — chest mimic via `createMimicBattle`, `inv-state` non-wire-field strip, mirror seed gap closure, server-atomic trade). Server picks monsters + RNG seed; client runs the battle locally for native-speed UX; server outcome-validates at battle-end via shared monster pools. Backed by the **inventory mirror** (v1.7.740-746) — all 5 original dup vectors closed; V-A trade dup was a partial close in v1.7.745, fully closed v1.7.802 after a 2026-06-01 audit. **PvP duels** server-arbitrated rewrite shipped v1.7.747-757, flags went LIVE v1.7.758, **DISABLED again v1.7.770** pending P-6d anim polish + P-4c magic/items (3-edit re-enable; see `docs/PVP-REWRITE-PLAN.md`). **Co-op party battles** never returned — battle allies are now local AI built from real roster players' stats (`tryJoinPlayerAlly`, v1.7.559), avoiding the cross-phone determinism problem that killed the three prior co-op architectures. **Social MP** (presence, chat, party invites, give-item, Roster Trade with audit log, party persistence across restart) all wire-driven and working. The historical narrative below (1.7.398-1.7.456) describes co-op + PvP combat as they were when first built.
