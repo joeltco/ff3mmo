@@ -288,4 +288,28 @@ export const MONSTER_NAMES_SHRINES = new Map([
   [0xC8, 'YellowD'],      [0xCC, 'LandTurtl'],    [0xCD, 'Jinn'],
   [0xCE, 'BigRat'],       [0xD0, 'Guzco'],
   [0xD1, 'Salamandr'],    [0xD2, 'Hyne'],         [0xD7, 'Dorga'],
-  [0xD8, 'Unne'],         [0xDF, 'RedD'],         [0xE2, '2HeadD'],       ]);
+  [0xD8, 'Unne'],         [0xDF, 'RedD'],         [0xE2, '2HeadD'],
+  // The six dummied-out enemies, named from The Cutting Room Floor's FF3 (NES)
+  // page rather than Shrines — they have no Shrines entry because they appear in
+  // no encounter monster list in EITHER the English or Japanese ROM, so the game
+  // never shows their names anywhere. Identified by matching TCRF's stat blocks
+  // against MONSTERS, corroborated by which artwork each one shares:
+  //   0x35 Fury      — lvl/HP/EXP/gil all exact; shares Harpy art; our
+  //                    location 'tower_owen' matches TCRF's DS-remake note
+  //   0x63 Captain   — lvl 34 / 315 HP; shares Goblin art, and TCRF reads it as
+  //                    a cut surface-overworld goblin
+  //   0x66 Phoenix   — all four stats exact; shares Rust Bird (a bird) art
+  //   0x8D Hobgoblin — lvl 48 / 320 EXP; shares Goblin art, paired with Captain
+  //                    by TCRF as the goblins cut from outside the Floating Continent
+  //   0xBE Spriggan  — all four stats exact; shares Ogre art, TCRF captions it "IcOgre"
+  //   0xBF TerribleD — lvl/EXP/gil exact; shares GreenDragon art. Abbreviated to
+  //                    match the ROM's own convention for dragons (RedD, 2HeadD).
+  [0x35, 'Fury'],         [0x63, 'Captain'],      [0x66, 'Phoenix'],
+  [0x8D, 'Hobgoblin'],    [0xBE, 'Spriggan'],     [0xBF, 'TerribleD'],
+  // 0x59 LostGold — TCRF's seventh dummied enemy, matched on all four stats
+  // (lvl 30 / 265 HP / 560 EXP / 310 gil). Unlike the six above it DOES sit in
+  // an encounter monster list (98, pal 172/167), which is why its sprite and
+  // palette were already correct and only its name was missing; TCRF notes it
+  // is reachable in one Goldor Manor room but hard to trigger.
+  [0x59, 'LostGold'],
+]);

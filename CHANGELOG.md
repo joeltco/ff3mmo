@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.819 — 2026-08-09
+
+### Named the seven dummied-out enemies — nothing in the catalog is "(unnamed)" now
+
+Six monsters (0x35, 0x63, 0x66, 0x8D, 0xBE, 0xBF) had no name because they appear in **no encounter monster list in either the English or Japanese ROM** — the game never displays their names, so Shrines has no entry for them. The Cutting Room Floor's FF3 (NES) page documents them as dummied-out enemies, and their stat blocks match ours:
+
+| id | name | match | artwork corroboration |
+|---|---|---|---|
+| 0x35 | Fury | lvl/HP/EXP/gil all exact | shares Harpy art; our `location: ['tower_owen']` matches TCRF's DS-remake note |
+| 0x63 | Captain | lvl 34 / 315 HP | shares Goblin art; TCRF reads it as a cut surface-overworld goblin |
+| 0x66 | Phoenix | all four exact | shares Rust Bird art — a bird |
+| 0x8D | Hobgoblin | lvl 48 / 320 EXP | shares Goblin art; TCRF pairs it with Captain as the cut goblins |
+| 0xBE | Spriggan | all four exact | shares Ogre art; TCRF captions it "IcOgre" |
+| 0xBF | TerribleD | lvl/EXP/gil exact | shares GreenDragon art |
+
+Every identification is corroborated twice — by stats and independently by which artwork the id shares — rather than resting on the stat match alone. "Terrible Dragon" is abbreviated to fit the map's conventions (no spaces, max 11 chars) using the ROM's own dragon shorthand: `RedD`, `YellowD`, `2HeadD`.
+
+Checking what was left over turned up a **seventh**: `0x59` matched TCRF's **Lost Gold** on all four stats (lvl 30 / 265 HP / 560 EXP / 310 gil). It is a different case — it *does* sit in encounter monster list 98, so its sprite and palette were already correct and only the name was missing, which is consistent with TCRF describing it as reachable in one Goldor Manor room but hard to trigger. `MONSTER_NAMES_SHRINES` goes 114 → 121.
+
+Palettes for the six are still untouched. TCRF gives color hints ("tangy orange" Hobgoblin, "IcOgre" Spriggan) but no palette data, and no encounter list in either ROM carries one, so any color remains a guess rather than a measurement. Left as-is deliberately.
+
+### Two defects found while verifying — NOT fixed here
+
+Both live in `tools/gen-monsters-js.js` territory and are logged rather than silently patched:
+
+- **HP is misread for large values.** 0x8D Hobgoblin reads 1200 against TCRF's 16,560, and 0xBF Terrible Dragon 1150 against 16,510 — both off by exactly 15,360 (0x3C00): `0x40B0` vs `0x04B0`, `0x407E` vs `0x047E`. A dropped high nibble, not a coincidence, and it will affect any monster with HP over 4095.
+- **Regenerating `monsters.js` destroys all the names.** The generator's output ends at the `MONSTERS` map's closing bracket, but `MONSTER_NAMES_SHRINES` is hand-maintained *below it in the same file*. The documented workflow — `node tools/gen-monsters-js.js > src/data/monsters.js` — would wipe all 121 names. This predates today's work and is worth fixing before anyone runs the generator.
+
+Also noted: 0x63 Captain's EXP and gil look swapped against TCRF (ours 800/410, theirs 410/800).
+
 ## 1.7.818 — 2026-08-09
 
 ### The boss block's artwork was wrong too — registry now covers every id
