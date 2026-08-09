@@ -6,6 +6,14 @@ import { getKnifeBladeCanvas, getKnifeBladeSwungCanvas,
          getSwordBladeCanvas, getSwordBladeSwungCanvas,
          getNunchakuBladeCanvas, getNunchakuBladeSwungCanvas,
          getStaffBladeCanvas, getStaffBladeSwungCanvas,
+         getRodBladeCanvas, getRodBladeSwungCanvas,
+         getAxeBladeCanvas, getAxeBladeSwungCanvas,
+         getSpearBladeCanvas, getSpearBladeSwungCanvas,
+         getKatanaBladeCanvas, getKatanaBladeSwungCanvas,
+         getHammerBladeCanvas, getHammerBladeSwungCanvas,
+         getBookBladeCanvas, getBookBladeSwungCanvas,
+         getBellBladeCanvas, getBellBladeSwungCanvas,
+         getHarpBladeCanvas, getHarpBladeSwungCanvas,
          getFistCanvas } from './weapon-sprites.js';
 import {
   fakePlayerAttackPortraits, fakePlayerAttackLPortraits,
@@ -61,8 +69,28 @@ export function pickAttackWeaponSpec({
     raised = getNunchakuBladeCanvas(); swung = getNunchakuBladeSwungCanvas();
   } else if (weaponSubtype === 'staff') {
     raised = getStaffBladeCanvas(); swung = getStaffBladeSwungCanvas();
+  } else if (weaponSubtype === 'rod') {
+    raised = getRodBladeCanvas(); swung = getRodBladeSwungCanvas();
+  } else if (weaponSubtype === 'axe') {
+    raised = getAxeBladeCanvas(); swung = getAxeBladeSwungCanvas();
+  } else if (weaponSubtype === 'spear') {
+    raised = getSpearBladeCanvas(); swung = getSpearBladeSwungCanvas();
+  } else if (weaponSubtype === 'katana') {
+    raised = getKatanaBladeCanvas(); swung = getKatanaBladeSwungCanvas();
+  } else if (weaponSubtype === 'hammer') {
+    raised = getHammerBladeCanvas(); swung = getHammerBladeSwungCanvas();
+  } else if (weaponSubtype === 'book') {
+    raised = getBookBladeCanvas(); swung = getBookBladeSwungCanvas();
+  } else if (weaponSubtype === 'bell') {
+    raised = getBellBladeCanvas(); swung = getBellBladeSwungCanvas();
+  } else if (weaponSubtype === 'harp') {
+    raised = getHarpBladeCanvas(); swung = getHarpBladeSwungCanvas();
   } else {
-    return null; // rod / claw / unknown / no weapon → no blade overlay (TODO: rod sprite)
+    // claw genuinely draws no overlay — measured, it loads weapon CHR but never
+    // renders a sprite. boomerang and shuriken are thrown: they have three poses
+    // (flight frames toward the target) and need a projectile model this does not
+    // have. bow and arrow captured too few pixels to trust. All deliberately null.
+    return null;
   }
 
   if (attackPhase === 'fwd') {

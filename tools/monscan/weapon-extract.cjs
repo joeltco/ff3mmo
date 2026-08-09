@@ -116,7 +116,18 @@ function grab() {
   const box = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   if (box.w > 24 || box.h > 24) return;                    // not a weapon overlay
   const key = geom.map((g) => `${g.tile}`).sort().join(',') + `#${box.w}x${box.h}`;
-  const rec = { key, box, geom, px: px.map((q) => ({ dx: q.x - minX, dy: q.y - minY, rgb: q.rgb })) };
+  // Store CHR and the sprite palettes too. Colors must come from palette RAM,
+  // not from framebuffer RGB: jsnes renders through its own palette, so nearest-
+  // matching those pixels against NES_SYSTEM_PALETTE lands on the wrong index for
+  // 62% of them (median distance 46.9). The diff is for deciding WHICH pixels are
+  // the weapon; CHR + palette RAM is for deciding what color they are.
+  const pl = p.f_spPatternTable ? 0x1000 : 0x0000;
+  const chr = {};
+  for (const g of geom) chr[g.tile] = [...n.vram.slice(pl + g.tile * 16, pl + g.tile * 16 + 16)];
+  const palRam = n.palette();
+  const sprPal = [0, 1, 2, 3].map((i) => palRam.slice(16 + i * 4, 20 + i * 4));
+  const attrs = idx.map((i) => ({ tile: p.sprTile[i], pal: p.sprCol[i] >> 2, hFlip: !!p.horiFlip[i], vFlip: !!p.vertFlip[i], x: p.sprX[i], y: p.sprY[i] }));
+  const rec = { key, box, geom, chr, sprPal, attrs, px: px.map((q) => ({ dx: q.x - minX, dy: q.y - minY, rgb: q.rgb })) };
   if (!poses.has(key)) poses.set(key, { ...rec, seen: 1 }); else poses.get(key).seen++;
 }
 

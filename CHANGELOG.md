@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.821 — 2026-08-09
+
+### Battle weapon overlays for 8 classes that previously drew nothing
+
+`combatant-pose.js` drew a blade overlay only for knife / sword / nunchaku / staff and returned null for everything else, while the game loads and draws weapon art for far more than that. **Rod, axe, spear, katana, hammer, book, bell and harp** now render their real overlays.
+
+Every value is measured. Three separate mechanisms, each doing the one thing it is actually reliable at:
+
+- **Which tiles are a weapon's** — CHR provenance. Slots `$49-$60` are re-decompressed per equipped weapon, so the slots holding bytes a knife never puts there are that weapon's. This is what separates the weapon from the character's fist and the damage digits, which share the range. Axe went from 59 candidate poses to 3.
+- **Which pixels are the weapon** — differential rendering. The frame is drawn twice, once with those sprites parked in the OAM shadow at `$0200`, and subtracted. What changes is the weapon as the PPU composited it.
+- **What color they are** — CHR + palette RAM, giving NES indices directly.
+
+Verification is that our tile data reproduces **100% of the pixels the differential capture attributes to each weapon** — 20/20 poses, zero missing. Extra pixels are expected and reported: those are where hiding the weapon changed nothing because the body is drawn over it, which is the case `attackWeaponLayer` already models.
+
+**raised vs swung is measured, not guessed at from frame timing.** The party stands right of the enemies, so the more-forward pose is the swing; every two-pose weapon shows exactly two positions with one distinct pixel pattern each. The measured displacement — 24px forward, 8px down — independently matches the `dx: -16 / dy: 1` versus `dx: 8 / dy: -7` offsets `combatant-pose.js` already applied for the original four weapons, so the existing placement model needed no per-weapon offsets.
+
+Weapons drawing a single pose (hammer, book, bell, harp) reuse it for both, as the game does.
+
+### Deliberately NOT landed
+
+- **Bow and arrow.** They pass every numeric check but capture only 12-14 px and render as a smudge rather than a bow, so something about how they draw is not being measured. Passing a check is not the same as being right.
+- **Boomerang and shuriken.** Three poses each — they are thrown, and those are flight frames travelling toward the target. Forcing them into raised/swung would discard the middle frame and put the weapon in the wrong place. They need a projectile model that does not exist yet.
+- **Claw.** Measured to draw no overlay at all: it loads weapon-specific CHR but never renders a sprite. The old `TODO: rod sprite` comment was wrong about claw specifically.
+
+### What made this work after it stalled
+
+An earlier attempt read OAM and re-rendered it to check, and never got closer than 30 of 190 pixels — because re-rendering means re-implementing sprite priority, palette selection, flips and the OAM Y+1 offset, four chances to be wrong. Differential rendering removes all four at once by letting the PPU composite. Bugs found and fixed on the way, each of which silently produced plausible-looking wrong answers:
+
+- Parking sprites in the PPU's OAM does nothing — the game re-uploads the whole page by DMA every frame. Both renders came back pixel-identical, 0 of 61440 differing.
+- Frame skew: sprite indices chosen before advancing a frame, attributes read after, so an index could have been reused. Showed up as stray tile `$0` sprites 100px away.
+- Colors snapped from framebuffer RGB to `NES_SYSTEM_PALETTE` land on the wrong index for **62% of pixels** (median distance 46.9), because jsnes renders through its own table. Structural checks all passed regardless; only measuring the distance caught it.
+
 ## 1.7.820 — 2026-08-09
 
 ### Regenerating monsters.js no longer destroys the names

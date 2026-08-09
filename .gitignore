@@ -27,3 +27,5 @@ tools/monscan/weapon-oam-*.json
 tools/monscan/weapon-diff-*.json
 tools/monscan/axe-only.json
 tools/monscan/weapon-extract-*.json
+tools/monscan/ex-*.log
+tools/monscan/ex2-*.log
