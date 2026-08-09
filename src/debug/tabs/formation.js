@@ -57,9 +57,14 @@ async function _loadNames() {
     const res = await fetch('src/data/monsters.js');
     if (!res.ok) return;
     const text = await res.text();
-    const re = /\[(0x[0-9a-fA-F]+),\s*\{[^}]*\}\],\s*\/\/\s*(.+)$/gm;
-    for (const m of text.matchAll(re)) {
-      state.names.set(parseInt(m[1], 16), m[2].trim());
+    // Match per LINE, and require a non-space character after the `//`. Rows
+    // that end in a bare `//` with no name (0xBE) let a multiline `[^}]*`
+    // regex run past the newline into the NEXT entry, so the monster was
+    // captioned with that entry's whole source line. Same fix as the BESTIARY
+    // tab's _loadNames — keep the two in step, they read the same file.
+    for (const line of text.split('\n')) {
+      const m = /^\s*\[(0x[0-9a-fA-F]+),.*\],\s*\/\/\s*(\S.*?)\s*$/.exec(line);
+      if (m) state.names.set(parseInt(m[1], 16), m[2]);
     }
   } catch (e) {
     console.warn('[formation] name load failed', e);
