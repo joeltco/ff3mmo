@@ -429,16 +429,81 @@ function _itemSelectSwap(isEquipPage, gIdx) {
   }
 }
 
+
+/**
+ * Which side a spell should aim at by default.
+ *
+ * NOTE: cannot use `spell.type === 'damage'` to mean "offensive" — Cure + Cura
+ * have type='damage' too, because that is the dispatch axis for numeric-effect
+ * spells. The friendly-target set is the inversion criterion instead.
+ *
+ * Shared by the Magic command and by casting from an equipped item, so the two
+ * cannot drift.
+ */
+function _spellDefaultsToPlayer(spell) {
+  return spell.element === 'recovery'
+      || spell.target === 'ally'
+      || spell.target === 'cure_status'
+      || spell.target === 'revive'
+      || spell.target === 'reflect';
+}
+
+/**
+ * Cast the spell an equipped weapon carries (`casts:` in items.js, the ROM's
+ * per-item `magicCast`). Free: no MP, and the weapon is not consumed — it is
+ * equipment being used, not an expendable.
+ *
+ * Reached from the battle Item menu's EQUIP page, which already lists both
+ * hands; selecting one there previously did nothing at all. 19 weapons carry
+ * the field and none of them could fire it before.
+ */
+function _castFromEquippedItem(weaponId) {
+  const itemDat = ITEMS.get(weaponId);
+  const spellId = itemDat && itemDat.casts;
+  if (spellId == null) { playSFX(SFX.ERROR); return false; }
+  const spell = SPELLS.get(spellId);
+  if (!spell) { playSFX(SFX.ERROR); return false; }
+  playSFX(SFX.CONFIRM);
+  inputSt.itemHeldIdx = -1;
+  if (_spellDefaultsToPlayer(spell)) {
+    inputSt.itemTargetType = 'player';
+    inputSt.itemTargetIndex = 0;
+  } else {
+    let pick = -1;
+    const cnt = _itemTargetCnt();
+    for (let i = 0; i < cnt; i++) if (_itemTargetIsRightCol(i) && _itemTargetAlive(i)) { pick = i; break; }
+    if (pick < 0) for (let i = 0; i < cnt; i++) if (_itemTargetAlive(i)) { pick = i; break; }
+    inputSt.itemTargetType = 'enemy';
+    inputSt.itemTargetIndex = Math.max(0, pick);
+  }
+  inputSt.itemTargetAllyIndex = -1;
+  inputSt.itemTargetMode = 'single';
+  // Same action shape as the Magic command, so it runs the existing cast /
+  // throw / apply pipeline with no parallel path.
+  inputSt.playerActionPending = { command: 'magic', spellId, fromItemId: weaponId };
+  battleSt.battleState = 'item-target-select';
+  battleSt.battleTimer = 0;
+  return true;
+}
+
 function _itemSelectZ(isEquipPage, gIdx) {
   if (inputSt.itemHeldIdx === -1) {
     if (isEquipPage) {
       const weaponId = inputSt.itemPageCursor === 0 ? ps.weaponR : ps.weaponL;
+      // Pick up ANY equipped weapon: this same hold is what _itemSelectSwap
+      // uses as its source (itemHeldIdx <= -100) to swap or unequip mid-battle.
+      // Restricting it to casting weapons would break in-battle unequip.
       if (weaponId !== 0) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     } else {
       const invIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
       if (inputSt.itemSelectList[invIdx] !== null) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     }
   } else if (inputSt.itemHeldIdx === gIdx) {
+    if (isEquipPage) {
+      const weaponId = inputSt.itemPageCursor === 0 ? ps.weaponR : ps.weaponL;
+      _castFromEquippedItem(weaponId);
+      return;
+    }
     if (!isEquipPage) {
       const invIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
       const item = inputSt.itemSelectList[invIdx];
@@ -532,11 +597,7 @@ function _battleInputMagicSelect() {
     // Cura have type='damage' too because that's the dispatch axis for
     // numeric-effect spells (heal counts as "damage" the helper applies). Use
     // the friendly-target set as the inversion criterion instead.
-    const defaultsToPlayer = spell.element === 'recovery'
-                          || spell.target === 'ally'
-                          || spell.target === 'cure_status'
-                          || spell.target === 'revive'
-                          || spell.target === 'reflect';
+    const defaultsToPlayer = _spellDefaultsToPlayer(spell);
     const defaultsToEnemy = !defaultsToPlayer;
     if (defaultsToEnemy) {
       let pick = -1;

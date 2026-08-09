@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.825 — 2026-08-09
+
+### 19 weapons could cast a spell and none of them ever did
+
+`items.js` carries `casts:` on 19 weapons — the ROM's per-item `magicCast` — and **nothing in the codebase read the field**. Burning Staff, Freezing Staff, IceBlade, Thor Hammer, HolyWand and the rest were ordinary weapons with a dead property.
+
+Now they cast, from the battle **Item** menu's equip page, free: no MP, and the weapon is not consumed because it is equipment rather than an expendable.
+
+That page already existed and already listed both hands — selecting a weapon there previously did **nothing at all** (the confirm branch was gated `if (!isEquipPage)`). So the UI was sitting there waiting for this.
+
+All 19 resolve to a real entry in `SPELLS` (checked — zero dangling ids); 16 default to targeting an enemy, 3 to self/ally. Targeting reuses the Magic command's rule, factored out as `_spellDefaultsToPlayer` so the two cannot drift, and the action is dispatched in the Magic command's own shape so it runs the existing cast / throw / apply pipeline with no parallel path.
+
+### Two regressions caught before shipping
+
+Both were in my first version and both would have looked fine in the obvious test:
+
+- **Restricting equip-page pickup to casting weapons breaks in-battle unequip.** That same pickup sets `itemHeldIdx` to `-100`/`-101`, which is exactly the source marker `_itemSelectSwap` reads (`srcEquip = itemHeldIdx <= -100`). Filtering it would have silently removed the ability to swap or unequip a weapon mid-battle — a feature with nothing to do with casting. Any weapon can be picked up again; the cast happens on confirming the same slot.
+- **The "free" cast was not free.** `spell-cast.js` deducts MP for anything not flagged `_isItemUse`, so the first version charged full price. The cast now routes through that existing flag, which also puts the item's name on the battle strip instead of the spell's — matching how consumables that cast already behave.
+
+Known cosmetic gap: over the PvP wire the receiver shows the spell name rather than the item name, since `fromItemId` is local and not part of the action payload. Effects stay in lockstep — the damage/heal value is pre-rolled and sent, and MP is the caster's own local state.
+
 ## 1.7.824 — 2026-08-09
 
 ### Thrown and fired weapons now show their projectile
