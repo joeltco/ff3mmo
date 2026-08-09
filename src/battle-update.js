@@ -98,6 +98,7 @@ export function resetBattleVars() {
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.encounterDropItemRejected = false; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
   battleSt.lastKilledMonsterId = null;   // v1.7.803 — fresh battle, no prior kill
+  battleSt.projectileSubtype = null;     // fresh battle: no attack in flight
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1;

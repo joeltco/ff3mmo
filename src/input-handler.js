@@ -277,6 +277,11 @@ function _battleTargetConfirm() {
   // would fire the quiver as if it were a second melee weapon. ATK combines both
   // and the arrow supplies the element; one arrow is spent per shot.
   const bowShot = hasReadyBow(ps.weaponR, ps.weaponL, ps.arrowCount);
+  // Thrown weapons fly too, and unlike the bow they are ordinary melee-rolled
+  // weapons — only the visual differs.
+  const thrown = [ps.weaponR, ps.weaponL].map(weaponSubtype)
+    .find((st) => st === 'boomerang' || st === 'shuriken') || null;
+  battleSt.projectileSubtype = bowShot ? 'arrow' : thrown;
   if (bowShot) {
     const bowIt = ITEMS.get(bowShot.bow) || {}, arrowIt = ITEMS.get(bowShot.arrow) || {};
     inputSt.hitResults = rollHand({

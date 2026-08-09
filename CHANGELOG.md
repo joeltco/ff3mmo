@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.824 — 2026-08-09
+
+### Thrown and fired weapons now show their projectile
+
+The v1.7.823 sprites are drawn. Firing a bow, or attacking with a boomerang or shuriken, sends the projectile across to the target instead of drawing a melee slash on it.
+
+**Rides the existing `player-slash` window rather than adding an FSM state.** The swing already holds before the hit lands, which is exactly the flight time. Leaving the state machine alone keeps this off the animation code CLAUDE.md warns about reworking, and flight uses `getProjectilePos()` — the same interpolator spell projectiles fly on — so the travel curve is not a second implementation.
+
+**The projectile type is recorded on the attack, not re-derived at draw time.** A bow spends its arrow during the roll and clears the quiver at zero, so by the time the animation runs, the equipment no longer says "ranged" — the draw would silently fall back to a melee slash on the last shot of a quiver. `battleSt.projectileSubtype` is set when hits are rolled and cleared in `resetBattleVars`.
+
+Unlike the slash, the projectile draws on a miss too: the arrow still flies, it just does not land.
+
+### A bug in this change, caught before shipping
+
+The first version skipped the whole slash-effects function when the player held a thrown weapon — which would have suppressed the **ally** slash as well, breaking ally attack animations for anyone whose party leader carried a boomerang. Only the player block is skipped now. Worth recording because it is exactly the class of collateral the animation prohibition exists for: the change looked right and the failure would only have shown up in someone else's attack.
+
 ## 1.7.823 — 2026-08-09
 
 ### Projectile sprites for arrow, boomerang and shuriken

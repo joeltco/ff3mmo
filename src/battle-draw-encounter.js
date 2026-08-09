@@ -12,7 +12,8 @@ import { getMonsterCanvas, getMonsterWhiteCanvas, hasMonsterSprites } from './mo
 import { getBossBattleCanvas, getBossWhiteCanvas } from './boss-sprites.js';
 import { inputSt } from './input-handler.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
-import { drawSlashOverlay, SLASH_FRAME_MS, SLASH_FRAMES, shouldDrawSlash } from './slash-effects.js';
+import { drawSlashOverlay, SLASH_FRAME_MS, SLASH_FRAMES, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
+import { getProjectilePos, getWeaponProjectile } from './projectile-anim.js';
 import { getSpellTargets } from './spell-cast.js';
 import { pvpSt } from './pvp.js';
 import { drawBossSpriteBoxPVP } from './pvp-drawing.js';
@@ -144,8 +145,40 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
   _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY);
   ui.ctx.restore();
 }
+/**
+ * Thrown / fired weapons: draw the projectile crossing to the target instead of
+ * a slash on it. Reuses getProjectilePos, the same interpolator spell
+ * projectiles fly on, so the travel curve is not a second implementation.
+ *
+ * Rides the existing player-slash window rather than adding an FSM state — the
+ * swing already has a hold period before the hit lands, which is exactly the
+ * flight time, and leaving the state machine alone keeps this off the animation
+ * code CLAUDE.md warns about reworking.
+ */
+function _drawWeaponProjectile(gridPos, slideOffX, slotCenterY) {
+  if (battleSt.battleState !== 'player-slash') return;
+  const canvas = getWeaponProjectile(battleSt.projectileSubtype);
+  if (!canvas) return;
+  const pos = gridPos[inputSt.targetIndex];
+  if (!pos) return;                                    // target died mid-frame
+  const tx = pos.x - slideOffX + 8, ty = slotCenterY(inputSt.targetIndex);
+  // Launch from the right edge of the encounter view — the party stands there,
+  // which is the same geometry the raised/swung offsets encode.
+  const sx = HUD_VIEW_X + HUD_VIEW_W, sy = ty;
+  const t = Math.max(0, Math.min(1, battleSt.battleTimer / SWING_HOLD_MS));
+  const p = getProjectilePos(sx, sy, tx, ty, t);
+  if (!p.drawn) return;
+  ui.ctx.drawImage(canvas, Math.round(p.x) - 8, Math.round(p.y) - 8);
+}
+
 function _drawEncounterSlashEffects(gridPos, slideOffX, slotCenterY) {
-  if (battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES &&
+  // A thrown weapon has no melee contact, so it gets the projectile instead of
+  // a slash on the target. Only the PLAYER block is skipped — returning here
+  // would also suppress the ally slash drawn below whenever the player happened
+  // to hold a thrown weapon.
+  const playerThrows = !!battleSt.projectileSubtype;
+  if (playerThrows) _drawWeaponProjectile(gridPos, slideOffX, slotCenterY);
+  if (!playerThrows && battleSt.battleState === 'player-slash' && bsc.slashFrames && battleSt.slashFrame < SLASH_FRAMES &&
       shouldDrawSlash(inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx])) {
     // Same defensive guard as _drawEncounterCursors below — targetIndex can
     // drift out of gridPos if a monster died mid-frame.

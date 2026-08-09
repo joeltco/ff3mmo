@@ -47,6 +47,11 @@ export const battleSt = {
   slashFrame: 0,
   slashX: 0,
   slashY: 0,
+  // Which projectile the CURRENT physical attack throws, or null for melee.
+  // Recorded when the attack is rolled rather than re-derived at draw time: a
+  // bow spends its arrow on the roll and clears the quiver when it hits zero,
+  // so by the time the animation draws, the equipment no longer says "ranged".
+  projectileSubtype: null,
   slashOffX: 0,
   slashOffY: 0,
 
