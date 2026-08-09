@@ -1,0 +1,42 @@
+art: 27 monsters across 6 workers
+[1/27] 0xcf 18x12 3456B
+[2/27] 0xce 18x12 3456B
+[3/27] 0xcd 18x12 3456B
+[4/27] 0xd0 18x12 3456B
+[5/27] 0xcc 18x12 3456B
+[6/27] 0xd1 18x12 3456B
+[7/27] 0xd4 18x12 3456B
+[8/27] 0xd5 18x12 3456B
+[9/27] 0xd6 18x12 3456B
+[10/27] 0xd2 6x12 1152B
+[11/27] 0xd3 18x12 3456B
+[12/27] 0xd7 6x6 576B
+[13/27] 0xda 18x12 3456B
+[14/27] 0xdb 18x12 3456B
+[15/27] 0xdc 18x12 3456B
+[16/27] 0xdd 18x12 3456B
+[17/27] 0xd8 6x6 576B
+[18/27] 0xd9 6x12 1152B
+[19/27] 0xe1 18x12 3456B
+(node:47423) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[20/27] 0xe0 18x12 3456B
+[21/27] 0xe2 12x6 1152B
+(node:47423) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[22/27] 0xe3 6x12 1152B
+(node:47423) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[23/27] 0xde 6x12 1152B
+[24/27] 0xdf 18x12 3456B
+[25/27] 0xe6 18x12 3456B
+(node:47423) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[26/27] 0xe4 18x12 3456B
+(node:47423) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+[27/27] 0xe5 18x12 3456B
+
+27/27 captured -> /home/joeltco/projects/ff3mmo/tools/monscan/art.json
+(node:47423) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)

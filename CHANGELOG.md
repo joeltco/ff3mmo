@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.818 — 2026-08-09
+
+### The boss block's artwork was wrong too — registry now covers every id
+
+Jinn (`0xCD`) and others still rendered broken after v1.7.817 wired the boss registry in. The v1.7.816 art capture only rewrote `src/data/monster-sprites-rom.js`; `src/data/boss-sprites-rom.js` is a **separate file** carrying its own copy of the same ROM-extracted bytes, and it was never touched. Measured: **26 of 27** boss entries disagree with the PPU on their first 36 tiles.
+
+All of 0xCC-0xE6 captured and added to `MONSTER_REGISTRY` — art from the PPU, palette split from the attribute table, palette pair from the encounter list. The BESTIARY already prefers the main registry (`buildMonsterCanvas(id) || buildBossCanvas(id)`), so these take precedence and the boss registry is no longer consulted for them.
+
+**`boss-sprites-rom.js` is deliberately NOT modified.** Its header documents the 6x6 nametable mapping and inverted palette split as verified against live Land Turtle PPU data, and these captures are of a boss spawned in a *random encounter*, which may legitimately differ from its scripted fight. Changing what the actual boss fight draws on the strength of a different context would be a guess, so the viewer is fixed and the fight is left alone. If the in-game Land Turtle looks wrong, that is a separate report with a separate capture.
+
+Sizes are trimmed to the drawn art, which is why they vary so widely — 4x4 through 16x12 — rather than every boss claiming one padded 18x12 shape. Palettes stored as `pal0Raw`/`pal1Raw` for the same reason as v1.7.817: several captured indices land past `PALETTE_TABLE`'s 244 entries and would fall back to grey.
+
+`MONSTER_REGISTRY` is now **231 entries with no gap anywhere in 0x00-0xE6**. Checks: 0 raw-length mismatches, 0 tilePal-length mismatches, 0 entries that can render grey.
+
 ## 1.7.817 — 2026-08-09
 
 ### Everything above 0xC2 had no sprite in the BESTIARY
