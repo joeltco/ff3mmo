@@ -91,16 +91,37 @@ function _makeDeathFrames(srcCanvas) {
 
 // ── Public API ─────────────────────────────────────────────────────
 
+/**
+ * Battle canvas for one monster, built on first ask and cached.
+ *
+ * Nothing here needs the ROM — MONSTER_REGISTRY and PALETTE_TABLE are both
+ * baked data — but the only thing that used to build these was
+ * initMonsterSprites(), which runs from initSpriteAssets() and therefore only
+ * after the player has supplied an FF3 ROM. Any caller that legitimately wants
+ * a monster sprite outside a booted game (the BESTIARY debug tab) got nothing.
+ * Exposing the per-monster build lets those callers render through this exact
+ * function instead of growing a second decoder that could disagree with what
+ * the battle screen paints.
+ */
+export function buildMonsterCanvas(monsterId) {
+  const cached = monsterBattleCanvas.get(monsterId);
+  if (cached) return cached;
+  const entry = MONSTER_REGISTRY.get(monsterId);
+  if (!entry) return null;
+  // pal0Raw / pal1Raw override the PALETTE_TABLE lookup — used for monsters
+  // whose real in-battle colors come from the sprite palette (SP0/SP1) rather
+  // than the BG palette table the extractor pulled from. Captured via SNAP OAM.
+  const pal0 = entry.pal0Raw || PALETTE_TABLE[entry.pal0] || [0x0F, 0x00, 0x10, 0x20];
+  const pal1 = entry.pal1Raw || PALETTE_TABLE[entry.pal1] || [0x0F, 0x00, 0x10, 0x20];
+  const canvas = _renderSprite(entry.raw, entry.cols, entry.rows, pal0, pal1, entry.tilePal);
+  monsterBattleCanvas.set(monsterId, canvas);
+  return canvas;
+}
+
 /** Initialize all monster sprites from ROM-extracted data. Call once after DOM ready. */
 export function initMonsterSprites() {
-  for (const [monsterId, entry] of MONSTER_REGISTRY) {
-    // pal0Raw / pal1Raw override the PALETTE_TABLE lookup — used for monsters
-    // whose real in-battle colors come from the sprite palette (SP0/SP1) rather
-    // than the BG palette table the extractor pulled from. Captured via SNAP OAM.
-    const pal0 = entry.pal0Raw || PALETTE_TABLE[entry.pal0] || [0x0F, 0x00, 0x10, 0x20];
-    const pal1 = entry.pal1Raw || PALETTE_TABLE[entry.pal1] || [0x0F, 0x00, 0x10, 0x20];
-    const canvas = _renderSprite(entry.raw, entry.cols, entry.rows, pal0, pal1, entry.tilePal);
-    monsterBattleCanvas.set(monsterId, canvas);
+  for (const monsterId of MONSTER_REGISTRY.keys()) {
+    const canvas = buildMonsterCanvas(monsterId);
     monsterWhiteCanvas.set(monsterId, _makeWhiteCanvas(canvas));
     monsterDeathFrames.set(monsterId, _makeDeathFrames(canvas));
   }

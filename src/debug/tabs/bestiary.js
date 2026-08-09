@@ -1,18 +1,19 @@
 // BESTIARY tab — every monster in the game, in color, with its stats.
 //
-// Sprites come from getMonsterCanvas(), the same canvas the battle screen
-// draws. That is deliberate: this tab is for looking at what the game actually
-// renders, so a second decode path here would be able to disagree with the
-// real one and hide exactly the problem you opened the tab to find. The cost is
-// that sprites only exist after initMonsterSprites() has run at boot — before
-// that the tab still lists every monster and its stats, just without art.
+// Sprites come from buildMonsterCanvas(), the same function the battle screen's
+// canvases are built by. That is deliberate: this tab is for looking at what
+// the game actually renders, so a second decode path here would be able to
+// disagree with the real one and hide exactly the problem you opened the tab to
+// find. It builds on demand and needs no ROM, so the tab works from the title
+// screen — depending on the game's boot having run made every card empty until
+// the player had loaded a ROM.
 //
 // Covers all 231 entries in MONSTERS, not the 195 in MONSTER_REGISTRY, so the
 // boss block (0xC3-0xE6) shows up as "no sprite" rather than silently missing.
 
 import { MONSTERS, MONSTER_NAMES_SHRINES } from '../../data/monsters.js';
 import { ITEM_NAMES_SHRINES } from '../../data/items.js';
-import { getMonsterCanvas, hasMonsterSprites } from '../../monster-sprites.js';
+import { buildMonsterCanvas } from '../../monster-sprites.js';
 
 const CARD_W = 92;      // sprite box inside a grid card
 const CARD_H = 76;
@@ -78,7 +79,7 @@ function _spriteBox(monId, boxW, boxH) {
   const c = document.createElement('canvas');
   c.width = boxW; c.height = boxH;
   c.style.cssText = `width:${boxW}px;height:${boxH}px;image-rendering:pixelated;`;
-  const src = getMonsterCanvas(monId, null);
+  const src = buildMonsterCanvas(monId);
   if (!src) return { canvas: c, ok: false };
   const zoom = Math.max(1, Math.floor(Math.min(boxW / src.width, boxH / src.height)));
   const w = src.width * zoom, h = src.height * zoom;
@@ -202,9 +203,7 @@ function _renderDetail(id) {
   } else {
     const note = document.createElement('div');
     note.style.cssText = 'color:#a66;font-size:10px;font-family:monospace;margin-bottom:8px;';
-    note.textContent = hasMonsterSprites()
-      ? 'No sprite: this id has no MONSTER_REGISTRY entry.'
-      : 'No sprite: monster sprites are not initialized yet — boot into the game first.';
+    note.textContent = 'No sprite: this id has no MONSTER_REGISTRY entry.';
     dom.detail.appendChild(note);
   }
 
@@ -251,13 +250,6 @@ function _buildDOM(root) {
   bar.appendChild(count);
 
   wrap.appendChild(bar);
-
-  if (!hasMonsterSprites()) {
-    const warn = document.createElement('div');
-    warn.style.cssText = 'color:#c86;font-size:10px;font-family:monospace;flex-shrink:0;';
-    warn.textContent = 'Monster sprites are not initialized — load the ROM and boot into the game to see art.';
-    wrap.appendChild(warn);
-  }
 
   const body = document.createElement('div');
   body.style.cssText = 'flex:1;display:flex;gap:8px;min-height:0;';

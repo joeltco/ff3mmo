@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.811 — 2026-08-09
+
+### BESTIARY showed no sprites — it depended on the game having booted
+
+Every card rendered as a "no sprite" placeholder. Not a rendering bug: `initMonsterSprites()` is the only thing that ever built the monster canvases, and it runs from `initSpriteAssets()`, which runs from `loadROM()`. Open the Konami panel before supplying an FF3 ROM — which is exactly what you do when you just want to look at the bestiary — and the canvas cache is empty, so `getMonsterCanvas()` returned the fallback for all 231.
+
+Nothing about building these needs the ROM; `MONSTER_REGISTRY` and `PALETTE_TABLE` are both baked data. Added **`buildMonsterCanvas(monsterId)`** to `src/monster-sprites.js` — builds one monster's battle canvas on demand and caches it in the same `monsterBattleCanvas` map. `initMonsterSprites()` now loops through it instead of duplicating the palette-resolution logic, so the boot path is unchanged and the `pal0Raw`/`pal1Raw` override rule lives in exactly one place. BESTIARY calls it directly and no longer cares whether the game has booted; the "sprites not initialized" warning is gone because the state it warned about can no longer happen.
+
+Verified headless both ways: mounting the tab with **no** boot now paints 40/40 sampled cards (was 0/40), and `initMonsterSprites()` still yields a 32x32 battle canvas, an opaque white-flash canvas, and 16 painted death frames for 0x04.
+
+**Testing lesson:** v1.7.809's smoke called `initMonsterSprites()` before mounting the tab, so it proved the tab works *given* initialized sprites — never that it obtains them. The check now deliberately omits the boot step, since that is the state a real user opens the panel in.
+
 ## 1.7.810 — 2026-08-09
 
 ### FORMATION tab — same name-parse bug fixed, recovers 5 lost names
