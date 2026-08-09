@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.814 — 2026-08-09
+
+### Every monster's palette split, measured — 167 of them were wrong
+
+Rust Bird (`0x12`) was the third report in a row, so this closes the class instead of the instance. `tools/monscan/tilepal.cjs` (v1.7.813) was run across the whole registry and the results written into `MONSTER_REGISTRY`.
+
+**189 of 195 captured.** The 6 misses appear in no monster list at all, so there is no authentic palette pair to spawn them with; they keep the old default. Of the 189:
+
+- **167 were rendering with the wrong split today.** Every one of them lacked a `tilePal` and was falling through to the shared default in `_renderSprite` — *rows < 2 use pal0, everything below uses pal1* — which is only correct for a monster that happens to split at exactly that boundary. Rust Bird is 6x6: the default put four of its six rows in **Firefry's** red/orange.
+- **22 already agreed** with the default by coincidence.
+- **0 disagreements involved an explicit `tilePal`.** Every value a human had previously verified from a live snapshot survives untouched, and the capture never contradicted one — it only ever disagreed with the guess.
+
+Entries that already carried a hand-verified `tilePal` were left alone rather than rewritten, so their provenance comments stay meaningful.
+
+**On trusting a 180-entry mechanical patch.** Two properties made it safe to apply in bulk. First, it reproduces every independently-obtained value: 0x04 KillerBee, 0x01 Carbuncle and 0x05 Werewolf from the April live-BG snapshots, plus 0x0C / 0x0D / 0x10 verified by hand this week. Second, the crop rule it depends on is uniform — 34 captures came back larger than their sprite and **all 34 differed by exactly +0 cols / +2 rows**, one attribute quadrant of vertical over-extension with no horizontal ambiguity in any case, and two of the six validation monsters fall inside that class. Post-patch checks: registry parses, 189 tilePals present, 0 length mismatches, 0 values outside {0,1}, all 6 verified entries byte-identical.
+
+Unrelated and still open: a handful of 18x12 entries (0x68, 0xB0, 0xB8 among them) render as noise because their stored *sprite bytes* are wrong. That is a separate defect from the palette split and is untouched here.
+
 ## 1.7.813 — 2026-08-09
 
 ### Firefry palette + a repeatable way to find the rest
