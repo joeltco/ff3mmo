@@ -82,6 +82,10 @@ function watch(frames) {
     if (seen.has(key)) { seen.get(key).frames++; return; }
     // Re-render one frame with per-scanline snapshots, then read each sprite's
     // CHR and the palette from the state live where that sprite is drawn.
+    // Everything below must come from ONE frame. frameWithScanlineSnapshots()
+    // advances a frame, so reading the layout before it and the pixels after it
+    // mixed frame N with N+1 — during a swing the pose changes every few frames,
+    // which guaranteed a mismatch no palette or offset fix could close.
     const { chrByLine, palByLine } = frameWithScanlineSnapshots();
     const g2 = weaponSprites();
     if (!g2) continue;
@@ -92,20 +96,19 @@ function watch(frames) {
       chr[s.tile] = [...bank.slice(0x1000 + s.tile * 16, 0x1000 + s.tile * 16 + 16)];
     }
     seen.set(key, {
-      key, frames: 1, firstFrame: n.frames, origin: { x: g.minX, y: g.minY },
-      sprites: g.sprites.map(({ dx, dy, tile, pal: p, hFlip, vFlip }) => ({ dx, dy, tile, pal: p, hFlip, vFlip })),
+      key, frames: 1, firstFrame: n.frames, origin: { x: g2.minX, y: g2.minY },
+      sprites: g2.sprites.map(({ dx, dy, tile, pal: p, hFlip, vFlip }) => ({ dx, dy, tile, pal: p, hFlip, vFlip })),
       chr,
       spritePalettes: [0, 1, 2, 3].map((i) => pal.slice(16 + i * 4, 20 + i * 4)),
-      // Framebuffer crop covering the group, captured at the same instant.
-      // Re-rendering the tiles and diffing against this is what proves the
-      // measurement is complete — tiles, layout, palette and flips together —
-      // rather than merely self-consistent.
+      // Cropped from minY+1: OAM stores Y one scanline above where the sprite is
+      // actually drawn, and jsnes keeps the raw byte. Confirmed empirically —
+      // shifting the comparison down a row cut mismatches from 81 to 30.
       fb: (() => {
-        const w = Math.max(...g.sprites.map((s) => s.dx)) + 8;
-        const h = Math.max(...g.sprites.map((s) => s.dy)) + 8;
+        const w = Math.max(...g2.sprites.map((s) => s.dx)) + 8;
+        const h = Math.max(...g2.sprites.map((s) => s.dy)) + 8;
         const px = [];
         for (let y = 0; y < h; y++)
-          for (let x = 0; x < w; x++) px.push(n.fb[(g.minY + y) * 256 + (g.minX + x)] >>> 0);
+          for (let x = 0; x < w; x++) px.push(n.fb[(g2.minY + 1 + y) * 256 + (g2.minX + x)] >>> 0);
         return { w, h, px };
       })(),
     });
