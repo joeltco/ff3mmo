@@ -398,4 +398,13 @@ export const ITEM_NAMES_SHRINES = new Map([
 export function isWeapon(id) { const i = ITEMS.get(id); return i && i.type === 'weapon' && i.subtype !== 'shield'; }
 export function weaponSubtype(id) { const i = ITEMS.get(id); return (i && i.type === 'weapon') ? i.subtype : null; }
 export function isHandEquippable(itemData) { return itemData && (itemData.type === 'weapon' || (itemData.type === 'armor' && itemData.subtype === 'shield')); }
+export function isBow(id) { return weaponSubtype(id) === 'bow'; }
+export function isArrow(id) { return weaponSubtype(id) === 'arrow'; }
+/** A bow only fires with arrows in the other hand — one of each, per the design. */
+export function hasReadyBow(weaponR, weaponL, arrowCount) {
+  const bow = isBow(weaponR) ? weaponR : (isBow(weaponL) ? weaponL : 0);
+  const arrow = isArrow(weaponR) ? weaponR : (isArrow(weaponL) ? weaponL : 0);
+  if (!bow || !arrow || (arrowCount | 0) <= 0) return null;
+  return { bow, arrow };
+}
 export function isBladedWeapon(id) { const st = weaponSubtype(id); return st === 'knife' || st === 'sword' || st === 'katana'; }

@@ -9,7 +9,7 @@ import { chatState, CHAT_TABS, activeTab, tabSelectMode, setActiveTab, setTabSel
 import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, getHitWeapon, getJobLevelStatBonus } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
-import { ITEMS, isHandEquippable, isWeapon, weaponSubtype } from './data/items.js';
+import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, hasReadyBow, isArrow } from './data/items.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult } from './status-effects.js';
@@ -272,7 +272,28 @@ function _battleTargetConfirm() {
       });
     }
   }
-  if (dualWield) {
+  // Bow + arrows is ONE ranged attack, not a dual-wield pair. The hands hold a
+  // bow and a quiver rather than two weapons, so rolling them separately (RRLL)
+  // would fire the quiver as if it were a second melee weapon. ATK combines both
+  // and the arrow supplies the element; one arrow is spent per shot.
+  const bowShot = hasReadyBow(ps.weaponR, ps.weaponL, ps.arrowCount);
+  if (bowShot) {
+    const bowIt = ITEMS.get(bowShot.bow) || {}, arrowIt = ITEMS.get(bowShot.arrow) || {};
+    inputSt.hitResults = rollHand({
+      atk: (bowIt.atk || 0) + (arrowIt.atk || 0),
+      hit: Math.min(bowIt.hit ?? 80, arrowIt.hit ?? 80),
+      element: arrowIt.element || null,
+    });
+    inputSt.rHandHitCount = 0;
+    ps.arrowCount = Math.max(0, (ps.arrowCount | 0) - 1);
+    if (ps.arrowCount === 0) {
+      // Out of ammo: clear the quiver so the bow visibly stops working rather
+      // than silently firing nothing.
+      if (isArrow(ps.weaponR)) ps.weaponR = 0;
+      if (isArrow(ps.weaponL)) ps.weaponL = 0;
+      recalcCombatStats();
+    }
+  } else if (dualWield) {
     // NES: all right hand hits first, then all left hand hits
     const rHits = rollHand(rWpn);
     inputSt.hitResults = [...rHits, ...rollHand(lWpn)];

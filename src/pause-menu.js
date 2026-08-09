@@ -25,7 +25,7 @@ import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBox } from './message-box.js';
-import { ITEMS, isHandEquippable, ITEM_NAMES_SHRINES } from './data/items.js';
+import { ITEMS, isHandEquippable, ITEM_NAMES_SHRINES, isArrow } from './data/items.js';
 import { sendNetGiveItem, setNetGiveItemHandler, setNetGiveItemFailedHandler, sendNetInvEvent, sendNetEquipFromInv } from './net.js';
 import { addChatMessage, chatJustClosedRecently } from './chat.js';
 import { hudSt } from './hud-state.js';
@@ -1394,14 +1394,23 @@ function _pauseInputEquipItemSelect() {
     const pick = pauseSt.eqItemList[pauseSt.eqItemCursor];
     if (pick) {
       const oldId = getEquipSlotId(pauseSt.eqSlotIdx);
+      // Arrows equip as a STACK, not one at a time: bows consume one per shot,
+      // so a single-arrow slot would empty after one attack. The whole held
+      // quantity moves into the slot and comes back on unequip.
+      const oldWasArrows = isArrow(oldId);
+      const oldQty = oldWasArrows ? Math.max(1, ps.arrowCount | 0) : 1;
       if (pick.label === 'remove') {
         setEquipSlotId(pauseSt.eqSlotIdx, 0);
-        if (oldId !== 0) addItem(oldId, 1, { bypass: true });
+        if (oldWasArrows) ps.arrowCount = 0;
+        if (oldId !== 0) addItem(oldId, oldQty, { bypass: true });
         sendNetEquipFromInv(pauseSt.eqSlotIdx, 0, 'equip-swap');   // v1.7.808 atomic
       } else {
+        const takeQty = isArrow(pick.id) ? Math.max(1, getItemCount(pick.id)) : 1;
         setEquipSlotId(pauseSt.eqSlotIdx, pick.id);
-        removeItem(pick.id);
-        if (oldId !== 0) addItem(oldId, 1, { bypass: true });
+        removeItem(pick.id, takeQty);
+        if (isArrow(pick.id)) ps.arrowCount = takeQty;
+        else if (oldWasArrows) ps.arrowCount = 0;
+        if (oldId !== 0) addItem(oldId, oldQty, { bypass: true });
         sendNetEquipFromInv(pauseSt.eqSlotIdx, pick.id, 'equip-swap');   // v1.7.808 atomic
       }
       recalcCombatStats();

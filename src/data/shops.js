@@ -12,8 +12,12 @@ export const SHOPS = new Map([
   ['ur_weapon', {
     type: 'weapon',
     mapId: 5, counter: { x: 3, y: 15 },
-    items: [0x1F, 0x24, 0x0E, 0x06],
-    // Dagger, Longsword, Staff, Nunchuck
+    items: [0x1F, 0x24, 0x0E, 0x06, 0x4A, 0x4F, 0x50, 0x51],
+    // Dagger, Longsword, Staff, Nunchuck, Bow, Wooden/Holy/Iron arrows.
+    // The bow tier stocked here is the one an Onion Knight can actually hold:
+    // Bow $4A and arrows $4F/$50/$51 all include job bit 0, while the later
+    // bows ($4C+) are Ranger/Ninja only and Ranger is unreachable at MAX_LEVEL 5.
+    // Three arrow types so the ammo choice is real — Holy carries its element.
   }],
   ['ur_armor', {
     type: 'armor',

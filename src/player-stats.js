@@ -29,6 +29,11 @@ export const ps = {
   gil: 0,
   weaponR: 0x1E,   // right hand item ID (Knife), 0 = unarmed
   weaponL: 0x00,   // left hand item ID, 0 = unarmed
+  // How many arrows sit in whichever hand holds the arrow stack. Bows fire one
+  // per shot, so the equipped stack has to carry a count — the equip slots
+  // otherwise hold a bare item id. Persisted, so it moves in lockstep with the
+  // client serializer (playerStatsSnapshot) and the server validator (api.js).
+  arrowCount: 0,
   head: 0x62,      // Leather Cap
   body: 0x72,      // Cloth Armor
   arms: 0x00,
@@ -370,7 +375,7 @@ export function playerStatsSnapshot() {
     str: ps.stats.str, agi: ps.stats.agi, vit: ps.stats.vit,
     int: ps.stats.int, mnd: ps.stats.mnd,
     maxHP: ps.stats.maxHP, maxMP: ps.stats.maxMP, hp: ps.hp,
-    weaponR: ps.weaponR, weaponL: ps.weaponL,
+    weaponR: ps.weaponR, weaponL: ps.weaponL, arrowCount: ps.arrowCount | 0,
     head: ps.head, body: ps.body, arms: ps.arms,
     hitRate: ps.hitRate, evade: ps.evade, mdef: ps.mdef,
   };

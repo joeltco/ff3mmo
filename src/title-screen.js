@@ -686,6 +686,7 @@ function _updateTitleMainOutCase() {
     ps.head    = 0x62;  // Leather Cap
     ps.body    = 0x72;  // Cloth Armor
     ps.arms    = 0x00;
+    ps.arrowCount = 0;
   }
   if (slot && slot.stats) {
     // Stat migration v1.7.139 — recompute base stats from the per-job matrix
@@ -718,6 +719,7 @@ function _updateTitleMainOutCase() {
     ps.head = slot.stats.head || 0x00;
     ps.body = slot.stats.body || 0x00;
     ps.arms = slot.stats.arms || 0x00;
+    ps.arrowCount = slot.stats.arrowCount || 0;
   }
   setPlayerInventory(
     (slot && slot.inventory) ? { ...slot.inventory } : {},

@@ -169,6 +169,9 @@ function _validateSaveData(data) {
       mnd:     _clamp(data.stats.mnd, 1, 99),
       weaponR: _clamp(data.stats.weaponR, 0, 255),
       weaponL: _clamp(data.stats.weaponL, 0, 255),
+      // Ammo for bows. Clamped like any other persisted counter so a modded
+      // client cannot save an endless quiver.
+      arrowCount: _clamp(data.stats.arrowCount, 0, 99),
       head:    _clamp(data.stats.head, 0, 255),
       body:    _clamp(data.stats.body, 0, 255),
       arms:    _clamp(data.stats.arms, 0, 255),

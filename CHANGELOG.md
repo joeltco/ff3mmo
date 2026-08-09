@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.822 — 2026-08-09
+
+### Bows and arrows — the system, not just the sprite
+
+Bows were on hold. An audit (v1.7.821 follow-up) found the feature did not exist at all: six bows and eight arrows sat in the item table with full stats, and **nothing in `src/` referenced either subtype**. `twoHanded` was never read, no ammo was consumed, and neither appeared in any shop or loot pool. The sprite gap was the last 10%, not the problem.
+
+**Rules, per the design decision:** a bow in one hand and arrows in the other, one arrow spent per shot, and a bow without arrows cannot fire.
+
+- **`ps.arrowCount`** — arrows equip as a *stack*. The equip slots hold a bare item id, so a single-arrow slot would empty after one shot. Equipping arrows moves the whole held quantity into the slot; unequipping returns it. New persisted field, so it moves in lockstep across all three points per the standing rule: `playerStatsSnapshot()` (client serializer), `_clamp(..., 0, 99)` in `api.js` (server validator, so a modded client cannot save an endless quiver), and the load path in `title-screen.js`.
+- **One ranged attack, not a dual-wield pair.** `hasReadyBow()` gates it. The hands hold a bow and a quiver rather than two weapons, so rolling them separately through the RRLL split would fire the quiver as a second melee weapon. ATK combines bow + arrow, hit rate takes the lower of the two, and the **arrow** supplies the element — so Holy/Bolt/Fire/Ice arrows finally do something, having been defined and inert until now.
+- **Running dry clears the quiver** rather than silently firing nothing, so the bow visibly stops working.
+
+### Ur stocks them
+
+`ur_weapon` gains Bow `$4A` and Wooden / Holy / Iron arrows (`$4F`/`$50`/`$51`). That tier specifically: all four include job bit 0, so an **Onion Knight can use them at level 1**. The later bows (`$4C`+) are Ranger/Ninja only, and Ranger is unreachable — `lvReq: 9` against `MAX_LEVEL: 5`, with `lvReq` not enforced anywhere regardless. Three arrow types so the ammo choice is real. The shop list scrolls, so eight entries is fine.
+
+### Not in this change
+
+The arrow **projectile sprite**. Bow and arrow capture as a 7x3 sliver at (190,114) — an arrow in flight, nowhere near the hand — which is the same projectile class as boomerang and shuriken, not the held-overlay class the other eight weapons landed as in v1.7.821. It reuses `projectile-anim.js`'s `getProjectilePos()` caster-to-target interpolation and wants doing as one piece across all three weapons.
+
+### On measuring rather than guessing
+
+Stage 1 was meant to measure the rules off the ROM instead of assuming them. It could not: the first run reported "40 arrows consumed" for every configuration, which a per-step trace showed was the count going 40 to cleared in a **single step** at frame 3611 — the game zeroing the region, not ammo being spent. A control confirmed the write survives 720 idle frames, and the documented inventory offsets (`$60C0`/`$60E0`) stay empty for the whole run, so live inventory is not there. Taken at face value that first number would have become "arrows are consumed", implemented on an artifact of the harness. The rules above came from the design decision instead, which is honest about its source.
+
 ## 1.7.821 — 2026-08-09
 
 ### Battle weapon overlays for 8 classes that previously drew nothing
