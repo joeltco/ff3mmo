@@ -8,12 +8,14 @@
 // screen — depending on the game's boot having run made every card empty until
 // the player had loaded a ROM.
 //
-// Covers all 231 entries in MONSTERS, not the 195 in MONSTER_REGISTRY, so the
-// boss block (0xC3-0xE6) shows up as "no sprite" rather than silently missing.
+// Covers all 231 entries in MONSTERS. Sprites come from MONSTER_REGISTRY first
+// and the separate boss registry second — bosses are not in the main registry at
+// all, which is why everything above 0xC2 used to render as a placeholder.
 
 import { MONSTERS, MONSTER_NAMES_SHRINES } from '../../data/monsters.js';
 import { ITEM_NAMES_SHRINES } from '../../data/items.js';
 import { buildMonsterCanvas } from '../../monster-sprites.js';
+import { buildBossCanvas } from '../../boss-sprites.js';
 
 const CARD_W = 92;      // sprite box inside a grid card
 const CARD_H = 76;
@@ -79,7 +81,10 @@ function _spriteBox(monId, boxW, boxH) {
   const c = document.createElement('canvas');
   c.width = boxW; c.height = boxH;
   c.style.cssText = `width:${boxW}px;height:${boxH}px;image-rendering:pixelated;`;
-  const src = buildMonsterCanvas(monId);
+  // Bosses live in their own registry (src/data/boss-sprites-rom.js) with their
+  // own 6x6 nametable mapping and an inverted palette split, so MONSTER_REGISTRY
+  // stops at 0xC2 and every id above it read as "no sprite" here.
+  const src = buildMonsterCanvas(monId) || buildBossCanvas(monId);
   if (!src) return { canvas: c, ok: false };
   const zoom = Math.max(1, Math.floor(Math.min(boxW / src.width, boxH / src.height)));
   const w = src.width * zoom, h = src.height * zoom;
@@ -203,7 +208,7 @@ function _renderDetail(id) {
   } else {
     const note = document.createElement('div');
     note.style.cssText = 'color:#a66;font-size:10px;font-family:monospace;margin-bottom:8px;';
-    note.textContent = 'No sprite: this id has no MONSTER_REGISTRY entry.';
+    note.textContent = 'No sprite: this id is in neither MONSTER_REGISTRY nor the boss registry.';
     dom.detail.appendChild(note);
   }
 

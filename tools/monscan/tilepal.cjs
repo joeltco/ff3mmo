@@ -95,7 +95,9 @@ if (!isMainThread) {
     try {
       const entry = catalogEntry(id);
       const src = listContaining(baseRom, id);
-      if (!entry) { result.reason = 'no catalog entry'; parentPort.postMessage(result); continue; }
+      // No catalog entry is fine: ids above 0xC2 are not in MONSTER_REGISTRY at
+      // all, and capturing them is how they get one. Fall back to the
+      // plausibility bound alone and report the measured size.
       if (!src) { result.reason = 'in no monster list'; parentPort.postMessage(result); continue; }
 
       const patched = Buffer.from(baseRom);
@@ -132,6 +134,7 @@ if (!isMainThread) {
       // monster and anything taller is a menu. `sizeMatch` in the output records
       // whether it agreed with the catalog instead of gating on it.
       const fits = (b) => b && b.cols <= 18 && b.rows <= 12;
+      const want = entry || { cols: 0, rows: 0 };
       const settled = () => {
         const a = readMonster(n);
         if (!fits(a)) return null;
@@ -158,8 +161,8 @@ if (!isMainThread) {
         pal0Idx: src.pal0, pal1Idx: src.pal1,
         bg: [0, 1, 2, 3].map((p) => pal.slice(p * 4, p * 4 + 4)),
         cols: res.cols, rows: res.rows,
-        expectCols: entry.cols, expectRows: entry.rows,
-        sizeMatch: res.cols === entry.cols && res.rows === entry.rows,
+        expectCols: want.cols, expectRows: want.rows,
+        sizeMatch: res.cols === want.cols && res.rows === want.rows,
         tilePal: res.tilePal,
         origin: { col: res.col, row: res.row },
       });

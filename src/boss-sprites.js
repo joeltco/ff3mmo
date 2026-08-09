@@ -63,6 +63,23 @@ function _renderBossSprite(rawBytes, pal0, pal1) {
 
 // ── Public API ─────────────────────────────────────────────────────
 
+/**
+ * Build a boss canvas WITHOUT touching the cached current-boss state.
+ *
+ * loadBossSprite() overwrites `bossBattleCanvas` / `currentBossId`, which is
+ * what the live fight draws from — so a viewer that walked the boss list
+ * through it would repaint the boss mid-battle with whatever it looked at last.
+ * The BESTIARY tab needs the pixels, not the cache, so it comes through here.
+ * Returns null for ids this registry does not carry.
+ */
+export function buildBossCanvas(monsterId) {
+  const entry = MONSTER_REGISTRY.get(monsterId);
+  if (!entry) return null;
+  const pal0 = PALETTE_TABLE[entry.pal0] || [0x0F, 0x00, 0x10, 0x20];
+  const pal1 = PALETTE_TABLE[entry.pal1] || [0x0F, 0x00, 0x10, 0x20];
+  return _renderBossSprite(entry.raw, pal0, pal1);
+}
+
 export function loadBossSprite(monsterId) {
   if (monsterId === currentBossId && bossBattleCanvas) {
     return { canvas: bossBattleCanvas, whiteCanvas: bossWhiteCanvas };

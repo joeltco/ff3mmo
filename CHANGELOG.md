@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.817 — 2026-08-09
+
+### Everything above 0xC2 had no sprite in the BESTIARY
+
+`MONSTER_REGISTRY` stops at 0xC2. Bosses live in a **separate** registry, `src/data/boss-sprites-rom.js`, with its own 6x6 nametable mapping and an inverted palette split (top 4 rows pal1, bottom 2 pal0) — and the BESTIARY only ever consulted the main one, so all 36 ids from 0xC3 up rendered as placeholders.
+
+Two halves to the fix.
+
+**Read the boss registry (covers 0xCC-0xE6).** New `buildBossCanvas(monsterId)` in `src/boss-sprites.js`, and the tab falls back to it. It is deliberately *not* `loadBossSprite()`: that function caches into `bossBattleCanvas` / `currentBossId`, which is what the live fight draws from, so walking the boss list through it would repaint an in-progress boss with whatever the viewer looked at last. `buildBossCanvas` builds and returns without touching that state.
+
+**Capture the 9 that are in neither registry (0xC3-0xCB).** All 36 bosses do appear in encounter monster lists, so the single-spawn trick reaches them: artwork from the PPU via `art.cjs`, palette split from the attribute table via `tilepal.cjs`, palette pair from the list the game would use. `tilepal.cjs` previously refused ids with no catalog entry — exactly the ids that need capturing — so it now falls back to the plausibility bound and reports the measured size.
+
+Sizes were trimmed to the drawn art (there is no prior entry to match), giving 6x12, 8x10, 6x6, 12x6, 9x12 and 8x9 sprites rather than one padded shape.
+
+**Two of them would have rendered grey.** `PALETTE_TABLE` holds 244 entries; 0xCA captured indices 248/249 and 0xCB 208/247, so `PALETTE_TABLE[entry.pal0]` would have missed and fallen through to the placeholder palette. All nine now carry `pal0Raw` / `pal1Raw` with the colors read live off the PPU — more faithful than an index lookup regardless, and immune to the range problem. Registry-wide check: 0 entries can now fall back to grey.
+
+BESTIARY now reports **231 of 231 shown** with nothing missing, and the registry holds 204 entries.
+
 ## 1.7.816 — 2026-08-09
 
 ### Real artwork for all 189 spawnable monsters
