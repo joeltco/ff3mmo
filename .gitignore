@@ -20,3 +20,6 @@ ff3mmo.db
 # (deterministic — fixed input script off the ROM). 1.4MB of emulator
 # savestate JSON does not need to sit in history forever.
 tools/monscan/battle-state.json
+
+# Regenerable: node tools/monscan/weapon.cjs [weaponId]
+tools/monscan/weapon-tiles*.json
