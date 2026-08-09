@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.820 — 2026-08-09
+
+### Regenerating monsters.js no longer destroys the names
+
+`src/data/monsters.js` is written wholesale by `node tools/gen-monsters-js.js > src/data/monsters.js`, and the generator's output ends at the `MONSTERS` map's closing bracket. The 121 hand-maintained short names sat **below** that, in the same file — so the workflow CLAUDE.md tells you to use would have silently deleted every one of them.
+
+Fixed structurally rather than by making the generator preserve a tail: the map moved to **`src/data/monster-names.js`**, and `monsters.js` is now purely generated. Importers repointed (`text-decoder.js`, `debug/tabs/bestiary.js`, `tools/sprite-ascii.mjs`). The generator's header and its emitted banner both now state that hand-maintained data must not live in the generated file.
+
+Proven rather than assumed: running the generator now produces a file **byte-identical** to the committed one, so regeneration is lossless. Post-change check — bestiary renders 231 cards, 0 unnamed, 0 without sprites, 0 console errors.
+
+### The two stat "bugs" from v1.7.819 were not bugs — correcting the record
+
+v1.7.819 logged an HP misread and a swapped EXP/gil as defects in our extraction, on the strength of TCRF's numbers. Both claims were wrong, and checking the ROM before changing anything is what caught it:
+
+- **HP reads correctly.** The extractor does a plain 16-bit little-endian read (`rom[off+1] | rom[off+2] << 8`) with no nibble handling to get wrong. Hobgoblin's ROM bytes are `0xB0 0x04` = **1200**, not TCRF's 16,560; Terrible Dragon's are `0x7E 0x04` = **1150**, not 16,510. Demon Xande reads `0x08 0x52` = 21,000 correctly, proving large values are handled. The "off by exactly 0x3C00, so it must be a dropped nibble" reasoning was a pattern found in two numbers and believed without checking the source bytes.
+- **Captain's gil is right.** ROM gil bytes are `0x9A 0x01` = **410**, which is what we store. TCRF's prose has EXP and gil swapped.
+
+No data was changed for either. Had the "fix" been applied as described, it would have corrupted correct values to match an inaccurate secondary source.
+
 ## 1.7.819 — 2026-08-09
 
 ### Named the seven dummied-out enemies — nothing in the catalog is "(unnamed)" now

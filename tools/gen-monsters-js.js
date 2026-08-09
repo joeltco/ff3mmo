@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 // Generate monsters.js from FF3 NES ROM data
 // Preserves steal/drops/location from existing monsters.js where available
+//
+// Output is the WHOLE file — `node tools/gen-monsters-js.js > src/data/monsters.js`
+// overwrites it. Nothing hand-maintained may live in monsters.js as a result.
+// The short-name overrides used to sit below the MONSTERS map in that same file
+// and were silently destroyed by regenerating; they now live in
+// src/data/monster-names.js. Keep hand-maintained data out of here.
 
 import { readFileSync } from 'fs';
 import { initTextDecoder, getSpellName, getMonsterName } from '../src/text-decoder.js';
@@ -71,6 +77,7 @@ lines.push(`// Monster Catalog — keyed by ROM bestiary ID`);
 lines.push(`// AUTO-GENERATED from FF3 NES ROM via tools/gen-monsters-js.js`);
 lines.push(`// Stats from Data Crystal ROM map ($60010 properties, $61010 stat table, $61210 attack scripts)`);
 lines.push(`// Steal/drops/location preserved from previous manual data where available`);
+lines.push(`// Hand-maintained short names live in monster-names.js — this file is overwritten wholesale.`);
 lines.push(``);
 lines.push(`export const MONSTERS = new Map([`);
 

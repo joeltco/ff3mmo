@@ -12,7 +12,8 @@
 // and the separate boss registry second — bosses are not in the main registry at
 // all, which is why everything above 0xC2 used to render as a placeholder.
 
-import { MONSTERS, MONSTER_NAMES_SHRINES } from '../../data/monsters.js';
+import { MONSTERS } from '../../data/monsters.js';
+import { MONSTER_NAMES_SHRINES } from '../../data/monster-names.js';
 import { ITEM_NAMES_SHRINES } from '../../data/items.js';
 import { buildMonsterCanvas } from '../../monster-sprites.js';
 import { buildBossCanvas } from '../../boss-sprites.js';

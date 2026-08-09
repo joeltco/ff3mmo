@@ -30,7 +30,7 @@ import { readFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { NES_SYSTEM_PALETTE } from '../src/tile-decoder.js';
 import { MONSTER_REGISTRY, PALETTE_TABLE } from '../src/data/monster-sprites-rom.js';
-import { MONSTER_NAMES_SHRINES } from '../src/data/monsters.js';
+import { MONSTER_NAMES_SHRINES } from '../src/data/monster-names.js';
 
 const GLYPHS = ['.', '░', '▒', '█'];
 const CAPTURED = new URL('./monscan/monster-palettes.json', import.meta.url);

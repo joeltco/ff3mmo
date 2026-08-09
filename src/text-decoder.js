@@ -29,7 +29,7 @@
 
 import { SPELL_NAMES_SHRINES } from './data/spells.js';
 import { ITEMS, ITEM_NAMES_SHRINES } from './data/items.js';
-import { MONSTER_NAMES_SHRINES } from './data/monsters.js';
+import { MONSTER_NAMES_SHRINES } from './data/monster-names.js';
 
 // --- ROM offsets ---
 const PTR_TABLE = 0x030010;   // 1712 × 2-byte pointers
