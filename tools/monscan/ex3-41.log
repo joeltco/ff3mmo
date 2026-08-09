@@ -1,0 +1,10 @@
+baseline knife $1e...
+weapon $41...
+slots carrying weapon-specific CHR: $49,$4a,$4b,$4c,$4d,$50,$4e,$4f
+3 distinct weapon poses
+    38x  8x8  24px  3 colors  tiles $49
+     7x  6x6  24px  3 colors  tiles $4a
+     6x  6x8  20px  3 colors  tiles $4b
+-> /home/joeltco/projects/ff3mmo/tools/monscan/weapon-extract-41.json
+(node:78516) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)

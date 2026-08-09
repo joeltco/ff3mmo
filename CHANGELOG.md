@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.823 — 2026-08-09
+
+### Projectile sprites for arrow, boomerang and shuriken
+
+All three PPU-captured and available via `getWeaponProjectile(subtype)` in `src/projectile-anim.js`.
+
+These are a different thing from the spell projectile already in that module. That one is a single universal `$58` sphere recolored per school, because every spell throws the same orb. Thrown and fired weapons each have their own artwork, so each carries its own tiles.
+
+Capture confirmed all three are one small sprite that *travels*, which is what `getProjectilePos()` already interpolates — the positions across frames say so directly:
+
+| weapon | captured positions | sprite |
+|---|---|---|
+| shuriken | 208,45 → 108,69 → 43,76 | one 8x8 crossing the screen |
+| boomerang | 200,38 and 176,53 held, then 94,94 | 16x16 meta-sprite in flight |
+| arrow | 190,114 / 189,114 | 7x3 sliver, no held pose at all |
+
+The flight pose is picked by position — furthest forward, since the party stands right of the enemies and a projectile leaving the character travels left. That is the same positional rule that assigned raised-vs-swung for the v1.7.821 held overlays, reused rather than reinvented. Arrow and shuriken fly as a single 8x8 and boomerang as a 16x16, so all three are stored on a 16x16 grid and the shape falls out of the data instead of being assumed.
+
+Verified in-browser: canvases build at 20 / 95 / 21 opaque pixels, matching the extractor's counts exactly, and an unrecognised subtype returns null.
+
+### NOT yet drawn — deliberately
+
+Nothing renders these yet. Showing a projectile in flight means adding a phase to the battle FSM and a draw site in the physical attack path, which is the "working animation code" CLAUDE.md is most explicit about not reworking casually, and this session has already found three separate bugs of mine inside sprite/animation measurement.
+
+So this lands the half that is safe and verifiable — captured art plus a getter, with no behavior change — and leaves the render hook as its own focused change. That split is the one CLAUDE.md recommends: plumbing is fine, animation timing is where it goes wrong.
+
 ## 1.7.822 — 2026-08-09
 
 ### Bows and arrows — the system, not just the sprite

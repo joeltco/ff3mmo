@@ -13,6 +13,7 @@
 // timing constants in cast-anim.js's CAST_PHASE_MS_THROW.
 
 import { _make8Canvas, _hflipCanvas, _vflipCanvas } from './canvas-utils.js';
+import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 
 // Universal projectile bytes (REC OAM 2026-05-07 f9627, frames 46-55, tile
 // $58). Round sphere shape — works for every school with palette swap.
@@ -75,6 +76,92 @@ function _bundle(pal) {
   };
 }
 
+
+// ─── Physical weapon projectiles (PPU-captured) ────────────────────────────
+//
+// Distinct from the spell projectile above: that one is a single universal $58
+// sphere recolored per school, because every spell throws the same orb. Thrown
+// and fired weapons each have their own artwork, so each carries its own tiles.
+//
+// Captured with tools/monscan/weapon-extract.cjs. The flight pose is the one
+// furthest forward — the party stands right of the enemies, so a projectile
+// leaving the character travels left, and it is the same positional rule that
+// assigned raised-vs-swung for the held overlays. Arrow and shuriken fly as a
+// single 8x8; boomerang is a 16x16 meta-sprite, so all three are stored on a
+// 16x16 grid and the shape falls out of the data.
+
+// arrow flight sprite — PPU-captured at (189,114), 20 opaque px
+const ARROW_PROJ_TILES = [
+  new Uint8Array([0x00,0x00,0x00,0x73,0x53,0x23,0x00,0x00,0x00,0x00,0x00,0x0c,0x2c,0x4c,0x00,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+];
+const ARROW_PROJ_PAL = [0x0F,0x17,0x36,0x0F];
+
+// boomerang flight sprite — PPU-captured at (94,94), 95 opaque px
+const BOOMERANG_PROJ_TILES = [
+  new Uint8Array([0x07,0x08,0x10,0x10,0x00,0x21,0x22,0x24,0x00,0x07,0x0f,0x0f,0x1f,0x1e,0x1c,0x18]),
+  new Uint8Array([0x80,0x60,0x1c,0x02,0x01,0xfe,0x00,0x00,0x00,0x80,0xe0,0xfc,0xfe,0x00,0x00,0x00]),
+  new Uint8Array([0x44,0x78,0x78,0x90,0x90,0xa0,0xc0,0x00,0x38,0x30,0x70,0x60,0x60,0x40,0x00,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+];
+const BOOMERANG_PROJ_PAL = [0x0F,0x24,0x34,0x21];
+
+// shuriken flight sprite — PPU-captured at (43,76), 21 opaque px
+const SHURIKEN_PROJ_TILES = [
+  new Uint8Array([0x40,0x00,0x60,0x94,0x90,0x60,0x00,0x20,0x00,0x60,0xf0,0x98,0x98,0xf0,0x60,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+  new Uint8Array([0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]),
+];
+const SHURIKEN_PROJ_PAL = [0x0F,0x37,0x18,0x13];
+
+
+let _weaponProj = null;
+
+/** Build the weapon projectile canvases. Called from initProjectile. */
+function _initWeaponProjectiles() {
+  const quad = [[0, 0], [8, 0], [0, 8], [8, 8]];
+  const make = (tiles, pal) => {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const cctx = c.getContext('2d');
+    tiles.forEach((t, i) => _blitProjTile(cctx, t, pal, quad[i][0], quad[i][1]));
+    return c;
+  };
+  _weaponProj = {
+    arrow:     make(ARROW_PROJ_TILES, ARROW_PROJ_PAL),
+    boomerang: make(BOOMERANG_PROJ_TILES, BOOMERANG_PROJ_PAL),
+    shuriken:  make(SHURIKEN_PROJ_TILES, SHURIKEN_PROJ_PAL),
+  };
+}
+
+function _blitProjTile(ctx, bytes, palette, x, y) {
+  const img = ctx.createImageData(8, 8);
+  for (let row = 0; row < 8; row++) {
+    const lo = bytes[row], hi = bytes[row + 8];
+    for (let col = 0; col < 8; col++) {
+      const bit = 7 - col, p = (row * 8 + col) * 4;
+      const v = (((hi >> bit) & 1) << 1) | ((lo >> bit) & 1);
+      if (!v) { img.data[p + 3] = 0; continue; }
+      const rgb = NES_SYSTEM_PALETTE[palette[v]] || [0, 0, 0];
+      img.data[p] = rgb[0]; img.data[p + 1] = rgb[1]; img.data[p + 2] = rgb[2]; img.data[p + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, x, y);
+}
+
+/**
+ * Flight sprite for a thrown/fired weapon, or null for anything that is not
+ * one. Callers pass the weapon subtype so arrows resolve from the ARROW in the
+ * quiver rather than the bow that fires it.
+ */
+export function getWeaponProjectile(subtype) {
+  if (!_weaponProj) return null;
+  return _weaponProj[subtype] || null;
+}
+
 export function initProjectile() {
   _bySpell = new Map();
   for (const [spellId, pal] of SPELL_PROJECTILE_PAL.entries()) {
@@ -85,6 +172,7 @@ export function initProjectile() {
     _byElement[el] = _bundle(pal);
   }
   _default = _bundle(DEFAULT_PAL);
+  _initWeaponProjectiles();
 }
 
 // Returns the projectile tile pair for a spell. Lookup order:
