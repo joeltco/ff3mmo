@@ -29,3 +29,10 @@ tools/monscan/axe-only.json
 tools/monscan/weapon-extract-*.json
 tools/monscan/ex-*.log
 tools/monscan/ex2-*.log
+
+# monscan capture artifacts — all regenerable, none are inputs
+tools/monscan/*.log
+tools/monscan/*.json
+!tools/monscan/package.json
+!tools/monscan/package-lock.json
+!tools/monscan/intro-sequence.json

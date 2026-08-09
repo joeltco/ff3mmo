@@ -1,3 +1,12 @@
+// SUPERSEDED — use tilepal.cjs. Kept for the drive logic and history only.
+//
+// captureByPalette() here PREFERS a window using both palettes, on the theory
+// that a real monster uses both of its. For a single-palette monster standing
+// beside one that uses the other palette, that preference deliberately selects a
+// window straddling the two and invents a 50/50 split belonging to neither. It
+// reported exactly the buggy rows<2 default for CursdCopper and Larva, so
+// consulting it CONFIRMED the bug it should have caught (see v1.7.812).
+//
 // Capture every monster's real battle palettes + per-tile palette layout.
 //
 // The trick that makes this possible: FF3 picks encounters out of a 6-byte
