@@ -1,0 +1,14 @@
+const { readFileSync } = require('fs');
+const jsnes = require("./vendor/jsnes.cjs");
+const ROM = '/home/joeltco/projects/ff3mmo/Final Fantasy III (Japan).nes';
+let frames = 0;
+const nes = new jsnes.NES({ onFrame: () => frames++, onAudioSample: () => {} });
+nes.loadROM(readFileSync(ROM, 'binary'));
+for (let i = 0; i < 300; i++) nes.frame();
+console.log('frames:', frames, '| mapper:', nes.mmap && nes.mmap.constructor.name);
+console.log('vram len:', nes.ppu.vramMem.length, '| cpu ram len:', nes.cpu.mem.length);
+const pal = Array.from(nes.ppu.vramMem.slice(0x3F00, 0x3F20)).map(b => (b & 0x3F).toString(16).padStart(2, '0'));
+console.log('BG pal :', pal.slice(0, 16).join(' '));
+console.log('SPR pal:', pal.slice(16).join(' '));
+const nt = nes.ppu.vramMem.slice(0x2000, 0x23C0);
+console.log('nametable non-zero tiles:', nt.filter(b => b !== 0).length, '/ 960');

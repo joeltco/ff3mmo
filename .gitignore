@@ -15,3 +15,8 @@ ff3mmo.db
 *.fc0
 *.fc8
 *.fc9
+
+# Regenerable in one command: node tools/monscan/reach-battle.cjs
+# (deterministic — fixed input script off the ROM). 1.4MB of emulator
+# savestate JSON does not need to sit in history forever.
+tools/monscan/battle-state.json

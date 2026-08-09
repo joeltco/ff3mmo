@@ -95,6 +95,12 @@ export default [
       'docs/**',
       // jsnes is vendored or fetched at runtime — not our code
       'src/lib/**',
+      // Same jsnes bundle, vendored again for the headless monster-palette
+      // sweep. tools/monscan is CommonJS (its top-level `return` is legal
+      // there but a parse error under this ESM config) and its node_modules
+      // is a local install — 26 errors from it were failing deploy.sh's lint
+      // gate for code that never ships to the browser.
+      'tools/monscan/**',
     ],
   },
 ];
