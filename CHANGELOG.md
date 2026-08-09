@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.812 — 2026-08-09
+
+### CursdCopper + Larva palettes — both were half-green, half-blue
+
+Reported from the new BESTIARY tab: `0x0C` CursdCopper and `0x0D` Larva render with the wrong colors. Confirmed and fixed.
+
+Both share monList 11, whose pal0 (#194) is green and pal1 (#52) is blue, and **each monster uses one of them whole**. Neither had a `tilePal`, so both fell through to the shared default in `_renderSprite` — *rows < 2 use pal0, everything below uses pal1* — which painted each sprite green on top and blue on the bottom. CursdCopper is entirely green (leaves + coin); Larva is entirely blue (the swirl with the white eye).
+
+Ground truth is the live attribute table in that encounter, dumped from the emulator: CursdCopper occupies cols 8-15 rows 6-11, **all palette 0**; Larva is a 4x4 block at cols 4-7 rows 8-11, **all palette 1**. Both now carry an explicit `tilePal` and render identically to the game.
+
+### The captured palette set can't be trusted for this, and said so wrongly
+
+`tools/monscan/monster-palettes.json` records `0000000011111111` for **both** monsters — byte-identical to the buggy fallback, so consulting it first actively confirmed the wrong answer.
+
+Cause is in `captureByPalette` (`tools/monscan/capture.cjs`): when sliding the monster-sized window it *prefers a window using BOTH palettes*, on the reasoning that "a genuine monster occupies a window that uses both of its palettes." That is wrong for a single-palette monster standing next to a monster using the other palette — the preference deliberately selects a window straddling the two, manufacturing a 50/50 split that belongs to neither. Of the 156 captures, **26 report a tilePal exactly equal to the fallback pattern and only 5 come back single-palette**, which is the fingerprint of this bias rather than a property of the art.
+
+**Do not merge that file's `tilePal` values into `MONSTER_REGISTRY`.** The `bg[]` palette *colors* in it are still good — they matched the shipped values for both monsters here. Fixing the window bias is unfinished work.
+
 ## 1.7.811 — 2026-08-09
 
 ### BESTIARY showed no sprites — it depended on the game having booted

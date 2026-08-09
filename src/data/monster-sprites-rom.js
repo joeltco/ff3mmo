@@ -5458,8 +5458,16 @@ export const MONSTER_REGISTRY = new Map([
   [0x09, { raw: C1_G4_RAW, cols: C1_G4_COLS, rows: C1_G4_ROWS, pal0: 141, pal1: 142 }],
   [0x0a, { raw: C1_G7_RAW, cols: C1_G7_COLS, rows: C1_G7_ROWS, pal0: 109, pal1: 90 }],
   [0x0b, { raw: C1_G3_RAW, cols: C1_G3_COLS, rows: C1_G3_ROWS, pal0: 109, pal1: 90 }],
-  [0x0c, { raw: C0_G13_RAW, cols: C0_G13_COLS, rows: C0_G13_ROWS, pal0: 194, pal1: 52 }],
-  [0x0d, { raw: C0_G14_RAW, cols: C0_G14_COLS, rows: C0_G14_ROWS, pal0: 194, pal1: 52 }],
+  // CursdCopper + Larva share monList 11 (pal0 #194 green, pal1 #52 blue) and
+  // each uses ONE of them whole — verified 2026-08-09 from the live attribute
+  // table in that encounter: CursdCopper occupies cols 8-15 rows 6-11 all
+  // palette 0, Larva a 4x4 block at cols 4-7 rows 8-11 all palette 1. With no
+  // tilePal the shared default (rows<2 = pal0, rest = pal1) painted both of
+  // them green on top and blue on the bottom.
+  [0x0c, { raw: C0_G13_RAW, cols: C0_G13_COLS, rows: C0_G13_ROWS, pal0: 194, pal1: 52,
+    tilePal: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }],
+  [0x0d, { raw: C0_G14_RAW, cols: C0_G14_COLS, rows: C0_G14_ROWS, pal0: 194, pal1: 52,
+    tilePal: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1] }],
   [0x0e, { raw: C1_G3_RAW, cols: C1_G3_COLS, rows: C1_G3_ROWS, pal0: 62, pal1: 61 }],
   [0x0f, { raw: C1_G4_RAW, cols: C1_G4_COLS, rows: C1_G4_ROWS, pal0: 62, pal1: 61 }],
   [0x10, { raw: C0_G2_RAW, cols: C0_G2_COLS, rows: C0_G2_ROWS, pal0: 89, pal1: 107 }],
