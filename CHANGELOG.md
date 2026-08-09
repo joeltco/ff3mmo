@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.816 — 2026-08-09
+
+### Real artwork for all 189 spawnable monsters
+
+SeaWitch (`0x83`) was reported as looking off. Its palettes were correct — indices, colors and `tilePal` all matched the capture exactly — but its **artwork** differed from the PPU in 480 of 576 bytes. That disproved the scope claimed in v1.7.815: the bad-art problem was never confined to the 18x12 entries, those were just the ones obvious enough to spot as noise in a contact sheet. Mid-size sprites were damaged too and merely looked plausible.
+
+So `tools/monscan/art.cjs` was run across every spawnable monster and the results landed wholesale. **189/189 captured, 0 misses, and all 189 are now byte-exact against the PPU.**
+
+Of the 101 RAW constants: **54 rewritten**, 47 already correct, and 26 dissenters split into their own constants.
+
+**Shared constants needed care.** Several monsters point at one RAW constant because FF3 recolors a graphic across species, so a constant cannot simply be overwritten from one member. Each group was clustered by captured bytes:
+
+- **All members agree** — rewrite the constant in place. This is what lets the six monsters that no encounter can spawn (0x35, 0x63, 0x66, 0x8D, 0xBE, 0xBF) inherit correct art from a sibling; every one of them has at least one capturable groupmate.
+- **Members disagree** — the registry's sharing claim is wrong and they are genuinely different sprites. Verified by eye on `C0_G0_RAW`: 0x00, 0x28 and 0x2C are all goblins, but 0x28's pose and weapon differ. The constant keeps the majority art so uncapturable members still inherit something authentic, and each dissenter is split into its own `M<ID>_RAW`.
+
+Also fixed here: **`0x00` Goblin**, whose artwork has been scrambled this whole time — the very first thing that looked wrong when the ASCII viewer was built, and which the registry-vs-ROM comparison could not explain because the stored bytes genuinely matched the ROM at the offset `sprite-init.js` reads. They matched, and both were wrong: ROM bytes are not PPU bytes.
+
+Palette work from v1.7.814 is unaffected — the attribute table is correct regardless of which tiles get drawn, which is why SeaWitch's palette data was right while its art was not.
+
 ## 1.7.815 — 2026-08-09
 
 ### All 13 large monsters had garbage artwork — captured the real tiles off the PPU
