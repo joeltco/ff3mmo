@@ -5470,7 +5470,13 @@ export const MONSTER_REGISTRY = new Map([
     tilePal: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1] }],
   [0x0e, { raw: C1_G3_RAW, cols: C1_G3_COLS, rows: C1_G3_ROWS, pal0: 62, pal1: 61 }],
   [0x0f, { raw: C1_G4_RAW, cols: C1_G4_COLS, rows: C1_G4_ROWS, pal0: 62, pal1: 61 }],
-  [0x10, { raw: C0_G2_RAW, cols: C0_G2_COLS, rows: C0_G2_ROWS, pal0: 89, pal1: 107 }],
+  // Firefry shares monList 13 with Rust Bird: pal0 (#89) is the bird's purple +
+  // white, pal1 (#107) the flame's red/orange with blue legs. Firefry is pal1
+  // throughout — verified 2026-08-09 against the live attribute table via
+  // tools/monscan/tilepal.cjs. Without a tilePal the shared default painted its
+  // top half in the BIRD's palette.
+  [0x10, { raw: C0_G2_RAW, cols: C0_G2_COLS, rows: C0_G2_ROWS, pal0: 89, pal1: 107,
+    tilePal: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1] }],
   [0x11, { raw: C0_G11_RAW, cols: C0_G11_COLS, rows: C0_G11_ROWS, pal0: 13, pal1: 14 }],
   [0x12, { raw: C2_G8_RAW, cols: C2_G8_COLS, rows: C2_G8_ROWS, pal0: 89, pal1: 107 }],
   [0x13, { raw: C2_G22_RAW, cols: C2_G22_COLS, rows: C2_G22_ROWS, pal0: 79, pal1: 72 }],

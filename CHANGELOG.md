@@ -18,6 +18,23 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.813 — 2026-08-09
+
+### Firefry palette + a repeatable way to find the rest
+
+`0x10` Firefry is entirely pal1 and had no `tilePal`, so the shared default painted its top half in **Rust Bird's** palette — the two share monList 13, where pal0 (#89) is the bird's purple/white and pal1 (#107) the flame's red/orange with blue legs. Its palette *indices* were already correct; only the split was missing. Fixed.
+
+Third report of the same class (after CursdCopper + Larva), so this one came with a tool instead of another hand inspection.
+
+**`tools/monscan/tilepal.cjs`** — reads the real split by removing the ambiguity rather than inferring around it. Since we control the ROM, it rewrites a donor's monster list to `[id, FF, FF, FF]` and its structure to spawn exactly ONE of group 0. FF3 paints monsters with BG palettes 0/1 and everything else with 2/3, so with a single monster on screen every 0/1 cell belongs to it and no window-sliding is needed. This also reaches the 39 monsters `sweep.cjs` reported as "no encounter spawns it": they still sit in a list with the palette pair the game would use, and the structure gets overwritten anyway.
+
+Two things it has to account for:
+
+- **Menus paint with palettes 0/1 too.** An unconstrained read locks onto the name-entry grid; all six validation monsters first came back as the same 16x30 box. Constraining to the largest plausible sprite (18x12) fixes it — an exact match against the catalog's cols/rows overcorrects, because a monster's drawn footprint does not always equal its stored sprite dimensions, and that rejected 5 of 6.
+- **Attribute quadrants are 2x2 tiles**, so the empty tile row above a sprite inherits its palette and the box reads 2 rows taller than the art. Bottom-aligning to the catalog dimensions recovers the true value.
+
+Validated before use, against values obtained independently: it reproduces the live-snapshot tilePals already in the registry for **0x04 KillerBee**, **0x01 Carbuncle** and **0x05 Werewolf** byte-for-byte, plus both hand-verified v1.7.812 fixes (**0x0C** all-pal0, **0x0D** all-pal1). Six for six.
+
 ## 1.7.812 — 2026-08-09
 
 ### CursdCopper + Larva palettes — both were half-green, half-blue
