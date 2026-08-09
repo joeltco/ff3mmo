@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.815 — 2026-08-09
+
+### All 13 large monsters had garbage artwork — captured the real tiles off the PPU
+
+`0x35` was reported as "broken sprites". It is not a palette problem and not specific to that id: **every 18x12 entry in the registry decodes to noise** — 0x35, 0x46, 0x56, 0x68, 0x75, 0x7C, 0x88, 0x9C, 0xAA, 0xAE, 0xB5, 0xB8, 0xBF. Their stored bytes were read as contiguous ROM at an offset, but ROM bytes are not PPU bytes: MMC3 swaps CHR banks mid-frame, which is exactly the mistake CLAUDE.md warns about for large sprites.
+
+Fixed by reading what the PPU actually draws. New **`tools/monscan/art.cjs`** spawns one monster (same single-spawn ROM patch as `tilepal.cjs`), takes the nametable tile id for every cell of its box, and resolves each id against the CHR bank that was mapped **on the scanline that cell is drawn on** — snapshotting the pattern table at all 262 scanlines rather than reading it once after the frame.
+
+**Art is shared.** Several monsters point at the same RAW constant (FF3 recolors one graphic across species): `C6_G9_RAW` backs 0x35, 0x68 and 0x75. Eight distinct constants cover all thirteen, and capturing any spawnable member fixes the whole group — which is how **0x35 and 0xBF got fixed at all**, since neither appears in any monster list and neither can be spawned.
+
+Verification that the sharing is real rather than an extractor artifact: for all three groups with more than one spawnable member, independent captures came back **byte-identical** — 0x68 vs 0x75, 0x46 vs 0xAA, 0x56 vs 0x88. Against the shipped data the captures differ in roughly 70% of bytes (2336-2978 of 3456), consistent with the old values being noise. All 13 now render as recognisable FF3 monsters (harpies, centaurs, dragons, a wyvern, Gomoree as a green gorgon head).
+
+Note `0x35` still carries the extractor's placeholder palette (pal0 and pal1 both index 0) because it appears in no monster list, so there is no authentic palette pair to read. Its artwork is now correct; its colors are a guess that predates this change and was not invented here.
+
 ## 1.7.814 — 2026-08-09
 
 ### Every monster's palette split, measured — 167 of them were wrong
