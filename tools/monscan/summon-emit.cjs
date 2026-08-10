@@ -114,8 +114,15 @@ function build(rec) {
   // region IS the shared burst.
   const fxRegions = rec.regions.filter((g) => g.start !== big.start && g.start !== SHARED_CALL);
   const effect = fxRegions.length ? pack(sequence(rec, fxRegions), rom) : null;
+  // The CAST animation. $55810 is loaded by all eight summons and by nothing
+  // else — it is the summon school's cast block, sibling to $55610 (black) and
+  // $55710 (white). Excluding it was right for isolating the creature and wrong
+  // to stop there: without it the scene opens on a creature appearing out of
+  // nothing, with no cast at all.
+  const castRegions = rec.regions.filter((g) => g.start === SHARED_CALL);
+  const cast = castRegions.length ? pack(sequence(rec, castRegions), rom) : null;
   return {
-    ...creature, creature, effect,
+    ...creature, creature, effect, cast,
     states: creature.layouts.length,
     region: big,
     fxRegions,
@@ -169,6 +176,19 @@ for (const [id, b] of [...built.entries()].sort((a, c) => a[0] - c[0])) {
   lines.push('    layouts: [');
   for (const l of b.layouts) lines.push(`      [${l.map((e) => `[${e.join(',')}]`).join(',')}],`);
   lines.push('    ],');
+  if (b.cast) {
+    lines.push('    cast: {   // $55810 — the summon school\'s cast burst, shared by all eight');
+    lines.push(`      pals: [${b.cast.pals.map((p) => `[${p.map(hx).join(',')}]`).join(', ')}],`);
+    lines.push(`      holds: [${b.cast.holds.join(', ')}],`);
+    lines.push(`      box: { x0: ${b.cast.box.x0}, x1: ${b.cast.box.x1}, y0: ${b.cast.box.y0}, y1: ${b.cast.box.y1} },`);
+    lines.push('      tiles: [');
+    for (const t of b.cast.tiles) lines.push(`        new Uint8Array([${bytesOf(t)}]),`);
+    lines.push('      ],');
+    lines.push('      layouts: [');
+    for (const l of b.cast.layouts) lines.push(`        [${l.map((e) => `[${e.join(',')}]`).join(',')}],`);
+    lines.push('      ],');
+    lines.push('    },');
+  }
   if (b.effect) {
     lines.push(`    effect: {   // ${b.fxRegions.map((g) => '$' + g.start.toString(16) + '(' + g.tiles + 't)').join(' ')}`);
     lines.push(`      pals: [${b.effect.pals.map((p) => `[${p.map(hx).join(',')}]`).join(', ')}],`);
@@ -191,6 +211,6 @@ for (const [id, b] of [...built.entries()].sort((a, c) => a[0] - c[0])) {
   console.log(`  $${id.toString(16).padStart(2, '0')} ${(NAMES[id] || '?').padEnd(9)}` +
     `${b.states} states, ${b.tiles.length} tiles, ${b.pals.length} palette(s), ` +
     `${b.holds.reduce((a, c) => a + c, 0)}ms, ` +
-    `effect ${b.effect ? b.effect.layouts.length + ' states' : 'none'}, ` +
+    `cast ${b.cast ? b.cast.layouts.length : 0}st, effect ${b.effect ? b.effect.layouts.length + 'st' : 'none'}, ` +
     `box x${b.box.x0}-${b.box.x1} y${b.box.y0}-${b.box.y1}, fade ${b.fadeFrames}f`);
 }

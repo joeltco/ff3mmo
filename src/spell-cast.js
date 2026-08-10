@@ -13,7 +13,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, STATUS_NAME_TO_FLAG } from './status-effects.js';
-import { isSummonSpell, summonTotalMs } from './summon-anim.js';
+import { isSummonSpell, summonTotalMs, summonCastMs } from './summon-anim.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
          CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
@@ -718,7 +718,14 @@ export function updateSpellCast(dt) {
   const useCastAnim = _isCastAnimSpell();
   const spell = SPELLS.get(_spellId);
   const isThrown = !!(spell && (spell.target === 'sight' || _isThrownDamageElement(spell.element) || _isThrownStatusType(spell.type)));
-  const castDur  = useCastAnim ? CAST_PHASE_MS.buildup : 250;
+  // The summon school's cast burst runs ~1026 ms, longer than the 800 ms
+  // buildup every other school uses, so summons get a buildup sized to their
+  // own cast animation. Leaving it at 800 clipped the burst a fifth of the way
+  // from the end.
+  const _summonCastMs = isSummonSpell(_spellId) ? summonCastMs(_spellId) : 0;
+  const castDur  = _summonCastMs > 0
+    ? Math.max(CAST_PHASE_MS.buildup, _summonCastMs)
+    : (useCastAnim ? CAST_PHASE_MS.buildup : 250);
   // hitEffectMs = when within magic-hit the spell effect applies (and damage /
   // heal number appears). hitTotalMs = total duration of magic-hit state.
   // Both measured from magic-hit start (= elapsedMs CAST_PHASE_MS.buildup).

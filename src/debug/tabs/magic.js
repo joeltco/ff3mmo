@@ -25,7 +25,7 @@
 import { SPELLS, SPELL_NAMES_SHRINES } from '../../data/spells.js';
 import { NES_SYSTEM_PALETTE } from '../../tile-decoder.js';
 import { getSpellAnim, getSpellAnimFrame, initSpellAnim } from '../../spell-anim.js';
-import { isSummonSpell, getSummon, summonTotalMs, initSummonAnim } from '../../summon-anim.js';
+import { isSummonSpell, getSummon, summonTotalMs, summonCastMs, initSummonAnim } from '../../summon-anim.js';
 
 const SCREEN_W = 256;
 const SCREEN_H = 240;
@@ -107,7 +107,7 @@ function _status(id) {
 function _reason(id) {
   if (isSummonSpell(id)) {
     const s = getSummon(id);
-    return s ? `summon scene — ${s.frames.length} states, ${summonTotalMs(id)} ms incl. fades`
+    return s ? `summon scene — cast ${summonCastMs(id)} ms + ${summonTotalMs(id)} ms scene`
              : 'summon — canvases not built';
   }
   const cap = state.caps && state.caps.spells[id];
@@ -278,7 +278,8 @@ function _renderSummonDetail(id) {
   }
   // Play the WHOLE scene: the creature, then the magic it performs. Showing
   // only the creature would hide the half of the capture that is the attack.
-  const seq = sm.frames.map((f, i) => ({ f, ms: sm.holds[i], part: 'creature' }))
+  const seq = (sm.cast ? sm.cast.frames.map((f, i) => ({ f, ms: sm.cast.holds[i], part: 'cast' })) : [])
+    .concat(sm.frames.map((f, i) => ({ f, ms: sm.holds[i], part: 'creature' })))
     .concat(sm.fx ? sm.fx.frames.map((f, i) => ({ f, ms: sm.fx.holds[i], part: 'effect' })) : []);
 
   const canvas = document.createElement('canvas');
@@ -313,14 +314,16 @@ function _renderSummonDetail(id) {
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
     // Panel is black behind the creature for the whole creature phase, which is
     // what the battle screen does — showing it un-faded here would misrepresent.
-    ctx.fillStyle = '#000';
-    ctx.fillRect(144, 32, 112, 144);
+    // Panel stays UP during the cast burst and goes black once the creature
+    // takes over — same as the battle screen.
+    if (seq[i].part !== 'cast') { ctx.fillStyle = '#000'; ctx.fillRect(144, 32, 112, 144); }
     ctx.drawImage(seq[i].f, 0, 32);
     slider.value = String(i);
     info.innerHTML = `<b style="color:${seq[i].part === 'effect' ? '#cc5' : '#a8f'}">${seq[i].part}</b> ` +
       `state <b>${i + 1}</b>/${seq.length} \u00b7 held ${seq[i].ms} ms \u00b7 ` +
       `scene ${summonTotalMs(id)} ms incl. fades<br>` +
-      `creature ${sm.frames.length} states, magic ${sm.fx ? sm.fx.frames.length + ' states' : 'none'}`;
+      `cast ${sm.cast ? sm.cast.frames.length : 0} (${summonCastMs(id)} ms) \u00b7 ` +
+      `creature ${sm.frames.length} \u00b7 magic ${sm.fx ? sm.fx.frames.length : 'none'}`;
   };
   const step = (d) => { state.stateIdx = (state.stateIdx + d + seq.length) % seq.length; draw(); };
   playBtn.addEventListener('click', () => {

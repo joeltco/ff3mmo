@@ -24,7 +24,7 @@ import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
 import { getCurrentSpellId } from './spell-cast.js';
 import { drawSpellThrow } from './combatant-cast.js';
-import { isSummonSpell, summonPhaseAt, SUMMON_FADE_STEPS } from './summon-anim.js';
+import { isSummonSpell, summonPhaseAt, summonCastFrameAt, SUMMON_FADE_STEPS } from './summon-anim.js';
 import { drawBattleMenu, drawVictoryBox } from './battle-draw-menu.js';
 import { drawBattleAllies } from './battle-draw-allies.js';
 import { drawBattlePortrait, drawBattleCritFlash, drawBattleStrobeFlash } from './battle-draw-player.js';
@@ -176,9 +176,17 @@ function drawBattle() {
 // it off mid-entrance. Extending those timelines is the work required to cover
 // them; a half-wired path would look broken rather than absent.
 function _drawSummonPresentation() {
-  if (battleSt.battleState !== 'magic-hit') return;
   const spellId = getCurrentSpellId();
   if (!isSummonSpell(spellId)) return;
+  // Cast burst first, during the buildup, with the party panel still up — the
+  // same slot a black or white cast animation occupies. Without it the scene
+  // opened on a creature appearing out of nothing.
+  if (battleSt.battleState === 'magic-cast') {
+    const cf = summonCastFrameAt(spellId, battleSt.battleTimer);
+    if (cf) ui.ctx.drawImage(cf, HUD_VIEW_X, HUD_VIEW_Y);
+    return;
+  }
+  if (battleSt.battleState !== 'magic-hit') return;
   const ph = summonPhaseAt(spellId, battleSt.battleTimer);
   if (!ph || ph.phase === 'done') return;
   if (ph.panelFade > 0) {

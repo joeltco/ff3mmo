@@ -63,8 +63,10 @@ export function initSummonAnim() {
     // The magic the creature performs. Six of eight have one; Odin and Titan
     // load nothing beyond the shared call burst, so they stand and that is it.
     const fx = e.effect ? { frames: buildFrames(e.effect), holds: e.effect.holds } : null;
+    // The cast burst, played during the buildup like any other school's cast.
+    const cast = e.cast ? { frames: buildFrames(e.cast), holds: e.cast.holds } : null;
     const effectMs = fx ? fx.holds.reduce((a, c) => a + c, 0) : 0;
-    _bySpellId.set(id, { frames, holds: e.holds, creatureMs, fx, effectMs, box: e.box });
+    _bySpellId.set(id, { frames, holds: e.holds, creatureMs, fx, effectMs, cast, box: e.box });
   }
 }
 
@@ -91,6 +93,32 @@ export function summonTotalMs(spellId) {
   const creature = e.holds.reduce((a, c) => a + c, 0);
   const effect = e.effect ? e.effect.holds.reduce((a, c) => a + c, 0) : 0;
   return SUMMON_FADE_MS + creature + effect + SUMMON_FADE_MS;
+}
+
+/** Length of the cast burst, so the buildup can be sized to fit it. */
+export function summonCastMs(spellId) {
+  const e = CAPTURED_SUMMONS.get(spellId);
+  if (!e || !e.cast) return 0;
+  return e.cast.holds.reduce((a, c) => a + c, 0);
+}
+
+/**
+ * Cast burst frame at `t` ms into the BUILDUP, or null.
+ *
+ * This is the summon school's cast animation ($55810), played while the party
+ * panel is still up — the same place a black or white cast plays. It is a
+ * separate call from summonPhaseAt because it belongs to the magic-cast state,
+ * not the scene.
+ */
+export function summonCastFrameAt(spellId, t) {
+  const s = getSummon(spellId);
+  if (!s || !s.cast) return null;
+  let acc = 0;
+  for (let i = 0; i < s.cast.holds.length; i++) {
+    acc += s.cast.holds[i];
+    if (t < acc) return s.cast.frames[i];
+  }
+  return null;                             // burst finished; buildup continues empty
 }
 
 /**
