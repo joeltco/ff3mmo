@@ -25,6 +25,7 @@
 import { SPELLS, SPELL_NAMES_SHRINES } from '../../data/spells.js';
 import { NES_SYSTEM_PALETTE } from '../../tile-decoder.js';
 import { getSpellAnim, getSpellAnimFrame, initSpellAnim } from '../../spell-anim.js';
+import { isSummonSpell, getSummon, summonTotalMs, initSummonAnim } from '../../summon-anim.js';
 
 const SCREEN_W = 256;
 const SCREEN_H = 240;
@@ -49,6 +50,9 @@ export async function mount(root, _context) {
   // title screen would otherwise show every LIVE spell as empty — the same
   // trap the BESTIARY tab hit before it built sprites on demand.
   try { if (!getSpellAnim(0x31)) initSpellAnim(); } catch (e) { state.error = 'initSpellAnim: ' + e.message; }
+  // Summons are their own module — they are a scene, not an on-target bundle,
+  // so getSpellAnim never returns them and they showed here as "no capture".
+  try { if (!getSummon(0x30)) initSummonAnim(); } catch (e) { state.error = 'initSummonAnim: ' + e.message; }
   await _loadNames();
   dom = _buildDOM(root);
   _renderList();
@@ -95,11 +99,17 @@ async function _loadCaptures() {
 
 // ── status per spell ──────────────────────────────────────────────
 function _status(id) {
+  if (isSummonSpell(id)) return 'summon';
   if (getSpellAnim(id)) return 'live';
   if (state.caps && state.caps.spells[id]) return 'candidate';
   return 'none';
 }
 function _reason(id) {
+  if (isSummonSpell(id)) {
+    const s = getSummon(id);
+    return s ? `summon scene — ${s.frames.length} states, ${summonTotalMs(id)} ms incl. fades`
+             : 'summon — canvases not built';
+  }
   const cap = state.caps && state.caps.spells[id];
   if (!cap) return 'not captured — monster-only ability, or no menu path';
   if (!cap.phases) return 'captured; classifier produced no phase file';
@@ -177,7 +187,7 @@ function _buildDOM(root) {
   const filter = document.createElement('select');
   filter.style.cssText = 'padding:6px;background:#1e1e2e;border:1px solid #444;border-radius:3px;' +
     'color:#e0e0e0;font-family:monospace;font-size:12px;min-height:34px;';
-  for (const [v, t] of [['all', 'all'], ['live', 'live only'], ['candidate', 'candidates'], ['none', 'no capture']]) {
+  for (const [v, t] of [['all', 'all'], ['live', 'live only'], ['summon', 'summons'], ['candidate', 'candidates'], ['none', 'no capture']]) {
     filter.appendChild(Object.assign(document.createElement('option'), { value: v, textContent: t }));
   }
   filter.addEventListener('change', () => { state.filter = filter.value; _renderList(); });
@@ -236,12 +246,14 @@ function _renderList() {
       'font-family:monospace;font-size:11px;cursor:pointer;border-bottom:1px solid #222;' +
       (sel ? 'background:#2a2a44;' : '');
     const dot = st === 'live' ? '<span style="color:#5c5">●</span>'
+      : st === 'summon' ? '<span style="color:#a8f">◆</span>'
       : st === 'candidate' ? '<span style="color:#cc5">○</span>'
       : '<span style="color:#555">·</span>';
     const cap = state.caps && state.caps.spells[id];
+    const sm = isSummonSpell(id) ? getSummon(id) : null;
     row.innerHTML = `${dot} <span style="color:#89f">$${id.toString(16).padStart(2, '0')}</span> ` +
       `<span style="flex:1;color:#ddd">${state.names.get(id) || '?'}</span>` +
-      `<span style="color:#777">${cap ? cap.states.length + ' st' : ''}</span>`;
+      `<span style="color:#777">${sm ? sm.frames.length + ' st' : cap ? cap.states.length + ' st' : ''}</span>`;
     row.addEventListener('click', () => {
       state.selected = id; state.stateIdx = 0; state.playing = true;
       _renderList(); _renderDetail();
@@ -254,6 +266,75 @@ function _renderList() {
     empty.textContent = 'nothing matches';
     dom.list.appendChild(empty);
   }
+}
+
+
+function _renderSummonDetail(id) {
+  const sm = getSummon(id);
+  if (!sm) {
+    dom.detail.insertAdjacentHTML('beforeend',
+      '<div style="color:#c66;font-family:monospace;font-size:11px;">canvases not built</div>');
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = SCREEN_W; canvas.height = SCREEN_H;
+  canvas.style.cssText = 'width:100%;max-width:512px;image-rendering:pixelated;background:#101018;' +
+    'border:1px solid #333;border-radius:3px;display:block;';
+  dom.detail.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  const info = document.createElement('div');
+  info.style.cssText = 'font-family:monospace;font-size:11px;color:#bbb;margin:6px 0;';
+  dom.detail.appendChild(info);
+
+  const ctrl = document.createElement('div');
+  ctrl.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;';
+  const playBtn = Object.assign(document.createElement('button'), { textContent: '\u275a\u275a' });
+  playBtn.style.cssText = BTN;
+  const prev = Object.assign(document.createElement('button'), { textContent: '\u25c0' });
+  prev.style.cssText = BTN;
+  const next = Object.assign(document.createElement('button'), { textContent: '\u25b6' });
+  next.style.cssText = BTN;
+  const slider = document.createElement('input');
+  slider.type = 'range'; slider.min = '0'; slider.max = String(sm.frames.length - 1); slider.value = '0';
+  slider.style.cssText = 'flex:1;min-width:120px;min-height:34px;';
+  ctrl.append(playBtn, prev, next, slider);
+  dom.detail.appendChild(ctrl);
+
+  const draw = () => {
+    const i = Math.max(0, Math.min(sm.frames.length - 1, state.stateIdx));
+    ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+    ctx.fillStyle = '#101018';
+    ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    // Panel is black behind the creature for the whole creature phase, which is
+    // what the battle screen does — showing it un-faded here would misrepresent.
+    ctx.fillStyle = '#000';
+    ctx.fillRect(144, 32, 112, 144);
+    ctx.drawImage(sm.frames[i], 0, 32);
+    slider.value = String(i);
+    info.innerHTML = `state <b>${i + 1}</b>/${sm.frames.length} \u00b7 held ${sm.holds[i]} ms \u00b7 ` +
+      `scene ${summonTotalMs(id)} ms incl. fades<br>box x${sm.box.x0}-${sm.box.x1} y${sm.box.y0}-${sm.box.y1}`;
+  };
+  const step = (d) => { state.stateIdx = (state.stateIdx + d + sm.frames.length) % sm.frames.length; draw(); };
+  playBtn.addEventListener('click', () => {
+    state.playing = !state.playing;
+    playBtn.textContent = state.playing ? '\u275a\u275a' : '\u25b6';
+  });
+  prev.addEventListener('click', () => { state.playing = false; playBtn.textContent = '\u25b6'; step(-1); });
+  next.addEventListener('click', () => { state.playing = false; playBtn.textContent = '\u25b6'; step(1); });
+  slider.addEventListener('input', () => {
+    state.playing = false; playBtn.textContent = '\u25b6';
+    state.stateIdx = Number(slider.value); draw();
+  });
+  // One tick per NES frame; each state advances when its measured hold is up.
+  let held = 0;
+  if (timer) clearInterval(timer);
+  timer = setInterval(() => {
+    if (!state.playing || !dom) return;
+    held += 16.64;
+    if (held >= sm.holds[state.stateIdx]) { held = 0; step(1); }
+  }, 16.64);
+  draw();
 }
 
 function _renderDetail() {
@@ -277,6 +358,9 @@ function _renderDetail() {
     `<div style="color:#888;font-size:10px;margin-top:3px;">${_reason(id)}</div>`;
   dom.detail.appendChild(head);
 
+  // Summons play from their own module — same canvases the battle screen uses,
+  // drawn at HUD_VIEW_Y so the player-box placement reads exactly as in game.
+  if (st === 'summon') { _renderSummonDetail(id); return; }
   if (!cap) return;
 
   const canvas = document.createElement('canvas');
