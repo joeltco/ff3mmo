@@ -208,20 +208,45 @@ function main() {
   }
   if (!srcPalette) { console.error(`FAIL: source palette not found`); process.exit(1); }
 
-  // Extract dump bytes for the matching frame range / origin.
+  // Scope overrides. Each spec's origin + frame range was copied off ONE
+  // hand-run recording, so a dump of the same spell captured against a
+  // different enemy — or headlessly via tools/monscan/spell-dump.cjs — has the
+  // right bytes at a different origin and frame index and reports "no bytes for
+  // this tile" for all of them. The overrides move the scope only; the byte
+  // comparison below is untouched, so a real mismatch still fails.
+  //
+  //   --origin=X,Y      look in the group at this origin instead
+  //   --frames=A-B      look in this frame range instead
+  //   --any-group       ignore origin entirely, match on frame range alone
+  const optOrigin = args.find((a) => a.startsWith('--origin='));
+  const optFrames = args.find((a) => a.startsWith('--frames='));
+  const anyGroup = args.includes('--any-group');
+
   const matchSpec = spec.matchByOrigin
     ? { frameRange: spec.matchByOrigin.frameRange, originX: spec.matchByOrigin.x, originY: spec.matchByOrigin.y }
     : { frameRange: spec.matchByFrameRange };
+  if (optOrigin) {
+    const [x, y] = optOrigin.slice(9).split(',').map(Number);
+    matchSpec.originX = x; matchSpec.originY = y;
+  }
+  if (anyGroup) { delete matchSpec.originX; delete matchSpec.originY; }
+  if (optFrames) {
+    const [a, b] = optFrames.slice(9).split('-').map(Number);
+    matchSpec.frameRange = [a, b];
+  }
+  if (optOrigin || optFrames || anyGroup) {
+    console.log(`  scope overridden: ${matchSpec.originX === undefined ? 'any group' : `origin (${matchSpec.originX},${matchSpec.originY})`}` +
+      ` frames ${matchSpec.frameRange[0]}-${matchSpec.frameRange[1]}`);
+  }
   const dumpBytes = extractDumpTiles(dump, matchSpec);
 
   // ── Diff ──
   console.log(`parity-check ${spec.name}`);
   console.log(`  source: ${spec.sourceFile}  dump: ${dumpPath}`);
-  if (spec.matchByOrigin) {
-    console.log(`  dump scope: origin (${spec.matchByOrigin.x},${spec.matchByOrigin.y}) frames ${spec.matchByOrigin.frameRange[0]}-${spec.matchByOrigin.frameRange[1]}`);
-  } else {
-    console.log(`  dump scope: any group, frames ${spec.matchByFrameRange[0]}-${spec.matchByFrameRange[1]}`);
-  }
+  // Report the scope ACTUALLY used, not the spec's — printing the spec while
+  // matching on an override says the gate checked somewhere it didn't.
+  console.log(`  dump scope: ${matchSpec.originX === undefined ? 'any group' : `origin (${matchSpec.originX},${matchSpec.originY})`}` +
+    ` frames ${matchSpec.frameRange[0]}-${matchSpec.frameRange[1]}`);
   console.log('');
 
   let fail = 0;
