@@ -71,7 +71,11 @@ function patchedRom() {
   }
   const p = Buffer.from(rom), mo = ENCOUNTER_MON + list * 6;
   p[mo + 2] = 0x00; p[mo + 3] = 0xFF; p[mo + 4] = 0xFF; p[mo + 5] = 0xFF;
-  p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
+  // MONSTERS=N spawns N of group 0. A per-enemy effect (Odin's cut-in-half is
+  // described as hitting every enemy sprite) has nothing to act on with a single
+  // target, so it has to be testable against a full formation.
+  p[ENCOUNTER_STR] = parseInt(process.env.MONSTERS || '1', 10);
+  p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
   const props = MONSTER_PROPS;
   // KILLABLE=1 leaves the target's real HP in place. The default patch exists so
   // an effect renders at all — a dead target ends the animation early — but it
