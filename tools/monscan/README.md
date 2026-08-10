@@ -20,6 +20,13 @@ regenerable and gitignored — none of them are inputs to the game.
 | `weapon-extract.cjs` | isolates one weapon's overlay: CHR provenance + differential render |
 | `weapon-emit.cjs` | converts extracted pixels into the tile format `weapon-sprites.js` uses |
 | `weapon-diff.cjs` | differential render alone, unfiltered — useful when you need every sprite in range |
+| `spell-chr-region.cjs` | renders the battle-effect CHR region out of the ROM and maps known constants into it |
+| `spell-sweep.cjs` | every castable spell: which ROM CHR block its animation loads, plus palette + OAM per frame |
+| `spell-runs.cjs` | groups a sweep's blocks into contiguous runs and gates them against the shipped captures |
+| `spell-dump.cjs` | emits a captured spell as a REC OAM dump for `tools/render-oam-dump.js` + `parity-check-spell.js` |
+| `spell-capture.cjs` | one spell, cast round vs control round — the bring-up case for the sweep |
+| `spell-cast.cjs` | boot + SRAM magic loadout + battle entry, on its own |
+| `spell-verify.cjs` | Fire-only check used to bring the capture path up |
 | `palette-from-image.py` | recovers pal0/pal1 from a reference screenshot (for monsters that cannot be spawned) |
 
 ## The two techniques worth knowing
@@ -49,11 +56,30 @@ Each of these passed structural checks while being wrong:
   ~62% of pixels, because jsnes renders through its own table. Take colors from
   palette RAM instead; never match on RGB.
 - **OAM y is one scanline above where the sprite draws.**
+- **Spell capture: never sequence characters 2-4's command menus.** Their menu is
+  already open when their turn arrives, so a leading `a` picks ATTACK rather
+  than Guard; three fighters then kill the goblin before the caster acts and the
+  spell never fires. That is indistinguishable from "this spell has no
+  animation" — it produced 8 false negatives and an entire wrong theory that
+  those spells were background-drawn. Kill characters 2-4 instead (HP 0 at
+  `+$0C`/`+$0E` of each 64-byte SRAM block). A caster's menu is
+  Attack/Magic/Run/Item, with no Guard on it at all.
 - **`sweep.cjs` is SUPERSEDED** — its `captureByPalette` prefers a window using
   both palettes, which for a single-palette monster beside a differently-colored
   one invents a 50/50 split belonging to neither. It reported exactly the buggy
   default for CursdCopper and Larva, confirming the bug instead of catching it.
   Use `tilepal.cjs`. Kept only because the surrounding drive logic is shared history.
+
+## Spell art lives in the ROM, uncompressed
+
+All 66 verified animation tiles in `spell-anim.js` / `cast-anim.js` /
+`cure-anim.js` were found verbatim between `$55400` and `$57000`, 16 bytes per
+tile, one animation per 16-tile row, identical in the English and Japan ROMs.
+Casting copies **24 consecutive tiles** from an animation's base offset into
+sprite slots `$49-$60`. There is no dedicated spell SLOT range — that window is
+shared with weapons, the fist and the damage digits — so the ROM region is the
+discriminator. A capture therefore only has to identify which block loaded, an
+exact 16-byte lookup, and the bytes come from the ROM afterwards.
 
 ## Exploration leftovers
 

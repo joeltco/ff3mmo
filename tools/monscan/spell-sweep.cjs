@@ -94,6 +94,16 @@ if (!isMainThread) {
     writeFileSync(romPath, p);
   }
 
+  // Char 1 is the caster; characters 2-4 are killed outright (HP 0/0 at +$0C /
+  // +$0E of each 64-byte block, measured off the live SRAM).
+  //
+  // This replaces choreographing their command menus, which was the single
+  // biggest source of wrong answers here. Whether their menu needs 'a,down,a'
+  // or 'down,a' depends on whether it is already open, one spare press picks
+  // ATTACK instead of Guard, and three fighters then kill a 32 HP goblin before
+  // the caster's turn — so the spell never fires and the run looks exactly like
+  // "this spell has no animation". With them dead there is one menu in the
+  // whole round and nothing to get wrong.
   const grant = (n, job, mask) => {
     const a = SRAM_BASE + CHARS_A_OFF, b = SRAM_BASE + CHARS_B_OFF;
     n.ram[a] = job; n.ram[a + 1] = 50;
@@ -101,6 +111,11 @@ if (!isMainThread) {
     for (let l = 0; l < 8; l++) {
       n.ram[a + MP_OFF + l * 2] = 9; n.ram[a + MP_OFF + l * 2 + 1] = 9;
       n.ram[b + SPELL_LIST_OFF + l] = mask;
+    }
+    for (let c = 1; c < 4; c++) {
+      const blk = SRAM_BASE + CHARS_A_OFF + c * 0x40;
+      n.ram[blk + 0x0C] = 0; n.ram[blk + 0x0D] = 0;
+      n.ram[blk + 0x0E] = 0; n.ram[blk + 0x0F] = 0;
     }
   };
   const sc = (n) => { let c = 0; for (let i = 0; i < 64; i++) if (n.nes.ppu.sprY[i] < 0xEF) c++; return c; };
@@ -146,9 +161,12 @@ if (!isMainThread) {
       n.press('a', 8, 30);
       n.press('a', 8, 30);
     } else {
-      n.press('a', 8, 30); n.press('down', 8, 30); n.press('a', 8, 30);
+      // Control = a plain physical Attack. A caster's command menu is
+      // Attack/Magic/Run/Item — there is no Guard on it — so the old control
+      // walked into the spell list and committed nothing, which made every
+      // block in the cast round look spell-owned, cast halo included.
+      n.press('a', 8, 30); n.press('a', 8, 30); n.press('a', 8, 30);
     }
-    for (let c = 0; c < 3; c++) { n.press('a', 8, 30); n.press('down', 8, 30); n.press('a', 8, 30); }
 
     for (let f = 0; f < FRAMES; f++) {
       frameNo = f;
