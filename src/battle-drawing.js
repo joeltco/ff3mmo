@@ -287,6 +287,15 @@ export function drawSpellEffectAtTargets(ctx, targets, spellId, elapsedMs) {
   if (!bundle) return;
   const frame = getSpellAnimFrame(bundle, elapsedMs);
   if (!frame) return;
+  // Screen-anchored sweeps (Meteo, Drain, Kill) are not per-target: they play
+  // once across the whole map-HUD band at their captured absolute positions.
+  // Drawing one per target would stack identical full-band canvases on top of
+  // each other, which for a multi-target spell means N copies of the same
+  // effect burning fill rate for no visual difference.
+  if (bundle.kind === 'screen-strip') {
+    ctx.drawImage(frame, HUD_VIEW_X, HUD_VIEW_Y);
+    return;
+  }
   for (const tgt of targets) {
     const tc = _getMagicTargetCenter(tgt);
     if (!tc) continue;

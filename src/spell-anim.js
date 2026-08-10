@@ -335,13 +335,26 @@ function _buildBlizzardImpactFrames(pal) {
  * mean the tile is drawn mirrored about its own 8x8 box, so the translate has
  * to move by 8 on each flipped axis before scaling.
  */
+// Screen-anchored effects replay ABSOLUTE captured coordinates across the whole
+// map-HUD band instead of being centred on a target. The NES scene above the
+// message boxes is 256x152; our band is 256x144 (battle-drawing.js clips to
+// `0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H`), so x is 1:1 and y is squeezed by
+// 144/152. Tiles stay 8x8 — only positions are mapped, so nothing blurs.
+const SCREEN_BAND_W = 256, SCREEN_BAND_H = 144;
+
 function _buildCapturedFrames(entry) {
+  const screen = entry.anchor === 'screen';
+  const sx = screen ? SCREEN_BAND_W / entry.width : 1;
+  const sy = screen ? SCREEN_BAND_H / entry.height : 1;
   const tiles = entry.tiles.map((t) => _make8Canvas(t, entry.pal));
   return entry.layouts.map((layout) => {
     const c = document.createElement('canvas');
-    c.width = entry.width; c.height = entry.height;
+    c.width = screen ? SCREEN_BAND_W : entry.width;
+    c.height = screen ? SCREEN_BAND_H : entry.height;
     const cx = c.getContext('2d');
-    for (const [ti, ox, oy, hf, vf] of layout) {
+    for (const [ti, rx, ry, hf, vf] of layout) {
+      const ox = screen ? Math.round(rx * sx) : rx;
+      const oy = screen ? Math.round(ry * sy) : ry;
       cx.save();
       if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(tiles[ti], 0, 0); }
       else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(tiles[ti], 0, 0); }
@@ -412,9 +425,10 @@ export function initSpellAnim() {
   for (const [id, entry] of CAPTURED_SPELL_ANIMS) {
     if (_bySpellId[id]) continue;
     _bySpellId[id] = {
-      kind: 'burst-strip-2frame',
+      kind: entry.anchor === 'screen' ? 'screen-strip' : 'burst-strip-2frame',
       frames: _buildCapturedFrames(entry),
-      width: entry.width, height: entry.height,
+      width: entry.anchor === 'screen' ? SCREEN_BAND_W : entry.width,
+      height: entry.anchor === 'screen' ? SCREEN_BAND_H : entry.height,
       anchor: entry.anchor || 'enemy-center', toggleMs: entry.holdMs,
     };
   }
@@ -449,6 +463,12 @@ export function getSpellAnimForItem(itemId) {
 // caps at the last frame instead of cycling — phase 0 → 1 → 2 → hold 2.
 export function getSpellAnimFrame(bundle, elapsedMs) {
   if (!bundle || !bundle.frames || bundle.frames.length === 0) return null;
+  // A screen sweep is one-shot: Kill travels from the caster to the far corner
+  // and stops there. Cycling it would teleport it back to the caster mid-flight.
+  if (bundle.kind === 'screen-strip') {
+    const dur = bundle.toggleMs || 17;
+    return bundle.frames[Math.min(bundle.frames.length - 1, Math.max(0, Math.floor(elapsedMs / dur)))];
+  }
   if (bundle.kind === 'aoe-3phase') {
     const dur = bundle.phaseDurMs || 133;
     const idx = Math.min(bundle.frames.length - 1, Math.max(0, Math.floor(elapsedMs / dur)));

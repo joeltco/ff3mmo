@@ -27,6 +27,9 @@ const rom = readFileSync(REPO + '/FF3-English.nes');
 const sweep = JSON.parse(readFileSync(__dirname + '/spell-sweep.json', 'utf8'));
 const OUT = REPO + '/src/data/spell-anim-captured.js';
 const NES_FRAME_MS = 1000 / 60.0988;
+// Source rect for screen-anchored effects: the NES battle scene above the
+// message boxes. Captured sprites span y1-147, so 152 covers it.
+const NES_SRC_W = 256, NES_SRC_H = 152;
 
 // Spells with a hand-captured, parity-gated entry in spell-anim.js.
 // CLAUDE.md: don't rewrite working animation code.
@@ -108,9 +111,15 @@ function build(rec) {
   const minX = Math.min(...xs), minY = Math.min(...ys);
   const width = Math.max(...xs) + 8 - minX, height = Math.max(...ys) + 8 - minY;
 
-  const layouts = states.map((st) => st.spr.map((s) => [
+  // Both forms are emitted from the same source; `screen` decides which is
+  // used, and is set by the caller once the size is known.
+  const rel = states.map((st) => st.spr.map((s) => [
     tileIdx.get(hexOf(s, st)), s.x - minX, s.y - minY, s.h ? 1 : 0, s.v ? 1 : 0,
   ]));
+  const abs = states.map((st) => st.spr.map((s) => [
+    tileIdx.get(hexOf(s, st)), s.x, s.y, s.h ? 1 : 0, s.v ? 1 : 0,
+  ]));
+  const layouts = rel;
   // The palette the effect's own sprites actually use. Sub-palette index comes
   // from OAM, the entries from PPU palette RAM at that frame.
   const palIdx = states[0].spr[0].pal;
@@ -119,7 +128,7 @@ function build(rec) {
   const holds = states.slice(0, -1).map((s) => s.hold).filter((h) => h > 0).sort((a, b) => a - b);
   const holdMs = Math.round((holds.length ? holds[holds.length >> 1] : 4) * NES_FRAME_MS);
 
-  return { run, pal, tiles, layouts, width, height, holdMs, states: states.length };
+  return { run, pal, tiles, layouts, abs, width, height, holdMs, states: states.length };
 }
 
 // Target side, straight out of spells.js. `anchor` is metadata — the render
@@ -185,13 +194,15 @@ for (const rec of sweep.results) {
   // single frame, and centring that on the enemy would put it in the wrong
   // place entirely. Hold those back rather than register a misrepresentation —
   // they need a travelling-effect kind that does not exist yet.
-  if (b.width > 64 || b.height > 64) {
-    skipped.push(`$${rec.id.toString(16)} ${b.width}x${b.height} — traverses the screen, needs a travelling kind`);
-    continue;
-  }
-  if (b.holdMs < 33) {
-    skipped.push(`$${rec.id.toString(16)} ${b.holdMs}ms hold — moves every frame, not a cycling burst`);
-    continue;
+  // Effects that traverse the screen are not target-anchored bursts: Meteo
+  // spans x8-240 y7-139 with 30-odd sprites at once, Drain starts spread and
+  // collapses onto the target, Kill sweeps from the caster past the enemy to
+  // the bottom-left. Centring a canvas that size on a target would be nonsense.
+  // They are emitted SCREEN-ANCHORED instead — absolute captured coordinates,
+  // replayed across the whole map-HUD band.
+  if (b.width > 64 || b.height > 64 || b.holdMs < 33) {
+    b.screen = true;
+    b.width = NES_SRC_W; b.height = NES_SRC_H;
   }
   built.set(rec.id, b);
 }
@@ -219,12 +230,12 @@ for (const [id, b] of [...built.entries()].sort((a, c) => a[0] - c[0])) {
   lines.push(`  [${hx(id)}, {   // ${SPELL_NAMES.get(id) || '?'} — impact block $${b.run.start.toString(16)}`);
   lines.push(`    pal: [${b.pal.map(hx).join(', ')}],`);
   lines.push(`    width: ${b.width}, height: ${b.height}, holdMs: ${b.holdMs},`);
-  lines.push(`    anchor: '${anchorFor(id)}',`);
+  lines.push(`    anchor: '${b.screen ? 'screen' : anchorFor(id)}',`);
   lines.push('    tiles: [');
   for (const t of b.tiles) lines.push(`      new Uint8Array([${bytesOf(t)}]),`);
   lines.push('    ],');
   lines.push('    layouts: [');
-  for (const l of b.layouts) lines.push(`      [${l.map((e) => `[${e.join(',')}]`).join(',')}],`);
+  for (const l of (b.screen ? b.abs : b.layouts)) lines.push(`      [${l.map((e) => `[${e.join(',')}]`).join(',')}],`);
   lines.push('    ],');
   lines.push('  }],');
 }
