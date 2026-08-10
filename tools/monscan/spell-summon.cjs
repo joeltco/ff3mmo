@@ -73,7 +73,11 @@ function patchedRom() {
   p[mo + 2] = 0x00; p[mo + 3] = 0xFF; p[mo + 4] = 0xFF; p[mo + 5] = 0xFF;
   p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
   const props = MONSTER_PROPS;
-  p[props + 1] = 0xFF; p[props + 2] = 0x7F;          // unkillable target
+  // KILLABLE=1 leaves the target's real HP in place. The default patch exists so
+  // an effect renders at all — a dead target ends the animation early — but it
+  // also makes any DEATH-linked visual impossible, which is exactly what Odin's
+  // cut-in-half would be. Run both ways when a summon appears to have no effect.
+  if (process.env.KILLABLE !== '1') { p[props + 1] = 0xFF; p[props + 2] = 0x7F; }
   p[props + 9] = p[props + 9] & 0xC0;                // harmless attack
   p[props + 13] = 0x00;                              // no status resistance
   for (let s = 0; s < 88; s++) p[SPELL_DATA + s * 8 + 1] = 100;   // never miss

@@ -17,6 +17,7 @@
 // 144/152, and tiles stay 8x8 so nothing blurs.
 
 import { CAPTURED_SUMMONS, SUMMON_SRC_W, SUMMON_SRC_H } from './data/summon-anim-captured.js';
+import { CAPTURED_SPELL_ANIMS } from './data/spell-anim-captured.js';
 import { _make8Canvas } from './canvas-utils.js';
 
 const BAND_W = 256, BAND_H = 144;
@@ -28,6 +29,21 @@ const BAND_W = 256, BAND_H = 144;
 // over 300 ms matches the stepped look of the roster fades elsewhere.
 export const SUMMON_FADE_MS = 300;
 export const SUMMON_FADE_STEPS = 4;
+
+// DESIGN DECISION, not a capture. Titan loads no effect art of his own — this
+// was verified twice, against both an unkillable and a killable target, and the
+// regions came back identical either way, so nothing was being hidden by the
+// target surviving. He borrows Quake's ground crack, which is earth and already
+// emitted as a screen-anchored effect at the same 256x152 source rect.
+//
+// There is ROM precedent for a summon borrowing a spell's effect: Ramuh
+// genuinely loads $55cd0, the same block Bolt / Bolt2 / Bolt3 use.
+//
+// `ms` is the crack's measured hold from the Quake capture — 81 frames — not a
+// number picked to feel right.
+const BORROWED_EFFECT = {
+  0x1b: { spellId: 0x07, ms: 1350 },
+};
 
 let _bySpellId = null;
 
@@ -65,8 +81,22 @@ export function initSummonAnim() {
     const fx = e.effect ? { frames: buildFrames(e.effect), holds: e.effect.holds } : null;
     // The cast burst, played during the buildup like any other school's cast.
     const cast = e.cast ? { frames: buildFrames(e.cast), holds: e.cast.holds } : null;
+    // Borrowed effect, if this summon has none of its own. Quake is emitted with
+    // the same absolute-coordinate 256x152 source rect, so buildFrames maps it
+    // into the band exactly as it maps a summon's own art.
+    let borrowed = null;
+    if (!e.effect && BORROWED_EFFECT[id]) {
+      const src = CAPTURED_SPELL_ANIMS.get(BORROWED_EFFECT[id].spellId);
+      if (src) borrowed = { frames: buildFrames(src), holds: src.layouts.map(() => BORROWED_EFFECT[id].ms) };
+    }
     const effectMs = fx ? fx.holds.reduce((a, c) => a + c, 0) : 0;
-    _bySpellId.set(id, { frames, holds: e.holds, creatureMs, fx, effectMs, cast, box: e.box });
+    const fxFinal = fx || borrowed;
+    _bySpellId.set(id, {
+      frames, holds: e.holds, creatureMs,
+      fx: fxFinal,
+      effectMs: fxFinal ? fxFinal.holds.reduce((a, c) => a + c, 0) : 0,
+      cast, box: e.box,
+    });
   }
 }
 
@@ -91,7 +121,11 @@ export function summonTotalMs(spellId) {
   const e = CAPTURED_SUMMONS.get(spellId);
   if (!e) return 0;
   const creature = e.holds.reduce((a, c) => a + c, 0);
-  const effect = e.effect ? e.effect.holds.reduce((a, c) => a + c, 0) : 0;
+  let effect = e.effect ? e.effect.holds.reduce((a, c) => a + c, 0) : 0;
+  if (!e.effect && BORROWED_EFFECT[spellId]) {
+    const src = CAPTURED_SPELL_ANIMS.get(BORROWED_EFFECT[spellId].spellId);
+    if (src) effect = src.layouts.length * BORROWED_EFFECT[spellId].ms;
+  }
   return SUMMON_FADE_MS + creature + effect + SUMMON_FADE_MS;
 }
 
