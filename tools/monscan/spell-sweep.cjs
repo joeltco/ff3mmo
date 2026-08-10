@@ -36,6 +36,7 @@ const FRAMES = parseInt(process.env.FRAMES || '1500', 10);
 
 const ENCOUNTER_SET = 0x05C010, ENCOUNTER_MON = 0x05C410, ENCOUNTER_STR = 0x05CA10;
 const MONSTER_PROPS = 0x060010;
+const SPELL_DATA = 0x0618D0;   // 8 bytes/spell, +1 = hit%
 const SRAM_BASE = 0x6000, CHARS_A_OFF = 0x100, CHARS_B_OFF = 0x200;
 const MP_OFF = 0x30, SPELL_LIST_OFF = 0x07, JOB_LEVELS_OFF = 0x10;
 
@@ -48,6 +49,13 @@ const SCHOOLS = {
   wm: { job: parseInt(process.env.JOB_WM || '3', 10), mask: 0x38, colBase: 3 },
 };
 const ROWS = (process.env.ROWS || '0,1,2,3,4,5,6,7').split(',').map(Number);
+// AFFLICT=1: a cure-status spell on a healthy target is simply ineffective and
+// draws nothing, which is indistinguishable from having no art — that is why
+// Poisona was the last spell the provenance gate could not reproduce. With this
+// on, the goblin's statusOnAtk (+10, bit 0x02 = poison) is set and the cast is
+// deferred to round 2, so by the time the spell goes off there is something to
+// cure. Off by default: it changes the conditions of every other capture too.
+const AFFLICT = process.env.AFFLICT === '1';
 
 /**
  * Spell ID for a menu cell.
@@ -99,6 +107,13 @@ if (!isMainThread) {
     const props = MONSTER_PROPS + 0x00 * 16;
     p[props + 1] = 0xFF; p[props + 2] = 0x7F;          // 32767 HP
     p[props + 9] = p[props + 9] & 0xC0;                // attack stat set 0, keep hit-count bits
+    // A spell that MISSES draws no effect, which is indistinguishable from a
+    // spell with no effect art. Sleep is hit 15, so most captures of it were
+    // just misses. Zero the goblin's status resistance (+13) and force every
+    // spell to 100% hit so a status actually lands.
+    p[props + 13] = 0x00;
+    if (AFFLICT) p[props + 10] = 0x02;                 // statusOnAtk = poison
+    for (let sp = 0; sp < 88; sp++) p[SPELL_DATA + sp * 8 + 1] = 100;
     p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
     for (const g of gob) { p[ENCOUNTER_SET + g * 2] = list; p[ENCOUNTER_SET + g * 2 + 1] &= 0xC0; }
     writeFileSync(romPath, p);
@@ -122,7 +137,21 @@ if (!isMainThread) {
       n.ram[a + MP_OFF + l * 2] = 9; n.ram[a + MP_OFF + l * 2 + 1] = 9;
       n.ram[b + SPELL_LIST_OFF + l] = mask;
     }
-    for (let c = 1; c < 4; c++) {
+    // Character 2 stays ALIVE. Killing the whole rest of the party removed the
+    // menu choreography, but it also left ally-targeted spells with nobody to
+    // target — Poisona is a cure-status spell and simply did nothing. One ally
+    // is enough to give them a target and is still only one extra menu, which
+    // is deterministic: character 2's command menu is already open when its
+    // turn arrives, so 'down' then 'a' is Guard.
+    if (AFFLICT) {
+      // Poison ticks every round; 32 HP does not survive a deferred cast.
+      for (let c = 0; c < 2; c++) {
+        const blk = SRAM_BASE + CHARS_A_OFF + c * 0x40;
+        n.ram[blk + 0x0C] = 0xE7; n.ram[blk + 0x0D] = 0x03;
+        n.ram[blk + 0x0E] = 0xE7; n.ram[blk + 0x0F] = 0x03;
+      }
+    }
+    for (let c = 2; c < 4; c++) {
       const blk = SRAM_BASE + CHARS_A_OFF + c * 0x40;
       n.ram[blk + 0x0C] = 0; n.ram[blk + 0x0D] = 0;
       n.ram[blk + 0x0E] = 0; n.ram[blk + 0x0F] = 0;
@@ -164,18 +193,29 @@ if (!isMainThread) {
       }
     };
 
+    if (AFFLICT) {
+      // Round 1: plain attack + guard, then let it play out so the goblin lands
+      // poison before the spell is chosen.
+      n.press('a', 8, 30); n.press('a', 8, 30); n.press('a', 8, 30);
+      n.press('down', 8, 30); n.press('a', 8, 30);
+      for (let f = 0; f < 500; f++) {
+        if (f % 20 === 0) { n.nes.buttonDown(1, BTN.a); n.run(1); n.nes.buttonUp(1, BTN.a); } else n.run(1);
+      }
+    }
     if (cell) {
       n.press('a', 8, 30); n.press('down', 8, 30); n.press('a', 8, 30);
       for (let i = 0; i < cell.row; i++) n.press('down', 8, 24);
       for (let i = 0; i < cell.col; i++) n.press('right', 8, 24);
       n.press('a', 8, 30);
       n.press('a', 8, 30);
+      n.press('down', 8, 30); n.press('a', 8, 30);     // char 2 guards
     } else {
       // Control = a plain physical Attack. A caster's command menu is
       // Attack/Magic/Run/Item — there is no Guard on it — so the old control
       // walked into the spell list and committed nothing, which made every
       // block in the cast round look spell-owned, cast halo included.
       n.press('a', 8, 30); n.press('a', 8, 30); n.press('a', 8, 30);
+      n.press('down', 8, 30); n.press('a', 8, 30);     // char 2 guards
     }
 
     for (let f = 0; f < FRAMES; f++) {

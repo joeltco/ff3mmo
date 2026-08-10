@@ -415,7 +415,7 @@ export function initSpellAnim() {
       kind: 'burst-strip-2frame',
       frames: _buildCapturedFrames(entry),
       width: entry.width, height: entry.height,
-      anchor: 'enemy-center', toggleMs: entry.holdMs,
+      anchor: entry.anchor || 'enemy-center', toggleMs: entry.holdMs,
     };
   }
 }
