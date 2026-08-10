@@ -127,7 +127,7 @@ function paletteKey(p) { return p.join(','); }
 
 // ── Phase detection ─────────────────────────────────────────────────────────
 
-function classifyPhases(frames) {
+function classifyPhases(frames, targetSurvives = false) {
   // Phase detection by frame ORDER, not tile-count. Rules:
   //   - Cast = frames where every non-popup group is at party side (x >= 160).
   //   - Projectile = run of frames where a small (≤4 tile) group has a
@@ -282,8 +282,18 @@ function classifyPhases(frames) {
     const ys = r.originSamples.map(o => o[1]);
     return (Math.max(...xs) - Math.min(...xs) <= 8) && (Math.max(...ys) - Math.min(...ys) <= 8);
   }
-  const impact = enemyRuns.find(r => isStaticBurst(r) && !isMonsterRowOrigin(r.originSamples[0])) || null;
-  const deathWipe = enemyRuns.find(r => isMonsterRowOrigin(r.originSamples[0])) || null;
+  const impact = enemyRuns.find(r => isStaticBurst(r)
+    && (targetSurvives || !isMonsterRowOrigin(r.originSamples[0]))) || null;
+  // A dump may assert that the target was still alive when the capture ended.
+  // Headless captures (tools/monscan/spell-dump.cjs) patch the goblin
+  // unkillable and MEASURE its survival, so a death wipe cannot be present —
+  // but they also stand it at y=56, inside the 40-60 monster-row band that this
+  // heuristic uses, so a live impact would be labelled deathWipe on geometry
+  // alone. When the dump asserts survival, skip the branch entirely. Dumps
+  // without the marker are classified exactly as before.
+  const deathWipe = targetSurvives
+    ? null
+    : (enemyRuns.find(r => isMonsterRowOrigin(r.originSamples[0])) || null);
   // Scorch must be a real multi-tile static visual at impact-row y. The
   // single-tile projectile briefly entering enemy x must NOT show up as scorch.
   const scorch = enemyRuns.filter(r =>
@@ -358,7 +368,8 @@ function main() {
 
   const text = fs.readFileSync(dumpPath, 'utf8');
   const frames = parseDump(text);
-  const phases = classifyPhases(frames);
+  const targetSurvives = /^\/\/ capture: target-survives\s*$/m.test(text);
+  const phases = classifyPhases(frames, targetSurvives);
 
   const json = JSON.stringify(phases, (_k, v) => {
     if (v && v.constructor === Uint8Array) return Array.from(v);

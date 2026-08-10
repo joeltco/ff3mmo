@@ -74,6 +74,12 @@ const NES_FRAME_MS = 1000 / 60.0988;
 console.log(`// Headless REC OAM dump — spell $${want.toString(16).padStart(2, '0')} (${rec.school} level ${8 - rec.row} column ${rec.col})`);
 console.log(`// tools/monscan/spell-dump.cjs; tile bytes read from ROM at the offsets the`);
 console.log(`// capture proved were copied into each slot. BG palettes not captured.`);
+// Asserted so tools/classify-spell-phases.js can skip its death-wipe branch.
+// That branch keys off origin y in 40-60, and a headless capture stands the
+// goblin at y=56 while the original hand recording had its enemy at y=104 — so
+// a live impact gets labelled deathWipe purely by geometry. The goblin here is
+// patched unkillable and its survival is MEASURED at the end of the round.
+if (rec.survived) console.log('// capture: target-survives');
 
 // A sprite only belongs to the spell if the slot it names is holding one of the
 // spell's ROM blocks ON THAT FRAME. The damage digits live in $56-$5F, inside

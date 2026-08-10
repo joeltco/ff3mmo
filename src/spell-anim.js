@@ -21,6 +21,7 @@
 import { _makeCanvas16, _make8Canvas, _hflipCanvas } from './canvas-utils.js';
 import { ITEMS } from './data/items.js';
 import { initSouthWindSprite } from './south-wind.js';
+import { CAPTURED_SPELL_ANIMS } from './data/spell-anim-captured.js';
 
 // ── Palettes per spell family ─────────────────────────────────────────────
 //
@@ -327,6 +328,31 @@ function _buildBlizzardImpactFrames(pal) {
   ];
 }
 
+/**
+ * Composite one generated entry's layouts into per-state canvases.
+ *
+ * Same flip handling as _buildBlizzardImpactFrames above — the OAM flip flags
+ * mean the tile is drawn mirrored about its own 8x8 box, so the translate has
+ * to move by 8 on each flipped axis before scaling.
+ */
+function _buildCapturedFrames(entry) {
+  const tiles = entry.tiles.map((t) => _make8Canvas(t, entry.pal));
+  return entry.layouts.map((layout) => {
+    const c = document.createElement('canvas');
+    c.width = entry.width; c.height = entry.height;
+    const cx = c.getContext('2d');
+    for (const [ti, ox, oy, hf, vf] of layout) {
+      cx.save();
+      if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(tiles[ti], 0, 0); }
+      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(tiles[ti], 0, 0); }
+      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(tiles[ti], 0, 0); }
+      else          { cx.drawImage(tiles[ti], ox, oy); }
+      cx.restore();
+    }
+    return c;
+  });
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 let _bySpellId = null;
@@ -374,6 +400,24 @@ export function initSpellAnim() {
     0x3a: { kind: 'aoe-3phase', frames: blizzaraImpact, anchor: 'enemy-center', phaseDurMs: 133 },
     // Sight (0x36) intentionally absent — battle msg handles "Ineffective".
   };
+
+  // Generated captures (src/data/spell-anim-captured.js). Additive only: a
+  // spell that already has a hand-captured, parity-gated entry above keeps it.
+  // CLAUDE.md is explicit that rewriting working animation code is how v1.7.49
+  // and v1.7.90 happened, so the guard is a hard skip rather than a merge.
+  //
+  // These reuse 'burst-strip-2frame' deliberately — that kind is just "cycle
+  // frames at toggleMs, anchored on the target", which is what Blizzard and
+  // Sleep already do with 4 and 3 frames. No new render path is introduced.
+  for (const [id, entry] of CAPTURED_SPELL_ANIMS) {
+    if (_bySpellId[id]) continue;
+    _bySpellId[id] = {
+      kind: 'burst-strip-2frame',
+      frames: _buildCapturedFrames(entry),
+      width: entry.width, height: entry.height,
+      anchor: 'enemy-center', toggleMs: entry.holdMs,
+    };
+  }
 }
 
 // Returns the on-target render bundle for a spell ID, or null. Callers

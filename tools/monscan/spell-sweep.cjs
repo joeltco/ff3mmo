@@ -35,6 +35,7 @@ const REGION_START = 0x55400, REGION_END = 0x57000;
 const FRAMES = parseInt(process.env.FRAMES || '1500', 10);
 
 const ENCOUNTER_SET = 0x05C010, ENCOUNTER_MON = 0x05C410, ENCOUNTER_STR = 0x05CA10;
+const MONSTER_PROPS = 0x060010;
 const SRAM_BASE = 0x6000, CHARS_A_OFF = 0x100, CHARS_B_OFF = 0x200;
 const MP_OFF = 0x30, SPELL_LIST_OFF = 0x07, JOB_LEVELS_OFF = 0x10;
 
@@ -89,6 +90,15 @@ if (!isMainThread) {
   {
     const p = Buffer.from(rom), mo = ENCOUNTER_MON + list * 6;
     p[mo + 2] = 0x00; p[mo + 3] = 0xFF; p[mo + 4] = 0xFF; p[mo + 5] = 0xFF;
+    // Make the goblin unkillable and harmless. If the spell kills it, the
+    // enemy-side group during the impact is a DEATH WIPE overlapping the
+    // effect, and tools/classify-spell-phases.js labels the impact as
+    // deathWipe. If it kills the lone caster, the capture ends mid-animation.
+    // HP is 16-bit LE at MONSTER_PROPS + id*16 + 1; byte +9's low 6 bits index
+    // the attack stat set, and set 0 is the harmless one (tools/extract-monsters.js).
+    const props = MONSTER_PROPS + 0x00 * 16;
+    p[props + 1] = 0xFF; p[props + 2] = 0x7F;          // 32767 HP
+    p[props + 9] = p[props + 9] & 0xC0;                // attack stat set 0, keep hit-count bits
     p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
     for (const g of gob) { p[ENCOUNTER_SET + g * 2] = list; p[ENCOUNTER_SET + g * 2 + 1] &= 0xC0; }
     writeFileSync(romPath, p);
@@ -184,7 +194,12 @@ if (!isMainThread) {
       else n.run(1);
     }
     ppu.endScanline = origEnd;
-    return { blocks, oamFrames };
+    // Measured, not assumed: the goblin is patched to 32767 HP and stat-set-0
+    // attack, so it should still be standing and the caster still alive at the
+    // end. Recorded so the dump can assert it rather than the reader trusting
+    // the patch landed.
+    const survived = sc(n) > 12;
+    return { blocks, oamFrames, survived };
   }
 
   const { job, mask, colBase, cells } = workerData;
@@ -196,6 +211,7 @@ if (!isMainThread) {
     const out = { ...cell, id: spellId(cell.row, cell.col, colBase) };
     try {
       const r = round(job, mask, cell);
+      out.survived = r.survived;
       const own = [...r.blocks.entries()].filter(([off]) => !ctrlOffs.has(off)).sort((a, b) => a[0] - b[0]);
       out.blocks = own.map(([off, rec]) => ({
         off, slots: [...rec.slots].sort((a, b) => a - b), first: rec.first, last: rec.last,
