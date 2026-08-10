@@ -45,8 +45,14 @@ const MP_OFF = 0x30, SPELL_LIST_OFF = 0x07, JOB_LEVELS_OFF = 0x10;
 // later presses drift the cursor onto a lower spell. Level 8 must be swept as
 // Magus / Devout, which jobs.js gives maxMagicLv 8.
 const SCHOOLS = {
-  bm: { job: parseInt(process.env.JOB_BM || '4', 10), mask: 0x07, colBase: 0 },
-  wm: { job: parseInt(process.env.JOB_WM || '3', 10), mask: 0x38, colBase: 3 },
+  bm: { job: parseInt(process.env.JOB_BM || '4', 10), mask: 0x07, colBase: 0, cols: 3 },
+  wm: { job: parseInt(process.env.JOB_WM || '3', 10), mask: 0x38, colBase: 3, cols: 3 },
+  // Summons are bit 6, one per level, and the menu renders whichever school the
+  // MASK enables — with 0x7F set, black wins and the summon column never shows.
+  // Masking to 0x40 alone turns the list into a single column of eight:
+  // Bahamur / Leviath / Catastro / Hyper / Ifrit / Ramuh / Shiva / Chocb.
+  // Sage ($14) is used because it is the one job proven to reach magic level 8.
+  call: { job: parseInt(process.env.JOB_CALL || '20', 10), mask: 0x40, colBase: 6, cols: 1 },
 };
 const ROWS = (process.env.ROWS || '0,1,2,3,4,5,6,7').split(',').map(Number);
 // AFFLICT=1: a cure-status spell on a healthy target is simply ineffective and
@@ -279,7 +285,7 @@ const schools = which === 'both' ? ['bm', 'wm'] : [which];
 const jobs = [];
 for (const s of schools) {
   const cells = [];
-  for (const row of ROWS) for (let col = 0; col < 3; col++) cells.push({ school: s, row, col });
+  for (const row of ROWS) for (let col = 0; col < SCHOOLS[s].cols; col++) cells.push({ school: s, row, col });
   jobs.push({ school: s, ...SCHOOLS[s], cells });
 }
 
