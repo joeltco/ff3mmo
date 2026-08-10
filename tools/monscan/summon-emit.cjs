@@ -33,20 +33,25 @@ const OUT = REPO + '/src/data/summon-anim-captured.js';
 const NES_FRAME_MS = 1000 / 60.0988;
 const NES_SRC_W = 256, NES_SRC_H = 152;
 
-// Names as the ROM's own menu renders them. SPELL_NAMES_SHRINES disagrees for
-// levels 6-2 (Odin/Titan/Ifrit/Ramuh/Shiva); recorded here as observed.
+// CREATURE names, from the ROM's own STRING_SUMMONS table ($0607), where each
+// appears three times — once per job tier. An earlier version of this file used
+// the STRING_SPELLS names (Catas / Hyper / Heatra / Spark / Icen / Escape),
+// which label the per-level SPELL, not the creature, and made it look as though
+// SPELL_NAMES_SHRINES were wrong. It is not: it already carries these names.
 const NAMES = {
-  0x06: 'Bahamur', 0x0d: 'Leviath', 0x14: 'Catastro', 0x1b: 'Hyper',
-  0x22: 'Ifrit', 0x29: 'Ramuh', 0x30: 'Shiva', 0x37: 'Chocb',
+  0x06: 'Bahamut', 0x0d: 'Leviathan', 0x14: 'Odin', 0x1b: 'Titan',
+  0x22: 'Ifrit', 0x29: 'Ramuh', 0x30: 'Shiva', 0x37: 'Chocobo',
 };
 
-function build(rec) {
-  const big = rec.regions.slice().sort((a, b) => b.tiles - a.tiles)[0];
-  if (!big) return null;
-  const win = new Map();                   // slot -> [first, last]
-  const srcOff = new Map();                // slot -> rom offset
+// $55810 is loaded by all eight — the shared "call" spark burst that plays for
+// every summon, so it belongs to no one creature.
+const SHARED_CALL = 0x55810;
+
+/** Sprites drawn from `regions`, honouring each block's frame window. */
+function sequence(rec, regions) {
+  const win = new Map(), srcOff = new Map();
   for (const a of rec.art) {
-    if (a.off < big.start || a.off > big.end) continue;
+    if (!regions.some((g) => a.off >= g.start && a.off <= g.end)) continue;
     for (const s of a.slots) {
       const w = win.get(s);
       win.set(s, w ? [Math.min(w[0], a.first), Math.max(w[1], a.last)] : [a.first, a.last]);
@@ -59,8 +64,12 @@ function build(rec) {
       return w && f.f >= w[0] && f.f <= w[1];
     }) }))
     .filter((f) => f.spr.length >= 3);
-  if (!frames.length) return null;
+  return { frames, srcOff };
+}
 
+function pack(seq, rom) {
+  const { frames, srcOff } = seq;
+  if (!frames.length) return null;
   const states = [];
   const key = (spr) => spr.map((s) => `${s.tile},${s.x},${s.y},${s.pal},${s.h ? 1 : 0}${s.v ? 1 : 0}`).sort().join('|');
   for (const fr of frames) {
@@ -69,15 +78,8 @@ function build(rec) {
     if (last && last.key === k) { last.hold++; continue; }
     states.push({ key: k, hold: 1, spr: fr.spr, pal: fr.pal });
   }
-
-  const tiles = [];
-  const tileIdx = new Map();
-  const hexOf = (s) => {
-    const off = srcOff.get(s.tile);
-    return rom.slice(off, off + 16).toString('hex');
-  };
-  const pals = [];
-  const palIdx = new Map();
+  const tiles = [], tileIdx = new Map(), pals = [], palIdx = new Map();
+  const hexOf = (s) => { const off = srcOff.get(s.tile); return rom.slice(off, off + 16).toString('hex'); };
   const palOf = (s, st) => {
     const row = st.pal.slice(16 + s.pal * 4, 16 + s.pal * 4 + 4);
     const k = row.join(',');
@@ -91,22 +93,33 @@ function build(rec) {
   const layouts = states.map((st) => st.spr.map((s) => [
     tileIdx.get(hexOf(s)), s.x, s.y, s.h ? 1 : 0, s.v ? 1 : 0, palOf(s, st),
   ]));
-
   const xs = states.flatMap((st) => st.spr.map((s) => s.x));
   const ys = states.flatMap((st) => st.spr.map((s) => s.y));
-  // PER-STATE holds, not one toggle. A summon is a one-shot sequence, not a
-  // cycling burst: Shiva's runs are 1,1,1,1,1,1,149 — a six-frame entrance and
-  // then she stands for ~2.5s. Taking a median (and dropping the final state as
-  // "capture ended mid-hold", which is right for a cycling effect) collapsed
-  // that to a 17ms toggle and would have strobed her.
-  const holds = states.map((s) => Math.round(s.hold * NES_FRAME_MS));
   return {
-    pals, tiles, layouts, holds,
-    states: states.length,
+    pals, tiles, layouts,
+    holds: states.map((s) => Math.round(s.hold * NES_FRAME_MS)),
     box: { x0: Math.min(...xs), x1: Math.max(...xs) + 8, y0: Math.min(...ys), y1: Math.max(...ys) + 8 },
+  };
+}
+
+function build(rec) {
+  const big = rec.regions.slice().sort((a, b) => b.tiles - a.tiles)[0];
+  if (!big) return null;
+  const creature = pack(sequence(rec, [big]), rom);
+  if (!creature) return null;
+  // The MAGIC the summon performs. Everything the cast loads that is neither
+  // the creature nor the shared call burst: Bahamut $571d0, Leviathan $57170,
+  // Ifrit $57050, Ramuh $55cd0 (the same bolt Bolt/Bolt2/Bolt3 use) + $56750,
+  // Shiva $57430, Chocobo $57470. Odin and Titan load none — their only extra
+  // region IS the shared burst.
+  const fxRegions = rec.regions.filter((g) => g.start !== big.start && g.start !== SHARED_CALL);
+  const effect = fxRegions.length ? pack(sequence(rec, fxRegions), rom) : null;
+  return {
+    ...creature, creature, effect,
+    states: creature.layouts.length,
     region: big,
+    fxRegions,
     fadeFrames: rec.fadeFrames,
-    firstFrame: frames[0].f, lastFrame: frames[frames.length - 1].f,
   };
 }
 
@@ -156,6 +169,19 @@ for (const [id, b] of [...built.entries()].sort((a, c) => a[0] - c[0])) {
   lines.push('    layouts: [');
   for (const l of b.layouts) lines.push(`      [${l.map((e) => `[${e.join(',')}]`).join(',')}],`);
   lines.push('    ],');
+  if (b.effect) {
+    lines.push(`    effect: {   // ${b.fxRegions.map((g) => '$' + g.start.toString(16) + '(' + g.tiles + 't)').join(' ')}`);
+    lines.push(`      pals: [${b.effect.pals.map((p) => `[${p.map(hx).join(',')}]`).join(', ')}],`);
+    lines.push(`      holds: [${b.effect.holds.join(', ')}],`);
+    lines.push(`      box: { x0: ${b.effect.box.x0}, x1: ${b.effect.box.x1}, y0: ${b.effect.box.y0}, y1: ${b.effect.box.y1} },`);
+    lines.push('      tiles: [');
+    for (const t of b.effect.tiles) lines.push(`        new Uint8Array([${bytesOf(t)}]),`);
+    lines.push('      ],');
+    lines.push('      layouts: [');
+    for (const l of b.effect.layouts) lines.push(`        [${l.map((e) => `[${e.join(',')}]`).join(',')}],`);
+    lines.push('      ],');
+    lines.push('    },');
+  }
   lines.push('  }],');
 }
 lines.push(']);', '');
@@ -164,6 +190,7 @@ console.log(`emitted ${built.size} summons -> ${OUT}`);
 for (const [id, b] of [...built.entries()].sort((a, c) => a[0] - c[0])) {
   console.log(`  $${id.toString(16).padStart(2, '0')} ${(NAMES[id] || '?').padEnd(9)}` +
     `${b.states} states, ${b.tiles.length} tiles, ${b.pals.length} palette(s), ` +
-    `${b.holds.reduce((a, c) => a + c, 0)}ms total, ` +
+    `${b.holds.reduce((a, c) => a + c, 0)}ms, ` +
+    `effect ${b.effect ? b.effect.layouts.length + ' states' : 'none'}, ` +
     `box x${b.box.x0}-${b.box.x1} y${b.box.y0}-${b.box.y1}, fade ${b.fadeFrames}f`);
 }

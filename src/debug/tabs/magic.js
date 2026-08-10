@@ -276,6 +276,11 @@ function _renderSummonDetail(id) {
       '<div style="color:#c66;font-family:monospace;font-size:11px;">canvases not built</div>');
     return;
   }
+  // Play the WHOLE scene: the creature, then the magic it performs. Showing
+  // only the creature would hide the half of the capture that is the attack.
+  const seq = sm.frames.map((f, i) => ({ f, ms: sm.holds[i], part: 'creature' }))
+    .concat(sm.fx ? sm.fx.frames.map((f, i) => ({ f, ms: sm.fx.holds[i], part: 'effect' })) : []);
+
   const canvas = document.createElement('canvas');
   canvas.width = SCREEN_W; canvas.height = SCREEN_H;
   canvas.style.cssText = 'width:100%;max-width:512px;image-rendering:pixelated;background:#101018;' +
@@ -296,13 +301,13 @@ function _renderSummonDetail(id) {
   const next = Object.assign(document.createElement('button'), { textContent: '\u25b6' });
   next.style.cssText = BTN;
   const slider = document.createElement('input');
-  slider.type = 'range'; slider.min = '0'; slider.max = String(sm.frames.length - 1); slider.value = '0';
+  slider.type = 'range'; slider.min = '0'; slider.max = String(seq.length - 1); slider.value = '0';
   slider.style.cssText = 'flex:1;min-width:120px;min-height:34px;';
   ctrl.append(playBtn, prev, next, slider);
   dom.detail.appendChild(ctrl);
 
   const draw = () => {
-    const i = Math.max(0, Math.min(sm.frames.length - 1, state.stateIdx));
+    const i = Math.max(0, Math.min(seq.length - 1, state.stateIdx));
     ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
     ctx.fillStyle = '#101018';
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
@@ -310,12 +315,14 @@ function _renderSummonDetail(id) {
     // what the battle screen does — showing it un-faded here would misrepresent.
     ctx.fillStyle = '#000';
     ctx.fillRect(144, 32, 112, 144);
-    ctx.drawImage(sm.frames[i], 0, 32);
+    ctx.drawImage(seq[i].f, 0, 32);
     slider.value = String(i);
-    info.innerHTML = `state <b>${i + 1}</b>/${sm.frames.length} \u00b7 held ${sm.holds[i]} ms \u00b7 ` +
-      `scene ${summonTotalMs(id)} ms incl. fades<br>box x${sm.box.x0}-${sm.box.x1} y${sm.box.y0}-${sm.box.y1}`;
+    info.innerHTML = `<b style="color:${seq[i].part === 'effect' ? '#cc5' : '#a8f'}">${seq[i].part}</b> ` +
+      `state <b>${i + 1}</b>/${seq.length} \u00b7 held ${seq[i].ms} ms \u00b7 ` +
+      `scene ${summonTotalMs(id)} ms incl. fades<br>` +
+      `creature ${sm.frames.length} states, magic ${sm.fx ? sm.fx.frames.length + ' states' : 'none'}`;
   };
-  const step = (d) => { state.stateIdx = (state.stateIdx + d + sm.frames.length) % sm.frames.length; draw(); };
+  const step = (d) => { state.stateIdx = (state.stateIdx + d + seq.length) % seq.length; draw(); };
   playBtn.addEventListener('click', () => {
     state.playing = !state.playing;
     playBtn.textContent = state.playing ? '\u275a\u275a' : '\u25b6';
@@ -332,7 +339,7 @@ function _renderSummonDetail(id) {
   timer = setInterval(() => {
     if (!state.playing || !dom) return;
     held += 16.64;
-    if (held >= sm.holds[state.stateIdx]) { held = 0; step(1); }
+    if (held >= seq[state.stateIdx].ms) { held = 0; step(1); }
   }, 16.64);
   draw();
 }

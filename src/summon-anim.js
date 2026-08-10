@@ -35,12 +35,13 @@ export function initSummonAnim() {
   _bySpellId = new Map();
   for (const [id, e] of CAPTURED_SUMMONS) {
     const sx = BAND_W / SUMMON_SRC_W, sy = BAND_H / SUMMON_SRC_H;
-    const cache = e.pals.map(() => new Array(e.tiles.length));
-    const tileFor = (pi, ti) => {
-      if (!cache[pi][ti]) cache[pi][ti] = _make8Canvas(e.tiles[ti], e.pals[pi]);
-      return cache[pi][ti];
-    };
-    const frames = e.layouts.map((layout) => {
+    const buildFrames = (part) => {
+      const cache = part.pals.map(() => new Array(part.tiles.length));
+      const tileFor = (pi, ti) => {
+        if (!cache[pi][ti]) cache[pi][ti] = _make8Canvas(part.tiles[ti], part.pals[pi]);
+        return cache[pi][ti];
+      };
+      return part.layouts.map((layout) => {
       const c = document.createElement('canvas');
       c.width = BAND_W; c.height = BAND_H;
       const cx = c.getContext('2d');
@@ -54,10 +55,16 @@ export function initSummonAnim() {
         else          { cx.drawImage(img, ox, oy); }
         cx.restore();
       }
-      return c;
-    });
+        return c;
+      });
+    };
+    const frames = buildFrames(e);
     const creatureMs = e.holds.reduce((a, c) => a + c, 0);
-    _bySpellId.set(id, { frames, holds: e.holds, creatureMs, box: e.box });
+    // The magic the creature performs. Six of eight have one; Odin and Titan
+    // load nothing beyond the shared call burst, so they stand and that is it.
+    const fx = e.effect ? { frames: buildFrames(e.effect), holds: e.effect.holds } : null;
+    const effectMs = fx ? fx.holds.reduce((a, c) => a + c, 0) : 0;
+    _bySpellId.set(id, { frames, holds: e.holds, creatureMs, fx, effectMs, box: e.box });
   }
 }
 
@@ -81,7 +88,9 @@ export function getSummon(spellId) {
 export function summonTotalMs(spellId) {
   const e = CAPTURED_SUMMONS.get(spellId);
   if (!e) return 0;
-  return SUMMON_FADE_MS + e.holds.reduce((a, c) => a + c, 0) + SUMMON_FADE_MS;
+  const creature = e.holds.reduce((a, c) => a + c, 0);
+  const effect = e.effect ? e.effect.holds.reduce((a, c) => a + c, 0) : 0;
+  return SUMMON_FADE_MS + creature + effect + SUMMON_FADE_MS;
 }
 
 /**
@@ -108,7 +117,19 @@ export function summonPhaseAt(spellId, t) {
     }
     return { phase: 'creature', panelFade: SUMMON_FADE_STEPS, frame: s.frames[idx] };
   }
-  const ft = ct - s.creatureMs;
+  // The creature casts. Six of eight have an effect; Odin and Titan skip
+  // straight to the fade because they load no art beyond the shared burst.
+  const et = ct - s.creatureMs;
+  if (s.fx && et < s.effectMs) {
+    let acc = 0, idx = 0;
+    for (let i = 0; i < s.fx.holds.length; i++) {
+      acc += s.fx.holds[i];
+      if (et < acc) { idx = i; break; }
+      idx = i;
+    }
+    return { phase: 'effect', panelFade: SUMMON_FADE_STEPS, frame: s.fx.frames[idx] };
+  }
+  const ft = et - s.effectMs;
   if (ft < SUMMON_FADE_MS) {
     return { phase: 'fade-in', panelFade: Math.max(0, SUMMON_FADE_STEPS - Math.floor(ft / stepMs)), frame: null };
   }
