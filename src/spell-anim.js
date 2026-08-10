@@ -346,20 +346,30 @@ function _buildCapturedFrames(entry) {
   const screen = entry.anchor === 'screen';
   const sx = screen ? SCREEN_BAND_W / entry.width : 1;
   const sy = screen ? SCREEN_BAND_H / entry.height : 1;
-  const tiles = entry.tiles.map((t) => _make8Canvas(t, entry.pal));
+  // A tile canvas per (palette, tile) pair — Warp and Exit alternate between
+  // two sub-palettes mid-animation, so one baked palette per tile would drop
+  // the flicker. Built lazily; 33 of the 35 have a single palette and only ever
+  // touch row 0.
+  const pals = entry.pals || [entry.pal];
+  const cache = pals.map(() => new Array(entry.tiles.length));
+  const tileFor = (pi, ti) => {
+    if (!cache[pi][ti]) cache[pi][ti] = _make8Canvas(entry.tiles[ti], pals[pi]);
+    return cache[pi][ti];
+  };
   return entry.layouts.map((layout) => {
     const c = document.createElement('canvas');
     c.width = screen ? SCREEN_BAND_W : entry.width;
     c.height = screen ? SCREEN_BAND_H : entry.height;
     const cx = c.getContext('2d');
-    for (const [ti, rx, ry, hf, vf] of layout) {
+    for (const [ti, rx, ry, hf, vf, pi = 0] of layout) {
       const ox = screen ? Math.round(rx * sx) : rx;
       const oy = screen ? Math.round(ry * sy) : ry;
+      const img = tileFor(pi, ti);
       cx.save();
-      if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(tiles[ti], 0, 0); }
-      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(tiles[ti], 0, 0); }
-      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(tiles[ti], 0, 0); }
-      else          { cx.drawImage(tiles[ti], ox, oy); }
+      if (hf && vf) { cx.translate(ox + 8, oy + 8); cx.scale(-1, -1); cx.drawImage(img, 0, 0); }
+      else if (hf)  { cx.translate(ox + 8, oy);     cx.scale(-1,  1); cx.drawImage(img, 0, 0); }
+      else if (vf)  { cx.translate(ox,     oy + 8); cx.scale( 1, -1); cx.drawImage(img, 0, 0); }
+      else          { cx.drawImage(img, ox, oy); }
       cx.restore();
     }
     return c;

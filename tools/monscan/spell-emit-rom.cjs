@@ -113,22 +113,31 @@ function build(rec) {
 
   // Both forms are emitted from the same source; `screen` decides which is
   // used, and is set by the caller once the size is known.
+  // Palette PER SPRITE, not one for the whole animation. Warp and Exit
+  // alternate between two sub-palettes; locking to the first dropped the
+  // flicker and rendered a single colour phase. Every layout entry now carries
+  // its own index into `pals`, which is length 1 for the other 33 spells.
+  const pals = [];
+  const palIdx = new Map();
+  const palOf = (s, st) => {
+    const row = st.pal.slice(s.pal * 4, s.pal * 4 + 4);
+    const k = row.join(',');
+    if (!palIdx.has(k)) { palIdx.set(k, pals.length); pals.push(row); }
+    return palIdx.get(k);
+  };
   const rel = states.map((st) => st.spr.map((s) => [
-    tileIdx.get(hexOf(s, st)), s.x - minX, s.y - minY, s.h ? 1 : 0, s.v ? 1 : 0,
+    tileIdx.get(hexOf(s, st)), s.x - minX, s.y - minY, s.h ? 1 : 0, s.v ? 1 : 0, palOf(s, st),
   ]));
   const abs = states.map((st) => st.spr.map((s) => [
-    tileIdx.get(hexOf(s, st)), s.x, s.y, s.h ? 1 : 0, s.v ? 1 : 0,
+    tileIdx.get(hexOf(s, st)), s.x, s.y, s.h ? 1 : 0, s.v ? 1 : 0, palOf(s, st),
   ]));
   const layouts = rel;
   // The palette the effect's own sprites actually use. Sub-palette index comes
   // from OAM, the entries from PPU palette RAM at that frame.
-  const palIdx = states[0].spr[0].pal;
-  const pal = states[0].pal.slice(palIdx * 4, palIdx * 4 + 4);
-
   const holds = states.slice(0, -1).map((s) => s.hold).filter((h) => h > 0).sort((a, b) => a - b);
   const holdMs = Math.round((holds.length ? holds[holds.length >> 1] : 4) * NES_FRAME_MS);
 
-  return { run, pal, tiles, layouts, abs, width, height, holdMs, states: states.length };
+  return { run, pals, tiles, layouts, abs, width, height, holdMs, states: states.length };
 }
 
 // Target side, straight out of spells.js. `anchor` is metadata — the render
@@ -228,7 +237,7 @@ const lines = [
 ];
 for (const [id, b] of [...built.entries()].sort((a, c) => a[0] - c[0])) {
   lines.push(`  [${hx(id)}, {   // ${SPELL_NAMES.get(id) || '?'} — impact block $${b.run.start.toString(16)}`);
-  lines.push(`    pal: [${b.pal.map(hx).join(', ')}],`);
+  lines.push(`    pals: [${b.pals.map((p) => `[${p.map(hx).join(',')}]`).join(', ')}],`);
   lines.push(`    width: ${b.width}, height: ${b.height}, holdMs: ${b.holdMs},`);
   lines.push(`    anchor: '${b.screen ? 'screen' : anchorFor(id)}',`);
   lines.push('    tiles: [');
