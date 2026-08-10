@@ -27,6 +27,7 @@ import { initMissSprite } from './damage-numbers.js';
 import { initProjectile } from './projectile-anim.js';
 import { initCastAnim } from './cast-anim.js';
 import { initSpellAnim } from './spell-anim.js';
+import { initSummonAnim } from './summon-anim.js';
 
 const TITLE_FADE_MAX = 4;
 
@@ -83,6 +84,7 @@ export function initSpriteAssets(rom) {
   initProjectile();
   initCastAnim();
   initSpellAnim();
+  initSummonAnim();
   initPlayerStats(rom);
   initExpTable(rom);
 

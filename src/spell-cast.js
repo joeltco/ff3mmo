@@ -13,6 +13,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
          tickHealNums, clearHealNums, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, STATUS_NAME_TO_FLAG } from './status-effects.js';
+import { isSummonSpell, summonTotalMs } from './summon-anim.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
          CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
@@ -804,6 +805,25 @@ export function updateSpellCast(dt) {
   // 550..650 post-impact gap (no render), 650 = apply effect (damage applies +
   // damage number pops), 650..1150 hold for the damage-number bounce. SFX
   // fires per-target at the start of each window.
+  // Phase 2s — summon: one scene, not a per-target walk. The creature takes
+  // over the party panel for its measured duration (Shiva ~2.6 s) and the
+  // effect applies to every target once, at the end. Falling through to the
+  // walk below would replay the whole entrance for each enemy, and summons
+  // target everyone.
+  if (isSummonSpell(_spellId)) {
+    const sceneMs = summonTotalMs(_spellId);
+    if (!_sfxPlayed) _playSpellSFXOnce(_spellImpactSFX(spell));
+    if (!_effectApplied && battleSt.battleTimer >= sceneMs) {
+      for (const tgt of _targets) _applySpellEffect(tgt);
+      _effectApplied = true;
+    }
+    if (battleSt.battleTimer >= sceneMs + DMG_SHOW_MS) {
+      _hitIdx = Math.max(0, _targets.length - 1);
+      _finishMagicHit();
+    }
+    return true;
+  }
+
   if (isThrown && _hasCrossFactionTarget) {
     const impactDur     = CAST_PHASE_MS_THROW.impact;          // 550
     const postGap       = CAST_PHASE_MS_THROW.postImpactGap;   // 100

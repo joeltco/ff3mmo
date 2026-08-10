@@ -22,7 +22,9 @@ import { _nameToBytes } from './text-utils.js';
 import { pvpSt } from './pvp.js';
 import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
+import { getCurrentSpellId } from './spell-cast.js';
 import { drawSpellThrow } from './combatant-cast.js';
+import { isSummonSpell, summonPhaseAt, SUMMON_FADE_STEPS } from './summon-anim.js';
 import { drawBattleMenu, drawVictoryBox } from './battle-draw-menu.js';
 import { drawBattleAllies } from './battle-draw-allies.js';
 import { drawBattlePortrait, drawBattleCritFlash, drawBattleStrobeFlash } from './battle-draw-player.js';
@@ -150,10 +152,43 @@ function drawBattle() {
   _drawPlayerSpellTargetSparkleOnEnemy();
   _drawPVPEnemyOffensiveCast();
   _drawAllyOffensiveCast();
+  _drawSummonPresentation();
   drawBattleMenu();
   drawVictoryBox();
   drawBattleMessageStrip();
   drawDamageNumbers();
+}
+
+
+// Summon presentation — the party panel fades out, the creature plays in the
+// player box, the panel fades back. Drawn AFTER drawBattlePortrait (step 2 of
+// drawBattle) so the fade actually covers the roster rather than being painted
+// over by them.
+//
+// Deliberately an overlay rather than a new battleState: a new state would have
+// to be threaded through every `is*` / combat-state predicate in the engine,
+// and the presentation needs none of that — the cast timeline already runs for
+// exactly as long (spell-cast.js gives summons a scene-length impact window).
+// COVERAGE: player-cast only. Ally-cast and PVP-cast summons are NOT handled,
+// and deliberately so — those paths run the heal-style timeline
+// (CAST_PHASE_MS_HEAL), which was never extended to a summon's scene length, so
+// hooking them here would start a 2-3 s creature inside a ~500 ms window and cut
+// it off mid-entrance. Extending those timelines is the work required to cover
+// them; a half-wired path would look broken rather than absent.
+function _drawSummonPresentation() {
+  if (battleSt.battleState !== 'magic-hit') return;
+  const spellId = getCurrentSpellId();
+  if (!isSummonSpell(spellId)) return;
+  const ph = summonPhaseAt(spellId, battleSt.battleTimer);
+  if (!ph || ph.phase === 'done') return;
+  if (ph.panelFade > 0) {
+    ui.ctx.save();
+    ui.ctx.globalAlpha = Math.min(1, ph.panelFade / SUMMON_FADE_STEPS);
+    ui.ctx.fillStyle = '#000';
+    ui.ctx.fillRect(HUD_RIGHT_X, HUD_VIEW_Y, HUD_RIGHT_W, HUD_VIEW_H);
+    ui.ctx.restore();
+  }
+  if (ph.frame) ui.ctx.drawImage(ph.frame, HUD_VIEW_X, HUD_VIEW_Y);
 }
 
 // ── Centralized magic render helpers ─────────────────────────────────────
