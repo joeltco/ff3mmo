@@ -92,7 +92,9 @@ function build(rec) {
     if (last && last.key === k) { last.hold++; continue; }
     states.push({ key: k, hold: 1, spr: fr.spr, pal: fr.pal, win: fr.win });
   }
-  if (states.length < 2) return { states: states.length, tooStatic: true };
+  // A single held state is a legitimate effect, not a failure: Quake's crack
+  // sits for 81 frames and Death's burst for 16. Rejecting them as "static, not
+  // an animation" was my rule and it threw away two real visuals.
 
   const tiles = [];
   const tileIdx = new Map();
@@ -137,7 +139,7 @@ function build(rec) {
   const holds = states.slice(0, -1).map((s) => s.hold).filter((h) => h > 0).sort((a, b) => a - b);
   const holdMs = Math.round((holds.length ? holds[holds.length >> 1] : 4) * NES_FRAME_MS);
 
-  return { run, pals, tiles, layouts, abs, width, height, holdMs, states: states.length };
+  return { run, pals, tiles, layouts, abs, width, height, holdMs, states: states.length, minX, maxX: Math.max(...xs) + 8 };
 }
 
 // Target side, straight out of spells.js. `anchor` is metadata — the render
@@ -196,7 +198,7 @@ for (const rec of sweep.results) {
   if (SHIPPED.has(rec.id)) { skipped.push(`$${rec.id.toString(16)} already shipped`); continue; }
   const b = build(rec);
   if (!b) { skipped.push(`$${rec.id.toString(16)} no impact run with drawn sprites`); continue; }
-  if (b.tooStatic) { skipped.push(`$${rec.id.toString(16)} only ${b.states} state — static, not an animation`); continue; }
+  b.anchorSide = anchorFor(rec.id);
   // The registry's 'burst-strip-2frame' kind is "cycle these frames at toggleMs,
   // anchored on the target". An effect that TRAVERSES the screen is not that
   // shape: it comes out as a near-full-screen canvas whose states each last a
@@ -209,7 +211,14 @@ for (const rec of sweep.results) {
   // the bottom-left. Centring a canvas that size on a target would be nonsense.
   // They are emitted SCREEN-ANCHORED instead — absolute captured coordinates,
   // replayed across the whole map-HUD band.
-  if (b.width > 64 || b.height > 64 || b.holdMs < 33) {
+  // Quake's crack is drawn at x160-208 — the party side — while the spell
+  // targets enemies on the left. An effect that does not sit where its target
+  // is cannot be target-anchored; it belongs at its captured screen position.
+  const ally = b.anchorSide === 'portrait-center';
+  const onPartySide = b.minX >= 144;
+  const onEnemySide = b.maxX <= 128;
+  const wrongSide = (!ally && onPartySide) || (ally && onEnemySide);
+  if (b.width > 64 || b.height > 64 || b.holdMs < 33 || wrongSide) {
     b.screen = true;
     b.width = NES_SRC_W; b.height = NES_SRC_H;
   }
