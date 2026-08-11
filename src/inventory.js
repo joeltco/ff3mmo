@@ -1,4 +1,5 @@
 import { ITEMS } from './data/items.js';
+import { INV_CAP } from './data/limits.js';
 import { ps } from './player-stats.js';
 
 // Player inventory state — { itemId: count } map of held items.
@@ -7,7 +8,8 @@ import { ps } from './player-stats.js';
 // (v1.7.219): all reads and writes route through the helpers below so
 // the future websocket layer has one place to hook delta emission.
 
-export const INV_CAP = 16;  // max distinct item slots (v1.7.689 — was 8 v1.7.599→v1.7.688)
+// Re-exported from the shared leaf so `api.js` clamps saves to the same value.
+export { INV_CAP } from './data/limits.js';
 export const INV_SLOTS = 16; // total navigable slots — matches cap; pause panel scrolls within it
 
 export const playerInventory = {};

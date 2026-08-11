@@ -15,7 +15,9 @@ import { computeRealizedStats } from './realized-stats.js';
 // gameplay clamps progression here. grantExp stops leveling at MAX_LEVEL and
 // pins expToNext to 0xFFFFFF ("MAX") so a capped player never crosses another
 // threshold. See chat.js /level, title-screen.js load, api.js server clamp.
-export const MAX_LEVEL = 5;
+// Re-exported from the shared leaf so `api.js` clamps saves to the same value.
+export { MAX_LEVEL } from './data/limits.js';
+import { MAX_LEVEL } from './data/limits.js';
 
 // Mutable player state — replaces the scattered globals in game.js
 export const ps = {

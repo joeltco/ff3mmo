@@ -48,6 +48,7 @@ import {
 // calcDamage / rollHits / rollInitiative are already imported at line 24
 // (Suite 1 RNG determinism tests). Reuse those for the P-3 parity tests.
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
+import { MAX_LEVEL, INV_CAP } from '../src/data/limits.js';
 import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testMirrorSync, _testMirrorSyncRuntime,
          _testMirrorRead, _testMirrorClear,
@@ -369,6 +370,55 @@ function suiteServer() {
     assertEqual(data.stats.head, 0x62, 'head dropped');
     assertEqual(data.stats.body, 0x72, 'body dropped');
     assertEqual(data.stats.arms, 0x05, 'arms dropped');
+  });
+
+  // v1.7.863 — the whole client save shape, through the real server validator.
+  //
+  // The standing rule is that a new `ps.*` field needs BOTH the client
+  // serializer and the server validator, because the server save wins over
+  // IndexedDB on load — a field the validator drops is progress that vanishes
+  // on the next reload. Nothing enforced that pairing; this does. The list is
+  // exactly what `saveSlotsToDB()` writes, with each field in its REAL type
+  // (`unlockedJobs` is a BITMASK number, not an array — getting that wrong is
+  // how this check first reported a false positive).
+  test('save round-trip — every client-serialized field survives the validator', () => {
+    const input = {
+      name: [0x80, 0x81], playTime: 12345,
+      level: 3, exp: 500, hp: 40, mp: 10,
+      stats: { level: 3, exp: 500, hp: 40, maxHP: 50, maxMP: 12,
+               str: 10, agi: 10, vit: 10, int: 10, mnd: 10,
+               weaponR: 1, weaponL: 0, arrowCount: 5, head: 0, body: 0, arms: 0 },
+      inventory: { 166: 3 }, inventoryOrder: [166], gil: 500,
+      jobLevels: { 0: 2 }, jobIdx: 1, palIdx: 2, unlockedJobs: 0x3F, cp: 7,
+      knownSpells: [0x31, 0x34], currentMapId: 5, worldX: 10, worldY: 12,
+      onWorldMap: true, lastTown: 3, lastWorldExitX: 4, lastWorldExitY: 5,
+      consumedTiles: { 5: { 100: 124 } }, consumedTilesAt: { 5: { 100: 1 } },
+      statusMask: 2, statusPoisonTick: 1,
+    };
+    const { ok, data } = _testValidateSaveData(input);
+    assertEqual(ok, true, 'validator rejected a normal save');
+    const dropped = Object.keys(input).filter(k => !(k in data));
+    assertEqual(dropped, [], 'fields dropped by the server validator');
+    // Scalars must survive unchanged, not merely survive.
+    for (const k of ['level', 'exp', 'hp', 'mp', 'gil', 'jobIdx', 'palIdx', 'unlockedJobs',
+                     'cp', 'currentMapId', 'worldX', 'worldY', 'lastTown',
+                     'statusMask', 'statusPoisonTick', 'playTime']) {
+      assertEqual(data[k], input[k], `${k} changed in transit`);
+    }
+  });
+
+  // The server CLAMPS saves to these bounds, so a drift silently truncates a
+  // real player's level or bag order. They used to be hardcoded in api.js with
+  // "must mirror" comments; both sides now read src/data/limits.js.
+  test('save validator clamps track the shared client limits', () => {
+    const atCap = _testValidateSaveData({ level: MAX_LEVEL, stats: null });
+    assertEqual(atCap.data.level, MAX_LEVEL, 'a level AT the cap was clamped down');
+    const overCap = _testValidateSaveData({ level: MAX_LEVEL + 1 });
+    assertEqual(overCap.data.level, MAX_LEVEL, 'level not clamped to MAX_LEVEL');
+    const order = [];
+    for (let i = 0; i < INV_CAP + 4; i++) order.push(i + 1);
+    const inv = _testValidateSaveData({ inventoryOrder: order });
+    assertEqual(inv.data.inventoryOrder.length, INV_CAP, 'inventoryOrder not truncated to INV_CAP');
   });
 
   test('save validator clamps equipment IDs to 0-255', () => {

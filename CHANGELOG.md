@@ -18,6 +18,34 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.863 — 2026-08-11
+
+**Save sweep. The parity rule this project cares most about held — so the finding is that nothing enforced it.**
+
+The standing rule is that a new `ps.*` field needs BOTH the client serializer and the server validator, because the **server save wins over IndexedDB on load**: a field the validator drops is progress that disappears on the next reload. `saveSlotsToDB()` writes 26 fields. I fed exactly those, in their real types, through the real `_validateSaveData`.
+
+**Result: nothing dropped, no value altered.** The lockstep is intact. What was missing is any check that keeps it that way, so that is what shipped.
+
+Worth recording how that answer was almost wrong. The first run reported `unlockedJobs` as dropped, and it is not — `ps.unlockedJobs` is a BITMASK NUMBER (`0x01`, `|= 0x3E`) and the probe passed an array, which the validator correctly ignores. The bug was in the test input, not the code. A field-parity check is only as good as its types.
+
+**Two constants the server hardcoded with a "must mirror" comment.** `_validateSaveData` clamped level to a literal `5` (twice) and `inventoryOrder` to a literal `16`, each carrying a comment naming the client constant it had to match. They agreed today. A comment is not a mechanism, and a drift here does not throw — it silently truncates a real player's level or bag order on every save, with lost progress as the only symptom. That is the same duplicate-constant hazard behind the v1.7.180 damage-show drift this session already unpicked.
+
+`src/data/limits.js` is now the single source for `MAX_LEVEL` and `INV_CAP`. It is a deliberate leaf — no imports — so `api.js` can read it without pulling in the client's stat system; `player-stats.js` and `inventory.js` re-export from it, so every existing import and the `CLAUDE.md` pointer stay valid.
+
+**Gates** (2 new, in `pvp-wire-sim`'s server suite — 137 -> 139):
+
+- The whole client save shape round-trips: every field survives, and the scalars come back byte-identical rather than merely present.
+- The server's clamps track the shared limits: a level AT the cap is left alone, `MAX_LEVEL + 1` clamps down, and an over-long `inventoryOrder` truncates to exactly `INV_CAP`.
+
+Three reverts verified to fail independently: the validator dropping `unlockedJobs`, the level clamp drifting to 3, and the bag clamp drifting to 8.
+
+**Checked and found correct:**
+
+- `hp` is cross-clamped to `maxHP` on both the top-level mirror and `stats`, so a modded client cannot save 9999 HP against a 28 HP cap.
+- Unknown keys are dropped rather than stored, and the payload is size-capped before parsing.
+- Equipment IDs, inventory quantities, gil, exp and the stat block are each range-clamped; `inventoryOrder` also de-duplicates.
+- The new-game and load paths both default `unlockedJobs` to `0x01` when absent, so a pre-existing save without it opens with Onion Knight rather than no jobs at all.
+
 ## 1.7.862 — 2026-08-11
 
 **Shop sweep: the shop would buy your Magic Key for 100 gil.**
