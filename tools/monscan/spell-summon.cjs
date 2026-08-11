@@ -115,7 +115,12 @@ const spriteCount = (n) => {
 /** One round. `row` null = control (plain attack). */
 function round(row) {
   const n = new Nes(romPath);
-  n.run(300);
+  // DELAY=N idles N frames BEFORE the encounter. It has to be before, not after
+  // battle entry: FF3 seeds the battle RNG when the fight starts, so idling
+  // inside the battle changes nothing and four "different" runs came back
+  // byte-identical. A tier that picks a RANDOM effect would otherwise look
+  // fixed and be mistaken for having no variation.
+  n.run(300 + parseInt(process.env.DELAY || '0', 10));
   for (let i = 0; i < 25; i++) n.press('start', 6, 45);
   let ib = false;
   for (let blk = 0; blk < 20 && !ib; blk++) {
@@ -123,6 +128,10 @@ function round(row) {
     if (!ib) { grant(n); n.press('down', 8, 40); ib = spriteCount(n) > 12; }
   }
   if (!ib) throw new Error('never reached a battle');
+  // DELAY=N idles N extra frames before the menu is opened. jsnes is
+  // deterministic and this script is fixed, so without it every run makes the
+  // same RNG draw — and a tier that picks a RANDOM effect (FF3's Evoker) would
+  // look identical every time and be mistaken for having no variation at all.
   n.run(60);
   const baseNt = n.nametable().slice();
   const basePal = n.palette().slice();
