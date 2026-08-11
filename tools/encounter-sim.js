@@ -112,6 +112,8 @@ const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask } = awa
 const { applySpell } = await import('../src/combatant-cast.js');
 const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
 const { processNextTurn } = await import('../src/battle-turn.js');
+const { addItem } = await import('../src/inventory.js');
+const { hasStatus } = await import('../src/status-effects.js');
 // Turn dispatch queues the actor's NAME on the battle strip, which reads the
 // ROM string table. Feed it the real ROM when it is there; the confuse test is
 // the only one that walks that path, and it skips itself if it is not.
@@ -1138,6 +1140,80 @@ const tests = [
       battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
       battleSt.encounterMonsters = saved.mons; battleSt.battleAllies = saved.allies;
       battleSt.isRandomEncounter = saved.rnd; battleSt.forcedEnemyTarget = saved.forced;
+    }
+  },
+  // Regression — an in-battle item lands on the target the player PICKED.
+  //
+  // `_playerTurnConsumable` honoured `allyIndex` on its heal branch (with a
+  // full dead-target redirect) and ignored it on the other two:
+  //   cure_status — cured `ps` unconditionally. An Antidote used on a poisoned
+  //     ALLY consumed the item, cured the PLAYER, and played its sparkle on the
+  //     ally's portrait, so the animation pointed at one combatant while the
+  //     effect landed on another.
+  //   full_heal  — ran only when the target was the player with no ally picked,
+  //     so an Elixir on an ally did NOTHING: item consumed, no heal, no number.
+  // The out-of-battle path already handled both correctly, and the in-battle
+  // cure comment claimed parity with it. v1.7.858.
+  () => {
+    const name = 'regression — in-battle items land on the picked target';
+    if (!_romLoaded) return { pass: true, name, info: 'SKIPPED — no FF3-English.nes in this checkout' };
+    const ANTIDOTE = 0xaf, ELIXIR = 0xa8, POTION = 0xa6;
+    const saved = { state: battleSt.battleState, queue: battleSt.turnQueue,
+                    mons: battleSt.encounterMonsters, allies: battleSt.battleAllies,
+                    pending: inputSt.playerActionPending };
+    try {
+      const useItem = (itemId, allyIndex) => {
+        setupEncounter({ monster: { ...goblin, hp: 200, maxHP: 200 }, seed: 5 });
+        // The harness `ps` carries a top-level maxHP the real one does not (max
+        // lives in ps.stats). Set both so `applyMagicHeal`'s lookup order
+        // resolves the same 300 either way.
+        ps.hp = 30; ps.maxHP = 300; ps.stats = { ...(ps.stats || {}), maxHP: 300, level: 1, agi: 5 };
+        ps.status = createStatusState(); addStatus(ps.status, STATUS.POISON);
+        const ally = battleSt.battleAllies[0];
+        ally.hp = 20; ally.maxHP = 200;
+        ally.status = createStatusState(); addStatus(ally.status, STATUS.POISON);
+        addItem(itemId, 1);
+        battleSt.turnQueue = [{ type: 'player' }];
+        inputSt.playerActionPending = { command: 'item', itemId, target: 'player',
+                                        allyIndex, targetMode: 'single' };
+        battleSt.battleState = 'menu-open';
+        processNextTurn();
+        return { psHp: ps.hp, allyHp: ally.hp,
+                 psPoisoned: hasStatus(ps.status, STATUS.POISON),
+                 allyPoisoned: hasStatus(ally.status, STATUS.POISON) };
+      };
+
+      // 1. Antidote on the ALLY cures the ally and leaves the player poisoned.
+      let r = useItem(ANTIDOTE, 0);
+      if (r.allyPoisoned) return { pass: false, name, reason: 'Antidote on ally did not cure the ally' };
+      if (!r.psPoisoned)  return { pass: false, name, reason: 'Antidote on ally cured the PLAYER instead' };
+
+      // 2. ...and on the player it still cures the player, not the ally.
+      r = useItem(ANTIDOTE, -1);
+      if (r.psPoisoned)    return { pass: false, name, reason: 'Antidote on self did not cure the player' };
+      if (!r.allyPoisoned) return { pass: false, name, reason: 'Antidote on self also cured the ally' };
+
+      // 3. Elixir on the ALLY fills the ally, not the player.
+      r = useItem(ELIXIR, 0);
+      if (r.allyHp !== 200) return { pass: false, name, reason: `Elixir on ally left it at ${r.allyHp}/200` };
+      if (r.psHp !== 30)    return { pass: false, name, reason: `Elixir on ally also healed the player to ${r.psHp}` };
+
+      // 4. Elixir on the player still fills the player.
+      r = useItem(ELIXIR, -1);
+      if (r.psHp !== 300)   return { pass: false, name, reason: `Elixir on self left the player at ${r.psHp}/300` };
+
+      // 5. The heal branch that always worked must keep working.
+      r = useItem(POTION, 0);
+      if (r.allyHp !== 70)  return { pass: false, name, reason: `Potion(50) on ally gave ${r.allyHp}, wanted 70` };
+      if (r.psHp !== 30)    return { pass: false, name, reason: `Potion on ally also healed the player` };
+
+      return { pass: true, name, info: 'cure_status / full_heal / heal all honour allyIndex' };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
+      battleSt.encounterMonsters = saved.mons; battleSt.battleAllies = saved.allies;
+      inputSt.playerActionPending = saved.pending;
     }
   },
 ];

@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.858 — 2026-08-11
+
+**Item sweep: two of the three in-battle item effects ignored the target you picked.**
+
+`_playerTurnConsumable` dispatches three effects. Its `heal` branch has always honoured `allyIndex`, complete with a dead-target redirect. The other two did not:
+
+- **`cure_status` cured `ps` unconditionally.** An Antidote used on a poisoned ALLY consumed the item, cured the PLAYER instead, and — because the sparkle keys off `inputSt.itemTargetAllyIndex` — played its animation on the ally's portrait. The animation pointed at one combatant while the effect landed on another. The out-of-battle path already did this correctly, and the in-battle comment claimed parity with it ("only target player for now" against pause-menu's "matches the in-battle path"); both were describing something that was not true.
+- **`full_heal` ran only when the target was the player with no ally picked.** An Elixir used on an ally therefore did *nothing whatsoever*: item consumed at dispatch, no heal, no number, no message. Silent loss of the most valuable consumable in the game.
+
+Both now resolve the picked target. `full_heal` is not a special case at all — it is a heal with an unreachable power, so it folds into the shared heal branch (which already has ally targeting and the redirect), the same shape the out-of-battle path uses. The cure routes through `applyMagicCureStatus`, which is what its comment always said it did.
+
+**Gate** (29th). Poisons the player AND an ally, then drives real turns through `processNextTurn`: an Antidote on the ally must cure the ally and leave the player poisoned; on the player, the reverse. An Elixir on the ally must fill the ally and not touch the player, and on the player must fill the player. A Potion is included because that branch always worked and must keep working. Both reverts verified to fail independently.
+
+**Checked and found correct — stated rather than implied:**
+
+- Job equip restrictions (`canJobEquip`) are enforced at every site: the manual equip list, both auto-equip paths, the job-switch unequip, and the in-battle weapon swap. No hole.
+- Equipment status resistance works. `sResist` is OR'd into `statusResist` in `realized-stats.js` and reaches every inflict path. (My first grep suggested otherwise; it had matched `statusResist` as a substring and truncated.)
+- The battle item menu cannot be used to destroy gear. `buildItemSelectList` returns the WHOLE inventory with no filter, but the confirm handler gates on `type === 'consumable' || 'battle_item'`, so a weapon or key item errors instead of being consumed for a 50 HP heal.
+- Every `cures` value in the catalogue (petrify, toad, silence, mini, blind, poison) maps to a real `STATUS_NAME_TO_FLAG` entry — items name a single status, so they never had the bitmask problem the SPELL cure family had in v1.7.855.
+
+**Reported, not fixed:**
+
+- **`twoHanded` is never read.** Eight weapons (0x46, 0x48-0x4e) carry the flag and nothing enforces it, so a two-hander can be paired with a second weapon and get dual-wield hit counts. Enforcing it is a gameplay rule, not a defect against anything the code claims — your call.
+- The battle item menu listing unusable gear is a UX wart, not a bug; you scroll past weapons and key items to reach potions.
+- `restore_hp` appears in two out-of-battle effect checks and no item in the catalogue has it; likewise `item.value` in the power fallback. Both dead.
+- Out-of-battle use of a revive item is explicitly rejected (errors, item not consumed). That reads deliberate, so I left it.
+
 ## 1.7.857 — 2026-08-11
 
 **Confuse works on everyone now, not just the player.**

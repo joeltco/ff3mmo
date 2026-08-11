@@ -18,7 +18,7 @@ import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum, setSwDmgNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
-import { applyMagicHeal } from './combatant-cast.js';
+import { applyMagicHeal, applyMagicCureStatus } from './combatant-cast.js';
 import { dispatchDelta } from './deltas.js';
 import { sendNetPVPAction, sendNetInvEvent, PVP_ARBITER } from './net.js';   // v1.7.742 Phase 1c
 import { SPELLS } from './data/spells.js';
@@ -806,7 +806,13 @@ function _playerTurnConsumable() {
   const itemId = inputSt.playerActionPending.itemId;
   const itemDat = ITEMS.get(itemId);
   const effect = itemDat?.effect || 'heal';
-  const power = itemDat?.power || 50;
+  // v1.7.858 — `full_heal` used to be its own branch that ran ONLY when the
+  // target was the player with no ally picked. An Elixir used on an ally
+  // therefore did nothing whatsoever: item consumed, no heal, no number. It is
+  // a heal with an unreachable power, so it now runs the shared heal path
+  // below, which already handles ally targets and dead-target redirect — the
+  // same shape the out-of-battle path uses (`full_heal ? 9999 : power`).
+  const power = effect === 'full_heal' ? 9999 : (itemDat?.power || 50);
 
   // Player name was queued at command dispatch; swap in the item name now.
   replaceBattleMsg(getItemNameShrinesClean(itemId));
@@ -814,21 +820,19 @@ function _playerTurnConsumable() {
   const { target, allyIndex } = inputSt.playerActionPending;
 
   if (effect === 'cure_status') {
-    // Status cure items — only target player for now.
+    // v1.7.858 — this cured `ps` unconditionally, ignoring the target the
+    // player picked, while the heal branch below has always honoured
+    // `allyIndex` with a full dead-target redirect. So an Antidote used on a
+    // poisoned ALLY consumed the item, cured the PLAYER instead, and played
+    // its sparkle on the ally's portrait — the animation pointed at one
+    // combatant while the effect landed on another. The out-of-battle path
+    // (pause-menu.js) already did this correctly and its comment claimed
+    // parity with here, which was the opposite of the truth.
     const flag = STATUS_NAME_TO_FLAG[itemDat.cures];
-    if (flag && ps.status) removeStatus(ps.status, flag);
+    const allies = battleSt.battleAllies || [];
+    const cureTgt = (target === 'player' && allyIndex >= 0 && allies[allyIndex]) ? allies[allyIndex] : ps;
+    if (flag) applyMagicCureStatus(cureTgt, flag);
     battleSt.itemHealAmount = 0;
-    battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
-    return;
-  }
-
-  if (effect === 'full_heal') {
-    // Elixir — full HP restore.
-    if (target === 'player' && (allyIndex === undefined || allyIndex < 0)) {
-      const heal = ps.stats.maxHP - ps.hp;
-      ps.hp = ps.stats.maxHP;
-      battleSt.itemHealAmount = heal; setPlayerHealNum({ value: heal, timer: 0 });
-    }
     battleSt.battleState = 'item-use'; battleSt.battleTimer = 0;
     return;
   }
