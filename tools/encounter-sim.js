@@ -126,11 +126,14 @@ const { hasStatus } = await import('../src/status-effects.js');
 // the only one that walks that path, and it skips itself if it is not.
 const { initTextDecoder } = await import('../src/text-decoder.js');
 let _romLoaded = false;
+let _romBytes = null;
 try {
   const { readFileSync } = await import('node:fs');
-  initTextDecoder(new Uint8Array(readFileSync(new URL('../FF3-English.nes', import.meta.url))));
+  _romBytes = new Uint8Array(readFileSync(new URL('../FF3-English.nes', import.meta.url)));
+  initTextDecoder(_romBytes);
   _romLoaded = true;
-} catch { /* no ROM in this checkout — the confuse test reports itself skipped */ }
+} catch { /* no ROM in this checkout — the ROM-dependent tests report themselves skipped */ }
+const { sweepFloors } = await import('./dungeon-sweep.mjs');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
@@ -1516,6 +1519,31 @@ const tests = [
     if (shopBad.length) return { pass: false, name, reason: shopBad.join(', ') };
     const quest = [...ITEMS].filter(([id]) => isQuestItem(id)).length;
     return { pass: true, name, info: `${quest} quest items unsellable, ${SHOPS.size} shop catalogs valid` };
+  },
+  // Regression — every dungeon floor generates a playable map, on the kind of
+  // seeds the game actually uses.
+  //
+  // `map-triggers.js` seeds with `Date.now()`, so consecutive small seeds prove
+  // nothing about live floors. This runs 60 timestamp-style seeds per floor
+  // through the shared `sweepFloors` and fails on the unambiguous breakage: a
+  // floor that throws, a floor with essentially nothing reachable, or an exit
+  // staircase the player cannot walk to.
+  //
+  // The "nothing reachable" arm is the one with a story. `floor-view.mjs` — the
+  // tool CLAUDE.md tells you to validate gen changes with — seeded its flood at
+  // the entrance and the four tiles BELOW it. Floor 4's entrance is at the
+  // BOTTOM with the boss chamber above, so the flood never started and the
+  // viewer reported that entire floor unreachable, on every seed, for as long
+  // as it has existed. v1.7.865.
+  () => {
+    const name = 'regression — every dungeon floor is generable and traversable';
+    if (!_romLoaded) return { pass: true, name, info: 'SKIPPED — no FF3-English.nes in this checkout' };
+    const { hard, rows } = sweepFloors(_romBytes, 60);
+    if (hard.length) {
+      return { pass: false, name, reason: hard.slice(0, 4).join('; ') + (hard.length > 4 ? ` (+${hard.length - 4} more)` : '') };
+    }
+    const seeds = rows.reduce((a, r) => a + r.seeds, 0);
+    return { pass: true, name, info: `${rows.length} floors x 60 timestamp seeds = ${seeds} maps, all traversable` };
   },
 ];
 

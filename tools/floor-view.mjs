@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 import { generateFloor } from '../src/dungeon-generator.js';
+import { reachableFrom } from './dungeon-sweep.mjs';
 
 // ── Locate the ROM (env → repo root → ~/roms) ──────────────────────────────
 function findRom() {
@@ -55,24 +56,16 @@ const PASS = new Set([0x30, 0x09, 0x41, 0x49, 0x44, 0x73, 0x42, 0x68, 0x6a, 0x60
 
 function glyph(t) { return GLYPH[t] ?? t.toString(16).padStart(2, '0')[0]; }
 
-// ── Connectivity: reachable passable tiles from the entrance ───────────────
-function reachable(tm, entranceX, entranceY) {
-  const seen = new Uint8Array(1024);
-  const q = [];
-  const push = (x, y) => {
-    if (x < 0 || x > 31 || y < 0 || y > 31) return;
-    const i = y * 32 + x;
-    if (!seen[i] && PASS.has(tm[i])) { seen[i] = 1; q.push(i); }
-  };
-  for (let dy = 0; dy <= 4; dy++) push(entranceX, entranceY + dy);
-  while (q.length) { const i = q.pop(); const x = i % 32, y = (i - x) / 32; push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1); }
-  return seen;
-}
+// ── Connectivity ───────────────────────────────────────────────────────────
+// `reachableFrom` lives in dungeon-sweep.mjs so the picture you LOOK at and the
+// numbers that gate a deploy can never disagree about what is reachable. This
+// file used to carry its own copy, seeded only downward from the entrance —
+// see that function's note for what that cost. v1.7.865.
 
 function render(floor, seed) {
   const r = generateFloor(rom, floor, seed);
   const tm = r.tilemap;
-  const seen = reachable(tm, r.entranceX, r.entranceY);
+  const seen = reachableFrom(tm, r.entranceX, r.entranceY);
 
   let chests = 0, bones = 0, floorTiles = 0, stairsAt = -1;
   for (let i = 0; i < 1024; i++) {
@@ -81,9 +74,13 @@ function render(floor, seed) {
     if (tm[i] === 0x30) floorTiles++;
     if (tm[i] === 0x73 && stairsAt < 0) stairsAt = i;
   }
-  const exitOk = stairsAt >= 0 && seen[stairsAt];
+  // Floors 1 / 2 / 4 legitimately carry no `0x73` staircase — trap holes, a
+  // rock-switch passage, and the boss chamber. Saying UNREACHABLE there is the
+  // same wolf-cry as the flood bug: it reads as breakage when nothing is wrong.
+  const exitLabel = stairsAt < 0 ? 'no staircase (trap-hole / boss floor)'
+                  : seen[stairsAt] ? 'REACHABLE' : 'UNREACHABLE';
 
-  console.log(`\n── floor ${floor}  seed ${seed}  ──  chests=${chests} skeletons=${bones} floor=${floorTiles}  exit ${exitOk ? 'REACHABLE' : 'UNREACHABLE'}`);
+  console.log(`\n── floor ${floor}  seed ${seed}  ──  chests=${chests} skeletons=${bones} floor=${floorTiles}  exit ${exitLabel}`);
   console.log('   ' + Array.from({ length: 32 }, (_, x) => (x % 10)).join(''));
   for (let y = 0; y < 32; y++) {
     let row = '';

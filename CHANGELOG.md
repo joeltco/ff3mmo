@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.865 — 2026-08-11
+
+**Dungeon sweep. The generator is sound; the tool you validate it with was lying about an entire floor.**
+
+`CLAUDE.md` says to validate any gen change with `tools/floor-view.mjs` across many seeds. Its connectivity flood seeded the entrance tile **and the four tiles BELOW it** — which assumes the walkable side of an entrance is downward. That holds for the top-entry floors. **Floor 4's entrance sits at the BOTTOM (row ~19) with the boss chamber above it**, so nothing seeded, the flood never ran, and the viewer painted the whole floor `!` and reported `exit UNREACHABLE` — on every seed, for as long as the tool has existed.
+
+A validator that cries wolf is worse than none: it either trains you to ignore `!`, or it buries a real stranding among false ones. Seeding the entrance plus its four neighbours fixes it, and floor 4 comes back fully connected.
+
+Same class, same file: floors 1, 2 and 4 carry no `0x73` staircase at all — trap holes, a rock-switch passage and the boss chamber — and the viewer called that `exit UNREACHABLE` too. It now says `no staircase (trap-hole / boss floor)`.
+
+**`tools/dungeon-sweep.mjs` is new** and is the half that was missing: `floor-view` RENDERS one floor so you can look at it; this CHECKS hundreds and reports counts. It seeds timestamp-style by default, because `map-triggers.js` seeds with `Date.now()` and consecutive small seeds prove nothing about live floors. Both tools now share one `reachableFrom`, so the picture you look at and the numbers that gate a deploy cannot disagree.
+
+**Result across 150 seeds x 5 floors: no hard invariant violations.** No floor throws, no exit staircase is stranded, every floor has a real reachable region.
+
+Four signals that a naive checker reads as bugs and are not — each cost a look before it could be dismissed:
+
+- **Floor 2 strands ~21 tiles and one chest on 150/150 seeds.** That is the **rock-switch puzzle room**: `rockSwitch.wallTiles` at x=19, y=15-17 turn to floor when the switch fires, opening exactly that pocket. Sealed by design, not by accident.
+- Floor 0's two floating rocks per seed are the entrance frame — original `placeEntrance` design.
+- Floor 3's alcove chests sit at fat-stretch ends rather than 2x2 corners, placed directly rather than through `findCornerFloor`.
+- Rows >= 22 host the intentional secret teleport room, a separate hidden formation.
+
+**Reported, not fixed:** floor 0 strands 2 decoration tiles (a floor tile and a skeleton) on **1 seed in 150** — 0.67%, no rock switch or warp involved, so genuinely dead space. No chest or exit has ever landed there across the sweep. The generator is explicitly flagged as delicate — "read the body before dungeon-gen changes", and the entrance-landing template is LOCKED — so chasing a two-tile cosmetic pocket at sub-1% risks far more than it gains. It is now measurable, which is the part that was missing.
+
+**Gate** (34th): 60 timestamp seeds per floor, failing on a floor that throws, a floor with essentially nothing reachable, or an unreachable exit staircase. Two reverts verified: restoring the downward-only flood (`floor 4 ... only 0 reachable tiles`, 60/60 seeds) and inverting the exit check.
+
 ## 1.7.864 — 2026-08-11
 
 **Multiplayer sweep. The wire contract is intact in both directions; the finding is that the rate-limit list grew by accident.**
