@@ -120,6 +120,12 @@ export function hasCapturedSpellAnim(spellId) {
 // their final frame instead of cycling, so they have a real length that the
 // impact window has to fit. Cycling target bursts return 0 — they loop, so the
 // standard window shows them fine and must NOT be stretched.
+/** Is this spell's captured effect anchored to the SCREEN rather than a target? */
+export function isScreenAnchoredSpell(spellId) {
+  const e = CAPTURED_SPELL_ANIMS.get(spellId);
+  return !!e && e.anchor === 'screen';
+}
+
 export function capturedOneShotMs(spellId) {
   const e = CAPTURED_SPELL_ANIMS.get(spellId);
   if (!e || e.anchor !== 'screen') return 0;

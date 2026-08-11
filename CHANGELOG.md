@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.849 — 2026-08-11
+
+**Screen-anchored spells now shake the screen when the animation STARTS, not when damage lands.**
+
+The shake was never missing — it rode `applyMagicDamage` (`combatant-cast.js:249`), firing next to `dispatchDelta` and the damage number. That reads as a single event for a 283 ms burst, but not for a long sweep: Meteo's 1071 ms of meteors played out in silence and stillness, and only after the last frame did the screen jolt. Same reasoning as the standing rule that SFX fire at anim-start rather than with the damage number.
+
+- **Screen-anchored only** (Meteo `0x02`, Quake `0x07`, Drain `0x09`, Kill `0x16`) — shake fires at `CAST_T_HEAL - buildup` = **417 ms** into magic-hit, which is exactly where the renderer opens the impact draw. Once per cast via `_shakeFired`.
+- **Target-anchored spells are untouched** and keep shaking on damage-apply.
+- The damage-apply shake is suppressed for screen-anchored spells in BOTH damage paths (enemy-target and party/PVP-target) — otherwise one cast would jolt twice. The two drain / recovery-on-undead `onShake` sites are left alone; they are not damage paths.
+
+NOT captured, and worth stating plainly: the sweep recorded OAM, tiles, palettes and nametable, never the PPU scroll registers, so there is no ROM data on which spells shake or how hard. This is placement of an EXISTING shake, using the existing `BATTLE_SHAKE_MS` duration — no invented numbers.
+
+Regression gate asserts the helper agrees with each capture's `anchor`, and that the shake instant falls inside the animation window for every screen-anchored spell (417 ms against Meteo 417..1488, Quake 417..700, Drain 417..791, Kill 417..2236). 19 passed.
+
 ## 1.7.848 — 2026-08-11
 
 **Quake's crack pinned to the HUD boundary — half in the battle view, half in the roster box.**

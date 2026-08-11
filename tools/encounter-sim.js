@@ -105,6 +105,7 @@ const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowM
         CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
 const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
 const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
+const { isScreenAnchoredSpell, CAST_T_HEAL, CAST_PHASE_MS } = await import('../src/cast-anim.js');
 const { spellUsesCastAnim } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX } = await import('../src/combatant-cast.js');
 const { SPELLS } = await import('../src/data/spells.js');
@@ -588,6 +589,33 @@ const tests = [
     }
     if (silent.length) return { pass: false, name, reason: `cast silently: ${silent.join(', ')}` };
     return { pass: true, name, info: 'no castable spell is silent' };
+  },
+  // Regression — screen-anchored effects shake at ANIMATION START, and the
+  // shake must land while the animation is actually on screen.
+  //
+  // The shake used to ride `applyMagicDamage`, next to the damage number. That
+  // reads as one event for a 283 ms burst but not for a 1071 ms Meteo: the
+  // whole sweep played and only then did the screen jolt. Target-anchored
+  // spells deliberately keep the damage-apply shake. v1.7.849.
+  () => {
+    const name = 'regression — screen-anchored spells shake at anim start';
+    const animStart = CAST_T_HEAL - CAST_PHASE_MS.buildup;
+    const bad = [];
+    for (const [id, e] of CAPTURED_SPELL_ANIMS) {
+      const screen = e.anchor === 'screen';
+      if (isScreenAnchoredSpell(id) !== screen) {
+        bad.push(`0x${id.toString(16)} anchor/helper disagree`);
+        continue;
+      }
+      if (!screen) continue;
+      // The shake must fire DURING the animation, not before or after it.
+      const end = animStart + healImpactWindowMs(id);
+      if (!(animStart >= 0 && animStart < end)) {
+        bad.push(`0x${id.toString(16)} shake at ${animStart} outside ${animStart}..${end}`);
+      }
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join(', ') };
+    return { pass: true, name, info: `shake at t=${animStart}ms, inside every screen animation` };
   },
 ];
 

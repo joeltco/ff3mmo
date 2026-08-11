@@ -16,7 +16,7 @@ import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, S
 import { isSummonSpell, summonTotalMs, summonCastMs } from './summon-anim.js';
 import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
-         CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START, hasCapturedSpellAnim, healImpactWindowMs, CAST_PHASE_MS_HEAL } from './cast-anim.js';
+         CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START, hasCapturedSpellAnim, healImpactWindowMs, CAST_PHASE_MS_HEAL, isScreenAnchoredSpell, CAST_T_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
@@ -59,6 +59,13 @@ let _isItemUse = false;
 // magic-hit duration with the original timing — the walk code only kicks in
 // when isThrown && cross-faction targets exist (any count, including 1).
 let _magicHitPhase = 'impact-walk';
+// v1.7.849 — screen-anchored effects shake at ANIMATION START rather than at
+// damage-apply. The shake used to ride `applyMagicDamage`, next to the damage
+// number, which reads as one event for a 283 ms burst but not for a 1071 ms
+// Meteo: the whole sweep played out and only then did the screen jolt. Same
+// reasoning as the standing rule that SFX fire at anim-start. Target-anchored
+// spells are deliberately UNCHANGED — they keep shaking on damage.
+let _shakeFired = false;
 export function getMagicHitPhase() { return _magicHitPhase; }
 
 function _playSpellSFXOnce(sfx) {
@@ -107,7 +114,7 @@ export function getCurrentSpellId() { return _spellId; }
 export function isCurrentCastItemUse() { return _isItemUse; }
 export function resetSpellCastVars() {
   _spellId = 0; _summonEffect = null; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
-  _sfxPlayed = false;
+  _sfxPlayed = false; _shakeFired = false;
   _magicHitPhase = 'impact-walk';
   clearActiveCast();
 }
@@ -529,7 +536,11 @@ function _applyEnemyEffect(idx, spell) {
     sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
     onDmgNum: (dealt) => _setEnemyDmg(idx, dealt, false),
     onMiss:   () => _setEnemyDmg(idx, 0, true),
-    onShake:  () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+    // Screen-anchored spells already shook at anim start — a second jolt on
+    // damage-apply would read as two quakes for one cast.
+    onShake:  isScreenAnchoredSpell(_spellId)
+      ? undefined
+      : () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
   });
 }
 
@@ -591,7 +602,11 @@ function _applyFriendlyOffensive(target, spell) {
     sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
     onDmgNum: (dealt) => setDmgNum(dealt),
     onMiss:   () => setDmgNum(0, true),
-    onShake:  () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+    // Screen-anchored spells already shook at anim start — a second jolt on
+    // damage-apply would read as two quakes for one cast.
+    onShake:  isScreenAnchoredSpell(_spellId)
+      ? undefined
+      : () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
   });
 }
 
@@ -855,6 +870,16 @@ export function updateSpellCast(dt) {
       _sfxPlayed = false;
     }
     return true;
+  }
+
+  // Screen-anchored effects shake as the sweep BEGINS, not when damage lands.
+  // Anim start is where the renderer starts drawing the impact: the heal-style
+  // path opens at CAST_T_HEAL, which is `CAST_T_HEAL - buildup` into magic-hit.
+  // Fired once per cast via `_shakeFired`.
+  if (!_shakeFired && isScreenAnchoredSpell(_spellId)
+      && battleSt.battleTimer >= CAST_T_HEAL - CAST_PHASE_MS.buildup) {
+    battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+    _shakeFired = true;
   }
 
   // Phase 2a — thrown impact walk: per-target serial impact + post-impact gap
