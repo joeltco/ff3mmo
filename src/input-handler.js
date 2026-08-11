@@ -361,6 +361,20 @@ function _itemSelectNav(isEquipPage, totalPages, pageRows) {
   }
 }
 
+// Battle inventory slot at a page index, or null.
+//
+// v1.7.843 — `buildItemSelectList` pads to INV_SLOTS (16) with `null`, but the
+// battle menu pages by BATTLE_INV_ROWS (3) and 16 is NOT divisible by 3. The
+// last page therefore addresses indices 15, 16 and 17 against a 16-element
+// array, so its bottom two rows read back `undefined` rather than `null`. Every
+// emptiness check in this file tested `!== null`, which `undefined` passes.
+// Normalize here so a phantom row behaves like the empty slot it already
+// renders as, instead of each call site having to know about the ragged page.
+function _invSlotAt(invIdx) {
+  const slot = inputSt.itemSelectList[invIdx];
+  return slot == null ? null : slot;
+}
+
 function _itemSelectSwap(isEquipPage, gIdx) {
   const srcEquip = inputSt.itemHeldIdx <= -100;
   const dstEquip = isEquipPage;
@@ -370,6 +384,9 @@ function _itemSelectSwap(isEquipPage, gIdx) {
   let equipChanged = false;
   if (!srcEquip && !dstEquip) {
     const dstIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
+    // A phantom row is not a slot to drop into: the write would extend the
+    // array past INV_SLOTS and leave a hole where the held item had been.
+    if (dstIdx >= inputSt.itemSelectList.length) { playSFX(SFX.ERROR); return; }
     const tmp = inputSt.itemSelectList[inputSt.itemHeldIdx];
     inputSt.itemSelectList[inputSt.itemHeldIdx] = inputSt.itemSelectList[dstIdx];
     inputSt.itemSelectList[dstIdx] = tmp;
@@ -496,7 +513,7 @@ function _itemSelectZ(isEquipPage, gIdx) {
       if (weaponId !== 0) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     } else {
       const invIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
-      if (inputSt.itemSelectList[invIdx] !== null) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
+      if (_invSlotAt(invIdx)) { inputSt.itemHeldIdx = gIdx; playSFX(SFX.CONFIRM); } else playSFX(SFX.ERROR);
     }
   } else if (inputSt.itemHeldIdx === gIdx) {
     if (isEquipPage) {
@@ -506,7 +523,10 @@ function _itemSelectZ(isEquipPage, gIdx) {
     }
     if (!isEquipPage) {
       const invIdx = (inputSt.itemPage - 1) * BATTLE_INV_ROWS + inputSt.itemPageCursor;
-      const item = inputSt.itemSelectList[invIdx];
+      const item = _invSlotAt(invIdx);
+      // Was `ITEMS.get(item.id)` unguarded — the game loop died here when the
+      // cursor sat on a phantom last-page row. See _invSlotAt.
+      if (!item) { inputSt.itemHeldIdx = -1; playSFX(SFX.ERROR); return; }
       const itemDat = ITEMS.get(item.id);
       if (itemDat?.type === 'consumable' || itemDat?.type === 'battle_item') {
         // Revive items (FenixDown) auto-target the first downed ally — you

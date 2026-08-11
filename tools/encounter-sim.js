@@ -98,7 +98,7 @@ const battleEnemy  = await import('../src/battle-enemy.js');
 const rngMod       = await import('../src/rng.js');
 const statusMod    = await import('../src/status-effects.js');
 const battleTurn   = await import('../src/battle-turn.js');
-const { inputSt }  = await import('../src/input-handler.js');
+const { inputSt, keys, handleBattleInput } = await import('../src/input-handler.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -392,6 +392,50 @@ const tests = [
       battleSt.turnQueue = savedQueue; battleSt.battleState = savedState;
       battleSt.battleAllies = savedAllies; inputSt.playerActionPending = savedPending;
       ps.hp = savedHp; ps.status = savedStatus;
+    }
+  },
+  // Regression — the battle item menu's PHANTOM last-page rows must not crash.
+  // `buildItemSelectList` pads to INV_SLOTS (16) but the menu pages by
+  // BATTLE_INV_ROWS (3), and 16 % 3 != 0, so the last page addresses indices
+  // 15/16/17 against a 16-element array. Rows 2 and 3 read back `undefined`,
+  // which passed the `!== null` emptiness check — so a first Z "picked up" a
+  // slot that does not exist and the second Z died on `item.id`, taking the
+  // game loop with it (v1.7.843). Drives the real production path:
+  // handleBattleInput -> _battleInputItemSelect -> _itemSelectZ.
+  () => {
+    const name = 'regression — battle item menu phantom last-page row';
+    const savedState = battleSt.battleState, savedList = inputSt.itemSelectList;
+    const savedPage = inputSt.itemPage, savedCursor = inputSt.itemPageCursor;
+    const savedHeld = inputSt.itemHeldIdx, savedMode = inputSt.menuMode;
+    const savedPending = inputSt.playerActionPending;
+    try {
+      const list = [{ id: 0x40, count: 1 }];
+      while (list.length < 16) list.push(null);        // exactly what the builder emits
+      inputSt.itemSelectList = list;
+      inputSt.menuMode = 'item';
+      inputSt.itemHeldIdx = -1;
+      inputSt.playerActionPending = null;
+      battleSt.battleState = 'item-select';
+      inputSt.itemPage = 6;                            // last inventory page
+      inputSt.itemPageCursor = 1;                      // -> invIdx 16, past the end
+      const invIdx = (inputSt.itemPage - 1) * 3 + inputSt.itemPageCursor;
+      if (invIdx < list.length) {
+        return { pass: false, name, reason: `test is stale: invIdx ${invIdx} is in range of ${list.length}` };
+      }
+      keys['z'] = true; handleBattleInput();           // pick up the phantom slot
+      if (inputSt.itemHeldIdx !== -1) {
+        return { pass: false, name, reason: `phantom row was picked up (itemHeldIdx=${inputSt.itemHeldIdx})` };
+      }
+      keys['z'] = true; handleBattleInput();           // pre-fix: threw on item.id
+      return { pass: true, name, info: `invIdx ${invIdx} past end of ${list.length} rejected as empty` };
+    } catch (e) {
+      return { pass: false, name, reason: `still throws: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      keys['z'] = false;
+      battleSt.battleState = savedState; inputSt.itemSelectList = savedList;
+      inputSt.itemPage = savedPage; inputSt.itemPageCursor = savedCursor;
+      inputSt.itemHeldIdx = savedHeld; inputSt.menuMode = savedMode;
+      inputSt.playerActionPending = savedPending;
     }
   },
 ];
