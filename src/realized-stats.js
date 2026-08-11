@@ -62,7 +62,42 @@ export function computeShieldEvade(weaponR, weaponL) {
 //
 // `intStat` and `mndStat` are the effective magic-stat fields — same
 // naming as the `update` profile + `generateAllyStats` fast-path consume.
+/**
+ * A two-handed weapon occupies BOTH hands. Returns an `equipped` whose offhand
+ * is blanked when either hand holds one, so nothing downstream can read a
+ * loadout that could not legally exist.
+ *
+ * SINGLE SOURCE for the rule, and deliberately placed here rather than at the
+ * equip screens: equipment reaches `ps` from five different call sites plus the
+ * wire profile, and saves written before v1.7.859 can already contain an
+ * illegal pair. Normalising at the point where stats are DERIVED means no path
+ * — old save, wire mirror, in-battle swap — can grant a two-hander a free
+ * offhand. The equip UI additionally returns the displaced item to the bag so
+ * the screen agrees with the maths.
+ *
+ * Tie-break: the two-handed weapon wins, since it is the one making the claim.
+ * Two two-handers, and the right hand wins. Node-clean, so the PVP arbiter's
+ * `buildCombatantFromUser` inherits the same rule for free.
+ */
+export function normalizeGrip(equipped) {
+  if (!equipped) return equipped;
+  const r = equipped.weaponR, l = equipped.weaponL;
+  if (!r || !l) return equipped;
+  const twoR = !!ITEMS.get(r)?.twoHanded;
+  const twoL = !!ITEMS.get(l)?.twoHanded;
+  if (!twoR && !twoL) return equipped;
+  return twoR ? { ...equipped, weaponL: 0 } : { ...equipped, weaponR: 0 };
+}
+
+/** Does this pair of hands amount to a dual wield? False for a two-hander. */
+export function isDualWield(weaponR, weaponL) {
+  const g = normalizeGrip({ weaponR, weaponL });
+  const rW = isWeapon(g.weaponR), lW = isWeapon(g.weaponL);
+  return (rW && lW) || (!rW && !lW);   // two weapons, or bare fists
+}
+
 export function computeRealizedStats({ stats, jobIdx, jobLevel, equipped }) {
+  equipped = normalizeGrip(equipped);
   const eff = computeEffectiveStats({ stats, jobIdx, jobLevel, equipped });
   const allSlots = [equipped.weaponR, equipped.weaponL, equipped.head, equipped.body, equipped.arms];
   // ATK — calcAttackerAtk uses effective STR + character level + job level.

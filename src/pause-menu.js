@@ -17,8 +17,7 @@ import { inputSt, keys } from './input-handler.js';
 import { drawBorderedBox, clipToViewport, drawCursorFaded } from './hud-drawing.js';
 import {
   playerInventory, addItem, removeItem, getItemCount,
-  buildItemSelectList, swapInventorySlots, INV_SLOTS, INV_CAP,
-} from './inventory.js';
+  buildItemSelectList, swapInventorySlots, INV_SLOTS, INV_CAP, releaseOffhandForTwoHanded } from './inventory.js';
 import { getTrashCanvas } from './data/inventory-icons.js';
 import { showMsgBoxPrompt, yesNoLabels } from './message-box.js';
 import { battleSt } from './battle-state.js';
@@ -1415,6 +1414,9 @@ function _pauseInputEquipItemSelect() {
         else if (oldWasArrows) ps.arrowCount = 0;
         if (oldId !== 0) addItem(oldId, oldQty, { bypass: true });
         sendNetEquipFromInv(pauseSt.eqSlotIdx, pick.id, 'equip-swap');   // v1.7.808 atomic
+        // A two-hander takes both hands — send the other one back to the bag.
+        const _freed = releaseOffhandForTwoHanded(pauseSt.eqSlotIdx);
+        if (_freed) sendNetEquipFromInv(pauseSt.eqSlotIdx === -101 ? -100 : -101, 0, 'equip-swap');
       }
       recalcCombatStats();
       saveSlotsToDB();

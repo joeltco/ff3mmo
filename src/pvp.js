@@ -36,6 +36,7 @@ import { pvpGridLayout, PVP_CELL_W, PVP_CELL_H } from './pvp-math.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, SWING_HOLD_MS } from './slash-effects.js';
 import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canCastMagic, createStatusState } from './status-effects.js';
+import { normalizeGrip, isDualWield } from './realized-stats.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameShrinesClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
@@ -730,18 +731,20 @@ function _processEnemyFlash() {
   const hitRate = (attackerStats?.hitRate || BOSS_HIT_RATE) * pvpBlindMult;
   // Unarmed = dual fists. Single dualWield flag drives both hit count and visual alternation,
   // matching player + ally paths so we don't end up with bespoke per-call-site logic.
-  const aRw = !!(attackerStats && isWeapon(attackerStats.weaponId));
-  const aLw = !!(attackerStats && isWeapon(attackerStats.weaponL));
+  // v1.7.859 — same grip rule as the player + ally paths.
+  const _pGrip = normalizeGrip({ weaponR: attackerStats?.weaponId, weaponL: attackerStats?.weaponL });
+  const aRw = !!(attackerStats && isWeapon(_pGrip.weaponR));
+  const aLw = !!(attackerStats && isWeapon(_pGrip.weaponL));
   const isUnarmed = !aRw && !aLw;
-  const dualWield = (aRw && aLw) || isUnarmed;
+  const dualWield = isDualWield(attackerStats?.weaponId, attackerStats?.weaponL);
   const potentialHits = calcPotentialHits(attackerStats?.level || 1, attackerStats?.agi || 5, dualWield);
   // Per-hand ATK split (v1.7.322): attackerStats.atk is the DISPLAY sum
   // (rWpn+lWpn+str/2). Strip the weapon component to recover str/2, then add
   // each hand's own weapon ATK back. RRLL split inside rollHits via opts.lAtk
   // + splitRH. BOSS_ATK has no weapon decomposition — falls through with
   // rAtk == lAtk == displayAtk.
-  const pvpRWpnAtk = aRw ? (ITEMS.get(attackerStats.weaponId)?.atk || 0) : 0;
-  const pvpLWpnAtk = aLw ? (ITEMS.get(attackerStats.weaponL)?.atk || 0) : 0;
+  const pvpRWpnAtk = aRw ? (ITEMS.get(_pGrip.weaponR)?.atk || 0) : 0;
+  const pvpLWpnAtk = aLw ? (ITEMS.get(_pGrip.weaponL)?.atk || 0) : 0;
   const pvpBaseAtk = displayAtk - pvpRWpnAtk - pvpLWpnAtk;
   const pvpRAtk = pvpBaseAtk + pvpRWpnAtk;
   const pvpLAtk = pvpBaseAtk + pvpLWpnAtk;

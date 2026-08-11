@@ -19,6 +19,7 @@ import { _nameToBytes } from './text-utils.js';
 import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum, setPlayerHealNum, setSwDmgNum } from './damage-numbers.js';
 import { startSpellCast } from './spell-cast.js';
 import { applyMagicHeal, applyMagicCureStatus } from './combatant-cast.js';
+import { normalizeGrip, isDualWield } from './realized-stats.js';
 import { dispatchDelta } from './deltas.js';
 import { sendNetPVPAction, sendNetInvEvent, PVP_ARBITER } from './net.js';   // v1.7.742 Phase 1c
 import { SPELLS } from './data/spells.js';
@@ -367,8 +368,11 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       : null;
     const targetDef = monTgt ? monTgt.def : pvpTgt ? pvpTgt.def : BOSS_DEF;
     // Unarmed = dual fists (same as player path) → 2x hits.
-    const aRw = isWeapon(ally.weaponId), aLw = isWeapon(ally.weaponL);
-    const dualWield = (aRw && aLw) || (!aRw && !aLw);
+    // v1.7.859 — normalise first; a two-hander blanks the offhand, so the
+    // per-hand ATK split below strips the right weapon out of the display sum.
+    const _aGrip = normalizeGrip({ weaponR: ally.weaponId, weaponL: ally.weaponL });
+    const aRw = isWeapon(_aGrip.weaponR), aLw = isWeapon(_aGrip.weaponL);
+    const dualWield = isDualWield(ally.weaponId, ally.weaponL);
     const potentialHits = calcPotentialHits(ally.level || 1, ally.agi, dualWield);
     const _allyJob = JOBS[ally.jobIdx || 0] || {};
     // Apply Blind (halves hit rate) and Mini/Toad (zeroes atk) at roll time —
@@ -382,8 +386,8 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // each hand's own weapon ATK back. RRLL split inside rollHits via opts.lAtk
     // + splitRH. Single-wield: pass the equipped hand's atk as `mainAtk` so
     // left-hand-only loadouts don't roll at str/2.
-    const allyRWpnAtk = aRw ? (ITEMS.get(ally.weaponId)?.atk || 0) : 0;
-    const allyLWpnAtk = aLw ? (ITEMS.get(ally.weaponL)?.atk || 0) : 0;
+    const allyRWpnAtk = aRw ? (ITEMS.get(_aGrip.weaponR)?.atk || 0) : 0;
+    const allyLWpnAtk = aLw ? (ITEMS.get(_aGrip.weaponL)?.atk || 0) : 0;
     const allyBaseAtk = (ally.atk - allyRWpnAtk - allyLWpnAtk) * allyAtkMult;
     const allyRAtk = allyBaseAtk + allyRWpnAtk;
     const allyLAtk = allyBaseAtk + allyLWpnAtk;

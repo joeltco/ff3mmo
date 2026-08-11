@@ -112,7 +112,9 @@ const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask } = awa
 const { applySpell } = await import('../src/combatant-cast.js');
 const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
 const { processNextTurn } = await import('../src/battle-turn.js');
-const { addItem } = await import('../src/inventory.js');
+const { addItem, releaseOffhandForTwoHanded } = await import('../src/inventory.js');
+const { normalizeGrip, isDualWield, computeRealizedStats } = await import('../src/realized-stats.js');
+const { calcPotentialHits } = await import('../src/battle-math.js');
 const { hasStatus } = await import('../src/status-effects.js');
 // Turn dispatch queues the actor's NAME on the battle strip, which reads the
 // ROM string table. Feed it the real ROM when it is there; the confuse test is
@@ -1214,6 +1216,82 @@ const tests = [
       battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
       battleSt.encounterMonsters = saved.mons; battleSt.battleAllies = saved.allies;
       inputSt.playerActionPending = saved.pending;
+    }
+  },
+  // Regression — a two-handed weapon occupies BOTH hands.
+  //
+  // The `twoHanded` flag sat on eight weapons (0x46, 0x48-0x4e) and was read by
+  // nothing, so a two-hander could be paired with a second weapon or a shield
+  // and collect the offhand's ATK, DEF and — worst — the dual-wield hit count,
+  // doubling its swings. v1.7.859.
+  //
+  // The rule is enforced where stats are DERIVED (`normalizeGrip`), not at the
+  // equip screens, because equipment reaches `ps` from five call sites plus the
+  // wire, and saves written before this version can already hold an illegal
+  // pair. Anything that reads a loadout gets the legal one.
+  () => {
+    const name = 'regression — a two-handed weapon occupies both hands';
+    const TWO = 0x46, SWORD = 0x01, SHIELD = 0x58;
+    const savedR = ps.weaponR, savedL = ps.weaponL;
+    try {
+      // 1. The offhand is blanked whichever hand holds the two-hander.
+      if (normalizeGrip({ weaponR: TWO, weaponL: SWORD }).weaponL !== 0) {
+        return { pass: false, name, reason: 'two-hander in R did not blank the left hand' };
+      }
+      if (normalizeGrip({ weaponR: SWORD, weaponL: TWO }).weaponR !== 0) {
+        return { pass: false, name, reason: 'two-hander in L did not blank the right hand' };
+      }
+      // ...and a legal pair is left completely alone.
+      const legal = normalizeGrip({ weaponR: SWORD, weaponL: SWORD });
+      if (legal.weaponR !== SWORD || legal.weaponL !== SWORD) {
+        return { pass: false, name, reason: 'a legal dual wield was altered' };
+      }
+
+      // 2. Hit count — the headline consequence. A two-hander must roll the
+      //    same number of swings with a sword in the offhand as with nothing.
+      if (isDualWield(TWO, SWORD)) return { pass: false, name, reason: 'two-hander + sword still counts as dual wield' };
+      if (isDualWield(TWO, SHIELD)) return { pass: false, name, reason: 'two-hander + shield still counts as dual wield' };
+      if (!isDualWield(SWORD, SWORD)) return { pass: false, name, reason: 'a real dual wield stopped counting' };
+      if (!isDualWield(0, 0)) return { pass: false, name, reason: 'bare fists stopped counting as dual wield' };
+      const paired = calcPotentialHits(10, 20, isDualWield(TWO, SWORD));
+      const alone  = calcPotentialHits(10, 20, isDualWield(TWO, 0));
+      if (paired !== alone) {
+        return { pass: false, name, reason: `two-hander swings ${paired} with an offhand vs ${alone} without` };
+      }
+
+      // 3. The illegal offhand contributes no stats either.
+      const base = { stats: { level: 10, str: 20, agi: 10, vit: 10, int: 10, mnd: 10 }, jobIdx: 0, jobLevel: 1 };
+      const solo = computeRealizedStats({ ...base, equipped: { weaponR: TWO, weaponL: 0, head: 0, body: 0, arms: 0 } });
+      const withShield = computeRealizedStats({ ...base, equipped: { weaponR: TWO, weaponL: SHIELD, head: 0, body: 0, arms: 0 } });
+      if (withShield.def !== solo.def) {
+        return { pass: false, name, reason: `shield gave the two-hander DEF ${solo.def} -> ${withShield.def}` };
+      }
+      const withSword = computeRealizedStats({ ...base, equipped: { weaponR: TWO, weaponL: SWORD, head: 0, body: 0, arms: 0 } });
+      if (withSword.atk !== solo.atk) {
+        return { pass: false, name, reason: `offhand sword gave the two-hander ATK ${solo.atk} -> ${withSword.atk}` };
+      }
+
+      // 4. Equipping into a hand sends the other one back to the bag, keeping
+      //    what the player just chose.
+      ps.weaponR = TWO; ps.weaponL = SWORD;
+      let freed = releaseOffhandForTwoHanded(-100);      // just equipped the two-hander
+      if (freed !== SWORD || ps.weaponL !== 0) {
+        return { pass: false, name, reason: `equipping the two-hander left ${ps.weaponL} in the offhand` };
+      }
+      ps.weaponR = TWO; ps.weaponL = SWORD;
+      freed = releaseOffhandForTwoHanded(-101);          // just equipped the sword
+      if (freed !== TWO || ps.weaponR !== 0) {
+        return { pass: false, name, reason: 'equipping into the offhand did not remove the two-hander' };
+      }
+      ps.weaponR = SWORD; ps.weaponL = SWORD;
+      if (releaseOffhandForTwoHanded(-100) !== 0 || ps.weaponL !== SWORD) {
+        return { pass: false, name, reason: 'a legal dual wield was unequipped' };
+      }
+      return { pass: true, name, info: 'grip normalised for hits, stats and the equip screen' };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      ps.weaponR = savedR; ps.weaponL = savedL;
     }
   },
 ];

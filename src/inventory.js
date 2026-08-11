@@ -1,3 +1,6 @@
+import { ITEMS } from './data/items.js';
+import { ps } from './player-stats.js';
+
 // Player inventory state — { itemId: count } map of held items.
 //
 // This is the single source for inventory mutation. Multiplayer-prep
@@ -111,6 +114,30 @@ export function buildItemSelectList() {
   }
   while (list.length < INV_SLOTS) list.push(null);
   return list;
+}
+
+/**
+ * A two-handed weapon occupies BOTH hands. Call right after equipping into
+ * `keptSlot` (-100 right, -101 left): if the resulting pair is now illegal,
+ * the OTHER hand is unequipped and its item returned to the bag. Returns the
+ * displaced item id, or 0.
+ *
+ * The rule that actually MATTERS lives in `normalizeGrip` (realized-stats.js),
+ * which every stat and hit-count path runs through — that is what makes it
+ * unbypassable for an old save or a wire profile. This exists so the equip
+ * screen agrees with the maths instead of showing an impossible loadout, and
+ * it keeps whatever the player just chose, where `normalizeGrip` keeps the
+ * two-hander. v1.7.859.
+ */
+export function releaseOffhandForTwoHanded(keptSlot) {
+  const keptIsLeft = keptSlot === -101;
+  const kept  = keptIsLeft ? ps.weaponL : ps.weaponR;
+  const other = keptIsLeft ? ps.weaponR : ps.weaponL;
+  if (!kept || !other) return 0;
+  if (!ITEMS.get(kept)?.twoHanded && !ITEMS.get(other)?.twoHanded) return 0;
+  if (keptIsLeft) ps.weaponR = 0; else ps.weaponL = 0;
+  addItem(other, 1, { bypass: true });
+  return other;
 }
 
 // Swap two slot positions. Either index may point at an empty slot (>=

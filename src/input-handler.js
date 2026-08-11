@@ -13,6 +13,7 @@ import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, hasReadyBow, isArrow 
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult } from './status-effects.js';
+import { normalizeGrip, isDualWield } from './realized-stats.js';
 import { _nameToBytes } from './text-utils.js';
 import { MONSTERS } from './data/monsters.js';
 import { canJobEquip, JOBS } from './data/jobs.js';
@@ -30,7 +31,7 @@ import { startPVPSearch, cancelPVPSearch, isSearchingFor, isSearchOnCooldown } f
 import { startPartyInvite, cancelPartyInvite, isInvitingTarget, isInviteOnCooldown, isInParty, isPartyFull, removeFromParty } from './party-invite.js';
 import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCooldown, handleTradePickInput } from './trade.js';
 import { openInspect } from './inspect.js';
-import { playerInventory, addItem, removeItem, buildItemSelectList } from './inventory.js';
+import { playerInventory, addItem, removeItem, buildItemSelectList, releaseOffhandForTwoHanded } from './inventory.js';
 import { sendNetEquipFromInv, sendNetEquipSwapHands } from './net.js';   // v1.7.808 atomic equip
 
 // Battle Item menu rows-per-page. The pause inventory uses a single
@@ -212,11 +213,14 @@ function _battleTargetConfirm() {
   if (!k['z'] && !k['Z']) return;
   k['z'] = false; k['Z'] = false;
   playSFX(SFX.CONFIRM);
-  const rIsWeapon = isWeapon(ps.weaponR);
-  const lIsWeapon = isWeapon(ps.weaponL);
+  // v1.7.859 — hands come through `normalizeGrip` first: a two-handed weapon
+  // occupies BOTH slots, so it can never also collect an offhand's hit count.
+  const _grip = normalizeGrip({ weaponR: ps.weaponR, weaponL: ps.weaponL });
+  const rIsWeapon = isWeapon(_grip.weaponR);
+  const lIsWeapon = isWeapon(_grip.weaponL);
   const unarmed = !rIsWeapon && !lIsWeapon;
   // Unarmed = dual fists. Reuses the existing dual-wield code path: 2x hits, R then L, summed damage, single target.
-  const dualWield = (rIsWeapon && lIsWeapon) || unarmed;
+  const dualWield = isDualWield(ps.weaponR, ps.weaponL);
   const wpnSubtype = weaponSubtype(ps.weaponR) || weaponSubtype(ps.weaponL) || 'unarmed';
   const lv = ps.stats ? ps.stats.level : 1;
   const agi = (ps.stats ? ps.stats.agi : 5) + getJobLevelStatBonus().agi;
@@ -230,12 +234,15 @@ function _battleTargetConfirm() {
   // Each hand then adds its own weapon ATK below. Must match calcAttackerAtk's
   // display value = rWpnAtk + lWpnAtk + floor(str/2).
   // Mini/Toad reduces effective ATK to 0 (calcDamage clamps result to minimum 1).
-  const rWpnAtkRaw = ITEMS.get(ps.weaponR)?.atk || 0;
-  const lWpnAtkRaw = ITEMS.get(ps.weaponL)?.atk || 0;
+  // Read the NORMALISED hands: `ps.atk` is computed from them too, so an
+  // illegally-paired offhand must not be subtracted out of a sum that never
+  // included it. v1.7.859.
+  const rWpnAtkRaw = ITEMS.get(_grip.weaponR)?.atk || 0;
+  const lWpnAtkRaw = ITEMS.get(_grip.weaponL)?.atk || 0;
   const wpnAtkComponent = rWpnAtkRaw + lWpnAtkRaw;
   const baseAtk = (ps.atk - wpnAtkComponent) * atkMult;
-  const rWpn = rIsWeapon ? ITEMS.get(ps.weaponR) : null;
-  const lWpn = lIsWeapon ? ITEMS.get(ps.weaponL) : null;
+  const rWpn = rIsWeapon ? ITEMS.get(_grip.weaponR) : null;
+  const lWpn = lIsWeapon ? ITEMS.get(_grip.weaponL) : null;
   const job = JOBS[ps.jobIdx] || {};
   const critOpts = { critPct: job.critPct || 0, critBonus: job.critBonus || 0 };
   // Roll each hand independently (NES loops per hand at 30/9F6A)
@@ -401,6 +408,8 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       removeItem(item.id);
       if (oldWeapon !== 0) addItem(oldWeapon, 1, { bypass: true });
       sendNetEquipFromInv(handEqIdx, item.id, 'equip-swap');   // v1.7.808 atomic
+      const _freedA = releaseOffhandForTwoHanded(handEqIdx);
+      if (_freedA) sendNetEquipFromInv(handEqIdx === -101 ? -100 : -101, 0, 'equip-swap');
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else { playSFX(SFX.ERROR); inputSt.itemHeldIdx = -1; }
@@ -414,6 +423,8 @@ function _itemSelectSwap(isEquipPage, gIdx) {
       if (srcHand === 0) ps.weaponR = invItem.id; else ps.weaponL = invItem.id;
       removeItem(invItem.id); addItem(handWeaponId, 1, { bypass: true });
       sendNetEquipFromInv(handEqIdx, invItem.id, 'equip-swap');   // v1.7.808 atomic
+      const _freedB = releaseOffhandForTwoHanded(handEqIdx);
+      if (_freedB) sendNetEquipFromInv(handEqIdx === -101 ? -100 : -101, 0, 'equip-swap');
       recalcCombatStats(); inputSt.itemHeldIdx = -1; playSFX(SFX.CONFIRM);
       equipChanged = true;
     } else if (!invItem) {
