@@ -30,7 +30,11 @@ const REPO = '/home/joeltco/projects/ff3mmo';
 const BASE_ROM = REPO + '/FF3-English.nes';
 const OUT = process.env.OUT || (__dirname + '/spell-sweep.json');
 
-const LO = 0x49, HI = 0x60;
+// Sprite slots watched for spell CHR. Summons draw from $0F-$48 instead of the
+// $49-$60 the elemental effects use (see project_ff3mmo_summon_presentation), so
+// the call school needs a wider window or it yields no animation block at all —
+// which is why all 8 summons stayed on picked SFX. v1.7.872.
+const LO = parseInt(process.env.SLOT_LO || '0x49', 16), HI = parseInt(process.env.SLOT_HI || '0x60', 16);
 const REGION_START = 0x55400, REGION_END = 0x57000;
 const FRAMES = parseInt(process.env.FRAMES || '1500', 10);
 
@@ -81,6 +85,9 @@ const AFFLICT = process.env.AFFLICT === '1';
 // sound when there is something IT can cure — Wash (0x28) clears BLIND, so it
 // stays a silent no-op under poison. v1.7.870.
 const AFFLICT_MASK = parseInt(process.env.AFFLICT_MASK || '2', 10);
+// Per-character status byte in BATTLE work RAM. Measured — see the AFFLICT
+// block below for the method and the evidence.
+const STATUS_BLOCK0 = 0x7576;
 
 /**
  * Spell ID for a menu cell.
@@ -193,6 +200,7 @@ if (!isMainThread) {
     // apart from the spell's own impact sound.
     const sfxWrites = [];
     let _sfxFrame = -1;
+    let afflictSlots = null;
     const n = new Nes(romPath, {
       onBatteryRamWrite: (addr, val) => {
         if ((addr | 0) !== 0x7F49) return;
@@ -231,24 +239,26 @@ if (!isMainThread) {
     };
 
     if (AFFLICT) {
-      // Round 1: plain attack + guard, then let it play out so the goblin lands
-      // poison before the spell is chosen.
-      // v1.7.871 — this used to be `a,a,a` then `down,a` "char 2 guards", then
-      // 500 frames tapping A every 20. Both halves were written for the OLD
-      // all-alive party and never updated when the sweep started killing chars
-      // 2-4. With one living character there is ONE menu in the round: the
-      // `down,a` steered the CASTER's own menu, and a 3-per-second A-mash then
-      // walked straight through whatever opened next. Result: the spell was
-      // committed (or not) during setup, before the capture loop ever started —
-      // 0 of 24 spells produced an animation block under AFFLICT.
+      // v1.7.872 — the round-1 combat is gone. It ended after a FIXED frame
+      // count, so the capture loop began mid-round and the spell navigation had
+      // no menu to talk to: 0 of 24 spells captured under it. Write the status
+      // straight into battle work RAM instead — no round, no timing to get
+      // wrong.
       //
-      // One plain Attack, then let the round resolve with A tapped only often
-      // enough to clear the battle message and never fast enough to enter the
-      // next menu.
-      n.press('a', 8, 30); n.press('a', 8, 30);
-      for (let f = 0; f < 420; f++) {
-        if (f % 60 === 0) { n.nes.buttonDown(1, BTN.a); n.run(1); n.nes.buttonUp(1, BTN.a); } else n.run(1);
-      }
+      // The address is MEASURED, not guessed. `tools/monscan/status-offset.cjs`
+      // runs the same battle with the goblin's statusOnAtk set and cleared and
+      // diffs ALL of CPU RAM: $75b6 and $75f6 are the only bytes that gain
+      // EXACTLY the configured mask, for poison (0x02) and blind (0x04) alike,
+      // and they sit 0x40 apart — the per-character block stride. The save
+      // block ($6100) never changes mid-battle, which is why looking there
+      // first found nothing.
+      //
+      // All four slots are written because which one holds the living caster
+      // depends on the kill pattern above; a write to an unused slot is inert.
+      // Re-applied every frame in the capture loop so the status is still
+      // present when the cure actually resolves.
+      afflictSlots = [STATUS_BLOCK0, STATUS_BLOCK0 + 0x40, STATUS_BLOCK0 + 0x80, STATUS_BLOCK0 + 0xC0];
+      for (const a of afflictSlots) n.ram[a] = AFFLICT_MASK & 0xFF;
     }
     if (cell) {
       n.press('a', 8, 30); n.press('down', 8, 30); n.press('a', 8, 30);
@@ -272,6 +282,7 @@ if (!isMainThread) {
     const diag = process.env.DIAG === '1' ? [] : null;
     for (let f = 0; f < FRAMES; f++) {
       frameNo = f; _sfxFrame = f;
+      if (afflictSlots) for (const a of afflictSlots) n.ram[a] = AFFLICT_MASK & 0xFF;
       if (diag && f % 150 === 0) diag.push(f + ':' + sc(n));
       // Snapshot OAM + sprite palettes only while effect slots are actually on
       // screen; that window IS the animation and everything else is idle battle.

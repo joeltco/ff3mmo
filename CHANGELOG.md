@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.872 — 2026-08-11
+
+**AFFLICT fixed by measuring the address instead of guessing it. All 56 castable spells now carry a CAPTURED impact sound — zero picked.**
+
+**Finding the status byte.** `status-offset.cjs` (new) runs the same battle twice, once with the goblin's `statusOnAtk` set and once cleared, and diffs CPU RAM. `$75b6` and `$75f6` are the only bytes that gain EXACTLY the configured mask — for poison (0x02) AND blind (0x04) — and they sit 0x40 apart, the per-character block stride.
+
+The first attempt scanned only the save block `$6100-$62FF` and found nothing, which was itself the answer: **in-battle status lives in battle work RAM and never touches the save block mid-fight.** Widening the scan to all of RAM found it. Do not assume where a value lives.
+
+**AFFLICT no longer plays a combat round at all.** It wrote the status by having the goblin attack, which ended on a FIXED frame count, so the capture loop began mid-round with no menu for the navigation to talk to — 0 of 24 spells captured. It now writes the mask straight into the four character slots and re-applies each frame. The two spells in that row with existing captures reproduced their values exactly, so the change perturbs nothing.
+
+**Summons: two windows were too small.** All 8 stayed on picked sounds because the sweep watches sprite slots `$49-$60` and **summons draw from `$0F-$48`** — no slots seen, no animation block, nothing to correlate against. With `SLOT_LO`/`SLOT_HI` widened they all produce blocks, and with a window sized to their 1.4-5.3 s entrance they all produce a distinct sound. **None of the 8 is `$b6`**, the ambient enemy-turn value, which was the thing to check before believing them.
+
+**56 of 56 captured.** The 6 that were uncapturable this morning, plus the 8 summons that had never been measured:
+
+| | |
+|---|---|
+| Heal / Soft / Wash / Pure / Life2 | 74 — via the RAM affliction |
+| Safe 0x1a | 97 — recovered by dropping value-subtraction (v1.7.870) |
+| Bahamut / Leviathan / Odin / Titan | 125 / 115 / 118 / 131 |
+| Ifrit / Ramuh / Shiva / Chocobo | 130 / 132 / 67 / 75 |
+
+Ifrit measuring as 130 (Fire's sound) and Ramuh as 132 (thunder) is the kind of result that would have been a plausible GUESS — the difference is that it is now measured, and Quake's 131-not-153 and Aero2's 134-not-93 are the reminder that plausible guesses were wrong twice.
+
+Parity holds throughout: Fire 130, Ice 93, Sleep 149, byte-for-byte with the hand-traced originals.
+
+**The gate now reports `56 spells on CAPTURED sounds, 0 still picked`.** Yesterday it read 9 and 47.
+
 ## 1.7.871 — 2026-08-11
 
 **AFFLICT: two real bugs fixed, one diagnosis, and it still does not capture. Reporting that rather than claiming otherwise.**

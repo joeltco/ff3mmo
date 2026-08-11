@@ -788,6 +788,12 @@ const tests = [
       const el = spell.element;
       const parts = Array.isArray(el) ? el : (typeof el === 'string' ? el.split(',') : []);
       if (parts.includes('fire')) continue;                       // legitimately Fire's sound
+      // v1.7.872 — only a PICKED rule can "borrow". Ifrit (0x22) MEASURES as
+      // 130: the capture says a fire summon really does play Fire's impact, and
+      // that is data, not a fallback helping itself to a captured signature.
+      // The rule this guards is the v1.7.847 one — a generic tail returning
+      // FIRE_BOOM — which would surface here as a picked rule.
+      if (spellSfxRule(spell).src === 'captured') continue;
       if (getSpellImpactSFX(spell) === SFX_FIRE_BOOM) borrowed.push(`0x${id.toString(16)}`);
     }
     if (borrowed.length) {
