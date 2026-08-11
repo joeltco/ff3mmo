@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.874 — 2026-08-11
+
+**The 11 leftover SFX: 5 measured against the event that fires them, 5 still unmeasured and named as such, 2 heard but not attributed.**
+
+`spell-sweep.cjs` can cast all 56 spells, which is why every spell sound is captured. It cannot open a chest, move a cursor, or trip an encounter, so v1.7.873 left 12 constants on a `SFX $NN + $41` formula. `tools/monscan/world-sfx-sweep.cjs` (new) drives those events instead.
+
+**Every write is tagged with the CPU PC and resolved back to a ROM offset.** The value alone is not an identification — several events share one, and the ambient `$b6` already faked an impact once (v1.7.870). The ROM contains exactly one `LDA #$BF / STA $7F49`, so a write resolving to that offset IS the treasure sound regardless of what else is on screen. Attribution to an *event* then comes from the machine: a screenshot at the write, another 70-200 frames later, whether the screen faded to black, and whether a battle appeared.
+
+**Measured, event and all:**
+
+| constant | wrote | nsf | what actually triggered it |
+|---|---|---|---|
+| TREASURE | `$bf` | 128 ✓ | A pressed at a chest; ROM's only `LDA #$BF` (0x7e994) |
+| BATTLE_SWIPE | `$95` | 86 ✓ | encounter swoosh — battle on screen within 240f, **11 of 11** |
+| CURSOR | `$98` | 89 ✓ | cursor moved, name grid + battle menu, two `LDA #$98` sites |
+| ERROR | `$86` | 71 ✓ | the battle menu has 3 rows; picking rows 3-6 buzzes 20/20, rows 0-2 never |
+| EARTHQUAKE | `$d8` | 153 ✓ | the opening quake; ROM's only `LDA #$D8` (0x775a1) |
+
+All five already matched what we shipped. The point was never to find them wrong — it was to stop them resting on a formula.
+
+**BATTLE_SWIPE is the one worth explaining.** "It was followed by a battle" proves nothing on its own. What makes it a measurement is the contrast: in the same run, `$95` scores 11/11 while every other field sound scores **0** — 0/8 for the quake, 0/3 for `$83`, 0/1 for the chest.
+
+**Two heard but NOT attributed, and deliberately not promoted.** `$93` (SCREEN_CLOSE, 84) arrives at the window routine but only 3 times in 200k frames — far too rare to be "every window that closes". `$83` (DOOR, 68) fires on the field 7 times, always at the *same map position*, with no fade-to-black after it, so it is not a map transition — and the Altar Cave has no door to test against. Their numbers match; their events do not. Hearing the value a constant predicts proves the sound exists, not that it belongs to the event the constant is named after, and shipping the easy half as the hard half is the documented failure here. **The new gate asserts they stay separate: promoting one without demonstrating its event fails the deploy.**
+
+**Five still unmeasured, listed rather than glossed:** RUN_AWAY, SCREEN_OPEN, WARP, POND_DRINK, FALL.
+
+- **RUN_AWAY** — the ROM has exactly one `LDA #$B3` (0x67cc9), sitting after a 32-iteration animation loop, so it plays on a *successful* escape. 36 button combos and 21 command-menu walks never escaped. A wrong turn worth recording: that loop's `JSR $8AE6 / AND #$20 / BEQ` reads exactly like a joypad test, which would make escape "hold SELECT" — `$8AE6` is `INC $B6 / LDA $B6 / RTS`, a **loop counter**. Tested, wrong, and it would have shipped as a confident finding.
+- **WARP / POND_DRINK** — their implied writes (`$dc`, `$d0`) appear at *no* immediate site in the ROM. Suggestive, and explicitly **not** proof: spell sounds arrive through the `LDA $CA` dispatcher and are equally absent while measuring correct. Both need a town.
+- **FALL** is a *song* (0x30), not an SFX, so `nsf - 0x3F` does not apply and this method cannot check it at all.
+
+Reaching the rest needs a town — 200k frames of scripted exploration never left the Altar Cave.
+
 ## 1.7.873 — 2026-08-11
 
 **Battle SFX: SIGHT was wrong and the code said so. 14 constants now pinned to measurements.**

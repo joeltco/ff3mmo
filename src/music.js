@@ -24,26 +24,26 @@ export const TRACKS = {
 // SFX — raw NSF track numbers (passed directly to gme_start_track)
 // SFX-type sounds: ROM SFX ID + 0x41. Song-type sounds: song ID directly.
 export const SFX = {
-  DOOR:         0x44,  // SFX $03 + $41
-  FALL:         0x30,  // song 48 ($30) — falling/whoosh
-  EARTHQUAKE:   0x99,  // SFX $58 + $41
-  SCREEN_CLOSE: 0x54,  // SFX $13 + $41
-  SCREEN_OPEN:  0x55,  // SFX $14 + $41
-  WARP:         0x9D,  // SFX $5C + $41
-  POND_DRINK:   0x91,  // SFX $50 + $41 — healing drink (play half)
+  DOOR:         0x44,  // SFX $03 + $41  [OBSERVED v1.7.874, NOT ATTRIBUTED — the world sweep hears $83 (-> 68) on the field 7 times in 200k frames, always at the SAME map position, with no fade-to-black after it. So the value is real but it is NOT a map transition, and the Altar Cave has no door to test against. Needs a town.]
+  FALL:         0x30,  // song 48 ($30) — falling/whoosh. UNMEASURABLE by the $7F49 method: this is a SONG, not an SFX, so `nsf - 0x3F` does not apply and no store to $7F49 can confirm or refute it. Left alone deliberately rather than 'checked'.
+  EARTHQUAKE:   0x99,  // SFX $58 + $41  [MEASURED v1.7.874 — the opening quake, from the ROM's only `LDA #$D8` (0x775a1); $D8 - $3F = 0x99]
+  SCREEN_CLOSE: 0x54,  // SFX $13 + $41  [OBSERVED v1.7.874, NOT ATTRIBUTED — $93 (-> 84) arrives at the window-routine store $E28F, but only 3 times in 200k frames, far too rare to be 'every window that closes'. Value confirmed, event not.]
+  SCREEN_OPEN:  0x55,  // SFX $14 + $41  [UNVERIFIED — never heard once in ~250k frames. $94 IS the fall-through literal at the shared store that produced SCREEN_CLOSE's $93, so the game can request it; nothing here triggered it.]
+  WARP:         0x9D,  // SFX $5C + $41  [UNVERIFIED — never heard, and its implied write $DC appears at NO immediate site in the ROM. Suggestive, NOT proof: spell sounds are table-driven and also absent while measuring correct (SIGHT, FIRE_BOOM). Needs a warp to actually fire.]
+  POND_DRINK:   0x91,  // SFX $50 + $41 — healing drink (play half).  [UNVERIFIED — never heard; implied write $D0 appears at no immediate site. Same caveat as WARP.]
   CURE:         0x4A,  // SFX $09 + $41 — cure spell sound  [MEASURED v1.7.873 — cure/heal captures, $89]
   MAGIC_CAST:   0x62,  // SFX $21 + $41 — magic pre-animation channel sound (FF3J disasm 33/B0D8 black, 33/B0FF white: LDA #$A1 / STA $7F49)  [MEASURED v1.7.873 — pre-animation cast cue, $A1]
-  BATTLE_SWIPE: 0x56,  // SFX $15 + $41 — battle encounter swoosh
+  BATTLE_SWIPE: 0x56,  // SFX $15 + $41 — battle encounter swoosh  [MEASURED v1.7.874 — the only `LDA #$95` site (0x7d35f). A battle is on screen within 240 frames 11 times out of 11, while every other field sound in the same run scores 0/8, 0/3, 0/1. The CONTRAST is the evidence.]
   BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble  [MEASURED v1.7.873 — Bahamut (0x06) capture, $BC]
-  CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement
+  CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement  [MEASURED v1.7.874 — cursor moved in the name grid and the battle command window; two distinct `LDA #$98` sites, 0x7d225 (field) and 0x65bea (battle)]
   CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm  [MEASURED v1.7.873 — physical-attack control round, $85]
-  ERROR:        0x47,  // SFX $06 + $41 — error buzz
+  ERROR:        0x47,  // SFX $06 + $41 — error buzz  [MEASURED v1.7.874 — the battle command menu has 3 rows; selecting rows 3-6 buzzes on every attempt (20/20 per row) and rows 0-2 never do. Also fires from its own `LDA #$86` site (0x7d53b) on the field.]
   ATTACK_HIT:   0x71,  // SFX $30 + $41 — enemy physical hit on player (from battle-sfx-log trace v3)  [MEASURED v1.7.873 — physical-attack control round, $B0]
   KNIFE_HIT:    0x77,  // SFX $36 + $41 — knife/blade slash hit (ROM writes $B6 to $7F49)  [MEASURED v1.7.873 — monster's hit on the party, $B6 (32 traces)]
   MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)  [MEASURED v1.7.873 — death-spell secondary cue, $B1 (5 traces)]
   DEFEND_HIT:   0x61,  // SFX $20 + $41 — defend action sound (confirmed by user)  [MEASURED v1.7.873 — Safe (0x1a) capture, $A0]
-  TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)
-  RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
+  TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)  [MEASURED v1.7.874 — A pressed at a chest in the Altar Cave, from the ROM's ONLY `LDA #$BF` store (0x7e994); the screenshot at the write shows the party against a row of chests and the follow-up shows one open]
+  RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC).  [UNVERIFIED — never heard. The ROM has exactly one `LDA #$B3` (0x67cc9) and it sits after a 32-iteration animation loop, so it plays on a SUCCESSFUL escape; 36 button combos and 21 command-menu walks never escaped. Do not read that loop's `JSR $8AE6 / AND #$20 / BEQ` as a joypad test — $8AE6 is `INC $B6 / LDA $B6 / RTS`, a counter. 'Hold SELECT to run' was tested and is wrong.]
   SW_HIT:       0x5D,  // SFX $1C + $41 — SouthWind ice hit per enemy (from battle-item-trace)
   SIGHT:        0x7A,  // NSF $7A — Sight impact. MEASURED v1.7.873: the headless sweep casts Sight (spell 0x36) and the CPU writes `$B9` to $7F49, 98 frames after Sight's own CHR block goes live -> `$B9 - $3F = $7A`. This was 0x81 for a long time, carrying its own note that 0x81 had been inferred from a `$40` post-consume RESIDUAL rather than the request, and asking for exactly this recapture. The note was right: 0x81 is wrong. Same trap that once made FIRE_BOOM and REVIVE wrong.
   FIRE_BOOM:    0x82,  // SFX $41 + $41 — Fire spell impact. Verified via REC OAM f1301 (2026-05-08, post-v1.7.111 dumper): CPU writes `$C1` to $7F49 at frame 19 → NSF track `$C1 - $3F = $82`. Was 0x81 before v1.7.112; that was inferred from the post-consume residual `$40`, which is NOT the requested index — the engine does its own bookkeeping after consuming the high-bit pulse.

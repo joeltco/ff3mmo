@@ -112,6 +112,8 @@ const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
 const { getSpellImpactSFX, healStyleRenderWindow, SPELL_SFX_RULES,
         spellSfxRule, spellElementParts } = await import('../src/combatant-cast.js');
 const { CAPTURED_SPELL_SFX } = await import('../src/data/spell-sfx-captured.js');
+const { CAPTURED_WORLD_SFX, OBSERVED_UNATTRIBUTED, NOT_CAPTURED } =
+  await import('../src/data/world-sfx-captured.js');
 const { SFX: _SFXMAP } = await import('../src/music.js');
 const SFX_FIRE_BOOM = _SFXMAP.FIRE_BOOM, SFX_THUNDER = _SFXMAP.CRYSTAL_THUNDER;
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpellBuyPrice } = await import('../src/data/spells.js');
@@ -1725,6 +1727,45 @@ const tests = [
     }
     if (bad.length) return { pass: false, name, reason: bad.join('; ') };
     return { pass: true, name, info: `${Object.keys(MEASURED).length} battle SFX constants pinned to measurements` };
+  },
+  // Regression — the WORLD SFX constants that have been measured must not drift,
+  // and the two tiers must not quietly merge.
+  //
+  // v1.7.873 left 12 constants on a `SFX $NN + $41` formula because the spell
+  // sweep cannot open a chest or move a cursor. `world-sfx-sweep.cjs` triggers
+  // those events and identifies each sound by the ROM SITE that requested it.
+  //
+  // The second half of this gate is the one that matters. It would be very easy
+  // to "finish" this sweep by moving DOOR and SCREEN_CLOSE into the captured map
+  // because their NUMBERS were seen — the events never were. Hearing the value a
+  // constant predicts proves the sound exists, not that it belongs to the event
+  // the constant is named for, and shipping the easy half as if it were the hard
+  // half is the documented failure mode here (docs/SWEEP-DISCIPLINE.md). So the
+  // gate asserts the unattributed set stays unattributed: promoting one without
+  // demonstrating its event fails this test on purpose. v1.7.874.
+  () => {
+    const name = 'regression — measured world SFX stay measured, unattributed stay separate';
+    const bad = [];
+    for (const [k, want] of CAPTURED_WORLD_SFX) {
+      if (_SFXMAP[k] !== want) bad.push(`SFX.${k} is ${_SFXMAP[k]}, measured ${want}`);
+    }
+    // The tiers must stay disjoint, and nothing may claim both.
+    for (const [k, want] of OBSERVED_UNATTRIBUTED) {
+      if (CAPTURED_WORLD_SFX.has(k)) {
+        bad.push(`${k} is in BOTH tiers — attribute it or leave it observed, not both`);
+      }
+      if (_SFXMAP[k] !== want) bad.push(`SFX.${k} is ${_SFXMAP[k]}, observed ${want}`);
+    }
+    for (const k of NOT_CAPTURED) {
+      if (CAPTURED_WORLD_SFX.has(k) || OBSERVED_UNATTRIBUTED.has(k)) {
+        bad.push(`${k} is listed NOT_CAPTURED but also claims a measurement`);
+      }
+      if (!(k in _SFXMAP)) bad.push(`${k} is listed NOT_CAPTURED but SFX.${k} does not exist`);
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+    return { pass: true, name,
+      info: `${CAPTURED_WORLD_SFX.size} world SFX attributed, ${OBSERVED_UNATTRIBUTED.size} observed-only, `
+        + `${NOT_CAPTURED.length} still unmeasured (${NOT_CAPTURED.join('/')})` };
   },
 ];
 
