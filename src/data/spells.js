@@ -1,10 +1,22 @@
 // Spell Catalog — keyed by spell ID (0x00–0x57)
-// AUTO-GENERATED from FF3 NES ROM via tools/gen-spells-js.js
+//
+// ONLY the SPELLS map between the GENERATED markers below comes from the ROM.
+// Everything after it — SPELL_NAMES_SHRINES, SPELL_MP_COST, SPELL_BUY_PRICE,
+// MULTI_TARGET_SPELLS, SPELL_SCHOOL and every helper — is HAND-MAINTAINED and
+// has no ROM source to rebuild it from.
+//
+// Regenerate with `node tools/gen-spells-js.js`, which splices the map in place
+// and leaves the rest alone. Do NOT redirect it over this file
+// (`... > src/data/spells.js`) the way gen-monsters-js.js is used: monsters.js
+// really is generated end to end, this file is not, and the redirect would
+// delete every table below.
+//
 // Stats from Data Crystal ROM map ($618D0, 8 bytes per spell)
 // IDs 0-55: player/enemy magic, 56+: monster-only abilities
 
 import { JOBS, MAG_WHITE, MAG_BLACK, MAG_CALL } from './jobs.js';
 
+// ─── BEGIN GENERATED (tools/gen-spells-js.js) ───
 export const SPELLS = new Map([
   [0x00, { power: 200, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Flare
   [0x01, { power:   0, hit:  35, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Death
@@ -95,6 +107,7 @@ export const SPELLS = new Map([
   [0x56, { power: 120, hit:  60, element: 'air', type: 'damage', target: 'enemy', anim: 0x00 }], // Tornado
   [0x57, { power: 120, hit:  40, element: 'earth', type: 'damage', target: 'enemy', anim: 0x03 }], // Avalanche
 ]);
+// ─── END GENERATED ───
 
 // Short display names per RPG Shrines (shrines.rpgclassics.com/nes/ff3/spells.shtml).
 // These override the IPS-patched ROM names (which use FF6-style Curaja/Curaga/Cura

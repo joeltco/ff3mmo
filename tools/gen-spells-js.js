@@ -1,7 +1,19 @@
 #!/usr/bin/env node
-// Generate spells.js from FF3 NES ROM data
+// Regenerate the SPELLS map inside src/data/spells.js from the ROM.
+//
+//   node tools/gen-spells-js.js            # splice the map in place
+//   node tools/gen-spells-js.js --stdout   # print it instead, change nothing
+//
+// SPLICES rather than printing, and that is deliberate. Only the SPELLS map is
+// generated; SPELL_NAMES_SHRINES, SPELL_MP_COST, SPELL_BUY_PRICE,
+// MULTI_TARGET_SPELLS, SPELL_SCHOOL and every helper below it are
+// hand-maintained with no ROM source to rebuild them from. The old usage was
+// `node tools/gen-spells-js.js > src/data/spells.js`, copied from
+// gen-monsters-js.js — but monsters.js really is generated end to end and this
+// file is not, so that redirect would have silently deleted every table below
+// the map.
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { initTextDecoder, getSpellName } from '../src/text-decoder.js';
 
 const rom = readFileSync('FF3-English.nes');
@@ -79,11 +91,8 @@ function targetJS(b) {
 }
 
 const lines = [];
-lines.push(`// Spell Catalog — keyed by spell ID (0x00–0x57)`);
-lines.push(`// AUTO-GENERATED from FF3 NES ROM via tools/gen-spells-js.js`);
-lines.push(`// Stats from Data Crystal ROM map ($618D0, 8 bytes per spell)`);
-lines.push(`// IDs 0-55: player/enemy magic, 56+: monster-only abilities`);
-lines.push(``);
+// The file's header lives ABOVE the GENERATED marker and is hand-maintained;
+// emitting it here would duplicate it into the spliced region on every run.
 lines.push(`export const SPELLS = new Map([`);
 
 // Player spells: 0-55 (white/black/summon magic + geomancer)
@@ -112,4 +121,25 @@ for (let id = 0; id < 88; id++) {
 }
 
 lines.push(`]);`);
-console.log(lines.join('\n'));
+
+const BEGIN = '// ─── BEGIN GENERATED (tools/gen-spells-js.js) ───';
+const END = '// ─── END GENERATED ───';
+const body = lines.join('\n');
+
+if (process.argv.includes('--stdout')) {
+  console.log(body);
+} else {
+  const target = 'src/data/spells.js';
+  const cur = readFileSync(target, 'utf8');
+  const a = cur.indexOf(BEGIN);
+  const b = cur.indexOf(END);
+  if (a < 0 || b < 0 || b < a) {
+    console.error(`${target}: GENERATED markers missing or out of order — refusing to write.`);
+    console.error('Restore them around the SPELLS map, or run with --stdout and splice by hand.');
+    process.exit(1);
+  }
+  const out = cur.slice(0, a) + BEGIN + '\n' + body + '\n' + cur.slice(b);
+  writeFileSync(target, out);
+  const kept = cur.slice(b).split('\n').length;
+  console.log(`spliced the SPELLS map into ${target}; ${kept} lines of hand-maintained code below it untouched.`);
+}
