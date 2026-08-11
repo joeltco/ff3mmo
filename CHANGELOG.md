@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.852 — 2026-08-11
+
+**Quake captured properly: 67 ms -> 1348 ms. The capture was never missing — the emitter overwrote its measurement with a guess.**
+
+I said Quake needed a fresh capture. It did not. The raw sweep already held 1067 frames for it, and re-measuring them off `spell-sweep.json` shows the impact run (`$56100`, 24 blocks) drawing across **81 consecutive frames — 1348 ms of one static crack.** The art and the frame count were right the whole time; only the duration shipped wrong.
+
+The defect is in `tools/monscan/spell-emit-rom.cjs`. It drops the LAST state before taking the median hold, which is correct — that state's length is bounded by the end of the capture window rather than by the animation. But a **single-state** effect has nothing left after that drop, and the code fell through to a hardcoded 4-frame fallback. 4 frames is 67 ms. Quake's real hold is 81 frames. The guess was 20x short, and it read exactly like a failed capture.
+
+Quake's own CHR block goes dark at frame 590 while the state ends at 567, so the capture watched the effect genuinely END — the 81 frames are a measurement, not a truncation.
+
+Two entries change, and only two: **Quake 0x07 67 -> 1348 ms**, and **Death 0x01 67 -> 266 ms** (16 frames), which had the identical shape. Verified by round-tripping the generator against the shipped file BEFORE the change — byte-identical — so the diff is attributable to this fix and nothing else. Every other captured animation is untouched.
+
+Nothing was drawn, inferred or hand-authored. The tile bytes still come from the ROM offsets the capture proved were copied into each slot, the layout and flips from OAM, the palette from PPU palette RAM. Only the hold changed, from a constant to the number the capture recorded.
+
+**Gate** (23rd, verified to fail on revert): a one-frame captured animation may not carry the emitter's 4-frame fallback. That value is the fingerprint of the guess, so a regenerate cannot silently put Quake back to a flash. If a future capture genuinely measures 4 frames, widen it deliberately.
+
+Quake's magic-hit state now runs the full 1348 ms before the damage number — the sequential-pipeline math from v1.7.851 sizes the window off the same helper, so the 100 ms gap still closes exactly. A cast is roughly 3.1 s end to end. That is what the NES does; say the word if you want it tightened.
+
 ## 1.7.851 — 2026-08-11
 
 **Magic sweep #2 — timing and SFX. Four defects found by computing the whole schedule per spell rather than spot-checking.**

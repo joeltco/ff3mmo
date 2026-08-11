@@ -136,8 +136,18 @@ function build(rec) {
   const layouts = rel;
   // The palette the effect's own sprites actually use. Sub-palette index comes
   // from OAM, the entries from PPU palette RAM at that frame.
+  // Drop the LAST state before taking the median: its duration is bounded by
+  // the end of the capture window, not by the animation, so it reads short.
+  //
+  // But a SINGLE-state effect has nothing left after that drop, and the `4`
+  // fallback is a guess that overwrote a real measurement. Quake is exactly
+  // that case — one static crack, measured at 81 frames (1348 ms), emitted as
+  // 67 ms, i.e. a 20x-too-short flash. Its own block goes dark at frame 590
+  // while the state ends at 567, so the capture watched the effect END; the
+  // hold is a measurement, not a truncation. When there is one state, use it.
   const holds = states.slice(0, -1).map((s) => s.hold).filter((h) => h > 0).sort((a, b) => a - b);
-  const holdMs = Math.round((holds.length ? holds[holds.length >> 1] : 4) * NES_FRAME_MS);
+  const fallback = states.length === 1 ? states[0].hold : 4;
+  const holdMs = Math.round((holds.length ? holds[holds.length >> 1] : fallback) * NES_FRAME_MS);
 
   return { run, pals, tiles, layouts, abs, width, height, holdMs, states: states.length, minX, maxX: Math.max(...xs) + 8 };
 }

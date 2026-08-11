@@ -739,6 +739,31 @@ const tests = [
     if (dead.length) return { pass: false, name, reason: `component ignored: ${dead.join(', ')}` };
     return { pass: true, name, info: 'compound elements split; single + null unchanged' };
   },
+  // Regression — a single-state captured animation must carry its MEASURED
+  // hold, not the emitter's fallback guess.
+  //
+  // `spell-emit-rom.cjs` drops the last state before taking the median hold,
+  // because that state's length is bounded by the capture window rather than by
+  // the animation. For a one-state effect that left nothing, and it fell back to
+  // a hardcoded 4 frames. Quake is one static crack measured at 81 frames
+  // (1348 ms) and shipped at 67 ms — a 20x-too-short flash that read as a
+  // missing capture. Death's burst had the same shape (16 frames -> 266 ms).
+  // 67 ms on a one-frame animation is the exact fingerprint of that guess.
+  // If a future capture genuinely measures 4 frames, widen this deliberately.
+  () => {
+    const name = 'regression — single-state animations keep their measured hold';
+    const FALLBACK_MS = Math.round(4 * (1000 / 60.0988));   // 67 — the emitter guess
+    const guessed = [];
+    for (const [id, e] of CAPTURED_SPELL_ANIMS) {
+      if ((e.layouts ? e.layouts.length : 0) !== 1) continue;
+      if (e.holdMs === FALLBACK_MS) guessed.push(`0x${id.toString(16)}`);
+    }
+    if (guessed.length) {
+      return { pass: false, name, reason: `one-frame animation still on the ${FALLBACK_MS}ms emitter fallback: ${guessed.join(', ')}` };
+    }
+    const singles = [...CAPTURED_SPELL_ANIMS].filter(([, e]) => (e.layouts ? e.layouts.length : 0) === 1);
+    return { pass: true, name, info: `${singles.length} single-state animations, all measured` };
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────
