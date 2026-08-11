@@ -257,6 +257,31 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
  * buzz, identical to an empty bag.
  */
 
+
+/**
+ * Battle attack sound BY WEAPON CLASS. v1.7.881.
+ *
+ * Found while trying to pin $8f: arming a character with a bow changed the
+ * attack sound from the knife's $b6 to $8a. Weapon class selects it. So all 16
+ * subtypes in data/items.js were swept — one representative each, equipped into
+ * the character-B block ($6200 + i*0x40, weapon at +3, re-asserted every frame)
+ * in the unkillable/harmless sandbox, ~10 attacks apiece.
+ *
+ * Six distinct sounds across sixteen classes. Most are the same `$b6` the
+ * starting party's knives play, which is why nothing before this session ever
+ * saw the others.
+ *
+ * Note $da/$db and $af/$bb: boomerang and shuriken each produce TWO values per
+ * attack — a throw and a return/impact, presumably.
+ */
+export const WEAPON_ATTACK_SFX = Object.freeze({
+  b6: { nsf: 119, classes: ['rod','nunchaku','staff','hammer','spear','knife','axe','sword','katana','book','bell'] },
+  '8a': { nsf: 75, classes: ['claw','bow'] },
+  '8b': { nsf: 76, classes: ['harp'] },
+  bb_db: { nsf: [124, 156], classes: ['boomerang'] },
+  af_da: { nsf: [112, 155], classes: ['shuriken'] },
+});
+
 /**
  * Sounds the game plays that no constant in music.js accounts for — now with
  * what each one IS. v1.7.880.
@@ -302,12 +327,16 @@ export const IDENTIFIED_EXTRA_SFX = Object.freeze([
     site: '0x775a9',
   },
   {
-    wrote: 0x8f, nsf: 80, what: 'TWO producers — not pinned',
-    how: 'Has a dedicated `LDA #$8F` site at 0x669af in bank 25, the BATTLE bank, in a '
-       + 'routine that runs an animation loop. But the only firing captured came '
-       + 'through the dispatcher, from an event tile in a farming village (map 69). '
-       + 'Same id, two call paths; neither has been tied to a named event.',
-    site: '0x669af + dispatcher',
+    wrote: 0x8f, nsf: 80, what: 'a battle attack animation — NOT any weapon class',
+    how: 'Narrowed, still unnamed. Its dedicated site 0x669af sits in bank 25 (the '
+       + 'BATTLE bank) inside a routine entered at $A988; forcing entry there (patching '
+       + 'the party-hit store to `JMP $A988`) does play $8f and then resolves a hit, so '
+       + 'the routine is attack-related. Nothing in the ROM JSRs $A988 — it is reached '
+       + 'indirectly, same as the escape routine. RULED OUT: all 16 weapon classes, '
+       + 'swept one representative each (see WEAPON_ATTACK_SFX); none produces it. It '
+       + 'also fires from a village event tile (map 69 at 20,16) via the dispatcher. '
+       + 'Remaining candidates are job commands and monster specials.',
+    site: '0x669af ($A988) + dispatcher',
   },
   {
     wrote: 0xc6, nsf: 135, what: 'the alternate physical-hit cue',
