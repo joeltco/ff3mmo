@@ -31,24 +31,24 @@ export const SFX = {
   SCREEN_OPEN:  0x55,  // SFX $14 + $41
   WARP:         0x9D,  // SFX $5C + $41
   POND_DRINK:   0x91,  // SFX $50 + $41 — healing drink (play half)
-  CURE:         0x4A,  // SFX $09 + $41 — cure spell sound
-  MAGIC_CAST:   0x62,  // SFX $21 + $41 — magic pre-animation channel sound (FF3J disasm 33/B0D8 black, 33/B0FF white: LDA #$A1 / STA $7F49)
+  CURE:         0x4A,  // SFX $09 + $41 — cure spell sound  [MEASURED v1.7.873 — cure/heal captures, $89]
+  MAGIC_CAST:   0x62,  // SFX $21 + $41 — magic pre-animation channel sound (FF3J disasm 33/B0D8 black, 33/B0FF white: LDA #$A1 / STA $7F49)  [MEASURED v1.7.873 — pre-animation cast cue, $A1]
   BATTLE_SWIPE: 0x56,  // SFX $15 + $41 — battle encounter swoosh
-  BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble
+  BOSS_DEATH:   0x7D,  // SFX $3C + $41 — boss dissolve crumble  [MEASURED v1.7.873 — Bahamut (0x06) capture, $BC]
   CURSOR:       0x59,  // SFX $18 + $41 — menu cursor movement
-  CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm
+  CONFIRM:      0x46,  // SFX $05 + $41 — menu confirm  [MEASURED v1.7.873 — physical-attack control round, $85]
   ERROR:        0x47,  // SFX $06 + $41 — error buzz
-  ATTACK_HIT:   0x71,  // SFX $30 + $41 — enemy physical hit on player (from battle-sfx-log trace v3)
-  KNIFE_HIT:    0x77,  // SFX $36 + $41 — knife/blade slash hit (ROM writes $B6 to $7F49)
-  MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)
-  DEFEND_HIT:   0x61,  // SFX $20 + $41 — defend action sound (confirmed by user)
+  ATTACK_HIT:   0x71,  // SFX $30 + $41 — enemy physical hit on player (from battle-sfx-log trace v3)  [MEASURED v1.7.873 — physical-attack control round, $B0]
+  KNIFE_HIT:    0x77,  // SFX $36 + $41 — knife/blade slash hit (ROM writes $B6 to $7F49)  [MEASURED v1.7.873 — monster's hit on the party, $B6 (32 traces)]
+  MONSTER_DEATH: 0x72, // SFX $31 + $41 — normal monster death (ROM writes $B1 to $7F49)  [MEASURED v1.7.873 — death-spell secondary cue, $B1 (5 traces)]
+  DEFEND_HIT:   0x61,  // SFX $20 + $41 — defend action sound (confirmed by user)  [MEASURED v1.7.873 — Safe (0x1a) capture, $A0]
   TREASURE:     0x80,  // SFX $3F + $41 — treasure chest open (3F/E982: LDA #$BF → $7F49)
   RUN_AWAY:     0x74,  // SFX $33 + $41 — escape success (ROM writes $B3 to $7F49 at PC=$BCBC)
   SW_HIT:       0x5D,  // SFX $1C + $41 — SouthWind ice hit per enemy (from battle-item-trace)
-  SIGHT:        0x81,  // SFX $40 + $41 — Sight scan/projectile impact. UNVERIFIED: was inferred from a $7F49=$40 residual in the f5887 capture, but post-1.7.111 we know that residual byte is the audio engine's post-consume bookkeeping value, not the requested SFX index. Recapture Sight with the v1.7.111+ EMU dumper to get the actual `$Cx` write and update.
+  SIGHT:        0x7A,  // NSF $7A — Sight impact. MEASURED v1.7.873: the headless sweep casts Sight (spell 0x36) and the CPU writes `$B9` to $7F49, 98 frames after Sight's own CHR block goes live -> `$B9 - $3F = $7A`. This was 0x81 for a long time, carrying its own note that 0x81 had been inferred from a `$40` post-consume RESIDUAL rather than the request, and asking for exactly this recapture. The note was right: 0x81 is wrong. Same trap that once made FIRE_BOOM and REVIVE wrong.
   FIRE_BOOM:    0x82,  // SFX $41 + $41 — Fire spell impact. Verified via REC OAM f1301 (2026-05-08, post-v1.7.111 dumper): CPU writes `$C1` to $7F49 at frame 19 → NSF track `$C1 - $3F = $82`. Was 0x81 before v1.7.112; that was inferred from the post-consume residual `$40`, which is NOT the requested index — the engine does its own bookkeeping after consuming the high-bit pulse.
   SLEEP_PUFF:   0x95,  // SFX $54 + $41 — Sleep spell impact. Verified via REC OAM sleep-emu-snap (2026-05-08, v1.7.111+ dumper): CPU writes `$D4` to $7F49 at frame 74 → NSF track `$D4 - $3F = $95`.
-  CRYSTAL_THUNDER: 132,  // NSF track 132 ($84) — crystal flash thunder/crash. Found by audition (/sfx); the disasm event $4B `F8 7F` pointed here.
+  CRYSTAL_THUNDER: 132,  // NSF track 132 ($84) — crystal flash thunder/crash. Found by audition (/sfx); the disasm event $4B `F8 7F` pointed here.  [MEASURED v1.7.873 — Bolt/Bolt2/Bolt3 captures, $C3]
   REVIVE:       0x92,  // NSF track $92 — party-death/angel revive jingle. Verified via REC OAM @ f311 (capture STARTED before death): CPU writes `$D1` to $7F49 at frame 40 → track `$D1 - $3F = $92`, firing as the angel appears. The earlier f5299 residual `$40` was post-consume bookkeeping, NOT the request (same trap as SIGHT/FIRE_BOOM).
 };
 

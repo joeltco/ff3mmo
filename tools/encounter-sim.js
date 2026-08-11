@@ -1693,6 +1693,39 @@ const tests = [
     }
     return { pass: true, name, info: `${sourced} spells on CAPTURED sounds, ${picked} still picked` };
   },
+  // Regression — the battle SFX constants that have been MEASURED must not drift
+  // back to inferred values.
+  //
+  // `src/music.js` mixes provenance: some entries cite a real capture, some cite
+  // a `SFX $NN + $41` formula, and SIGHT carried its own note saying it had been
+  // inferred from a `$40` POST-CONSUME RESIDUAL rather than the request, asking
+  // for a recapture. That note was right — Sight measures $B9 -> 0x7A, not 0x81.
+  // The same residual trap had already made FIRE_BOOM and REVIVE wrong once.
+  //
+  // These twelve are now independently measured by the headless sweep, several
+  // of them by a path completely separate from the spell captures (the
+  // physical-attack control round). Pin them. v1.7.873.
+  () => {
+    const name = 'regression — measured battle SFX constants stay measured';
+    const MEASURED = {
+      SIGHT: 0x7A, ATTACK_HIT: 0x71, CONFIRM: 0x46, DEFEND_HIT: 0x61,
+      KNIFE_HIT: 0x77, MONSTER_DEATH: 0x72, CURE: 0x4A, MAGIC_CAST: 0x62,
+      CRYSTAL_THUNDER: 132, BOSS_DEATH: 0x7D, FIRE_BOOM: 0x82,
+      SLEEP_PUFF: 0x95, SW_HIT: 0x5D, REVIVE: 0x92,
+    };
+    const bad = [];
+    for (const [k, want] of Object.entries(MEASURED)) {
+      if (_SFXMAP[k] !== want) bad.push(`${k} is ${_SFXMAP[k]}, measured ${want}`);
+    }
+    // And the captured spell table must agree with the constants it feeds.
+    const pairs = [[0x36, 'SIGHT'], [0x31, 'FIRE_BOOM'], [0x32, 'SW_HIT'], [0x33, 'SLEEP_PUFF'], [0x19, 'REVIVE']];
+    for (const [sid, k] of pairs) {
+      const got = CAPTURED_SPELL_SFX.get(sid);
+      if (got !== _SFXMAP[k]) bad.push(`spell 0x${sid.toString(16)} captured ${got} but SFX.${k} is ${_SFXMAP[k]}`);
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+    return { pass: true, name, info: `${Object.keys(MEASURED).length} battle SFX constants pinned to measurements` };
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────

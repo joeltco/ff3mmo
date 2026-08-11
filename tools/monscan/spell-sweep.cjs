@@ -309,7 +309,16 @@ if (!isMainThread) {
   const { job, mask, colBase, cells } = workerData;
   const control = round(job, mask, null);
   const ctrlOffs = new Set(control.blocks.keys());
-  parentPort.postMessage({ control: [...ctrlOffs] });
+  // v1.7.873 — the control round is a plain PHYSICAL ATTACK, and battle weapon
+  // CHR decompresses into the same $49-$60 slots the sweep already watches. So
+  // it carries everything needed to capture the non-spell battle sounds: an
+  // animation frame reference (the swing) and the $7F49 writes around it. It
+  // was being thrown away except for its block offsets.
+  parentPort.postMessage({
+    control: [...ctrlOffs],
+    controlSfx: control.sfxWrites,
+    controlBlocks: [...control.blocks.entries()].map(([off, r]) => ({ off, first: r.first, last: r.last })),
+  });
 
   for (const cell of cells) {
     const out = { ...cell, id: spellId(cell.row, cell.col, colBase) };
@@ -358,6 +367,10 @@ const PAR = Math.max(1, Math.min(parseInt(process.env.SWEEP_WORKERS || '0', 10) 
 const results = [];
 let pending = 0;
 
+// Control rounds are plain PHYSICAL ATTACKS — kept so the non-spell battle
+// sounds can be derived from the same trace. v1.7.873.
+const controlRuns = [];
+
 function launch(school, job, mask, colBase, cells) {
   pending++;
   const w = new Worker(__filename, { workerData: { school, job, mask, colBase, cells } });
@@ -369,6 +382,7 @@ function launch(school, job, mask, colBase, cells) {
       console.log(r.error ? `  ${nm}  ERROR ${r.error}`
         : `  ${nm}  base ${r.base === null ? '(none)' : '$' + r.base.toString(16)}  ${r.runLength} block(s)  ${r.frames.length} drawn frame(s)`);
     }
+    if (m.controlSfx) controlRuns.push({ school, sfx: m.controlSfx, blocks: m.controlBlocks });
     if (m.done) { pending--; if (!pending) finish(); }
   });
   w.on('error', (e) => { console.error('worker error', e); pending--; if (!pending) finish(); });
@@ -376,7 +390,7 @@ function launch(school, job, mask, colBase, cells) {
 
 function finish() {
   results.sort((a, b) => a.id - b.id);
-  writeFileSync(OUT, JSON.stringify({ region: [REGION_START, REGION_END], results }));
+  writeFileSync(OUT, JSON.stringify({ region: [REGION_START, REGION_END], results, controlRuns }));
   const ok = results.filter((r) => r.base != null);
   console.log(`\n${ok.length}/${results.length} spells produced a CHR block`);
   const byBase = new Map();

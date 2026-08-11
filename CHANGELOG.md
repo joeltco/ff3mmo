@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.873 — 2026-08-11
+
+**Battle SFX: SIGHT was wrong and the code said so. 14 constants now pinned to measurements.**
+
+**The code was carrying its own bug report.** `SFX.SIGHT` shipped as `0x81` with this note attached: *"UNVERIFIED: was inferred from a `$7F49=$40` residual... that residual byte is the audio engine's post-consume bookkeeping value, not the requested SFX index. Recapture Sight with the v1.7.111+ EMU dumper."*
+
+That note was right. The sweep casts Sight (spell 0x36) and the CPU writes **`$B9`** 98 frames after Sight's own CHR block goes live -> `$B9 - $3F` = **`0x7A`**, not `0x81`. Same post-consume-residual trap that had already made FIRE_BOOM and REVIVE wrong once each. Fixed.
+
+**The physical-attack control round was being thrown away.** `spell-sweep.cjs` runs one as its subtraction baseline and kept only its block offsets — but battle weapon CHR decompresses into the same `$49-$60` slots the sweep already watches, so that round carries an animation reference AND the `$7F49` writes around it. It now emits both, which is a capture path for the NON-spell battle sounds with no new harness.
+
+That round independently confirms four constants, by a route with nothing to do with the spell captures:
+
+| constant | write | value |
+|---|---|---|
+| CONFIRM | `$85` | 70 ✓ |
+| ATTACK_HIT | `$B0` | 113 ✓ |
+| DEFEND_HIT | `$A0` | 97 ✓ |
+| KNIFE_HIT | `$B6` | 119 ✓ |
+
+`$B6` also settles something from v1.7.870: I had called it "the ambient enemy-turn cadence". It is the monster's hit landing on the party — KNIFE_HIT, a real constant, appearing in 32 traces. The window bound that keeps it out of spell captures was right for the right reason.
+
+**MONSTER_DEATH confirmed too** — death-type spells fire their impact and then `$B1` -> 114, in 5 traces.
+
+**14 constants pinned by a gate**, cross-checked both ways: the constant must match its measurement, AND the captured spell table must agree with the constant it feeds (`spell 0x36 captured 122 but SFX.SIGHT is 129` is what the revert prints).
+
+**Not measured, and listed rather than glossed:** BATTLE_SWIPE, CURSOR, ERROR, RUN_AWAY, TREASURE, DOOR, WARP, POND_DRINK, SCREEN_OPEN/CLOSE, FALL, EARTHQUAKE. Most are out-of-battle or UI sounds the sweep never triggers — TREASURE and RUN_AWAY carry ROM-address citations already, the rest carry a `SFX $NN + $41` formula rather than a capture. Getting them needs a harness that opens a chest, flees a battle, walks through a door; that is a different capture script, not this one.
+
 ## 1.7.872 — 2026-08-11
 
 **AFFLICT fixed by measuring the address instead of guessing it. All 56 castable spells now carry a CAPTURED impact sound — zero picked.**
