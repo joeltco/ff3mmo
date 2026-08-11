@@ -147,47 +147,60 @@ function _resolveThrowRender(role, caster, target) {
 // Apply helpers (applyMagicHeal, applyMagicCureStatus, etc.) MUST NOT play
 // SFX themselves. The engine is the single source. See memory:
 // `feedback_ff3mmo_sfx_during_spell_anim.md` for the rule history.
-export function getSpellImpactSFX(spell) {
+/**
+ * Spell -> impact SFX, as an ORDERED rule table.
+ *
+ * v1.7.867 — this was an if-chain whose comments dressed picked sounds in the
+ * citation style of captured ones: `// NSF $84 — thunder crash` sat directly
+ * under `// NSF $82 — REC OAM f1301`. The first is a track number plus my
+ * description of what it sounds like; the second is a real capture. Making the
+ * provenance a FIELD means a guess can no longer be mistaken for data, and the
+ * deploy gate can count how much of the catalogue is actually sourced.
+ *
+ * `src`:
+ *   'captured' — traced from a REC OAM / `$Cx` write capture. Real data. Do not
+ *                change these without a new capture.
+ *   'picked'   — a plausible existing NSF track chosen to suit the element or
+ *                the spell family. NOT canon, and not claimed to be. Free to
+ *                replace the moment a capture exists.
+ *
+ * Order is load-bearing and matches the original chain exactly: fire before
+ * ice before bolt, so `['bolt','ice']` resolves as ice regardless of array order.
+ */
+export const SPELL_SFX_RULES = [
+  { id: 'sight',       src: 'picked',   sfx: SFX.SIGHT,           match: (s)     => s.target === 'sight' },
+  { id: 'fire',        src: 'captured', ref: 'REC OAM f1301',     sfx: SFX.FIRE_BOOM,       match: (s, e) => e.includes('fire') },
+  { id: 'ice',         src: 'captured', ref: 'REC OAM f766',      sfx: SFX.SW_HIT,          match: (s, e) => e.includes('ice') },
+  { id: 'bolt',        src: 'picked',   sfx: SFX.CRYSTAL_THUNDER, match: (s, e) => e.includes('bolt') },
+  { id: 'earth',       src: 'picked',   sfx: SFX.EARTHQUAKE,      match: (s, e) => e.includes('earth') },
+  { id: 'air',         src: 'picked',   sfx: SFX.FALL,            match: (s, e) => e.includes('air') },
+  { id: 'sleep',       src: 'captured', ref: 'REC OAM sleep-emu-snap', sfx: SFX.SLEEP_PUFF, match: (s)  => s.type === 'sleep' },
+  { id: 'heal-family', src: 'picked',   sfx: SFX.CURE,            match: (s, e) => e.includes('recovery')
+                          || s.target === 'cure_status' || s.target === 'ally' || s.target === 'revive' },
+  // The generic tail. v1.7.847 made this FIRE_BOOM — Fire's own captured
+  // impact — so 23 element-less spells played Fire's signature, Meteo among
+  // them. A fallback must be neutral; SW_HIT is what it was before.
+  { id: 'fallback-damage', src: 'picked', sfx: SFX.SW_HIT,     match: (s) => s.type === 'damage' || s.type === 'death' },
+  { id: 'fallback-status', src: 'picked', sfx: SFX.SLEEP_PUFF, match: () => true },
+];
+
+/** Element as a component list, whatever shape the entry uses (array | string | null). */
+export function spellElementParts(spell) {
+  const el = spell && spell.element;
+  return Array.isArray(el) ? el : (typeof el === 'string' ? el.split(',') : []);
+}
+
+/** The rule that decides this spell's impact sound — sound AND provenance. */
+export function spellSfxRule(spell) {
   if (!spell) return null;
-  if (spell.target === 'sight') return SFX.SIGHT;
-  // v1.7.847 — element was compared with ===, so BOLT had no case at all and
-  // 37 of 56 spells cast silently, including every Bolt tier and all 8 summons.
-  //
-  // v1.7.867 — that fix normalised only comma-STRINGS. A compound element is an
-  // ARRAY in this catalogue (`['ice','air']` on Aero2 0x11 and 0x2d; weapons use
-  // `['bolt','fire']` too) and NO entry is a comma-string, so the two
-  // array-element spells fell through every case here and landed on the generic
-  // fallback below — Aero2 came out sounding like Fire. Normalise all three
-  // shapes; `String(e).split(',')` also keeps a comma-string working if one ever
-  // appears, without pretending that is the live shape.
-  const _el = spell.element;
-  const els = Array.isArray(_el) ? _el
-            : (typeof _el === 'string' ? _el.split(',') : []);
-  if (els.includes('fire'))  return SFX.FIRE_BOOM;        // NSF $82 — Fire impact
-  if (els.includes('ice'))   return SFX.SW_HIT;           // NSF $5D — Blizzard impact
-  if (els.includes('bolt'))  return SFX.CRYSTAL_THUNDER;  // NSF $84 — thunder crash
-  if (els.includes('earth')) return SFX.EARTHQUAKE;       // NSF $99 — quake rumble
-  if (els.includes('air'))   return SFX.FALL;             // NSF $30 — wind whoosh
-  if (spell.type === 'sleep')    return SFX.SLEEP_PUFF;   // NSF $95 — Sleep puff
-  // Heal-style — sparkle visuals, no projectile, no impact burst. SFX still
-  // syncs with the sparkle render window per the user's pipeline rule.
-  if (els.includes('recovery'))       return SFX.CURE;
-  if (spell.target === 'cure_status') return SFX.CURE;
-  if (spell.target === 'ally')        return SFX.CURE;   // generic ally-target heal fallback
-  if (spell.target === 'revive')      return SFX.CURE;
-  // Everything else that still has a VISUAL must still make a sound — silence
-  // while an animation plays is the bug this replaced. Existing NSF tracks
-  // only; nothing invented. These two generics are a DESIGN CHOICE, not a
-  // capture: swap them freely if a spell wants its own sound.
-  // v1.7.867 — this generic was FIRE_BOOM, which is not a generic at all: it is
-  // Fire's own captured impact (NSF $82, REC OAM f1301). Every element-less
-  // damage/death spell therefore played Fire's signature — Meteo, Kill, Exit,
-  // Wall, Safe and all 8 summons, 23 spells sounding like a Fire hit. The
-  // pre-v1.7.847 function fell back to SW_HIT, a neutral impact, and that is
-  // what a fallback should be. Restored. A spell that deserves its own sound
-  // needs a capture, not a borrowed one.
-  if (spell.type === 'damage' || spell.type === 'death') return SFX.SW_HIT;
-  return SFX.SLEEP_PUFF;   // status-type landing puff
+  const parts = spellElementParts(spell);
+  for (const r of SPELL_SFX_RULES) if (r.match(spell, parts)) return r;
+  return null;
+}
+
+export function getSpellImpactSFX(spell) {
+  const r = spellSfxRule(spell);
+  return r ? r.sfx : null;
 }
 
 // Plays the impact SFX for a spell. One call site for all three role engines.

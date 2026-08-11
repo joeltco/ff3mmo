@@ -18,6 +18,40 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.868 — 2026-08-11
+
+**The SFX sweep, done properly. Only 9 of 56 spell sounds are real data — the other 47 I picked, and v1.7.847 dressed some of them up as captures.**
+
+The v1.7.847 pass asserted that no spell was SILENT and stopped there. It never asked whether the sound was RIGHT. So 23 spells playing Fire's captured impact went straight through — and the sweep table I produced printed Meteo and Fire with the same SFX number on adjacent rows. **Presence is not correctness**, and the evidence was in my own output.
+
+Worse than the miss: the comments. v1.7.847 added
+
+```
+if (els.includes('bolt'))  return SFX.CRYSTAL_THUNDER;  // NSF $84 — thunder crash
+```
+
+directly beneath the pre-existing
+
+```
+if (spell.element === 'fire') return SFX.FIRE_BOOM;     // NSF $82 — REC OAM f1301
+```
+
+The second is a capture reference. The first is a track number plus my description of what it sounds like. Written in the same style, in the same block, they are indistinguishable — a guess wearing the clothes of data. That is the part that actually violates "never guess game data": not picking a plausible sound, but making the pick unrecognisable as one.
+
+**Provenance is now a field, not a comment.** `SPELL_SFX_RULES` is an ordered table where each rule declares `src: 'captured' | 'picked'`, and a captured rule must carry its `ref`. Order is preserved exactly, so `['bolt','ice']` still resolves as ice.
+
+| provenance | spells |
+|---|---|
+| **captured** — real REC OAM traces | **9** (fire x3, ice x5, sleep x1) |
+| picked — element/family themed | 19 |
+| picked — the bare fallback | **28**, Meteo and all 8 summons among them |
+
+**Gate** (36th) asserts both halves this time: every castable spell matches a rule (a spell that falls off the end would be silent), no non-fire spell resolves to Fire's captured sound, the captured set is exactly `fire,ice,sleep`, and each captured rule carries a reference. It also **reports the picked count**, so "47 of 56 are not sourced" is visible on every deploy instead of buried.
+
+Three reverts verified: relabelling `bolt` as captured to dodge the gate (`claims captured with no reference; captured rule set is now [bolt,fire,ice,sleep]`), restoring the `FIRE_BOOM` fallback (all 21 offenders listed), and a spell falling off the end of the table (`0x1e matches no SFX rule — it would be silent`).
+
+**What is actually needed and cannot be invented:** captures for the 28 fallback spells, Meteo first. That is an EMU-tab `$Cx` write trace per spell, the same method that produced the three real entries. Until then those spells share a neutral impact, which is honest, and the gate now says so out loud.
+
 ## 1.7.867 — 2026-08-11
 
 **Meteo was playing Fire's sound. Both causes are mine, from v1.7.847, and one earlier finding was wrong.**

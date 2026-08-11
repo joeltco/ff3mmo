@@ -109,7 +109,8 @@ const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY,
         CAST_T_HEAL_ANIM_START, CAST_T_HEAL_ANIM_END } = await import('../src/cast-anim.js');
 const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
         getCastAnimElapsedMs } = await import('../src/spell-cast.js');
-const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combatant-cast.js');
+const { getSpellImpactSFX, healStyleRenderWindow, SPELL_SFX_RULES,
+        spellSfxRule, spellElementParts } = await import('../src/combatant-cast.js');
 const { SFX: _SFXMAP } = await import('../src/music.js');
 const SFX_FIRE_BOOM = _SFXMAP.FIRE_BOOM, SFX_THUNDER = _SFXMAP.CRYSTAL_THUNDER;
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpellBuyPrice } = await import('../src/data/spells.js');
@@ -1626,6 +1627,49 @@ const tests = [
       return { pass: false, name, reason: `PASS claims walkable where the game blocks: ${list}` };
     }
     return { pass: true, name, info: `${compared} tiles compared, 0 optimistic, ${stricter} conservatively strict` };
+  },
+  // Regression — every castable spell resolves a sound, and the CAPTURED ones
+  // stay captured.
+  //
+  // The v1.7.847 "SFX sweep" asserted that no spell was SILENT and stopped
+  // there. It never asked whether the sound was RIGHT, so 23 spells playing
+  // Fire's captured impact — Meteo, Kill, every summon — sailed through, and
+  // the sweep table printed Meteo and Fire with the same SFX number on adjacent
+  // rows. Presence is not correctness. This gate asserts both halves: every
+  // spell matches a rule, no non-fire spell resolves to Fire's captured sound,
+  // and the three rules backed by a real capture still carry their reference.
+  // It also REPORTS how much of the catalogue is picked rather than sourced, so
+  // that number is visible instead of buried. v1.7.867.
+  () => {
+    const name = 'regression — spell SFX resolve, and captured mappings stay captured';
+    const captured = SPELL_SFX_RULES.filter(r => r.src === 'captured');
+    const bad = [];
+    for (const r of captured) if (!r.ref) bad.push(`${r.id} claims captured with no reference`);
+    const ids = captured.map(r => r.id).sort().join(',');
+    if (ids !== 'fire,ice,sleep') {
+      bad.push(`captured rule set is now [${ids}] — a new one needs a real capture, not a relabel`);
+    }
+    for (const r of SPELL_SFX_RULES) {
+      if (r.src !== 'captured' && r.src !== 'picked') bad.push(`${r.id} has no provenance`);
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+
+    let picked = 0, sourced = 0;
+    const borrowing = [];
+    for (const [id, spell] of SPELLS) {
+      if (id > 0x37) continue;
+      const rule = spellSfxRule(spell);
+      if (!rule) return { pass: false, name, reason: `0x${id.toString(16)} matches no SFX rule — it would be silent` };
+      if (rule.src === 'captured') sourced++; else picked++;
+      // A spell may only play Fire's captured impact if it is actually fire.
+      if (rule.sfx === SFX_FIRE_BOOM && !spellElementParts(spell).includes('fire')) {
+        borrowing.push(`0x${id.toString(16)}`);
+      }
+    }
+    if (borrowing.length) {
+      return { pass: false, name, reason: `non-fire spells playing Fire's captured impact: ${borrowing.join(', ')}` };
+    }
+    return { pass: true, name, info: `${sourced} spells on captured sounds, ${picked} on picked ones (28 are the bare fallback — these want captures)` };
   },
 ];
 
