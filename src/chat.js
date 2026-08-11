@@ -15,7 +15,7 @@ import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { playFF1Track, stopFF1Music, playFF2Track, stopFF2Music, pauseMusic, resumeMusic, playMentionChime, playSFX } from './music.js';
 import { ui } from './ui-state.js';
 import { ps, changeJob, fullHeal, grantExp, MAX_LEVEL } from './player-stats.js';
-import { JOBS } from './data/jobs.js';
+import { JOBS, MAG_WHITE, MAG_BLACK, MAG_CALL } from './data/jobs.js';
 import { swapBattleSprites } from './job-sprites.js';
 import { saveSlotsToDB } from './save-state.js';
 import { sendNetChat, setNetChatHandler, setNetPmFailedHandler, getOnlinePlayerByName, getOnlinePlayers, sendNetInvEvent } from './net.js';
@@ -707,10 +707,25 @@ registerCommand('magic', 'Grant a whole school: /magic black|white|summon|all', 
   saveSlotsToDB();
   addChatMessage('Learned ' + added + ' new spell(s) — ' + schools.join('+')
     + '. Known: ' + ps.knownSpells.length + '. MP refilled.', 'console');
+  // Warn on the CAPABILITY FLAG, not the level cap. Devout and Magus both reach
+  // magic level 8 and neither can summon, so a level check says nothing — it
+  // would have granted a Magus eight summons in silence. Note also that only
+  // Sage has all three schools: Conjurer and Summoner are MAG_CALL only.
   const job = JOBS[ps.jobIdx];
-  if (schools.includes('summon') && job && job.maxMagicLv < 8) {
-    addChatMessage('Note: ' + job.name + ' caps at magic level ' + job.maxMagicLv
-      + ' — use /job conjurer|summoner|sage for summons', 'console');
+  if (job) {
+    const missing = [];
+    if (schools.includes('black') && !(job.magic & MAG_BLACK)) missing.push('black');
+    if (schools.includes('white') && !(job.magic & MAG_WHITE)) missing.push('white');
+    if (schools.includes('summon') && !(job.magic & MAG_CALL)) missing.push('summon');
+    if (missing.length) {
+      addChatMessage('Note: ' + job.name + ' cannot cast ' + missing.join('/')
+        + ' magic — those spells are known but unusable', 'console');
+      const able = JOBS.map((j, i) => [i, j]).filter(([, j]) =>
+        missing.every((sc) => j.magic & (sc === 'black' ? MAG_BLACK : sc === 'white' ? MAG_WHITE : MAG_CALL)));
+      if (able.length) {
+        addChatMessage('  Jobs that can: ' + able.map(([i, j]) => j.name + ' (/job ' + i + ')').join(', '), 'console');
+      }
+    }
   }
 }, { dev: true });
 
