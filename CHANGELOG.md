@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.871 — 2026-08-11
+
+**AFFLICT: two real bugs fixed, one diagnosis, and it still does not capture. Reporting that rather than claiming otherwise.**
+
+Two genuine defects, both from the harness's own history:
+
+- **The round-1 sequence was written for the OLD all-alive party.** It did `a,a,a` then `down,a` "char 2 guards" — but the sweep KILLS chars 2-4, and the harness notes say so explicitly ("with them dead there is one menu in the round and nothing to sequence"). With one living character that `down,a` steered the CASTER's own menu. It then mashed A three times a second for 500 frames, walking through whatever opened next.
+- **`AFFLICT_MASK` is now parameterised.** It was hardcoded to poison. Wash (0x28) cures BLIND and would stay a silent no-op under poison even once the path works.
+
+**It still yields nothing — 0 of 24 spells produce an animation block.** `DIAG=1` prints the sprite count across the capture window and shows why:
+
+```
+NORMAL : 48 49 28 28 24 24 24 36 36 36   <- menu open at f0, then the cast
+AFFLICT: 24 24 24 28 36 36 36 36 36 36   <- never at the menu; mid-round
+```
+
+The round-1 wait ends after a FIXED number of frames, so the capture loop starts wherever the round happens to be, and the spell navigation that follows is talking to no menu. That is the diagnosis, and it is measured rather than guessed.
+
+**Why I stopped.** The fix needs either a reliable menu-state signature to wait on, or the SRAM status offset so the party can be afflicted directly with no combat round at all. `emu.js` documents char blocks at `$6100`/`$6200` and the HP offsets the sweep already writes, but not a status byte. Both routes are a guess, and this is the file whose entire purpose is to stop guesses being shipped as data. Four attempts is past the 3-strike rule.
+
+**No change to the captured data. Still 43 of 48**, and the four cure spells plus Life2 remain absent with the reason recorded at the top of `spell-sfx-captured.js`.
+
+What did improve: the two bugs above are gone, `DIAG=1` exists so the next attempt starts from evidence instead of a blind re-run, and the warning block above `AFFLICT` says plainly that it does not work and what it would take.
+
 ## 1.7.870 — 2026-08-11
 
 **1 of the 6 recovered — Safe (0x1a) = 97. The other 5 are blocked on a broken harness path, and I am not inventing them.**

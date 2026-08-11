@@ -61,6 +61,20 @@ const ROWS = (process.env.ROWS || '0,1,2,3,4,5,6,7').split(',').map(Number);
 // on, the goblin's statusOnAtk (+10, bit 0x02 = poison) is set and the cast is
 // deferred to round 2, so by the time the spell goes off there is something to
 // cure. Off by default: it changes the conditions of every other capture too.
+// ⚠ AFFLICT DOES NOT CURRENTLY PRODUCE CAPTURES. v1.7.871 fixed two real bugs
+// in it (see the round-1 block below, and AFFLICT_MASK) but 0 of 24 spells
+// still yield an animation block. Diagnosed with DIAG=1, which prints the
+// sprite count across the capture window:
+//
+//   NORMAL : 48 49 28 28 24 24 24 36 36 36   <- menu open at f0, then the cast
+//   AFFLICT: 24 24 24 28 36 36 36 36 36 36   <- never at the menu; mid-round
+//
+// The round-1 wait ends after a FIXED number of frames, so the capture loop
+// starts wherever the round happens to be and the spell navigation that follows
+// is talking to no menu. The fix is to wait for a known menu STATE rather than
+// a frame count — which needs a reliable menu signature, or the SRAM status
+// offset so the party can be afflicted directly with no combat round at all.
+// Neither is something to guess at. See docs/SWEEP-DISCIPLINE.md.
 const AFFLICT = process.env.AFFLICT === '1';
 // Which status the goblin inflicts when AFFLICT is on. Poison (0x02) is the
 // default because it is what Poisona needed, but a cure spell only fires its
@@ -219,10 +233,21 @@ if (!isMainThread) {
     if (AFFLICT) {
       // Round 1: plain attack + guard, then let it play out so the goblin lands
       // poison before the spell is chosen.
-      n.press('a', 8, 30); n.press('a', 8, 30); n.press('a', 8, 30);
-      n.press('down', 8, 30); n.press('a', 8, 30);
-      for (let f = 0; f < 500; f++) {
-        if (f % 20 === 0) { n.nes.buttonDown(1, BTN.a); n.run(1); n.nes.buttonUp(1, BTN.a); } else n.run(1);
+      // v1.7.871 — this used to be `a,a,a` then `down,a` "char 2 guards", then
+      // 500 frames tapping A every 20. Both halves were written for the OLD
+      // all-alive party and never updated when the sweep started killing chars
+      // 2-4. With one living character there is ONE menu in the round: the
+      // `down,a` steered the CASTER's own menu, and a 3-per-second A-mash then
+      // walked straight through whatever opened next. Result: the spell was
+      // committed (or not) during setup, before the capture loop ever started —
+      // 0 of 24 spells produced an animation block under AFFLICT.
+      //
+      // One plain Attack, then let the round resolve with A tapped only often
+      // enough to clear the battle message and never fast enough to enter the
+      // next menu.
+      n.press('a', 8, 30); n.press('a', 8, 30);
+      for (let f = 0; f < 420; f++) {
+        if (f % 60 === 0) { n.nes.buttonDown(1, BTN.a); n.run(1); n.nes.buttonUp(1, BTN.a); } else n.run(1);
       }
     }
     if (cell) {
@@ -241,8 +266,13 @@ if (!isMainThread) {
       n.press('down', 8, 30); n.press('a', 8, 30);     // char 2 guards
     }
 
+    // DIAG=1 — sprite count over the capture window. >12 means a battle is on
+    // screen; a flat low count means the run left the battle entirely, which is
+    // a different failure from "the spell fired nothing".
+    const diag = process.env.DIAG === '1' ? [] : null;
     for (let f = 0; f < FRAMES; f++) {
       frameNo = f; _sfxFrame = f;
+      if (diag && f % 150 === 0) diag.push(f + ':' + sc(n));
       // Snapshot OAM + sprite palettes only while effect slots are actually on
       // screen; that window IS the animation and everything else is idle battle.
       const drawn = [];
@@ -262,7 +292,7 @@ if (!isMainThread) {
     // end. Recorded so the dump can assert it rather than the reader trusting
     // the patch landed.
     const survived = sc(n) > 12;
-    return { blocks, oamFrames, survived, sfxWrites };
+    return { blocks, oamFrames, survived, sfxWrites, diag };
   }
 
   const { job, mask, colBase, cells } = workerData;
@@ -275,6 +305,7 @@ if (!isMainThread) {
     try {
       const r = round(job, mask, cell);
       out.survived = r.survived;
+      out.diag = r.diag;
       // Spell-owned SFX. The control round fires the same battle-frame sounds
       // (menu blips, the enemy's turn), so subtract it the way the CHR blocks
       // are subtracted rather than trusting the raw list.
