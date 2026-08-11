@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.880 — 2026-08-11
+
+**The six unaccounted sounds now have identities — three solid, two structural, one honestly still open.**
+
+These piled up across the arc as "heard, belongs to nothing". Each was re-triggered, resolved back to its ROM site, and photographed.
+
+| wrote | nsf | what it is | strength |
+|---|---|---|---|
+| `$be` | 127 | **the falling whoosh** | solid |
+| `$c0` | 129 | **the screen-flash cue** | solid |
+| `$c8` | 137 | **a monster special attack** | solid |
+| `$c6` | 135 | **the alternate branch of the hit cue** | structural |
+| `$d9` | 154 | **an event-script cue, sibling to the earthquake** | structural |
+| `$8f` | 80 | two producers, **not pinned** | open |
+
+**`$be` is the falling whoosh** — three firings during the intro fall (frames 2766/2800/2834) while the screen is black and a single character tumbles through it. It runs *on top of* song 48, which means the fall has both a song and a repeating SFX, and `SFX.FALL` is only the song half.
+
+**`$c0` is a screen flash.** Its own `LDA #$C0` site, 51 firings on one Altar Cave floor, and the before/after shots show the *same map* drawn greyscale and then red. Three instructions earlier the ROM does `AND #$01 / ORA #$1E / STA $2001` — the PPU mask: greyscale and colour emphasis. The picture and the code agree.
+
+**`$c8` is a monster special.** Caught mid-battle as a Flyer used **"Glare"** and a party member dropped to KO — monster name and attack name both legible in the message strip.
+
+**`$c6` is not really its own sound.** All five firings resolve to `0x668d7`, the *same* `STX $7F49` that produces ATTACK_HIT, where the ROM reads `LDX #$B0 / LDA $CB / BNE -> LDX #$C6`. One store, two values, chosen on whether `$CB` is set. What `$CB` means is not pinned.
+
+**`$d9` sits directly after EARTHQUAKE** in one jump-table handler block — `LDA #$D8 / STA / JMP $B938` then `LDA #$D9 / STA / JMP $B913`. Two scripted-event opcodes, each with its own sound and its own routine. Which event it belongs to is not identified.
+
+**`$8f` is the one I could not close.** It has a dedicated site at `0x669af` in bank 25 — the *battle* bank, inside an animation loop — yet the only firing I captured came through the dispatcher from an event tile in a farming village. Same id, two call paths, neither tied to a named event. Listed as open rather than dressed up.
+
+`UNACCOUNTED_SFX` is now empty and `IDENTIFIED_EXTRA_SFX` carries the evidence per entry. Read the `how` field before treating any as settled — the three tiers above are not the same thing.
+
 ## 1.7.879 — 2026-08-11
 
 **Found the real cursor, and measured the Item row. The cursor is the reusable part.**

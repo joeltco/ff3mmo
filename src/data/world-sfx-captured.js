@@ -258,15 +258,72 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
  */
 
 /**
- * Sounds the game demonstrably plays that NO constant in music.js accounts for.
- * Recorded so they are not rediscovered as "new" a third time; none is wired to
- * anything and none is claimed to be any particular event.
+ * Sounds the game plays that no constant in music.js accounts for — now with
+ * what each one IS. v1.7.880.
+ *
+ * These accumulated across the arc as "seen but unexplained". None is wired to
+ * anything; the point of identifying them is that the next person to hear one in
+ * a capture window knows whether it belongs there.
+ *
+ * Method is the same as everything else here: trigger it, resolve the write back
+ * to its ROM site, and photograph the screen.
  */
-export const UNACCOUNTED_SFX = [
-  { wrote: 0x8f, nsf: 80, where: 'event trigger, farming village (map 69 at 20,16)' },
-  { wrote: 0xd9, nsf: 154, where: 'event trigger, map 125 at 17,17; sits beside EARTHQUAKE $d8 in ROM' },
-  { wrote: 0xbe, nsf: 127, where: 'intro sequence' },
-  { wrote: 0xc6, nsf: 135, where: 'battle, seen on the Guard row' },
-  { wrote: 0xc0, nsf: 129, where: 'Altar Cave floor, map 108' },
-  { wrote: 0xc8, nsf: 137, where: 'Altar Cave floors — maps 111, 112, 113, 325, 338' },
-];
+export const IDENTIFIED_EXTRA_SFX = Object.freeze([
+  {
+    wrote: 0xbe, nsf: 127, what: 'the falling whoosh',
+    how: 'Fires three times during the intro fall (frames 2766/2800/2834) while the '
+       + 'screen is black and a single character tumbles through it. Runs ON TOP of '
+       + 'song 48 — the fall has both a song and a repeating SFX, and SFX.FALL is '
+       + 'only the song half.',
+    site: 'dispatcher',
+  },
+  {
+    wrote: 0xc0, nsf: 129, what: 'the screen-flash cue',
+    how: 'Its own `LDA #$C0` site (0x760ba), 51 firings while walking one Altar Cave '
+       + 'floor. The before/after shots show the SAME map drawn greyscale and then '
+       + 'red, and the ROM three instructions earlier does `AND #$01 / ORA #$1E / '
+       + 'STA $2001` — the PPU mask, i.e. greyscale and colour emphasis. The sound '
+       + 'accompanies a full-screen colour flash.',
+    site: '0x760ba',
+  },
+  {
+    wrote: 0xc8, nsf: 137, what: 'a monster special attack',
+    how: 'Caught mid-battle as a Flyer used "Glare" and a party member dropped to KO '
+       + '— both the monster name and the attack name are legible in the message '
+       + 'strip of the capture screenshot.',
+    site: 'dispatcher',
+  },
+  {
+    wrote: 0xd9, nsf: 154, what: 'an event-script cue, sibling to the earthquake',
+    how: 'Own `LDA #$D9` site (0x775a9) sitting DIRECTLY after EARTHQUAKE\'s `LDA #$D8` '
+       + '(0x775a1) in one jump-table handler block: each loads its sound and then '
+       + 'branches to a different routine ($B913 vs $B938). Triggered by walking onto '
+       + 'an event tile on map 125. Which scripted event it belongs to is NOT pinned.',
+    site: '0x775a9',
+  },
+  {
+    wrote: 0x8f, nsf: 80, what: 'TWO producers — not pinned',
+    how: 'Has a dedicated `LDA #$8F` site at 0x669af in bank 25, the BATTLE bank, in a '
+       + 'routine that runs an animation loop. But the only firing captured came '
+       + 'through the dispatcher, from an event tile in a farming village (map 69). '
+       + 'Same id, two call paths; neither has been tied to a named event.',
+    site: '0x669af + dispatcher',
+  },
+  {
+    wrote: 0xc6, nsf: 135, what: 'the alternate physical-hit cue',
+    how: 'Every firing (5, across 3 maps, always mid-battle) resolves to 0x668d7 — the '
+       + 'SAME `STX $7F49` that produces ATTACK_HIT. The ROM there reads `LDX #$B0 / '
+       + 'LDA $CB / BNE -> LDX #$C6` : one store, two values, chosen by whether '
+       + 'zero-page $CB is set. So $c6 is not a separate sound so much as the other '
+       + 'branch of the hit cue. WHAT $CB means is not pinned — the capture shows a '
+       + 'fight against Flyers with the party slept and two members KO, which is '
+       + 'suggestive of nothing on its own.',
+    site: '0x668d7 (shared with ATTACK_HIT)',
+  },
+]);
+
+/**
+ * Empty: all six are identified, to varying strength — read the `how` field
+ * before treating any of them as settled. $8f in particular is NOT pinned.
+ */
+export const UNACCOUNTED_SFX = [];
