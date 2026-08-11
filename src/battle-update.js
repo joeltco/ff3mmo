@@ -9,6 +9,7 @@ import { battleSpeedMult } from './settings.js';
 import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
+import { jobHasMagic } from './data/jobs.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP, grantGil } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
@@ -166,8 +167,10 @@ export function executeBattleCommand(index) {
       setArbStripName(cellId);
     }
   } else if (index === 1) {
-    // Slot 1: Defend for non-mages, Magic for mages (jobs 3/4/5).
-    const isMage = ps.jobIdx === 3 || ps.jobIdx === 4 || ps.jobIdx === 5;
+    // Slot 1: Defend for non-casters, Magic for casters.
+    // MUST agree with the label drawn by `battle-draw-menu.js#_isMageJob` —
+    // both read `jobHasMagic`. See that helper for what the split cost us.
+    const isMage = jobHasMagic(ps.jobIdx);
     // Filter to spells the current job can actually cast (school gate).
     // E.g., a White Mage carrying Fire from a previous BM stint won't see
     // Fire in their battle menu — RM sees both.

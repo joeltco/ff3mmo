@@ -25,6 +25,7 @@
 
 import { _makeCanvas16, _make8Canvas } from './canvas-utils.js';
 import { getSpellSchool } from './data/spells.js';
+import { jobHasMagic } from './data/jobs.js';
 
 // ── Per-job default palettes ──────────────────────────────────────────────
 const WM_DEFAULT_PAL = [0x0F, 0x12, 0x22, 0x31];  // blue / cyan / white
@@ -390,15 +391,27 @@ export function initCastAnim() {
 // stars; RM casting Fire (black) renders the BM halo. Falls back to
 // 'wm' when the spell ID isn't registered (better than nothing for
 // uncatalogued white-flavor effects).
+//
+// v1.7.844 — the map covered jobs 3/4/5 ONLY, so Conjurer, Summoner, Devout,
+// Magus and Sage all resolved to null and `getCastVisual` returned nothing:
+// they would have cast with no visual at all. That was invisible until now
+// only because those jobs could not reach the battle magic menu (same arc).
+// The Red Mage rule — follow the SPELL'S school, not the job's — is exactly
+// what a multi-school job needs, so it now covers every caster the map does
+// not name explicitly. Jobs 3 and 4 keep their job-driven visual unchanged: a
+// White Mage carrying Fire from a BM stint still casts WM stars.
 const _MAGE_CAST_KEY = { 3: 'wm', 4: 'bm' };
 export function jobToCastKey(jobIdx, spellId) {
-  if (jobIdx === 5) {
-    // Red Mage — pick visual by the spell's school.
-    const school = spellId != null ? getSpellSchool(spellId) : null;
-    if (school === 'black') return 'bm';
-    return 'wm';
-  }
-  return _MAGE_CAST_KEY[jobIdx] || null;
+  const explicit = _MAGE_CAST_KEY[jobIdx];
+  if (explicit) return explicit;
+  if (!jobHasMagic(jobIdx)) return null;          // non-caster — unchanged
+  const school = spellId != null ? getSpellSchool(spellId) : null;
+  if (school === 'black') return 'bm';
+  // Summons own their whole presentation (`summon-anim.js` plays the summon
+  // school's own cast burst from $55810), so they must NOT also get a
+  // school cast visual layered on. null is what Conjurer already returned.
+  if (school === 'call') return null;
+  return 'wm';                                    // documented white-flavor fallback
 }
 
 // Returns the cast-visual bundle for (jobIdx, spellId). Falls back to per-job

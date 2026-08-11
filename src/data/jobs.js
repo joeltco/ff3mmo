@@ -160,3 +160,20 @@ export function buildExpTable(romData) {
   }
   return table;
 }
+
+/**
+ * Does this job have ANY magic school? Single source for every "is this a
+ * caster" gate.
+ *
+ * v1.7.844 — the battle menu had TWO answers to this question. The DISPLAY
+ * rule (`battle-draw-menu.js`) was widened in v1.7.840 to read `job.magic`,
+ * but the EXECUTE rule in `battle-update.js#executeBattleCommand` still had an
+ * inline `jobIdx === 3 || jobIdx === 4 || jobIdx === 5`. Conjurer, Summoner,
+ * Devout, Magus and Sage therefore showed "Magic" in slot 1 and ran DEFEND
+ * when you picked it. Both call sites now come here, so the label and the
+ * button cannot disagree again.
+ */
+export function jobHasMagic(jobIdx) {
+  const job = JOBS[jobIdx];
+  return !!(job && job.magic);
+}

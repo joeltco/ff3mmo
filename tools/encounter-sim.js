@@ -99,6 +99,9 @@ const rngMod       = await import('../src/rng.js');
 const statusMod    = await import('../src/status-effects.js');
 const battleTurn   = await import('../src/battle-turn.js');
 const { inputSt, keys, handleBattleInput } = await import('../src/input-handler.js');
+const { executeBattleCommand } = await import('../src/battle-update.js');
+const { JOBS, jobHasMagic } = await import('../src/data/jobs.js');
+const { jobToCastKey } = await import('../src/cast-anim.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -436,6 +439,58 @@ const tests = [
       inputSt.itemPage = savedPage; inputSt.itemPageCursor = savedCursor;
       inputSt.itemHeldIdx = savedHeld; inputSt.menuMode = savedMode;
       inputSt.playerActionPending = savedPending;
+    }
+  },
+  // Regression — picking Magic must OPEN the magic menu for every caster job.
+  // Reported live: "selecting magic as a sage doesn't pull up magic menu and
+  // still uses guard sequence". v1.7.840 widened the battle menu's LABEL rule
+  // to read `job.magic` but left an inline `jobIdx === 3 || 4 || 5` in
+  // `executeBattleCommand`, so Conjurer, Summoner, Devout, Magus and Sage all
+  // showed "Magic" and ran DEFEND. Drives the real dispatch. v1.7.844.
+  () => {
+    const name = 'regression — Magic opens the magic menu for every caster job';
+    const savedJob = ps.jobIdx, savedKnown = ps.knownSpells, savedStatus = ps.status;
+    const savedState = battleSt.battleState, savedMode = inputSt.menuMode;
+    const savedDefending = battleSt.isDefending, savedPending = inputSt.playerActionPending;
+    const broken = [];
+    try {
+      for (let jobIdx = 0; jobIdx < JOBS.length; jobIdx++) {
+        if (!jobHasMagic(jobIdx)) continue;              // non-casters keep Defend
+        ps.jobIdx = jobIdx; ps.status = 0; ps.knownSpells = [0x31, 0x34];
+        battleSt.isDefending = false;
+        inputSt.playerActionPending = null;
+        inputSt.menuMode = 'item';
+        battleSt.battleState = 'menu-open';
+        executeBattleCommand(1);                          // slot 1 = Guard | Magic
+        const openedMagic = inputSt.menuMode === 'magic' && battleSt.battleState === 'item-menu-out';
+        const ranDefend = battleSt.isDefending
+          || (inputSt.playerActionPending && inputSt.playerActionPending.command === 'defend');
+        if (!openedMagic || ranDefend) {
+          broken.push(`${JOBS[jobIdx].name || jobIdx}${ranDefend ? ' (ran DEFEND)' : ''}`);
+        }
+      }
+      if (broken.length) {
+        return { pass: false, name, reason: `label says Magic but slot 1 does not open it: ${broken.join(', ')}` };
+      }
+      // Every caster must also resolve a cast VISUAL, or it casts invisibly.
+      // Summons are exempt: they own their whole presentation.
+      const noVisual = [];
+      for (let jobIdx = 0; jobIdx < JOBS.length; jobIdx++) {
+        if (!jobHasMagic(jobIdx)) continue;
+        for (const spellId of [0x31, 0x34]) {             // one black, one white
+          if (!jobToCastKey(jobIdx, spellId)) noVisual.push(`${JOBS[jobIdx].name || jobIdx}/0x${spellId.toString(16)}`);
+        }
+      }
+      if (noVisual.length) {
+        return { pass: false, name, reason: `caster resolves no cast visual: ${noVisual.join(', ')}` };
+      }
+      return { pass: true, name, info: 'all caster jobs open Magic and resolve a cast visual' };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      ps.jobIdx = savedJob; ps.knownSpells = savedKnown; ps.status = savedStatus;
+      battleSt.battleState = savedState; inputSt.menuMode = savedMode;
+      battleSt.isDefending = savedDefending; inputSt.playerActionPending = savedPending;
     }
   },
 ];

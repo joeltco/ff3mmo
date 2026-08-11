@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.844 — 2026-08-11
+
+**Fix: picking Magic as a Sage ran the Guard sequence. The battle menu had TWO answers to "is this job a caster" and they disagreed for SEVEN jobs.**
+
+Reported: "selecting magic as a sage doesnt pull up magic menu and still uses guard sequence". Correct, and it is a miss from v1.7.840 — that release widened the menu's LABEL rule and I did not grep for the matching EXECUTE rule.
+
+- **`battle-draw-menu.js#_isMageJob`** (the label) was changed in v1.7.840 to read `job.magic`.
+- **`battle-update.js#executeBattleCommand`** (the button) still carried an inline `ps.jobIdx === 3 || ps.jobIdx === 4 || ps.jobIdx === 5`.
+
+So slot 1 rendered "Magic" and dispatched DEFEND. Affected every job with magic outside White/Black/Red Mage: **Ranger, Magic Knight, Conjurer, Summoner, Devout, Magus and Sage** — seven, not the five I first counted from the jobs I happened to probe.
+
+Both call sites now read one exported `jobHasMagic(jobIdx)` in `src/data/jobs.js`, so the label and the button cannot drift apart again.
+
+**Second gap, found while verifying the first and fixed in the same pass.** `cast-anim.js#jobToCastKey` mapped jobs 3/4/5 ONLY, returning `null` for every other caster — and `getCastVisual` returns nothing on a null key. Fixing the menu alone would have handed Sage a working magic menu and a completely **invisible cast**. The Red Mage rule (follow the SPELL'S school, not the job's) is exactly what a multi-school job needs, so it now covers every caster the map does not name explicitly:
+
+- Jobs 3 and 4 unchanged — a White Mage carrying Fire from a BM stint still casts WM stars.
+- Devout resolves white, Magus black, Sage per-spell.
+- **Summon spells stay `null` on purpose** — `summon-anim.js` plays the summon school's own cast burst from `$55810`, and layering a school visual on top would double it. This is what Conjurer already returned.
+
+Regression test added to `tools/encounter-sim.js` (a deploy gate). It drives the real dispatch — `executeBattleCommand(1)` for EVERY job with a magic flag — and asserts the magic menu opens, that Defend did not fire, and that the job resolves a cast visual for a black and a white spell. Verified against the pre-fix code: it names all seven jobs and reports "(ran DEFEND)". 15 passed.
+
+One thing checked and cleared, not changed: Red Mage's cast visual looked inverted while probing (Cure reading as `bm`). It is not — `0x31` is a black spell and `0x34` a white one; `0x32 Ice` -> black and `0x35 Pure` -> white confirm the v1.7.840 block layout is right. The probe labels were wrong, not the code.
+
 ## 1.7.843 — 2026-08-11
 
 **Fix: two Z presses on the battle item menu's last page killed the game loop. Reachable by any player, in any battle, right now.**

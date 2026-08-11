@@ -24,7 +24,7 @@ import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
 import { drawCursorFaded, drawBorderedBox } from './hud-drawing.js';
 import { isMonsterStillVisible } from './battle-draw-encounter.js';
-import { JOBS } from './data/jobs.js';
+import { jobHasMagic } from './data/jobs.js';
 
 // ── Layout constants (match battle-drawing.js) ────────────────────────────
 const HUD_BOT_Y = 176, HUD_BOT_H = 64;
@@ -44,8 +44,7 @@ const VICTORY_ROW_FRAME_MS = 16.67;
 // Conjurer, Summoner, Devout, Magus, Ranger and Magic Knight all showed Guard
 // and had no way to cast in battle at all.
 function _isMageJob(jobIdx) {
-  const job = JOBS[jobIdx];
-  return !!(job && job.magic);
+  return jobHasMagic(jobIdx);
 }
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
