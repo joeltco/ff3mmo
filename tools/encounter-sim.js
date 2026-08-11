@@ -133,7 +133,9 @@ try {
   initTextDecoder(_romBytes);
   _romLoaded = true;
 } catch { /* no ROM in this checkout — the ROM-dependent tests report themselves skipped */ }
-const { sweepFloors } = await import('./dungeon-sweep.mjs');
+const { sweepFloors, PASS } = await import('./dungeon-sweep.mjs');
+const { generateFloor } = await import('../src/dungeon-generator.js');
+const { MapRenderer } = await import('../src/map-renderer.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
@@ -1544,6 +1546,46 @@ const tests = [
     }
     const seeds = rows.reduce((a, r) => a + r.seeds, 0);
     return { pass: true, name, info: `${rows.length} floors x 60 timestamp seeds = ${seeds} maps, all traversable` };
+  },
+  // Regression — the dungeon sweep's walkability approximation must never be
+  // OPTIMISTIC about the real game.
+  //
+  // `tools/dungeon-sweep.mjs` floods generated floors with a hand-written tile-id
+  // set, because the real `MapRenderer.isPassable` needs a DOM and cannot run in
+  // a plain node tool. Every reachability claim that gate makes — "the exit is
+  // reachable", "this floor has a real region" — rests on that list never
+  // calling something passable that the game blocks. If it ever does, the gate
+  // starts passing floors the player cannot actually walk. The opposite
+  // direction is fine and expected: the list is stricter than the game on 9 ids
+  // (0x70 door, 0x04 water, 0x61, 0x3a-0x3f), so its `stranded` counts are
+  // upper bounds. v1.7.866.
+  () => {
+    const name = 'regression — dungeon walkability set is never more permissive than the game';
+    if (!_romLoaded) return { pass: true, name, info: 'SKIPPED — no FF3-English.nes in this checkout' };
+    const optimistic = new Map();
+    let compared = 0, stricter = 0;
+    for (let k = 0; k < 12; k++) {
+      for (const f of [0, 1, 2, 3, 4]) {
+        const r = generateFloor(_romBytes, f, 1754900000000 + k * 7919);
+        const mr = new MapRenderer(r, r.entranceX, r.entranceY);
+        for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+          // The entrance is special-cased passable by the renderer; skip it.
+          if (x === r.entranceX && y === r.entranceY) continue;
+          const tile = r.tilemap[y * 32 + x];
+          mr._playerZ = 0;
+          const game = mr.isPassable(x, y);
+          const tool = PASS.has(tile);
+          compared++;
+          if (tool && !game) optimistic.set(tile, (optimistic.get(tile) || 0) + 1);
+          else if (!tool && game) stricter++;
+        }
+      }
+    }
+    if (optimistic.size) {
+      const list = [...optimistic].map(([t, n]) => `0x${t.toString(16)} x${n}`).join(', ');
+      return { pass: false, name, reason: `PASS claims walkable where the game blocks: ${list}` };
+    }
+    return { pass: true, name, info: `${compared} tiles compared, 0 optimistic, ${stricter} conservatively strict` };
   },
 ];
 

@@ -15,6 +15,23 @@
 import fs from 'node:fs';
 import { generateFloor } from '../src/dungeon-generator.js';
 
+/**
+ * Tiles treated as walkable when flooding a generated floor.
+ *
+ * This is a deliberate APPROXIMATION of the game's `MapRenderer.isPassable`,
+ * which needs a DOM (canvas work in its constructor) and so cannot run in a
+ * plain node tool. Measured against the real predicate over 125 floors
+ * (v1.7.866): it is **conservative in the safe direction** — there is no tile
+ * it calls passable that the game blocks, so a reachability conclusion drawn
+ * from it can never be falsely optimistic. That is the property the deploy gate
+ * in `encounter-sim.js` asserts, and it is why "the exit is reachable" here is
+ * trustworthy.
+ *
+ * It is stricter than the game on 9 ids the game does allow — 0x70 (chamber
+ * door), 0x04 (water), 0x61, and 0x3a-0x3f — so `stranded` counts here are
+ * upper bounds. Anything this flags as stranded is worth confirming against
+ * `MapRenderer.isPassable` before calling it a bug.
+ */
 export const PASS = new Set([0x30, 0x09, 0x41, 0x49, 0x44, 0x73, 0x42, 0x68, 0x6a, 0x60]);
 const CHEST = 0x7c, STAIRS = 0x73;
 

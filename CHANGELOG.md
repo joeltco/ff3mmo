@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.866 — 2026-08-11
+
+**Map / movement sweep. The system is sound; the finding is that yesterday's dungeon gate rested on an unverified assumption.**
+
+The v1.7.865 gate flooded generated floors with a hand-written tile-id set (`PASS`) in `tools/dungeon-sweep.mjs`, because the real `MapRenderer.isPassable` needs a DOM and cannot run in a plain node tool. Every claim that gate makes — "the exit is reachable", "this floor has a real region" — depends on that list never calling something walkable that the game blocks. **Nobody had checked.**
+
+Checked now, over 125 generated floors, comparing the list against the real predicate tile by tile:
+
+- **0 cases where the list says walkable and the game blocks.** The approximation is conservative in the only direction that matters, so yesterday's reachability conclusions stand and the gate cannot pass a floor the player is unable to walk.
+- **238 cases the other way** — the list is stricter than the game on 9 ids: `0x70` (chamber door), `0x04` (water), `0x61`, and `0x3a`-`0x3f`. So its `stranded` counts are **upper bounds**, and anything it flags is worth confirming against the real predicate before being called a bug.
+
+`isPassable` is nothing like a tile-id set: ROM collision bytes indexed per metatile, a bit-7 trigger sub-type check, always-passable entrance and bed tiles, a dynamic trigger map, and z-level layering with mutable `_playerZ` state for bridges. A hand-written list was never going to match it, which is exactly why the safe direction had to be pinned rather than assumed.
+
+**Re-verified yesterday's finding with the real predicate rather than the approximation.** Floor 0's two stranded tiles at seed 1754901076984 are genuinely unreachable — `isPassable` returns true for both and the game-collision flood still cannot reach them. Still 1 seed in 150, still cosmetic, still not worth touching delicate generator code. No retraction; it is now confirmed against the authority instead of a proxy.
+
+**Gate** (35th): compares `PASS` against `MapRenderer.isPassable` across 12 seeds x 5 floors — 61,380 tiles — and fails if the list is EVER more permissive than the game. The conservative direction is counted and allowed. Verified by adding `0x00` (ceiling) to the set: `PASS claims walkable where the game blocks: 0x0 x43315`.
+
+**Checked and found correct:**
+
+- The msgbox modal-input rule holds. `movement.js` owns the sole Z/X consumer chain across the msgbox / party-invite / trade-offer / prompt states, and `pause-menu.js` early-returns on `msgState.isPrompt` so the keys reach it rather than being eaten. `party-invite.js` dismisses a prompt without consuming keys.
+- Dungeon arrival places the player at `entranceX/entranceY` unless an explicit `returnX/returnY` is supplied for the walk-back case — which is what made the floor-4 flood bug diagnosable in the first place.
+
 ## 1.7.865 — 2026-08-11
 
 **Dungeon sweep. The generator is sound; the tool you validate it with was lying about an entire floor.**
