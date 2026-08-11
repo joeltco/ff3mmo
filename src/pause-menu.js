@@ -7,7 +7,7 @@ import { JOBS, JOB_NAMES_SHRINES, canJobEquip } from './data/jobs.js';
 import { _makeFadedPal, nesColorFade } from './palette.js';
 import { _nameToBytes, _nesNameToString } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
-import { SPELLS, getSpellMPCost, getCastableKnownSpells, canLearnSpell } from './data/spells.js';
+import { SPELLS, getSpellMPCost, getCastableKnownSpells, canLearnSpell, spellStatusMask } from './data/spells.js';
 import { stopFF1Music, resumeMusic, playFF1Track, FF1_TRACKS, playSFX, SFX, pauseMusic, applyMusicVolume, applySfxVolume } from './music.js';
 import { getSetting, setSetting, VOL_MAX, BATTLE_SPEED_LABELS } from './settings.js';
 import { PAUSE_ITEMS } from './data/strings.js';
@@ -870,7 +870,10 @@ function _applyPauseSpellUse(rosterTargets) {
   // Routes through `applyMagicCureStatus` so the in-battle and pause paths share
   // the same status-removal logic (single-source per memory feedback).
   if (spell.target === 'cure_status') {
-    const flag = STATUS_NAME_TO_FLAG[spell.type];
+    // v1.7.855 — the out-of-battle twin of the in-battle bug: Heal and Soft
+    // resolved to `undefined` here too, so casting them from the menu cured
+    // nothing. Same shared helper.
+    const flag = spellStatusMask(spell);
     if (pauseSt.invAllyTarget >= 0) {
       const rp = rosterTargets[pauseSt.invAllyTarget];
       if (!rp) { playSFX(SFX.ERROR); return; }

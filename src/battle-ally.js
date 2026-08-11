@@ -17,7 +17,7 @@ import { getEnemyDmgNum, setEnemyDmgNum, setPlayerHealNum, getAllyDamageNums, ti
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { ps } from './player-stats.js';
 import { STATUS, STATUS_NAME_TO_FLAG } from './status-effects.js';
-import { SPELLS } from './data/spells.js';
+import { SPELLS, spellStatusMask } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
@@ -325,7 +325,7 @@ function _applyAllyMagicEffect() {
   // Cure-status spells (Poisona, Esuna, Bndna, etc.) — pick the status
   // flag from `spell.type` the same way the sender does (spell-cast.js:679).
   const statusFlag = spell.target === 'cure_status'
-    ? (STATUS_NAME_TO_FLAG[spell.type] || STATUS.POISON)
+    ? spellStatusMask(spell)   // v1.7.855 — was STATUS_NAME_TO_FLAG[spell.type] || STATUS.POISON
     : 0;
 
   // Callbacks per faction. Damage numbers / heal numbers / status messages

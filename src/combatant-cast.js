@@ -20,11 +20,11 @@ import { ps } from './player-stats.js';
 import { pvpSt } from './pvp.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
          getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
-import { SPELLS } from './data/spells.js';
+import { SPELLS, spellStatusMask } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
 import { rand } from './rng.js';
 import { dispatchDelta } from './deltas.js';
-import { tryInflictStatus, removeStatus, addStatus, STATUS, STATUS_NAME_BYTES } from './status-effects.js';
+import { tryInflictStatus, tryInflictStatusByte, removeStatus, addStatus, STATUS, STATUS_NAME_BYTES } from './status-effects.js';
 import { playSFX, SFX } from './music.js';
 
 // Resolve role-specific cast context. Returns { jobIdx, spellId, elapsed }
@@ -219,9 +219,18 @@ export function applySpell(spell, target, opts = {}) {
     applyMagicDrain(target, opts.amount || 0, opts);
     return;
   }
-  // Cure-status — Poisona / Antidote.
+  // Cure-status — Poisona / Antidote / Heal / Soft.
   if (spell.target === 'cure_status') {
-    applyMagicCureStatus(target, opts.statusFlag, opts);
+    // Callers may pass an explicit flag; otherwise take the spell's own mask.
+    applyMagicCureStatus(target, opts.statusFlag != null ? opts.statusFlag : spellStatusMask(spell), opts);
+    return;
+  }
+  // Toggle-status — Toad / Mini. v1.7.855: this target had NO branch anywhere,
+  // in this dispatcher or in spell-cast's enemy path, so both spells fell all
+  // the way through to `applyMagicDamage` — Toad cast on an enemy dealt damage
+  // instead of transforming it, and cast on an ally it DAMAGED YOUR OWN PARTY.
+  if (spell.target === 'toggle_status') {
+    applyMagicToggleStatus(target, spellStatusMask(spell), spell.hit, opts);
     return;
   }
   // Recovery — heal non-undead, damage undead.
@@ -369,7 +378,10 @@ export function applyMagicAllStatus(target, hitChance, opts = {}) {
 // trigger monster-death state / ally.deathTimer / pvp-dissolve).
 export function applyMagicInstakill(target, hitChance, opts = {}) {
   if (!target || target.hp <= 0) return false;
-  if (rand() * 100 < hitChance) {
+  // hit 0 = no roll, guaranteed — same reading as applyMagicDamage and
+  // tryInflictStatus. Two death spells (0x10 and Exit) carry hit 0 and could
+  // never land while this read it as 0%. See status-effects.js. v1.7.855.
+  if (!(hitChance > 0) || rand() * 100 < hitChance) {
     dispatchDelta({ type: 'death', target, source: opts.source });
     if (opts.onDmgNum) opts.onDmgNum(0);
     if (opts.sfx) playSFX(opts.sfx);
@@ -378,6 +390,33 @@ export function applyMagicInstakill(target, hitChance, opts = {}) {
   }
   if (opts.onMiss) opts.onMiss();
   return false;
+}
+
+/**
+ * Toggle-status (Toad 0x2e, Mini 0x2f) — target byte 0x07.
+ *
+ * Cast on an unaffected target it tries to inflict; cast on an already-affected
+ * one it cures. That is what the generator's own target table has always called
+ * this byte, and it is why the spells are their own family rather than sharing
+ * `enemy_status`. Returns the applied flags, or -1 when the cast cured.
+ *
+ * Resist is honoured on the inflict half — every other inflict path in the game
+ * passes it, and this must not become the exception.
+ */
+export function applyMagicToggleStatus(target, statusMask, hitChance, opts = {}) {
+  if (!target || !target.status || !statusMask) return 0;
+  if (target.status.mask & statusMask) {
+    applyMagicCureStatus(target, statusMask, opts);
+    return -1;
+  }
+  const applied = tryInflictStatusByte(target.status, statusMask, hitChance, target.statusResist || 0);
+  if (applied) {
+    if (opts.sfx) playSFX(opts.sfx);
+    if (opts.onLand) opts.onLand(applied);
+  } else if (opts.onMiss) {
+    opts.onMiss();
+  }
+  return applied;
 }
 
 // Erase — clear positive statuses / buffs. Currently SFX-only since monster

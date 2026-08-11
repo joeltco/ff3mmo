@@ -8,7 +8,7 @@ import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './ba
 import { rand } from './rng.js';
 import { ps, getShieldEvade } from './player-stats.js';
 import { SFX, playSFX } from './music.js';
-import { tryInflictStatus, blindHitPenalty, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
+import { tryInflictStatus, blindHitPenalty, miniToadAtkMult, wakeOnHit, STATUS_NAME_BYTES } from './status-effects.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
 import { getPlayerDamageNum, setPlayerDamageNum, getAllyDamageNums } from './damage-numbers.js';
@@ -196,7 +196,14 @@ function _processEnemyFlash() {
 
   let hitRate = mon ? (mon.hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
   if (mon && mon.status) hitRate *= blindHitPenalty(mon.status);
-  const atk = mon ? mon.atk : BOSS_ATK;
+  // v1.7.855 — the player (input-handler.js), allies (battle-turn.js) and PVP
+  // opponents (pvp.js) all scale their attack by `miniToadAtkMult`; the monster
+  // path applied `blindHitPenalty` right above and then skipped it, so a Mini'd
+  // or Toad'd monster swung at full strength. Latent until this version, since
+  // the toggle-status spells that inflict those could never land — which is
+  // exactly why it went unnoticed.
+  const _atkMult = (mon && mon.status) ? miniToadAtkMult(mon.status) : 1;
+  const atk = Math.floor((mon ? mon.atk : BOSS_ATK) * _atkMult);
   const rolls = mon ? (mon.attackRoll || 1) : 1;
   const monAtkElem = mon ? (mon.atkElem || null) : null;
   // NES multi-hit: roll attackRoll times, per-hit shield/evade/hitRate checks

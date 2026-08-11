@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.855 — 2026-08-11
+
+**Status-effect sweep: two cure spells cured nothing, two status spells dealt damage instead, and one ROM byte was being read two opposite ways.**
+
+**The root cause is one decode error, and the ROM settles it.** For target bytes 0x06 (`cure_status`) and 0x07 (`toggle_status`), the spell table's byte +3 is a **BITMASK of NES status bits**, not a single type. The generator's `typeJS` names it, which is lossy — and for a multi-bit mask, simply wrong:
+
+| spell | ROM mask | decoded name | resolved flag |
+|---|---|---|---|
+| Heal | `0xFF` = every status bit | `'cure_status'` | **undefined** |
+| Soft | `0x07` = paralysis+poison+blind | `'haste'` (unrelated collision) | **undefined** |
+| Wash | `0x04` = blind | `'blind'` | blind |
+| Pure | `0x02` = poison | `'poison'` | poison |
+
+All three cast sites — in-battle, out-of-battle and ally — did `STATUS_NAME_TO_FLAG[spell.type]`. Heal and Soft therefore resolved to `undefined`, and `mask &= ~undefined` leaves the mask untouched, so **both spells cured nothing at all**. Wash and Pure only worked because their masks happen to be single bits whose names round-trip. The mask's bit order IS `STATUS` in `status-effects.js`, which was derived from this same NES byte, so it drops straight in.
+
+The generator now stamps `statusMask` for those two target bytes, and `spellStatusMask(spell)` in `spells.js` is the single source all three sites read. Generator round-trip verified byte-identical BEFORE the change, so the six-line data diff is attributable to it and nothing else.
+
+**Toad and Mini dealt damage.** Target `toggle_status` had no branch in any dispatcher — not in `applySpell`, not in `spell-cast.js`'s enemy path. Both spells fell all the way through to `applyMagicDamage`: cast on an enemy they dealt damage instead of transforming it, and **cast on an ally they damaged your own party.** `applyMagicToggleStatus` now handles the family — inflict on a clean target, cure on an afflicted one, resist honoured on the inflict half so it does not become the one path in the game that ignores immunities.
+
+**`hit: 0` meant "guaranteed" in one function and "impossible" in another.** `applyMagicDamage` has always gated its roll on `hit > 0 && hit < 100`, i.e. 0 = no roll. `tryInflictStatus` and `applyMagicInstakill` read the same byte as a 0% chance, so four spells could never land under any circumstances: Toad, Mini, and the two death spells (0x10 and Exit). Aligned to the damage path's reading, consuming no rand at that boundary exactly as the damage path doesn't.
+
+**A Mini'd or Toad'd monster swung at full strength.** The player (`input-handler.js`), allies (`battle-turn.js`) and PVP opponents (`pvp.js`) all scale attack by `miniToadAtkMult`. The monster path applied `blindHitPenalty` on the line above and then skipped the multiplier. Latent until this version — the only spells that inflict those statuses could never land, which is exactly why nobody noticed.
+
+**Side effect worth knowing:** Petrify had no working cure before this. Heal's 0xFF mask includes it, so it does now.
+
+**Gates** (26th and 27th). The cure/toggle test runs through the shared `applySpell` DISPATCHER rather than the leaf helpers — testing the helpers alone would still have passed with the dispatcher's branch reverted. Five reverts verified to fail independently: dropping `statusMask` from the generator, restoring `opts.statusFlag`, deleting the toggle branch, restoring hit-0-as-0%, and dropping the monster's attack multiplier.
+
+**Verified correct, not assumed:** every one of the seven `tryInflictStatus` call sites passes the target's resist. The status sprite renders for all six actor surfaces (player, ally, monster, PVP enemy, HUD, roster).
+
+**Reported, not fixed:**
+
+- **Confuse only works on the player.** `processTurnStart` returns a `confused` flag; the player's turn handler acts on it with a random-target pool, and the ally, monster and PVP handlers all discard it. So casting Confu on a monster does nothing but tick down. Making it real means writing random-target logic for actors that have no code path for attacking their own side — a feature, not a fix, so it needs your call.
+- `STATUS_NAME_BYTES` has no entry for MINI, TOAD or DEATH, so those land with no battle-strip message. Adding one means inventing the wording (the others are "Blinded", "Silenced", ...), which I am not doing unprompted.
+- `libra` (0x1f) falls through the same dispatcher gap Toad and Mini did and deals damage. It is not a status effect, so it was out of this sweep's scope.
+- `processTurnStart` computes a `poisonDmg` return that every one of its five callers discards — poison is applied by `_applyEndOfRoundPoison`. Harmless today; a future caller using it would double-tick.
+- `isTeamWiped` is HP-only, so a party alive but fully petrified never triggers a wipe. Not reachable as a hang (monsters keep attacking) and petrify is now curable.
+
 ## 1.7.854 — 2026-08-11
 
 **All four battle-action divergences from the v1.7.853 sweep, removed rather than wrapped.**

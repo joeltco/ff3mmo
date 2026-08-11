@@ -108,7 +108,9 @@ const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
 const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY } = await import('../src/cast-anim.js');
 const { spellUsesCastAnim, screenShakeCueMs } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combatant-cast.js');
-const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS } = await import('../src/data/spells.js');
+const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask } = await import('../src/data/spells.js');
+const { applySpell } = await import('../src/combatant-cast.js');
+const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
@@ -936,6 +938,102 @@ const tests = [
       battleSt.allyHitIdx = saved.hitIdx; battleSt.currentAllyAttacker = saved.attacker;
       battleSt.allyHitIsLeft = saved.isLeft;
     }
+  },
+  // Regression — status-cure and toggle spells act on the ROM's status MASK,
+  // and a `hit` of 0 means guaranteed rather than impossible.
+  //
+  // For target bytes 0x06 (cure) and 0x07 (toggle) the ROM's byte +3 is a
+  // BITMASK of NES status bits, not a single type. The generator's `typeJS`
+  // named it lossily and all three cast sites then did
+  // `STATUS_NAME_TO_FLAG[spell.type]`, so:
+  //   Heal  mask 0xFF -> named 'cure_status' -> undefined -> cured NOTHING
+  //   Soft  mask 0x07 -> collided with 'haste' -> undefined -> cured NOTHING
+  //   Wash  mask 0x04 / Pure mask 0x02 -> worked only because a single bit's
+  //         name happens to round-trip.
+  // Toad and Mini (target 0x07) had no branch in any dispatcher at all and
+  // fell through to `applyMagicDamage` — dealing damage to an enemy, and
+  // damaging your OWN PARTY when cast on an ally. Both also carry hit 0, which
+  // `tryInflictStatus` read as a 0% chance while `applyMagicDamage` has always
+  // read the same byte as "no roll, guaranteed". v1.7.855.
+  () => {
+    const name = 'regression — cure / toggle spells act on the ROM status mask';
+    // 1. Every spell in the family resolves a real mask.
+    const dead = [];
+    for (const [id, spell] of SPELLS) {
+      if (id > 0x37) continue;
+      if (spell.target !== 'cure_status' && spell.target !== 'toggle_status') continue;
+      if (!spellStatusMask(spell)) dead.push(`0x${id.toString(16)} (${spell.type})`);
+    }
+    if (dead.length) return { pass: false, name, reason: `resolves to no status: ${dead.join(', ')}` };
+
+    // 2. Heal's 0xFF clears every NES status bit it covers.
+    const heal = { status: createStatusState(), hp: 10, maxHP: 10 };
+    addStatus(heal.status, STATUS.POISON | STATUS.BLIND | STATUS.SILENCE | STATUS.PETRIFY);
+    // Through the shared DISPATCHER, not the leaf helper — otherwise the gate
+    // would still pass with the dispatcher's branch reverted.
+    applySpell(SPELLS.get(0x0b), heal, {});
+    if (heal.status.mask !== 0) {
+      return { pass: false, name, reason: `Heal left mask 0x${heal.status.mask.toString(16)}` };
+    }
+
+    // 3. Soft's 0x07 clears paralysis|poison|blind and LEAVES the rest — the
+    //    multi-bit case a single-name lookup can never express.
+    const soft = { status: createStatusState(), hp: 10, maxHP: 10 };
+    addStatus(soft.status, STATUS.PARALYSIS | STATUS.POISON | STATUS.BLIND | STATUS.SILENCE);
+    applySpell(SPELLS.get(0x12), soft, {});
+    if (soft.status.mask !== STATUS.SILENCE) {
+      return { pass: false, name, reason: `Soft left mask 0x${soft.status.mask.toString(16)}, wanted only SILENCE` };
+    }
+
+    // 4. Toad toggles: inflicts on a clean target, cures on an afflicted one —
+    //    and never touches HP, which is what it used to do instead.
+    const toadSpell = SPELLS.get(0x2e);
+    const t = { status: createStatusState(), hp: 100, maxHP: 100, statusResist: 0 };
+    applySpell(toadSpell, t, {});
+    if (!(t.status.mask & STATUS.TOAD)) {
+      return { pass: false, name, reason: `Toad did not land (hit ${toadSpell.hit} read as impossible?)` };
+    }
+    if (t.hp !== 100) return { pass: false, name, reason: `Toad changed HP 100 -> ${t.hp}` };
+    applySpell(toadSpell, t, {});
+    if (t.status.mask & STATUS.TOAD) return { pass: false, name, reason: 'second Toad cast did not cure' };
+    if (t.hp !== 100) return { pass: false, name, reason: `Toad cure changed HP 100 -> ${t.hp}` };
+
+    // 5. hit 0 is "no roll", not "never" — the reading applyMagicDamage uses.
+    const zero = createStatusState();
+    if (tryInflictStatus(zero, 'toad', 0) !== STATUS.TOAD) {
+      return { pass: false, name, reason: 'hit 0 still read as a 0% chance' };
+    }
+    // ...and a real percentage still rolls.
+    const resisted = createStatusState();
+    if (tryInflictStatus(resisted, 'toad', 50, ['toad']) !== 0) {
+      return { pass: false, name, reason: 'resist ignored on the inflict path' };
+    }
+    return { pass: true, name, info: 'Heal 0xff / Soft 0x07 / Wash 0x04 / Pure 0x02, Toad+Mini toggle, hit 0 guaranteed' };
+  },
+  // Regression — a Mini'd or Toad'd MONSTER swings at reduced strength.
+  //
+  // The player, ally and PVP attack paths all scale by `miniToadAtkMult`; the
+  // monster path applied `blindHitPenalty` and then skipped the multiplier, so
+  // a transformed monster hit at full power. It was invisible because the only
+  // spells that inflict those statuses could never land (above). v1.7.855.
+  () => {
+    const name = 'regression — mini/toad cuts a monster\'s attack like every other path';
+    const strong = { ...goblin, atk: 60, hitRate: 100, attackRoll: 1 };
+    setupEncounter({ monster: strong, seed: 7 });
+    battleSt.battleAllies[0].hp = 0; rngMod.rand();
+    updateBattleEnemyTurn();
+    const baseline = 100 - (ps.hp | 0);
+
+    setupEncounter({ monster: strong, seed: 7 });
+    addStatus(battleSt.encounterMonsters[0].status, STATUS.MINI);
+    battleSt.battleAllies[0].hp = 0; rngMod.rand();
+    updateBattleEnemyTurn();
+    const mini = 100 - (ps.hp | 0);
+
+    if (!(mini < baseline)) {
+      return { pass: false, name, reason: `mini'd monster dealt ${mini}, un-mini'd dealt ${baseline}` };
+    }
+    return { pass: true, name, info: `baseline=${baseline} mini=${mini}` };
   },
 ];
 

@@ -114,6 +114,18 @@ for (let id = 0; id < 88; id++) {
   props.push(`element: ${elemJS(element)}`);
   props.push(`type: ${typeJS(type)}`);
   props.push(`target: ${targetJS(target)}`);
+  // For the status-family targets, byte +3 is a BITMASK of NES status bits,
+  // not a single type. `typeJS` names it, which is lossy and, for a multi-bit
+  // mask, wrong: Heal's 0xFF became the bogus name 'cure_status' and Soft's
+  // 0x07 collided with the unrelated 'haste' entry, so both spells resolved to
+  // an undefined STATUS flag and cured NOTHING. Ship the raw mask alongside
+  // the name — its bit order is exactly `STATUS` in status-effects.js, which
+  // was derived from this same NES byte.
+  //   0x06 cure_status — clear every set bit.
+  //   0x07 toggle_status — clear if set, otherwise try to inflict.
+  if (target === 0x06 || target === 0x07) {
+    props.push(`statusMask: 0x${type.toString(16).padStart(2, '0')}`);
+  }
   props.push(`anim: 0x${anim.toString(16).padStart(2, '0')}`);
 
   const comment = name || `spell_${id}`;

@@ -11,7 +11,7 @@ import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
 import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setSwDmgNum,
          tickHealNums, clearHealNums, DMG_SHOW_MS, makeHealNumCallback } from './damage-numbers.js';
-import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
+import { SPELLS, getSpellMPCost, isMultiTargetSpell, spellStatusMask } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { isSummonSpell, summonTotalMs, summonCastMs } from './summon-anim.js';
 import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
@@ -20,7 +20,7 @@ import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN,
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
-         applyMagicErase, getSpellImpactSFX, healStyleRenderWindow } from './combatant-cast.js';
+         applyMagicErase, applyMagicToggleStatus, getSpellImpactSFX, healStyleRenderWindow } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
@@ -464,6 +464,19 @@ function _applyEnemyEffect(idx, spell) {
     return;
   }
 
+  // target='toggle_status' — Toad / Mini. Had no branch here at all, so both
+  // spells fell through to `applyMagicDamage` below and dealt damage instead
+  // of transforming the monster. v1.7.855.
+  if (spell.target === 'toggle_status') {
+    if (!mon || mon.hp <= 0) return;
+    applyMagicToggleStatus(mon, spellStatusMask(spell), spell.hit, {
+      sfx: _helperSfx(_spellImpactSFX(spell)),
+      onLand: _queueStatusMsg,
+      onMiss: () => _setEnemyDmg(idx, 0, true),
+    });
+    return;
+  }
+
   // target='drain' — shared `applyMagicDrain` helper.
   if (spell.target === 'drain') {
     if (!mon || mon.hp <= 0) return;
@@ -732,9 +745,21 @@ function _applySpellEffect(target) {
   // SFX fires via the engine at sparkle-start (see `getSpellImpactSFX` →
   // `playSpellImpactSFX`). NOT passed to the helper.
   if (isCureStatus) {
-    const flag = STATUS_NAME_TO_FLAG[spell.type];
-    applyMagicCureStatus(tgt, flag, {
+    // v1.7.855 — was `STATUS_NAME_TO_FLAG[spell.type]`, which is undefined for
+    // Heal (mask 0xFF, named 'cure_status') and Soft (mask 0x07, named
+    // 'haste'), so both cured nothing at all. See `spellStatusMask`.
+    applyMagicCureStatus(tgt, spellStatusMask(spell), {
       onSparkle: () => onHealNum(0),
+    });
+    return;
+  }
+  // Toggle-status on a friendly target (Toad / Mini on your own party — the
+  // way FF3 gets you through the mini-only passages). Previously fell through
+  // to the damage path below and hurt the target instead.
+  if (spell.target === 'toggle_status') {
+    applyMagicToggleStatus(tgt, spellStatusMask(spell), spell.hit, {
+      onSparkle: () => onHealNum(0),
+      onLand: _queueStatusMsg,
     });
     return;
   }

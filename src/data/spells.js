@@ -16,6 +16,7 @@
 
 import { JOBS, MAG_WHITE, MAG_BLACK, MAG_CALL } from './jobs.js';
 import { SUMMON_TIERS } from './summon-tiers.js';
+import { STATUS_NAME_TO_FLAG } from '../status-effects.js';
 
 // ─── BEGIN GENERATED (tools/gen-spells-js.js) ───
 export const SPELLS = new Map([
@@ -30,14 +31,14 @@ export const SPELLS = new Map([
   [0x08, { power:   0, hit:  40, element: 'earth', type: 'petrify', target: 'enemy_status', anim: 0x07 }], // Breakga
   [0x09, { power: 160, hit: 100, element: 'recovery', type: 'damage', target: 'drain', anim: 0x04 }], // Drain
   [0x0a, { power: 220, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Curaja
-  [0x0b, { power:   0, hit:  60, element: null, type: 'cure_status', target: 'cure_status', anim: 0x00 }], // Esuna
+  [0x0b, { power:   0, hit:  60, element: null, type: 'cure_status', target: 'cure_status', statusMask: 0xff, anim: 0x00 }], // Esuna
   [0x0c, { power:   0, hit:  75, element: null, type: 'damage', target: 'reflect', anim: 0x00 }], // Reflect
   [0x0d, { power: 180, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Leviath
   [0x0e, { power: 150, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00 }], // Firaga
   [0x0f, { power: 130, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Bio
   [0x10, { power:   0, hit:   0, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Warp
   [0x11, { power: 115, hit: 100, element: ['ice','air'], type: 'damage', target: 'enemy', anim: 0x00 }], // Aeroga
-  [0x12, { power:   0, hit:  60, element: null, type: 'haste', target: 'cure_status', anim: 0x00 }], // Stone
+  [0x12, { power:   0, hit:  60, element: null, type: 'haste', target: 'cure_status', statusMask: 0x07, anim: 0x00 }], // Stone
   [0x13, { power:   5, hit:  16, element: null, type: 'damage', target: 'haste', anim: 0x00 }], // Haste
   [0x14, { power: 150, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Catas
   [0x15, { power: 110, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00 }], // Taga
@@ -59,20 +60,20 @@ export const SPELLS = new Map([
   [0x25, { power:  55, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00 }], // Tara
   [0x26, { power: 125, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Cura
   [0x27, { power:   0, hit:   0, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Tport
-  [0x28, { power:   0, hit:  75, element: null, type: 'blind', target: 'cure_status', anim: 0x00 }], // Bndna
+  [0x28, { power:   0, hit:  75, element: null, type: 'blind', target: 'cure_status', statusMask: 0x04, anim: 0x00 }], // Bndna
   [0x29, { power:  65, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Spark
   [0x2a, { power:  35, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00 }], // Thunder
   [0x2b, { power:  20, hit:  60, element: null, type: 'poison', target: 'enemy', anim: 0x00 }], // Poison
   [0x2c, { power:  10, hit:  60, element: null, type: 'blind', target: 'enemy_status', anim: 0x00 }], // Blind
   [0x2d, { power:  45, hit: 100, element: ['ice','air'], type: 'damage', target: 'enemy', anim: 0x00 }], // Aero
-  [0x2e, { power:   0, hit:   0, element: null, type: 'toad', target: 'toggle_status', anim: 0x08 }], // Toad
-  [0x2f, { power:   0, hit:   0, element: null, type: 'mini', target: 'toggle_status', anim: 0x0d }], // Mini
+  [0x2e, { power:   0, hit:   0, element: null, type: 'toad', target: 'toggle_status', statusMask: 0x20, anim: 0x08 }], // Toad
+  [0x2f, { power:   0, hit:   0, element: null, type: 'mini', target: 'toggle_status', statusMask: 0x08, anim: 0x0d }], // Mini
   [0x30, { power:  50, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Icen
   [0x31, { power:  25, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00 }], // Fire
   [0x32, { power:  25, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00 }], // Bzzard
   [0x33, { power:   0, hit:  15, element: null, type: 'sleep', target: 'enemy_status', anim: 0x00 }], // Sleep
   [0x34, { power:  42, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Cure
-  [0x35, { power:   0, hit:  50, element: null, type: 'poison', target: 'cure_status', anim: 0x00 }], // Poisona
+  [0x35, { power:   0, hit:  50, element: null, type: 'poison', target: 'cure_status', statusMask: 0x02, anim: 0x00 }], // Poisona
   [0x36, { power:   0, hit: 100, element: null, type: 'damage', target: 'sight', anim: 0x00 }], // Sight
   [0x37, { power:  40, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Escape
   [0x38, { power:  32, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Zantetsuken
@@ -213,6 +214,31 @@ export function isMultiTargetSpell(spellId) {
   if (SUMMON_TIERS.has(spellId)) return false;
   const spell = SPELLS.get(spellId);
   return !!spell && MULTI_TARGET_SCOPES.has(spell.target);
+}
+
+/**
+ * The set of STATUS bits a cure-status / toggle-status spell acts on.
+ *
+ * SINGLE SOURCE for the three call sites that resolve this (in-battle cast,
+ * out-of-battle cast, ally cast). All three used to do
+ * `STATUS_NAME_TO_FLAG[spell.type]`, which is wrong for this spell family:
+ * for target bytes 0x06 and 0x07 the ROM's byte +3 is a BITMASK of NES status
+ * bits, not a single type, and the generator's `typeJS` names it lossily.
+ *
+ * Heal's mask is 0xFF and got named 'cure_status'; Soft's is 0x07 and collided
+ * with the unrelated 'haste' entry. Neither name is in STATUS_NAME_TO_FLAG, so
+ * both resolved to `undefined` and cured NOTHING — `mask &= ~undefined` leaves
+ * the mask untouched. Wash (0x04) and Pure (0x02) only worked because their
+ * masks happen to be single bits whose names round-trip.
+ *
+ * The mask's bit order IS `STATUS` in status-effects.js, which was derived
+ * from this same NES byte. Falls back to the name for any spell the generator
+ * has not stamped. v1.7.855.
+ */
+export function spellStatusMask(spell) {
+  if (!spell) return 0;
+  if (spell.statusMask != null) return spell.statusMask;
+  return STATUS_NAME_TO_FLAG[spell.type] || 0;
 }
 
 // ── Spell school dispatch (job gating) ────────────────────────────────────

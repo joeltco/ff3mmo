@@ -106,6 +106,17 @@ export function tryInflictStatus(targetState, statusName, hitChance = 50, resist
     else if (Array.isArray(resist)) { for (const r of resist) resistMask |= NAME_TO_FLAG[r] || 0; }
     if (resistMask & flag) return 0; // immune
   }
+  // v1.7.855 — a `hit` of 0 in the ROM's spell table means NO ROLL: the effect
+  // is guaranteed. `applyMagicDamage` has always read it that way (it gates the
+  // roll on `hit > 0 && hit < 100`), but this function read the same byte as a
+  // 0% chance, so four spells could never land under any circumstances — Toad,
+  // Mini and two death spells. One byte, two opposite meanings inside our own
+  // code. Aligned to the damage path's reading. Consumes no rand, matching how
+  // `applyMagicDamage` skips its roll at the same boundary.
+  if (!(hitChance > 0)) {
+    addStatus(targetState, flag);
+    return flag;
+  }
   const rng = opts.rand || rand;
   // Pre-P3 (lockstep PvP): rand() was seeded from the server-broadcast
   // seed so both clients rolled identically. P3 retires that with
@@ -117,14 +128,19 @@ export function tryInflictStatus(targetState, statusName, hitChance = 50, resist
   return 0;
 }
 
-// Try inflicting from a raw NES status byte (bitmask of multiple possible statuses)
-// Each bit is rolled independently against hitChance. `opts.rand` forwards
-// to tryInflictStatus (v1.7.749 P-3).
-export function tryInflictStatusByte(targetState, statusByte, hitChance = 50, opts = {}) {
+// Try inflicting from a raw NES status byte (bitmask of multiple possible
+// statuses). Each bit is rolled independently against hitChance.
+// `opts.rand` forwards to tryInflictStatus (v1.7.749 P-3).
+//
+// v1.7.855 — gained the `resist` parameter and its first caller. It had been
+// exported and never called since it was written; the toggle-status spells
+// (Toad, Mini) need exactly this, and skipping resist would have made them the
+// only inflict path in the game that ignores a target's immunities.
+export function tryInflictStatusByte(targetState, statusByte, hitChance = 50, resist = null, opts = {}) {
   let applied = 0;
   for (const [name, flag] of Object.entries(NAME_TO_FLAG)) {
     if (statusByte & flag) {
-      const result = tryInflictStatus(targetState, name, hitChance, null, opts);
+      const result = tryInflictStatus(targetState, name, hitChance, resist, opts);
       applied |= result;
     }
   }
