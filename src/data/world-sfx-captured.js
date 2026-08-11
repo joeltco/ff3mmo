@@ -274,6 +274,22 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
  * Note $da/$db and $af/$bb: boomerang and shuriken each produce TWO values per
  * attack — a throw and a return/impact, presumably.
  */
+/**
+ * COVERAGE GAP in the job sweep, stated rather than glossed. v1.7.882.
+ *
+ * 12 of 22 jobs produced data; the other 10 timed out with NO rows at all, and
+ * they are EXACTLY the 10 magic-capable jobs in data/jobs.js — White Mage, Black
+ * Mage, Red Mage, Ranger, Magic Knight, Conjurer, Summoner, Devout, Magus, Sage.
+ * (Checked, not assumed: the two id sets are identical.) Their Magic row opens a
+ * spell list the driver cannot finish or back out of, so the run wedges.
+ *
+ * "No data" is NOT "this job does not play $8f". The Bard attribution stands on
+ * its own row-level isolation and does not depend on these; but if the question
+ * is ever "which OTHER commands make sounds", these ten are unswept.
+ */
+export const JOB_SWEEP_UNCOVERED = Object.freeze(
+  ['White Mage','Black Mage','Red Mage','Ranger','Magic Knight','Conjurer','Summoner','Devout','Magus','Sage']);
+
 export const WEAPON_ATTACK_SFX = Object.freeze({
   b6: { nsf: 119, classes: ['rod','nunchaku','staff','hammer','spear','knife','axe','sword','katana','book','bell'] },
   '8a': { nsf: 75, classes: ['claw','bow'] },
@@ -327,16 +343,23 @@ export const IDENTIFIED_EXTRA_SFX = Object.freeze([
     site: '0x775a9',
   },
   {
-    wrote: 0x8f, nsf: 80, what: 'a battle attack animation — NOT any weapon class',
-    how: 'Narrowed, still unnamed. Its dedicated site 0x669af sits in bank 25 (the '
-       + 'BATTLE bank) inside a routine entered at $A988; forcing entry there (patching '
-       + 'the party-hit store to `JMP $A988`) does play $8f and then resolves a hit, so '
-       + 'the routine is attack-related. Nothing in the ROM JSRs $A988 — it is reached '
-       + 'indirectly, same as the escape routine. RULED OUT: all 16 weapon classes, '
-       + 'swept one representative each (see WEAPON_ATTACK_SFX); none produces it. It '
-       + 'also fires from a village event tile (map 69 at 20,16) via the dispatcher. '
-       + 'Remaining candidates are job commands and monster specials.',
-    site: '0x669af ($A988) + dispatcher',
+    wrote: 0x8f, nsf: 80, what: "the Bard's SCARE command",
+    how: 'Found by swapping the party JOB (byte 0 of $6100 + i*0x40) through all 22 and '
+       + 'selecting every command row with the verified cursor. Only the Bard produces '
+       + 'it. Its menu reads Sing / Scare / Cheer / Item, and the split is exact across '
+       + '18 attempts per row: row 1 (SCARE) fired $8f 8 times and never $cb; row 2 '
+       + '(CHEER) fired $cb 8 times and never $8f; Sing and Item fired neither. It is '
+       + 'not the Bard\'s weapon either — a harp attack plays $8b. The party are Onion '
+       + 'Knights, who have no Scare, which is why ~400k frames of play never heard it. '
+       + 'The dedicated site 0x669af sits in bank 25 inside a routine at $A988 reached '
+       + 'indirectly; forcing entry plays $8f and resolves a hit.',
+    site: '0x669af ($A988)',
+  },
+  {
+    wrote: 0xcb, nsf: 140, what: "the Bard's CHEER command",
+    how: 'Same sweep as $8f, the adjacent row. 8 firings on row 2 across 18 attempts, '
+       + 'never on any other row and never from any other job that produced data.',
+    site: 'dispatcher',
   },
   {
     wrote: 0xc6, nsf: 135, what: 'the alternate physical-hit cue',

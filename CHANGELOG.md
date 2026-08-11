@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.882 — 2026-08-11
+
+**$8f is the Bard's SCARE. It was a job command, and the party can never use it.**
+
+Job id is byte 0 of the character-A block (`$6100 + i*0x40`), so the party can be swapped through all 22 jobs and every command row selected with the verified cursor. Only ONE job produces $8f.
+
+The Bard's menu reads **Sing / Scare / Cheer / Item**, and the split is exact across 18 attempts per row:
+
+| Bard row | command | sound |
+|---|---|---|
+| 0 | Sing | — |
+| 1 | **Scare** | **`$8f` -> 80**, 8 firings, never `$cb` |
+| 2 | **Cheer** | **`$cb` -> 140**, 8 firings, never `$8f` |
+| 3 | Item | error buzz (empty bag) |
+
+Zero crossover in either direction. It is not the Bard's weapon either — a harp attack plays `$8b` (v1.7.881). **`$cb` -> 140 is a second sound identified for free**, the Cheer command.
+
+The reason ~400k frames of play never heard either: the party are Onion Knights, who have no Scare and no Cheer. Same shape as the weapon-class table — the starting loadout is not representative, and everything measured only from it is a biased sample.
+
+**Coverage gap, checked rather than waved at.** 12 of 22 jobs produced data; the other 10 timed out with no rows at all, and they are EXACTLY the 10 magic-capable jobs in `data/jobs.js` — White Mage, Black Mage, Red Mage, Ranger, Magic Knight, Conjurer, Summoner, Devout, Magus, Sage. I compared the two id sets programmatically rather than eyeballing the pattern: identical. Their Magic row opens a spell list the driver cannot finish or back out of, so the run wedges.
+
+"No data" is not "this job is silent". The Bard attribution stands on its own row-level isolation and does not lean on those ten, but they remain unswept and are recorded in `JOB_SWEEP_UNCOVERED`.
+
+The monster-special sweep was built and is not needed for this question; it is not being run for appearance's sake. New tool: `tools/monscan/job-command-sweep.cjs`.
+
 ## 1.7.881 — 2026-08-11
 
 **Chasing $8f turned up a whole table nobody had: the battle attack sound is chosen by WEAPON CLASS, and five of the six sounds were unknown.**
