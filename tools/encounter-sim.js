@@ -104,6 +104,7 @@ const { JOBS, jobHasMagic } = await import('../src/data/jobs.js');
 const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowMs,
         CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
 const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
+const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
 const { spellUsesCastAnim } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX } = await import('../src/combatant-cast.js');
 const { SPELLS } = await import('../src/data/spells.js');
@@ -541,18 +542,35 @@ const tests = [
   () => {
     const name = 'regression — screen-anchored effects stay inside the battle HUD';
     const HUD_VIEW_W = 144, TILE = 8;
-    const spills = [];
+    const spills = [], badPin = [];
     for (const [id, e] of CAPTURED_SPELL_ANIMS) {
       if (e.anchor !== 'screen') continue;
       const f = HUD_VIEW_W / e.width;
-      let maxX = 0;
-      for (const layout of e.layouts) for (const l of layout) maxX = Math.max(maxX, Math.round(l[1] * f) + TILE);
-      if (maxX > HUD_VIEW_W) spills.push(`0x${id.toString(16)} reaches x=${maxX}`);
+      let lo = Infinity, hi = -Infinity;
+      for (const layout of e.layouts) for (const l of layout) {
+        const x = Math.round(l[1] * f);
+        if (x < lo) lo = x;
+        if (x + TILE > hi) hi = x + TILE;
+      }
+      const place = SCREEN_PLACEMENT[id];
+      if (place && place.pinCenterX != null) {
+        // Pinned spells are a DELIBERATE exception: Quake straddles the
+        // boundary by design. Assert the straddle rather than containment —
+        // a pin that ended up wholly on one side would be just as wrong.
+        const dx = Math.round(place.pinCenterX - (lo + hi) / 2);
+        const [pLo, pHi] = [lo + dx, hi + dx];
+        if (!(pLo < place.pinCenterX && pHi > place.pinCenterX)) {
+          badPin.push(`0x${id.toString(16)} spans ${pLo}..${pHi}, not straddling ${place.pinCenterX}`);
+        }
+        continue;
+      }
+      if (hi > HUD_VIEW_W) spills.push(`0x${id.toString(16)} reaches x=${hi}`);
     }
     if (spills.length) {
       return { pass: false, name, reason: `spills into the roster box (x>=${HUD_VIEW_W}): ${spills.join(', ')}` };
     }
-    return { pass: true, name, info: `all screen-anchored effects within x<${HUD_VIEW_W}` };
+    if (badPin.length) return { pass: false, name, reason: `pin misplaced: ${badPin.join(', ')}` };
+    return { pass: true, name, info: `unpinned effects within x<${HUD_VIEW_W}; pinned ones straddle as specified` };
   },
   // Regression — no player-castable spell may cast SILENTLY.
   //

@@ -351,12 +351,46 @@ function _buildBlizzardImpactFrames(pal) {
 // the whole effect lands inside the map HUD and a right-edge capture stays on
 // the right edge of the battle box. Tiles stay 8x8 — only positions are mapped,
 // so nothing blurs.
-const SCREEN_BAND_W = 144, SCREEN_BAND_H = 144;
+// v1.7.848 — two different widths, and they are NOT the same thing:
+//   SCREEN_MAP_W    the width x positions map INTO (the battle view, 144)
+//   SCREEN_CANVAS_W the width of the canvas we draw (the full 256 screen)
+// They were one constant, which is fine while everything stays inside the view
+// but makes it impossible to place anything ON the boundary — the canvas would
+// clip the overhanging half away.
+const SCREEN_MAP_W = 144, SCREEN_CANVAS_W = 256, SCREEN_BAND_H = 144;
 
-function _buildCapturedFrames(entry) {
+// Per-spell placement overrides, in POST-MAP battle-view pixels.
+//
+// `pinCenterX` centers the effect's bounding box on an absolute x. Quake is
+// pinned to 144 — the boundary between the battle view and the player roster
+// box — so the crack sits half in each, which is the placement the user
+// specified. This is a DELIBERATE exception to the containment rule the rest
+// of the screen effects follow; `tools/encounter-sim.js` exempts pinned spells
+// from its "must stay inside the battle HUD" gate and asserts the straddle
+// instead.
+export const SCREEN_PLACEMENT = {
+  0x07: { pinCenterX: 144 },   // Quake — crack straddles the HUD boundary
+};
+
+function _buildCapturedFrames(entry, spellId) {
   const screen = entry.anchor === 'screen';
-  const sx = screen ? SCREEN_BAND_W / entry.width : 1;
+  const sx = screen ? SCREEN_MAP_W / entry.width : 1;
   const sy = screen ? SCREEN_BAND_H / entry.height : 1;
+  // Pin offset is computed from the MAPPED bounding box across every frame, so
+  // the whole animation shifts as one piece and does not wobble frame to frame.
+  let pinDx = 0;
+  const place = screen ? SCREEN_PLACEMENT[spellId] : null;
+  if (place && place.pinCenterX != null) {
+    let lo = Infinity, hi = -Infinity;
+    for (const layout of entry.layouts) {
+      for (const l of layout) {
+        const x = Math.round(l[1] * sx);
+        if (x < lo) lo = x;
+        if (x + 8 > hi) hi = x + 8;
+      }
+    }
+    if (lo !== Infinity) pinDx = Math.round(place.pinCenterX - (lo + hi) / 2);
+  }
   // A tile canvas per (palette, tile) pair — Warp and Exit alternate between
   // two sub-palettes mid-animation, so one baked palette per tile would drop
   // the flicker. Built lazily; 33 of the 35 have a single palette and only ever
@@ -369,11 +403,11 @@ function _buildCapturedFrames(entry) {
   };
   return entry.layouts.map((layout) => {
     const c = document.createElement('canvas');
-    c.width = screen ? SCREEN_BAND_W : entry.width;
+    c.width = screen ? SCREEN_CANVAS_W : entry.width;
     c.height = screen ? SCREEN_BAND_H : entry.height;
     const cx = c.getContext('2d');
     for (const [ti, rx, ry, hf, vf, pi = 0] of layout) {
-      const ox = screen ? Math.round(rx * sx) : rx;
+      const ox = screen ? Math.round(rx * sx) + pinDx : rx;
       const oy = screen ? Math.round(ry * sy) : ry;
       const img = tileFor(pi, ti);
       cx.save();
@@ -447,8 +481,8 @@ export function initSpellAnim() {
     if (_bySpellId[id]) continue;
     _bySpellId[id] = {
       kind: entry.anchor === 'screen' ? 'screen-strip' : 'burst-strip-2frame',
-      frames: _buildCapturedFrames(entry),
-      width: entry.anchor === 'screen' ? SCREEN_BAND_W : entry.width,
+      frames: _buildCapturedFrames(entry, id),
+      width: entry.anchor === 'screen' ? SCREEN_CANVAS_W : entry.width,
       height: entry.anchor === 'screen' ? SCREEN_BAND_H : entry.height,
       anchor: entry.anchor || 'enemy-center', toggleMs: entry.holdMs,
     };
