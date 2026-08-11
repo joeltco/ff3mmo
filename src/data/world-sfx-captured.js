@@ -170,13 +170,18 @@ export const NOT_CAPTURED = [];
  *   $a0     97           0          0        2        0
  *   $b3    116           0          0        1        0     escape success
  *
- * Findings:
- *  - `$c6` NEVER APPEARS. Not once in 25 Guard rounds. The v1.7.875 sighting was
- *    noise, and "Guard plays 135" is refuted. DEFEND_HIT is not moving.
- *  - Guard produces NO sound of its own — nothing distinguishes it from Attack
- *    except the cursor beeps my own navigation caused.
- *  - `$a0` appears only under Run, twice, alongside the one `$b3`; consistent
- *    with escape attempts, not with guarding.
+ * Findings, and a CORRECTION to how confidently v1.7.877 first stated them:
+ *
+ *  - `$c6` NEVER APPEARS, in 61 rounds of battle-menu interaction. The v1.7.875
+ *    sighting was noise and "Guard plays 135" is refuted. This holds regardless
+ *    of which row each round actually selected, so DEFEND_HIT is not moving.
+ *  - `$a0` appears only in Run-labelled rounds, twice, alongside the one `$b3`.
+ *  - "Guard produces no sound of its own" was OVERSTATED. Chasing the Item row
+ *    afterwards showed the battle command menu only accepts a direction press
+ *    about HALF the time in this harness: row 1 spent ~100 down-presses and
+ *    produced 48 cursor beeps, row 2 ~88 and produced 46. So an unknown share of
+ *    "Guard" rounds were really Attack, and this data cannot support a claim
+ *    about what Guard alone does. What it does support is the refutation above.
  *
  * So FF3's Guard row is silent, and our DEFEND_HIT is OUR cue for OUR defend
  * command (battle-turn.js, plus two PvP paths) — user-confirmed, and ff3mmo is
@@ -188,10 +193,37 @@ export const NOT_CAPTURED = [];
  */
 export const BATTLE_ROW_SOUNDS = Object.freeze({
   Attack: 'no row-unique sound; party hits play $b6',
-  Guard: 'no row-unique sound at all (25 rounds)',
+  Guard: 'no row-unique sound observed, but ~half of down-presses never landed, so not conclusive',
   Run: '$b3 escape success; $a0 seen twice alongside it',
-  Item: 'NOT MEASURED — 0 rounds',
+  Item: 'NOT MEASURED — the menu could not be driven to it; see below',
 });
+
+/**
+ * Why the Item row is still not captured. v1.7.878.
+ *
+ * Not for want of a battle: the sandbox fixes that. The blocker is that this
+ * harness cannot reliably move the battle command cursor. Measured, not guessed:
+ * pressing `down` at the command window changes ZERO background tiles on most
+ * attempts, and when it does change something it repaints 76-105 tiles — a whole
+ * window — rather than stepping a 4-row list. Across 50 consecutive closed-loop
+ * attempts the selection never left the first row.
+ *
+ * Two false trails, recorded so they are not walked again:
+ *  - The cursor is NOT an OAM sprite. Scanning the whole menu area of OAM finds
+ *    nothing; menu glyphs are background tiles in this game.
+ *  - Tile 0xD5 in column 4 is NOT the cursor either. It is the 'l' of the
+ *    monster's name "Gobl". A closed loop keyed on it looked like it was working
+ *    and silently never advanced the menu at all.
+ *
+ * Item also needs stock to be meaningful — an empty bag just buzzes, which would
+ * be a fact about the inventory rather than the command. Writing a Potion (0xa6)
+ * into $60C0/$60E0 sticks, but the game rewrites that area during a fight, so
+ * the poke needs to survive battle start, not merely precede it.
+ *
+ * What this needs is a state signal for "the command window is awaiting input"
+ * — the real cursor tile and its column — so navigation can be verified per
+ * press instead of counted. That is a piece of work, not a retry.
+ */
 
 /**
  * Sounds the game demonstrably plays that NO constant in music.js accounts for.

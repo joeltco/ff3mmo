@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.878 — 2026-08-11
+
+**Item row: not captured. And a correction to v1.7.877, which stated one of its findings more confidently than the data supported.**
+
+Chasing Item exposed the real blocker, and it is not battle availability — the sandbox fixes that. **This harness cannot reliably move the battle command cursor.** Measured: pressing `down` at the command window changes ZERO background tiles on most attempts, and when it does change something it repaints 76-105 tiles — a whole window — rather than stepping a four-row list. Across 50 consecutive closed-loop attempts the selection never left the first row.
+
+Two false trails, recorded so nobody walks them again:
+
+- **The cursor is not an OAM sprite.** Scanning the entire menu area of OAM finds nothing; menu glyphs are background tiles in this game.
+- **Tile `0xD5` in column 4 is not the cursor either** — it is the `l` of the monster's name "Gobl". A closed loop keyed on it looked like it was working and silently never advanced the menu at all, which is the same class of mistake as counting presses that never landed.
+
+Item additionally needs stock to mean anything: an empty bag just buzzes, which is a fact about the inventory rather than the command. A Potion (`0xa6`) written to `$60C0`/`$60E0` sticks, but the game rewrites that area during a fight, so the poke has to survive battle start rather than merely precede it.
+
+**The correction.** v1.7.877 reported "Guard produces no sound of its own." That was overstated. The same digging showed the menu only accepts a direction press about **half** the time here — row 1 spent ~100 down-presses and produced 48 cursor beeps, row 2 ~88 and produced 46. So an unknown share of the "Guard" rounds were really Attack, and that data cannot support a claim about Guard alone.
+
+**What does survive, unchanged:** `$c6` never appeared once in 61 rounds of battle-menu interaction. That refutation holds no matter which row each round actually selected, so "Guard plays 135" is still dead and **DEFEND_HIT still does not move**. The claim that depended on row labels has been narrowed; the claim that did not is intact.
+
+Getting Item needs a state signal for "the command window is awaiting input" — the real cursor tile and its column — so each press can be verified instead of counted. That is a piece of work, not a retry.
+
 ## 1.7.877 — 2026-08-11
 
 **The Guard/Run question, settled: my own suspicion was wrong and DEFEND_HIT does not move.**
