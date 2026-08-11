@@ -111,6 +111,9 @@ const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combat
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS } = await import('../src/data/spells.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
+const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
+const { updateBattleAlly } = await import('../src/battle-ally.js');
+const { DMG_SHOW_MS } = await import('../src/damage-numbers.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -763,6 +766,67 @@ const tests = [
     }
     const singles = [...CAPTURED_SPELL_ANIMS].filter(([, e]) => (e.layouts ? e.layouts.length : 0) === 1);
     return { pass: true, name, info: `${singles.length} single-state animations, all measured` };
+  },
+  // Regression — every state whose job is to SHOW a damage number must hold it
+  // for the number's full lifetime.
+  //
+  // v1.7.180 added the 200 ms stick phase and moved `DMG_SHOW_MS` 550 -> 750,
+  // updating battle-ally's magic path, pvp.js and spell-cast.js. Three state
+  // gates predated it and were missed: `player-damage-show` (bare 700, dated
+  // 2026-04-16), `ally-damage-show` (bare literal 700, 2026-04-02) and
+  // `poison-end-tick` (700, 2026-05-06, its comment still citing the old 550).
+  // Each ended 50 ms before the number cleared itself, so on every player
+  // attack, every ally attack and every end-of-round poison the number bled
+  // into the following state. Their defender-side twins were already correct,
+  // which is what made the split invisible. v1.7.853.
+  () => {
+    const name = 'regression — damage-show states hold for the number\'s full lifetime';
+    const saved = {
+      state: battleSt.battleState, timer: battleSt.battleTimer,
+      mons: battleSt.encounterMonsters, rnd: battleSt.isRandomEncounter,
+      tgt: inputSt.targetIndex, allyTgt: battleSt.allyTargetIndex,
+      dying: battleSt.dyingMonsterIndices,
+    };
+    try {
+      // A DEAD target makes every one of these transitions deterministic, so
+      // none of them depends on an injected `processNextTurn` callback.
+      battleSt.isRandomEncounter = true;
+      battleSt.encounterMonsters = [{ monsterId: 0x00, hp: 0, maxHP: 30 }];
+      inputSt.targetIndex = 0;
+      battleSt.allyTargetIndex = 0;
+
+      const CASES = [
+        { state: 'player-damage-show', run: () => updateBattlePlayerAttack() },
+        { state: 'ally-damage-show',   run: () => updateBattleAlly(0) },
+        { state: 'poison-end-tick',    run: () => updatePoisonTick() },
+      ];
+      const bad = [];
+      for (const c of CASES) {
+        // One tick BEFORE the number expires: the state must still be running.
+        battleSt.battleState = c.state;
+        battleSt.battleTimer = DMG_SHOW_MS - 1;
+        c.run();
+        if (battleSt.battleState !== c.state) {
+          bad.push(`${c.state} left early at ${DMG_SHOW_MS - 1}ms (number lives ${DMG_SHOW_MS}ms)`);
+        }
+        // At the number's expiry: the state must be done.
+        battleSt.battleState = c.state;
+        battleSt.battleTimer = DMG_SHOW_MS;
+        c.run();
+        if (battleSt.battleState === c.state) {
+          bad.push(`${c.state} still running at ${DMG_SHOW_MS}ms`);
+        }
+      }
+      if (bad.length) return { pass: false, name, reason: bad.join(', ') };
+      return { pass: true, name, info: `${CASES.length} damage-show states all hold exactly ${DMG_SHOW_MS}ms` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
+      inputSt.targetIndex = saved.tgt; battleSt.allyTargetIndex = saved.allyTgt;
+      battleSt.dyingMonsterIndices = saved.dying;
+    }
   },
 ];
 

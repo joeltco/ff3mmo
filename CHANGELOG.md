@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.853 — 2026-08-11
+
+**Damage-number sweep: three states ended 50 ms before the number they exist to show. All three were leftovers from a v1.7.180 change that missed them.**
+
+Built the table first — every damage-number channel, every write site, every draw anchor, every state duration — then diffed. The timing column had four different answers for one visual:
+
+| what shows the number | gate | value |
+|---|---|---|
+| `player-damage-show` (player hits) | `PLAYER_DMG_SHOW_MS` | **700** |
+| `ally-damage-show` (ally hits) | bare literal | **700** |
+| `poison-end-tick` (end-of-round poison) | `POISON_END_HOLD_MS` | **700** |
+| `enemy-damage-show` (player/ally hit) | `BATTLE_DMG_SHOW_MS` | 750 |
+| `ally-damage-show-enemy` (ally hit) | `BATTLE_DMG_SHOW_MS` | 750 |
+| every magic path | `DMG_SHOW_MS` | 750 |
+
+The number's own lifetime is 750 (`DMG_BOUNCE_MS` 550 + `DMG_STICK_MS` 200). So on every player attack, every ally attack and every end-of-round poison tick, the state handed off 50 ms before the number cleared itself and the number bled into whatever came next — the menu opening, the next turn, the death cascade.
+
+**Git says exactly what happened.** v1.7.180 (`0a8a5d2`, 2026-05-09) added the stick phase, moving `DMG_SHOW_MS` 550 -> 750 and `SW_DMG_SHOW_MS` 700 -> 750. It updated `battle-ally.js`'s magic path, `pvp.js` and `spell-cast.js` — and did not touch `battle-update.js`. All three stragglers predate it: `PLAYER_DMG_SHOW_MS` 2026-04-16, the `ally-damage-show` literal 2026-04-02, `POISON_END_HOLD_MS` 2026-05-06. The poison one still carried a comment reading "hold long enough for the damage-num bounce (DMG_SHOW_MS=550ms)" — citing a value that had not existed for three months. Each straggler's own defender-side twin was already correct, which is what kept the split invisible.
+
+All three now derive from `DMG_SHOW_MS`. The local copies are deleted, not re-synced — a local copy is how it drifted the first time.
+
+**Gate** (24th, and each of the three reverts verified to fail it independently): every state whose job is to show a damage number must still be running one tick before the number expires, and done at it. Driven against the real FSM with a dead target so each transition is deterministic and none depends on an injected callback.
+
+**Also fixed:** a comment in `battle-ally.js` citing `SW_DMG_SHOW_MS=700` (it is 750), and a dead `mh` local in `_encounterMonsterPos` — that anchor must stay byte-identical to the `swDmgNums` anchor or the same monster's number would sit at two different heights depending on whether a physical attack or a spell hit it, and a discarded sprite-height local sitting next to the row-height one it must NOT use is an invitation to split them.
+
+**Placements verified correct, not assumed** — every channel resolves to the same anchor as its neighbours: encounter monster popups (physical and spell) both `pos.x + mw - 4, pos.y + rH - 8`; PVP cells both `cx + 8, cy + 12`; boss both centre + half-sprite; player damage and player heal both `HUD_RIGHT_X + 20, HUD_VIEW_Y + 16`. Every draw site applies `_dmgBounceY`. No placement bug found.
+
+**Reported, not fixed** (each is a visible behaviour change, and you are the source of truth on those):
+
+- **The player shakes horizontally; allies shake vertically.** Same event, same +/-2 px, same 67 ms cadence — `battle-draw-player.js` adds the offset to X, `battle-draw-allies.js` adds it to Y.
+- **An ally's damage number rides its row's shake; the player's does not.** The ally anchor is `rowY + 16` and `rowY` already includes the shake; the player's is a fixed `HUD_VIEW_Y + 16`.
+- **An ally's physical attack is a different animation from the player's.** Back/forward swings are 40/40 ms against the player's 80/80, and the ally has NO hit-pause at all where the player holds the OAM-documented 316 ms anticipation beat before the number lands. Same action: 980 ms for an ally, 1376 ms for the player.
+- **`enemyDmgNum` is positioned by the shared `inputSt.targetIndex` cursor** rather than carrying its own index the way `enemyHealNum` does. `_finalizeAllyCombo` compensates by overwriting the player's cursor with the ally's target, so the player's target selection silently follows whatever their ally last hit. Nothing is mispositioned today; the coupling is the hazard.
+- `pause-menu.js` defines a local `BATTLE_DMG_SHOW_MS = 550` that shadows the 750 exported under that name from `battle-state.js`. Different context (the out-of-battle heal popup), so it is not wrong — but the name collision is one grep away from being mistaken for the battle constant.
+
 ## 1.7.852 — 2026-08-11
 
 **Quake captured properly: 67 ms -> 1348 ms. The capture was never missing — the emitter overwrote its measurement with a guess.**

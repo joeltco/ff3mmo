@@ -202,7 +202,7 @@ function _updateAllyEnemyHit() {
 //                      700  →  867 ms   ret window (post-impact hold, matches player)
 //   [monster-death | next-turn]
 //
-// Damage number lifetime: setSwDmgNum at hit-phase t=150ms. SW_DMG_SHOW_MS=700,
+// Damage number lifetime: setSwDmgNum at hit-phase t=150ms. SW_DMG_SHOW_MS=750,
 // so number visible until hit-phase t=850ms — overlaps the ret window cleanly,
 // auto-clears via tickDmgNums in updateBattle. No state-transition flicker.
 //
@@ -408,7 +408,11 @@ export function updateBattleAlly(dt) {
   if (_updateAllyJoin()) return true;
   if (_updateAllyAttack()) return true;
   if (_updateAllyMagicCast(dt)) return true;
-  if (battleSt.battleState === 'ally-damage-show') { if (battleSt.battleTimer >= 700) _updateAllyDamageShow(); return true; }
+  // v1.7.853 — was a bare literal 700, dated 2026-04-02. Its twin
+  // `ally-damage-show-enemy` (the ally TAKING a hit) already used the shared
+  // constant, so an ally's own damage number was shown 50 ms shorter than the
+  // one shown when it got hit, for no stated reason. Same v1.7.180 miss.
+  if (battleSt.battleState === 'ally-damage-show') { if (battleSt.battleTimer >= DMG_SHOW_MS) _updateAllyDamageShow(); return true; }
   if (_updateAllyEnemyHit()) return true;
   return false;
 }

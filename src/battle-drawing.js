@@ -430,8 +430,12 @@ function _encounterMonsterPos(idx) {
   const m = battleSt.encounterMonsters[safeIdx];
   const mc = getMonsterCanvas(m?.monsterId, battleSt.goblinBattleCanvas);
   const rH = safeIdx < 2 ? (row0H || dSprH) : (row1H || dSprH);
-  const mh = mc ? mc.height : rH;
   const mw = mc ? mc.width : 32;
+  // Anchor is row height, NOT sprite height — must stay byte-identical to the
+  // swDmgNums anchor in `drawSWDamageNumbers`, or the same monster's number
+  // would sit at two different heights depending on whether it was hit by a
+  // physical attack (this path) or a spell (that one). A `mh` local was
+  // computed here and discarded, which is an invitation to split them.
   return { bx: pos.x + mw - 4, baseY: pos.y + rH - 8 };
 }
 function _drawBossDmgNum() {

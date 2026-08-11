@@ -39,7 +39,7 @@ import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
          queueVictoryRewards as _queueVictoryRewards, clearVictoryPersist } from './battle-msg.js';
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
-         setEnemyDmgNum } from './damage-numbers.js';
+         setEnemyDmgNum, DMG_SHOW_MS } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
 import { MONSTERS } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
@@ -75,7 +75,15 @@ const FWD_SWING_MS             = 80;
 // gives the strike weight before the number lands. Was 100 ms.
 const HIT_PAUSE_MS             = 316;
 const HIT_COMBO_PAUSE_MS       = 30;
-const PLAYER_DMG_SHOW_MS       = 700;
+// How long `player-damage-show` holds. This MUST be the damage number's own
+// lifetime — the state exists to show that number and nothing else.
+//
+// v1.7.853 — was a bare 700, dated 2026-04-16. v1.7.180 then added the 200 ms
+// stick phase and moved `DMG_SHOW_MS` 550 -> 750, updating battle-ally's magic
+// path, pvp.js and spell-cast.js but not this file. So the state ended 50 ms
+// before the number cleared itself and the number bled into the next state.
+// Derive it; a local copy is exactly how it drifted the first time.
+const PLAYER_DMG_SHOW_MS       = DMG_SHOW_MS;
 // Brief pause between damage-show and the monster-death animation. NES holds
 // 85 ms here (OAM f14608 frames 105-109) with the SP3 palette dimmed — the
 // "the hit registered, now they fall" beat. Was 0 (immediate transition).
@@ -90,7 +98,9 @@ const TURN_TIME_MS             = 10000;
 const VICTORY_BOX_ROWS         = 8;
 const VICTORY_ROW_FRAME_MS     = 16.67;
 const POISON_TICK_MS           = 500;
-const POISON_END_HOLD_MS       = 700;
+// Same defect, same commit: the hold is meant to outlast the poison damage
+// numbers, and its own comment below still cites the pre-v1.7.180 value.
+const POISON_END_HOLD_MS       = DMG_SHOW_MS;
 
 // ── Exported utilities ─────────────────────────────────────────────────────
 
@@ -1140,8 +1150,8 @@ export function updatePoisonTick() {
     return true;
   }
   if (bs === 'poison-end-tick') {
-    // End-of-round multi-actor poison: hold long enough for the damage-num
-    // bounce (DMG_SHOW_MS=550ms) to land, then open the menu.
+    // End-of-round multi-actor poison: hold for the damage number's full
+    // bounce + stick (DMG_SHOW_MS), then open the menu.
     if (battleSt.battleTimer >= POISON_END_HOLD_MS) {
       battleSt.battleState = 'menu-open';
       battleSt.battleTimer = 0;
