@@ -551,14 +551,27 @@ registerCommand('pos', 'Show player tile + faced tile', () => {
   addChatMessage('faced ' + fx + ',' + fy + ' tile ' + tileHex, 'console');
 });
 
-registerCommand('job', 'Switch to job N (0-21). Bypasses CP cost. /job lists all.', (args) => {
+registerCommand('job', 'Switch job: /job 20 or /job sage. Bypasses CP cost. /job lists all.', (args) => {
   if (!args) {
     addChatMessage('Current: ' + ps.jobIdx + ' (' + (JOBS[ps.jobIdx]?.name || '?') + ')', 'console');
     JOBS.forEach((j, i) => addChatMessage(i + ': ' + j.name, 'console'));
     return;
   }
-  const n = parseInt(args, 10);
-  if (isNaN(n) || n < 0 || n >= JOBS.length) { addChatMessage('Bad job idx', 'console'); return; }
+  // Accept a NAME as well as an index — '/job sage' beats remembering that Sage
+  // is 20, and the three summon-capable jobs are the ones most often wanted.
+  const raw = args.trim();
+  let n = parseInt(raw, 10);
+  if (isNaN(n)) {
+    const q = raw.toLowerCase();
+    const hits = JOBS.map((j, i) => [i, j.name.toLowerCase()]).filter(([, nm]) => nm.startsWith(q));
+    if (hits.length === 0) { addChatMessage('No job matches "' + raw + '"', 'console'); return; }
+    if (hits.length > 1) {
+      addChatMessage('Ambiguous: ' + hits.map(([i, nm]) => i + ':' + nm).join(', '), 'console');
+      return;
+    }
+    n = hits[0][0];
+  }
+  if (n < 0 || n >= JOBS.length) { addChatMessage('Bad job idx', 'console'); return; }
   ps.unlockedJobs |= (1 << n);
   changeJob(n);
   fullHeal();
@@ -653,6 +666,54 @@ registerCommand('spell', 'Grant spell: /spell <hexId>. e.g. /spell 33', (args) =
   addChatMessage('Learned $' + id.toString(16).padStart(2, '0') + ' ' + name, 'console');
 }, { dev: true });
 
+// Spell IDs by school. Levels 8 down to 2 are blocks of SEVEN — 3 black, 3
+// white, 1 summon — and level 1 is the short block $31-$36 with the summon at
+// $37. Read off the game's own magic menu, not assumed: the rows list
+// Flare/Death/Meteor, Quake/Breakga/Drain, ... , Fire/Blizzard/Sleep, matching
+// spells.js $00-$02, $07-$09, ... , $31-$33.
+function _spellsOfSchool(school) {
+  const out = [];
+  for (let lvl = 8; lvl >= 2; lvl--) {
+    const base = (8 - lvl) * 7;
+    if (school === 'black') out.push(base, base + 1, base + 2);
+    else if (school === 'white') out.push(base + 3, base + 4, base + 5);
+    else if (school === 'summon') out.push(base + 6);
+  }
+  if (school === 'black') out.push(0x31, 0x32, 0x33);
+  else if (school === 'white') out.push(0x34, 0x35, 0x36);
+  else if (school === 'summon') out.push(0x37);
+  return out;
+}
+
+registerCommand('magic', 'Grant a whole school: /magic black|white|summon|all', (args) => {
+  const a = (args || '').trim().toLowerCase();
+  const schools = a === 'all' ? ['black', 'white', 'summon']
+    : (['black', 'white', 'summon'].includes(a) ? [a] : null);
+  if (!schools) {
+    addChatMessage('Usage: /magic black|white|summon|all', 'console');
+    addChatMessage('  Summons need a summon-capable job: /job conjurer|summoner|sage', 'console');
+    return;
+  }
+  if (!ps.knownSpells) ps.knownSpells = [];
+  let added = 0;
+  for (const sc of schools) {
+    for (const id of _spellsOfSchool(sc)) {
+      if (ps.knownSpells.includes(id)) continue;
+      ps.knownSpells.push(id);
+      added++;
+    }
+  }
+  ps.mp = ps.stats.maxMP; ps.stats.mp = ps.mp;   // no point granting spells you cannot cast
+  saveSlotsToDB();
+  addChatMessage('Learned ' + added + ' new spell(s) — ' + schools.join('+')
+    + '. Known: ' + ps.knownSpells.length + '. MP refilled.', 'console');
+  const job = JOBS[ps.jobIdx];
+  if (schools.includes('summon') && job && job.maxMagicLv < 8) {
+    addChatMessage('Note: ' + job.name + ' caps at magic level ' + job.maxMagicLv
+      + ' — use /job conjurer|summoner|sage for summons', 'console');
+  }
+}, { dev: true });
+
 registerCommand('buff', 'Set buff: /buff haste|protect|reflect, /buff clear, or /buff (show)', (args) => {
   const a = (args || '').trim().toLowerCase();
   if (!a) {
@@ -686,7 +747,7 @@ registerCommand('devhelp', 'Dev commands grouped by category', () => {
   const groups = [
     ['Player state',  ['hp', 'mp', 'heal', 'level', 'gil', 'cp']],
     ['Buffs',         ['buff']],
-    ['Job & spells',  ['job', 'spell']],
+    ['Job & spells',  ['job', 'spell', 'magic']],
     ['Items',         ['give']],
     ['Navigation',    ['warp']],
     ['Audio',         ['ff1', 'ff2']],
