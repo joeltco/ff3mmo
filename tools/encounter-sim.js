@@ -105,11 +105,12 @@ const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowM
         CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
 const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
 const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
-const { isScreenAnchoredSpell, CAST_T_HEAL, CAST_PHASE_MS } = await import('../src/cast-anim.js');
-const { spellUsesCastAnim } = await import('../src/spell-cast.js');
-const { getSpellImpactSFX } = await import('../src/combatant-cast.js');
+const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY } = await import('../src/cast-anim.js');
+const { spellUsesCastAnim, screenShakeCueMs } = await import('../src/spell-cast.js');
+const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combatant-cast.js');
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS } = await import('../src/data/spells.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
+const { elemMultiplier } = await import('../src/battle-math.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -600,7 +601,7 @@ const tests = [
   // spells deliberately keep the damage-apply shake. v1.7.849.
   () => {
     const name = 'regression — screen-anchored spells shake at anim start';
-    const animStart = CAST_T_HEAL - CAST_PHASE_MS.buildup;
+    const animStart = screenShakeCueMs(0x02);
     const bad = [];
     for (const [id, e] of CAPTURED_SPELL_ANIMS) {
       const screen = e.anchor === 'screen';
@@ -610,9 +611,17 @@ const tests = [
       }
       if (!screen) continue;
       // The shake must fire DURING the animation, not before or after it.
-      const end = animStart + healImpactWindowMs(id);
-      if (!(animStart >= 0 && animStart < end)) {
-        bad.push(`0x${id.toString(16)} shake at ${animStart} outside ${animStart}..${end}`);
+      // v1.7.851 — this used to bound the shake by a window computed from the
+      // same constant, so it held no matter which anchor the renderer used.
+      // Assert the shake lands exactly on the render window's OPENING FRAME.
+      // Read the engine's REAL cue, and pin it to the pipeline constants
+      // independently — asserting it against the render window alone would be
+      // tautological now that both read one helper.
+      const w = healStyleRenderWindow(id);
+      const shakeAt = screenShakeCueMs(id) + CAST_PHASE_MS.buildup;
+      const want = CAST_PHASE_MS_HEAL.buildup + CAST_PHASE_MS_HEAL.preImpactGap;
+      if (shakeAt !== w.start || shakeAt !== want) {
+        bad.push(`0x${id.toString(16)} shake at ${shakeAt}, animation opens ${w.start}, pipeline says ${want}`);
       }
     }
     if (bad.length) return { pass: false, name, reason: bad.join(', ') };
@@ -648,6 +657,87 @@ const tests = [
     }
     const n = [...SPELLS.keys()].filter(i => i <= 0x37 && isMultiTargetSpell(i)).length;
     return { pass: true, name, info: `${n} multi-target, all 8 summons left to their tier` };
+  },
+  // Regression — the heal-style pipeline must be strictly SEQUENTIAL, and the
+  // three cues that mark "the spell becomes visible" must come from one source.
+  //
+  // The renderer anchored its impact window on the legacy `CAST_T_HEAL` (1217)
+  // while the engine scheduled the SFX cue, the screen shake and the effect
+  // apply off `CAST_PHASE_MS_HEAL` (anim start 900). On all 23 enemy-facing
+  // heal-style spells the sound therefore played 317 ms before anything was
+  // drawn, and the damage number popped 66 ms INTO the burst with the burst
+  // still drawing for 217 ms after it — the overlap the pipeline rule forbids.
+  // `healStyleRenderWindow` is now the single source; this asserts the whole
+  // schedule closes, including the long screen sweeps (Meteo 1071, Kill 1819).
+  // v1.7.851.
+  () => {
+    const name = 'regression — heal-style SFX / shake / burst / damage stay sequential';
+    const bad = [];
+    let n = 0;
+    for (const [id, spell] of SPELLS) {
+      if (id > 0x37) continue;
+      if (!spellUsesCastAnim(id)) continue;
+      if (SUMMON_TIERS.has(id)) continue;
+      // Thrown spells run the projectile pipeline, not this one.
+      if (spell.target === 'sight' || spell.element === 'fire' || spell.element === 'ice'
+          || spell.element === 'bolt' || spell.type === 'sleep') continue;
+      n++;
+      const w = healStyleRenderWindow(id);
+      // 1. Burst opens exactly where the engine cues sound + shake.
+      const cue = CAST_PHASE_MS_HEAL.buildup + CAST_PHASE_MS_HEAL.preImpactGap;
+      if (w.start !== cue) {
+        bad.push(`0x${id.toString(16)} burst opens ${w.start}, cue at ${cue}`);
+        continue;
+      }
+      // 2. Burst CLOSES a full postImpactGap before damage lands — never
+      //    overlapping it, and never leaving dead air either.
+      const stretch = Math.max(0, healImpactWindowMs(id) - CAST_PHASE_MS_HEAL.impact);
+      const applyAt = CAST_T_HEAL_APPLY + stretch;
+      const gap = applyAt - w.end;
+      if (gap !== CAST_PHASE_MS_HEAL.postImpactGap) {
+        bad.push(`0x${id.toString(16)} gap burst->damage is ${gap}ms, want ${CAST_PHASE_MS_HEAL.postImpactGap}`);
+      }
+      // 3. The projectile lead-in must not run past the burst's opening.
+      if (!(w.projStart < w.start && w.start < w.end)) {
+        bad.push(`0x${id.toString(16)} window out of order ${w.projStart}/${w.start}/${w.end}`);
+      }
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join(', ') };
+    return { pass: true, name, info: `burst opens ${healStyleRenderWindow(0x02).start}ms, ${CAST_PHASE_MS_HEAL.postImpactGap}ms gap before damage, ${n} spells` };
+  },
+  // Regression — a compound spell element must be matched component by
+  // component against a monster's weakness / resist.
+  //
+  // Elements are stored comma-joined, and `elemMultiplier` compared the whole
+  // string against lists holding single elements, so 'ice,air' (Aero2 0x11 and
+  // 0x2d) matched nothing and both spells dealt flat neutral damage to every
+  // monster in the game. Same unsplit-element root cause as the silent-SFX bug
+  // of v1.7.847, which is why this gate covers the multiplier too. v1.7.851.
+  () => {
+    const name = 'regression — compound spell elements resolve weakness and resist';
+    if (elemMultiplier('ice,air', ['ice'], null) !== 2) {
+      return { pass: false, name, reason: 'compound element does not match a weakness' };
+    }
+    if (elemMultiplier('ice,air', null, ['air']) !== 0.5) {
+      return { pass: false, name, reason: 'compound element does not match a resist' };
+    }
+    if (elemMultiplier('ice,air', ['fire'], null) !== 1) {
+      return { pass: false, name, reason: 'compound element matched an unrelated weakness' };
+    }
+    // Single elements and the no-element case must be untouched.
+    if (elemMultiplier('fire', ['fire'], null) !== 2) return { pass: false, name, reason: 'single element regressed' };
+    if (elemMultiplier('fire', null, ['fire']) !== 0.5) return { pass: false, name, reason: 'single resist regressed' };
+    if (elemMultiplier(null, ['fire'], null) !== 1)   return { pass: false, name, reason: 'null element regressed' };
+    // Every compound-element spell in the catalogue must resolve its parts.
+    const dead = [];
+    for (const [id, spell] of SPELLS) {
+      if (typeof spell.element !== 'string' || !spell.element.includes(',')) continue;
+      for (const part of spell.element.split(',')) {
+        if (elemMultiplier(spell.element, [part], null) !== 2) dead.push(`0x${id.toString(16)}:${part}`);
+      }
+    }
+    if (dead.length) return { pass: false, name, reason: `component ignored: ${dead.join(', ')}` };
+    return { pass: true, name, info: 'compound elements split; single + null unchanged' };
   },
 ];
 

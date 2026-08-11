@@ -18,6 +18,40 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.851 — 2026-08-11
+
+**Magic sweep #2 — timing and SFX. Four defects found by computing the whole schedule per spell rather than spot-checking.**
+
+Built a per-spell table of path / captured animation / SFX cue / render window / effect-apply time for all 56 player-castable spells, then diffed the cues against the windows. That surfaced problems no amount of "cast it and look" would have caught, because they are 100–300 ms offsets.
+
+**1. The heal-style pipeline was 317 ms out of step with itself, on 23 spells.**
+
+Two constants both claimed to mark "the spell becomes visible":
+
+- `CAST_T_HEAL_ANIM_START` = 900 (buildup 800 + preImpactGap 100) — used by the engine's SFX cue, the screen-shake cue, and the ally + PVP render paths.
+- `CAST_T_HEAL` = 1217 — the LEGACY `CAST_PHASE_MS` model, still used by the player's enemy-facing renderer in `combatant-cast.js#_resolvePlayerThrow`.
+
+So on every enemy-facing heal-style spell — Meteo, Kill, Quake, Confu, Mute, Venom, Exit, Aero2, the whole non-thrown roster — the sound played **317 ms before anything appeared on screen**, the shake landed with it, and then the damage number popped at 1283, which is **66 ms INTO** a burst that kept drawing for another 217 ms after it. That is precisely the overlap the sequential-pipeline rule exists to prevent: cast, then anim, then a gap, then numbers. The ally path had it right the whole time; the player was the last one on the legacy constant.
+
+`healStyleRenderWindow(spellId)` in `combatant-cast.js` is now the single source, and the renderer, the SFX cue and the shake cue all read it. The schedule closes exactly: burst 900→900+window, a full 100 ms `postImpactGap`, then apply — for a 283 ms sparkle, for Meteo's 1071 ms sweep and for Kill's 1819 ms alike.
+
+**2. Every enemy-facing heal-style spell made its sound TWICE.**
+
+The engine fires the anim-start cue, then ~380 ms later the apply helper fired its own `opts.sfx` on top — often a different sound (Meteo: FIRE_BOOM at anim start, then SW_HIT at damage). On a multi-target cast the helper fired **once per target**, stacking N copies on one frame. The standing rule is that the engine is the single SFX source and helpers never carry sound; four player apply sites had drifted off it. Gated on `_sfxPlayed`, which is exactly the flag the engine sets when it owns the cue — legacy-path spells with no engine cue still get their sound from the helper as before.
+
+**3. Drain shook the screen twice.** v1.7.849 guarded the two `applyMagicDamage` sites against double-shake on screen-anchored spells and missed the drain site. Drain (0x09) *is* screen-anchored, so it jolted at anim start and again at damage-apply. Guarded, along with the latent twin in the recovery path.
+
+**4. Compound-element spells ignored every weakness and resistance in the game.** Elements are stored comma-joined, and `elemMultiplier` compared the whole string against lists holding single elements — so `'ice,air'` (Aero2 0x11, and 0x2d) matched nothing and dealt flat neutral damage to every monster, ice-weak and air-resistant alike. Same unsplit-element root cause as the silent-SFX bug of v1.7.847; split on the way in.
+
+**Gates.** Three added to `tools/encounter-sim.js` (20 → 22), **each verified to fail when its fix is reverted**: the heal-style schedule stays sequential; screen-anchored shake lands on the animation's opening frame; compound elements resolve component by component. The existing shake gate was rewritten — it bounded the cue by a window derived from the same constant, so it passed no matter which anchor shipped. `screenShakeCueMs` is now exported so the gate reads the engine's real cue and pins it against the pipeline constants independently.
+
+**Reported, not fixed** (data gaps and latent paths, listed so they are not mistaken for working):
+
+- **Quake's captured animation is a single frame held 67 ms.** Meteo is 63 frames / 1071 ms, Kill 107 / 1819, Drain 22 / 374. Quake needs a real capture, not synthesis.
+- **Heal, Soft and Wash play a cure sound with no animation registered at all**; Brak2 and Safe fall to the legacy 250/400/1100 timing for the same reason. Five spells, unchanged from the v1.7.845 count.
+- The ally/PVP render gate is still hardcoded to `0x31/0x32/0x33`. Re-confirmed latent: it matches `OFFENSIVE_SPELLS` exactly, and the AI picks only from that list.
+- The apply-time SFX de-duplication is verified by reading the call graph, not by a gate.
+
 ## 1.7.850 — 2026-08-11
 
 **Fix: 52 of 56 spells could only ever be aimed at ONE target. Multi-target is now derived instead of hand-listed.**

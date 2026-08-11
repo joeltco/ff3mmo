@@ -16,11 +16,11 @@ import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, S
 import { isSummonSpell, summonTotalMs, summonCastMs } from './summon-anim.js';
 import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
-         CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START, hasCapturedSpellAnim, healImpactWindowMs, CAST_PHASE_MS_HEAL, isScreenAnchoredSpell, CAST_T_HEAL } from './cast-anim.js';
+         CAST_T_HEAL_APPLY, hasCapturedSpellAnim, healImpactWindowMs, CAST_PHASE_MS_HEAL, isScreenAnchoredSpell } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
-         applyMagicErase, getSpellImpactSFX } from './combatant-cast.js';
+         applyMagicErase, getSpellImpactSFX, healStyleRenderWindow } from './combatant-cast.js';
 import { pvpGridLayout } from './pvp-math.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { BATTLE_INEFFECTIVE, BATTLE_HASTE, BATTLE_PROTECT, BATTLE_REFLECT, BATTLE_SLAIN } from './data/strings.js';
@@ -104,6 +104,16 @@ function _queueStatusMsg(flag) {
 // single source for all three role engines (player + ally + PVP-enemy). Local
 // alias for grep-discoverability and existing call sites.
 const _spellImpactSFX = (spell) => getSpellImpactSFX(spell);
+
+// v1.7.851 — apply helpers were passed an `sfx` unconditionally, so every
+// enemy-facing heal-style spell made TWO sounds: the engine's anim-start cue
+// (line ~940) and then the helper's again at effect-apply, ~380 ms later. On a
+// multi-target cast the helper fired once PER TARGET, stacking N copies on one
+// frame. `_sfxPlayed` is exactly the flag the engine sets when it owns the cue,
+// so gate on it — legacy-path spells (sfxStartMs -1, engine never fires) still
+// get their sound from the helper as before. Upholds the standing rule that the
+// engine is the single SFX source; see combatant-cast.js#getSpellImpactSFX.
+const _helperSfx = (sfx) => (_sfxPlayed ? null : sfx);
 
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
@@ -441,7 +451,7 @@ function _applyEnemyEffect(idx, spell) {
     // (confuse / blind / mini / silence) fires SFX at apply time via opts.sfx
     // since there's no impact-burst phase for those.
     applyMagicStatus(mon, spell.type, spell.hit, {
-      sfx: _isThrownStatusType(spell.type) ? null : _spellImpactSFX(spell),
+      sfx: _helperSfx(_spellImpactSFX(spell)),
       onLand: _queueStatusMsg,
       onMiss: () => _setEnemyDmg(idx, 0, true),
     });
@@ -461,11 +471,16 @@ function _applyEnemyEffect(idx, spell) {
       ? Math.max(1, Math.floor(_baseAmount / _targets.length))
       : _rollMagicAmount(spell.power, true);
     applyMagicDrain(mon, drainAmt, {
-      sfx: SFX.CURE,
+      sfx: _helperSfx(SFX.CURE),
       isUndead: _isUndead(mon),
       onTargetDmgNum: (dmg) => _setEnemyDmg(idx, dmg, false),
       onTargetHealNum: makeHealNumCallback('enemy', idx),
-      onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+      // Screen-anchored spells already shook at anim start. Drain (0x09) IS
+      // screen-anchored, so this fired a second jolt at damage-apply — the
+      // v1.7.849 sweep guarded the two damage sites and missed this one.
+      onShake: isScreenAnchoredSpell(_spellId)
+        ? undefined
+        : () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
       onCasterHeal: (amt) => {
         const realHeal = Math.min(amt, (ps.stats?.maxHP ?? ps.hp) - ps.hp);
         if (realHeal > 0) {
@@ -504,7 +519,9 @@ function _applyEnemyEffect(idx, spell) {
       isUndead: _isUndead(mon),
       onDmgNum: (dmg) => _setEnemyDmg(idx, dmg, false),
       onHealNum: makeHealNumCallback('enemy', idx),
-      onShake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+      onShake: isScreenAnchoredSpell(_spellId)
+        ? undefined
+        : () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
     });
     return;
   }
@@ -533,7 +550,7 @@ function _applyEnemyEffect(idx, spell) {
   // sender rolled here and the watcher skipped, drifting the round cursor
   // by one per hit<100 damage cast.
   applyMagicDamage(mon, amount, spell, {
-    sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
+    sfx: _helperSfx(SFX.SW_HIT),
     onDmgNum: (dealt) => _setEnemyDmg(idx, dealt, false),
     onMiss:   () => _setEnemyDmg(idx, 0, true),
     // Screen-anchored spells already shook at anim start — a second jolt on
@@ -584,7 +601,7 @@ function _applyFriendlyOffensive(target, spell) {
       return;
     }
     applyMagicStatus(tgt, spell.type, spell.hit, {
-      sfx: _isThrownStatusType(spell.type) ? null : _spellImpactSFX(spell),
+      sfx: _helperSfx(_spellImpactSFX(spell)),
       onLand: _queueStatusMsg,
       onMiss: () => setDmgNum(0, true),
     });
@@ -599,7 +616,7 @@ function _applyFriendlyOffensive(target, spell) {
     : _rollMagicAmount(spell.power, false);
 
   applyMagicDamage(tgt, amount, spell, {
-    sfx: _isThrownDamageElement(spell.element) ? null : SFX.SW_HIT,
+    sfx: _helperSfx(SFX.SW_HIT),
     onDmgNum: (dealt) => setDmgNum(dealt),
     onMiss:   () => setDmgNum(0, true),
     // Screen-anchored spells already shook at anim start — a second jolt on
@@ -763,6 +780,16 @@ export function spellUsesCastAnim(spellId) {
       || _isThrownStatusType(spell.type);
 }
 
+/**
+ * When the screen-shake fires for a screen-anchored spell, in ms into the
+ * `magic-hit` state. Exported and pure so the deploy gate reads the cue the
+ * engine actually uses — the previous gate re-derived its own value from the
+ * same constant, so it passed no matter which anchor shipped. v1.7.851.
+ */
+export function screenShakeCueMs(spellId) {
+  return healStyleRenderWindow(spellId).start - CAST_PHASE_MS.buildup;
+}
+
 export function isSightSpell(spellId) {
   const s = SPELLS.get(spellId);
   return !!(s && s.target === 'sight');
@@ -830,7 +857,7 @@ export function updateSpellCast(dt) {
     sfxStartMs = _isItemUse ? 0 : (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup);
   } else if (useCastAnim && !isThrown && spell && spell.target !== 'sight') {
     // Heal-style sparkle starts at preImpactGap into magic-hit phase.
-    sfxStartMs = CAST_T_HEAL_ANIM_START - CAST_PHASE_MS.buildup;
+    sfxStartMs = healStyleRenderWindow(_spellId).start - CAST_PHASE_MS.buildup;
   } else {
     sfxStartMs = -1;  // legacy / sight / unknown — SFX gated inside _apply* helpers
   }
@@ -874,10 +901,12 @@ export function updateSpellCast(dt) {
 
   // Screen-anchored effects shake as the sweep BEGINS, not when damage lands.
   // Anim start is where the renderer starts drawing the impact: the heal-style
-  // path opens at CAST_T_HEAL, which is `CAST_T_HEAL - buildup` into magic-hit.
+  // path opens at CAST_T_HEAL_ANIM_START, i.e. `preImpactGap` into magic-hit.
+  // v1.7.851 — this tracked the renderer's old CAST_T_HEAL anchor, so the jolt
+  // landed 317 ms late; both moved together to CAST_PHASE_MS_HEAL's schedule.
   // Fired once per cast via `_shakeFired`.
   if (!_shakeFired && isScreenAnchoredSpell(_spellId)
-      && battleSt.battleTimer >= CAST_T_HEAL - CAST_PHASE_MS.buildup) {
+      && battleSt.battleTimer >= screenShakeCueMs(_spellId)) {
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
     _shakeFired = true;
   }

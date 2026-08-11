@@ -14,7 +14,7 @@
 // code — only the (role, idx) input differs.
 
 import { drawCasterCastBehind, drawCasterCastFront,
-         CAST_PHASE_MS_THROW, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, healImpactWindowMs } from './cast-anim.js';
+         CAST_PHASE_MS_THROW, CAST_T_LUNGE, CAST_T_HEAL_ANIM_START, CAST_T_RETURN, healImpactWindowMs } from './cast-anim.js';
 import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { pvpSt } from './pvp.js';
@@ -95,6 +95,28 @@ export function drawSpellThrow(role, ctx, caster, target) {
   }
   // r.phase === 'impact'
   _drawSpellEffectAtTargets(ctx, r.targets, r.spellId, r.impactMs);
+}
+
+/**
+ * Heal-style spell-anim window for a spell, in ms ELAPSED from cast start.
+ *
+ * SINGLE SOURCE for the three things that must agree on when a heal-style
+ * spell's effect becomes visible: the renderer's impact window (below), the
+ * engine's SFX cue, and the engine's screen-shake cue. Before v1.7.851 each
+ * computed its own — the renderer off the legacy `CAST_T_HEAL` (1217), the
+ * other two off `CAST_PHASE_MS_HEAL` (900) — so on 23 enemy-facing spells the
+ * sound and the jolt were 317 ms out of step with the picture.
+ *
+ * Pure in the spell ID on purpose: the renderer reads mutable battle state,
+ * which is what let the last drift ship unnoticed. Being pure, the deploy gate
+ * in `tools/encounter-sim.js` can assert the whole schedule directly.
+ */
+export function healStyleRenderWindow(spellId) {
+  return {
+    projStart: CAST_T_LUNGE,
+    start:     CAST_T_HEAL_ANIM_START,
+    end:       CAST_T_HEAL_ANIM_START + healImpactWindowMs(spellId),
+  };
 }
 
 // Returns { phase, targets, t01? | impactMs?, spellId, spell } or null.
@@ -460,15 +482,30 @@ function _resolvePlayerThrow(_caster) {
   // used since v1.7.x; engine elapsed via getCastAnimElapsedMs.
   const cureMs = getCastAnimElapsedMs();
   if (cureMs < CAST_T_LUNGE) return null;
-  if (cureMs < CAST_T_HEAL) {
-    const projWindow = CAST_T_HEAL - CAST_T_LUNGE;
-    return { phase: 'projectile', targets: enemyTargets, t01: (cureMs - CAST_T_LUNGE) / projWindow, spellId, spell };
+  // v1.7.851 — this branch anchored on CAST_T_HEAL (1217, from the LEGACY
+  // CAST_PHASE_MS model) while the engine schedules the whole heal-style
+  // pipeline off CAST_PHASE_MS_HEAL, whose anim start is CAST_T_HEAL_ANIM_START
+  // (900). The burst therefore drew 1217..1500 while the SFX cue fired at 900
+  // and the damage number popped at 1283 — sound 317 ms before anything
+  // appeared, then the number landing 66 ms INTO the burst with the burst still
+  // drawing 217 ms after it. That is the exact overlap the sequential-pipeline
+  // rule forbids, on all 23 enemy-facing heal-style spells.
+  //
+  // Anchored here, the schedule closes exactly: burst 900..900+window, the
+  // engine's postImpactGap of 100, then apply at CAST_T_HEAL_APPLY + the same
+  // `_animExtraMs` stretch — 100 ms of clean gap for a 283 ms sparkle, for
+  // Meteo's 1071 ms sweep and for Kill's 1819 ms alike. The ally + PVP heal
+  // paths (battle-ally.js, battle-draw-allies.js) already used this anchor;
+  // the player was the last one on the legacy constant.
+  const w = healStyleRenderWindow(spellId);
+  if (cureMs < w.start) {
+    return { phase: 'projectile', targets: enemyTargets, t01: (cureMs - w.projStart) / (w.start - w.projStart), spellId, spell };
   }
   // Window is the sparkle length OR the captured animation's own length,
   // whichever is longer — same helper the engine sizes magic-hit with, so the
   // draw cannot outlive the state or stop before the animation finishes.
-  if (cureMs < CAST_T_HEAL + healImpactWindowMs(spellId)) {
-    return { phase: 'impact', targets: enemyTargets, impactMs: cureMs - CAST_T_HEAL, spellId, spell };
+  if (cureMs < w.end) {
+    return { phase: 'impact', targets: enemyTargets, impactMs: cureMs - w.start, spellId, spell };
   }
   return null;
 }

@@ -47,7 +47,16 @@ export function summarizeHits(hits, opts = {}) {
 // atkElem/weakness/resist can be a string or array of strings
 export function elemMultiplier(atkElem, weakness, resist) {
   if (!atkElem) return 1;
-  const atk = Array.isArray(atkElem) ? atkElem : [atkElem];
+  // v1.7.851 — spell elements are stored as a comma-joined string, so a
+  // compound element ('ice,air': Aero2 0x11 and 0x2d) arrived here as ONE
+  // opaque token and matched no entry in a monster's weakness/resist list,
+  // which holds single elements ('fire', 'holy', ...). Both spells therefore
+  // dealt flat neutral damage against every monster in the game, ignoring
+  // ice and air weaknesses alike. Same unsplit-element root cause as the
+  // silent-SFX bug fixed in v1.7.847 — split on the way in so a compound
+  // element is checked component by component.
+  const _split = (e) => (typeof e === 'string' && e.includes(',') ? e.split(',') : [e]);
+  const atk = Array.isArray(atkElem) ? atkElem.flatMap(_split) : _split(atkElem);
   const weak = weakness ? (Array.isArray(weakness) ? weakness : [weakness]) : [];
   const res = resist ? (Array.isArray(resist) ? resist : [resist]) : [];
   let mult = 1;
