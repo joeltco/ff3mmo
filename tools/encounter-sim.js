@@ -97,6 +97,8 @@ const { ps }       = await import('../src/player-stats.js');
 const battleEnemy  = await import('../src/battle-enemy.js');
 const rngMod       = await import('../src/rng.js');
 const statusMod    = await import('../src/status-effects.js');
+const battleTurn   = await import('../src/battle-turn.js');
+const { inputSt }  = await import('../src/input-handler.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -362,6 +364,35 @@ const tests = [
       return { pass: false, name, reason: 'neither target woke — sanity failure (wakeOnHit not firing)' };
     }
     return { pass: true, name, info: `both targets woke` };
+  },
+  // Regression — a PLAYER turn dispatched with no pending action must not throw.
+  // Production crashed here twice (v1.7.842): `processNextTurn` dereferenced
+  // `inputSt.playerActionPending.command` and killed the game loop, taking the
+  // player sprite and HUD with it. Both live stacks had queueLen 1 and a battle
+  // still running, reached via `_advancePVPTurnOrEnd` and `_updatePVPMenuConfirm`.
+  () => {
+    const name = 'regression — player turn with null playerActionPending';
+    const savedQueue = battleSt.turnQueue, savedState = battleSt.battleState;
+    const savedAllies = battleSt.battleAllies, savedPending = inputSt.playerActionPending;
+    const savedHp = ps.hp, savedStatus = ps.status;
+    try {
+      ps.hp = 38; ps.status = 0;
+      battleSt.battleAllies = [];
+      battleSt.turnQueue = [{ type: 'player', priority: 100 }];
+      battleSt.battleState = 'pvp-enemy-magic-hit';
+      inputSt.playerActionPending = null;
+      battleTurn.processNextTurn();
+      if (battleSt.battleState !== 'menu-open') {
+        return { pass: false, name, reason: `expected menu-open (control returned), got ${battleSt.battleState}` };
+      }
+      return { pass: true, name, info: 'advanced to menu-open instead of throwing' };
+    } catch (e) {
+      return { pass: false, name, reason: `still throws: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.turnQueue = savedQueue; battleSt.battleState = savedState;
+      battleSt.battleAllies = savedAllies; inputSt.playerActionPending = savedPending;
+      ps.hp = savedHp; ps.status = savedStatus;
+    }
   },
 ];
 

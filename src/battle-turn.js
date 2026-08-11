@@ -12,6 +12,7 @@ import { SFX, playSFX } from './music.js';
 import { processTurnStart, removeStatus, STATUS, blindHitPenalty, hasStatus, STATUS_NAME_TO_FLAG, miniToadAtkMult, canCastMagic } from './status-effects.js';
 import { bsc, getSlashFramesForWeapon } from './battle-sprite-cache.js';
 import { pvpSt } from './pvp.js';
+import { arbViewSt } from './pvp-arb-viewer.js';
 import { inputSt } from './input-handler.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
 import { _nameToBytes } from './text-utils.js';
@@ -19,7 +20,7 @@ import { getAllyDamageNums, setEnemyDmgNum, setEnemyHealNum, setPlayerDamageNum,
 import { startSpellCast } from './spell-cast.js';
 import { applyMagicHeal } from './combatant-cast.js';
 import { dispatchDelta } from './deltas.js';
-import { sendNetPVPAction, sendNetInvEvent } from './net.js';   // v1.7.742 Phase 1c
+import { sendNetPVPAction, sendNetInvEvent, PVP_ARBITER } from './net.js';   // v1.7.742 Phase 1c
 import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
@@ -30,6 +31,8 @@ import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          SPELL_CURE, SPELL_POISONA, AI_HEAL_THRESHOLD, AI_POTION_THRESHOLD,
          AI_OFFENSIVE_GATE, AI_ITEM_GATE } from './combatant-ai.js';
 
+// Once-only so a recurring condition stays visible without spamming every frame.
+let _warnedNoPending = false;
 function _playerName() { return saveSlots[selectCursor]?.name || null; }
 
 // ── Turn order ─────────────────────────────────────────────────────────────
@@ -178,6 +181,36 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
           return;
         }
       }
+    }
+    // v1.7.842 — the player's turn can be reached with NO pending action, and
+    // dereferencing `.command` here killed the game loop outright: the player
+    // sprite and HUD vanish and only a reload recovers. Two production stacks,
+    // both PvP, both with the battle still live:
+    //   • `_updatePVPMenuConfirm` -> `_buildAndProcessNextTurn`, state
+    //     'confirm-pause' — the arbiter emit consumed pending, then a tick
+    //     where `arbViewSt.inBattle` was false fell through to the legacy path.
+    //   • `_processPVPEnemyMagic` -> `_advancePVPTurnOrEnd`, state
+    //     'pvp-enemy-magic-hit' — that helper calls `processNextTurn()`
+    //     DIRECTLY, so v1.7.763's guard never saw it.
+    //
+    // v1.7.763 set out to "short-circuit at the root so every legacy caller is
+    // a safe no-op" but guarded ONE entry point. `processNextTurn` is the
+    // actual root — every caller funnels through here — so the guard belongs
+    // at this line, not upstream of one of them.
+    if (!inputSt.playerActionPending) {
+      // Arbiter in charge: the server is the sole turn dispatcher, so do NOT
+      // resolve anything locally. Same contract as `_buildAndProcessNextTurn`;
+      // `tickArbAnim` drives the state back to 'menu' when the deltas drain.
+      if (PVP_ARBITER && arbViewSt.inBattle) return;
+      // Otherwise there is no action to run and none to invent. Advance. The
+      // queue was already shifted, so an empty one lands on 'menu-open' and
+      // hands control back — a recoverable turn instead of a dead loop.
+      if (!_warnedNoPending) {
+        _warnedNoPending = true;
+        console.warn('[battle-turn] player turn with no pending action; advancing. state=', battleSt.battleState);
+      }
+      processNextTurn();
+      return;
     }
     const cmd = inputSt.playerActionPending.command;
     const pn = _playerName();

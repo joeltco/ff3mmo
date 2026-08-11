@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.842 — 2026-08-11
+
+**Fix: a player turn with no pending action killed the game loop — sprite and HUD vanish, only a reload recovers. The v1.7.763 guard was on the wrong root.**
+
+Found in the prod error log while verifying the previous deploy, not reported. `processNextTurn` dereferenced `inputSt.playerActionPending.command` unguarded, so any path reaching a player turn after the pending action was consumed threw inside the game loop. Two distinct production stacks, both PvP, both with the battle still live and `queueLen: 1`:
+
+- **`_updatePVPMenuConfirm` -> `_buildAndProcessNextTurn`**, state `confirm-pause`. The arbiter emit cleared pending, then a tick where `arbViewSt.inBattle` was false fell through to the legacy path — the v1.7.762 fix guards that branch only while the arbiter reports itself in battle.
+- **`_processPVPEnemyMagic` -> `_advancePVPTurnOrEnd`**, state `pvp-enemy-magic-hit`. That helper calls `processNextTurn()` DIRECTLY, so v1.7.763's guard never saw it at all.
+
+v1.7.763 set out to "short-circuit at the root so every legacy caller is a safe no-op" but guarded ONE entry point, `_buildAndProcessNextTurn`. `processNextTurn` is the actual root — every caller funnels through it — so the guard now sits at the dereference itself:
+
+- **Arbiter in charge** (`PVP_ARBITER && arbViewSt.inBattle`) — return without resolving anything locally, the same contract `_buildAndProcessNextTurn` already honors; `tickArbAnim` drives the state back to `menu` when the deltas drain.
+- **Otherwise** — there is no action to run and none to invent, so advance the turn. The queue is already shifted, so an empty one lands on `menu-open` and hands control back. A recoverable turn instead of a dead loop.
+- A once-only `console.warn` keeps the condition visible without spamming every frame.
+
+Regression test added to `tools/encounter-sim.js` (a deploy gate), reproducing the exact live shape — player turn, `queueLen: 1`, state `pvp-enemy-magic-hit`, pending null. Verified it FAILS with the guard disabled and passes with it, so it is guarding something real. 13 passed. `pvp-wire-sim` 137/137, `wire-stats-diag` lossless.
+
+NOTE this stops the crash; it does not explain why pending was null at those two moments. The arbiter clearing pending is by design (the server resolves the round), so the remaining question is why the legacy PvP FSM kept running afterward. Tracked, not fixed here.
+
 ## 1.7.841 — 2026-08-11
 
 **Fix: `spells.js` claimed to be AUTO-GENERATED while holding 187 lines of hand-maintained code the documented regeneration command would have deleted.**
