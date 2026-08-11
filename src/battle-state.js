@@ -76,6 +76,11 @@ export const battleSt = {
   allyHitIsLeft: false,
   allyShakeTimer: {},       // {allyIdx: ms remaining}
   enemyTargetAllyIdx: -1,
+  // Set by a CONFUSED monster's turn (battle-turn.js) to force who it swings
+  // at; `_processEnemyFlash` consumes and clears it, and rolls its own target
+  // normally when it is null. Null rather than -1 because -1 is a valid forced
+  // value meaning "the player". v1.7.857.
+  forcedEnemyTarget: null,
   // v1.7.364 step 7/7 — per-attacker mirror of enemyTargetAllyIdx. Keyed by
   // the attacker combatant object (encounter monster, pvpOpponentStats, or
   // pvpEnemyAllies entry). Single-player play is turn-based so only one

@@ -86,6 +86,134 @@ export function buildTurnOrder() {
 }
 
 // ── Turn dispatch ──────────────────────────────────────────────────────────
+// ── Confuse targeting (shared by player / ally / monster) ──────────────────
+//
+// NES confuse ignores sides: the actor swings at a random LIVING combatant,
+// which may be a teammate, an enemy, or itself.
+//
+// v1.7.857 — `processTurnStart` has always returned a `confused` flag, and
+// only the PLAYER's turn handler read it. The ally, monster and PVP handlers
+// destructured `{ canAct }` and dropped it on the floor, so Confu (0x20) cast
+// on a monster did nothing but tick itself down. These three helpers exist so
+// the three actors share one implementation instead of growing the same
+// three-way split this arc has spent its time removing.
+
+/** Every living combatant on the field, as `{ type, index? }`. */
+function _confusedPool() {
+  const pool = [];
+  if (ps.hp > 0) pool.push({ type: 'player' });
+  for (let i = 0; i < battleSt.battleAllies.length; i++) {
+    const a = battleSt.battleAllies[i];
+    if (a && a.hp > 0) pool.push({ type: 'ally', index: i });
+  }
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
+      const m = battleSt.encounterMonsters[i];
+      if (m && m.hp > 0) pool.push({ type: 'monster', index: i });
+    }
+  }
+  return pool;
+}
+
+/** Resolve a pool entry to the combatant plus its defensive stats + I/O. */
+function _confusedTarget(pick) {
+  if (pick.type === 'player') {
+    return {
+      ref: ps, def: ps.def, evade: ps.evade || 0, shieldEvade: 0,
+      setDmg: (d) => setPlayerDamageNum({ value: d, timer: 0 }),
+      shake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+    };
+  }
+  if (pick.type === 'ally') {
+    const a = battleSt.battleAllies[pick.index];
+    if (!a) return null;
+    return {
+      ref: a, def: a.def || 0, evade: a.evade || 0, shieldEvade: a.shieldEvade || 0,
+      setDmg: (d) => { getAllyDamageNums()[pick.index] = { value: d, timer: 0 }; },
+      // The ally's OWN shake channel — v1.7.854 moved that to the portrait.
+      // Using the screen shake here would jolt the player instead.
+      shake: () => { battleSt.allyShakeTimer[pick.index] = BATTLE_SHAKE_MS; },
+    };
+  }
+  const m = battleSt.encounterMonsters && battleSt.encounterMonsters[pick.index];
+  if (!m) return null;
+  return {
+    ref: m, def: m.def || 0, evade: m.evade || 0, shieldEvade: 0,
+    // Encounter monsters take their popup on the per-target swDmgNums channel
+    // (see the v1.7.853 damage-number sweep), not the single enemyDmgNum slot.
+    setDmg: (d) => setSwDmgNum(pick.index, d),
+    shake: () => { battleSt.battleShakeTimer = BATTLE_SHAKE_MS; },
+  };
+}
+
+/**
+ * A confused strike the normal animated path cannot express — friendly fire:
+ * player or ally hitting their own side, or a monster hitting a monster.
+ *
+ * No slash animation: there is no render path for a same-side swing, and the
+ * player's confused branch has worked exactly this way since it shipped —
+ * roll, apply, shake, hold in `poison-tick`, resume the queue. Inventing an
+ * animation is not what confuse needs, and would be art I cannot author.
+ *
+ * `profile` is `{ atk, hitRate, potHits, crit }` from `_confusedProfile`.
+ */
+function _confusedFriendlyFire(profile, pick) {
+  const t = _confusedTarget(pick);
+  if (!t) { processNextTurn(); return; }
+  const hits = rollHits(profile.atk, t.def, profile.hitRate, profile.potHits, {
+    ...profile.crit, evade: t.evade, shieldEvade: t.shieldEvade,
+  });
+  let totalDmg = 0;
+  for (const h of hits) { if (!h.miss && !h.shieldBlock) totalDmg += h.damage; }
+  if (totalDmg > 0) {
+    dispatchDelta({ type: 'hp', target: t.ref, amount: -totalDmg });
+    t.setDmg(totalDmg);
+    t.shake();
+    playSFX(SFX.ATTACK_HIT);
+  }
+  battleSt.battleState = 'poison-tick'; battleSt.battleTimer = 0;
+}
+
+/**
+ * The attacking half of a confused swing, per actor kind. Each side derives
+ * ATK differently (the player and allies carry a DISPLAY sum across two hands;
+ * monsters carry a flat stat), so this is the one place that knows how.
+ * Blind and Mini/Toad apply here exactly as they do on a sane turn.
+ */
+function _confusedProfile(kind, actor) {
+  if (kind === 'monster') {
+    const mult = actor.status ? miniToadAtkMult(actor.status) : 1;
+    const blind = actor.status ? blindHitPenalty(actor.status) : 1;
+    return {
+      atk: Math.floor((actor.atk || 0) * mult),
+      hitRate: (actor.hitRate || 70) * blind,
+      potHits: actor.attackRoll || 1,
+      crit: {},
+    };
+  }
+  // Player + ally share the same shape: strip BOTH weapons out of the display
+  // ATK, then add the first hand's weapon back — a confused dual-wielder rolls
+  // one hand, not the sum. Same correction the player's branch has always made.
+  const isPlayer = kind === 'player';
+  const wR = isPlayer ? ps.weaponR : actor.weaponId;
+  const wL = isPlayer ? ps.weaponL : actor.weaponL;
+  const rAtk = isWeapon(wR) ? (ITEMS.get(wR)?.atk || 0) : 0;
+  const lAtk = isWeapon(wL) ? (ITEMS.get(wL)?.atk || 0) : 0;
+  const firstHand = isWeapon(wR) ? rAtk : lAtk;
+  const blind = actor.status ? blindHitPenalty(actor.status) : 1;
+  const mult = actor.status ? miniToadAtkMult(actor.status) : 1;
+  const displayAtk = isPlayer ? ps.atk : (actor.atk || 0);
+  const job = JOBS[isPlayer ? ps.jobIdx : (actor.jobIdx || 0)] || {};
+  const lv = isPlayer ? (ps.stats?.level || 1) : (actor.level || 1);
+  const agi = isPlayer ? ((ps.stats?.agi || 5) + getJobLevelStatBonus().agi) : actor.agi;
+  return {
+    atk: Math.floor((displayAtk - rAtk - lAtk + firstHand) * mult),
+    hitRate: (isPlayer ? (ps.hitRate || 80) : (actor.hitRate || 85)) * blind,
+    potHits: calcPotentialHits(lv, agi, false),
+    crit: { critPct: job.critPct || 0, critBonus: job.critBonus || 0 },
+  };
+}
+
 export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     battleSt.isDefending = false; inputSt.battleCursor = 0; battleSt.turnTimer = 0;
     // Wire-PvP: opp's defend is round-scoped. End-of-round clear mirrors
@@ -122,62 +250,25 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       if (!canAct) { processNextTurn(); return; }
       // Confused: NES picks any random living target (self, ally, or enemy)
       if (confused) {
-        const pool = [];
-        pool.push({ type: 'self' });
-        for (let i = 0; i < battleSt.battleAllies.length; i++) {
-          if (battleSt.battleAllies[i].hp > 0) pool.push({ type: 'ally', index: i });
-        }
-        if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-          for (let i = 0; i < battleSt.encounterMonsters.length; i++) {
-            if (battleSt.encounterMonsters[i].hp > 0) pool.push({ type: 'monster', index: i });
-          }
-        }
+        const pool = _confusedPool();
         const pick = pool[Math.floor(rand() * pool.length)];
-        const blindMult = ps.status ? blindHitPenalty(ps.status) : 1;
-        const effHitRate = (ps.hitRate || 80) * blindMult;
-        const lv = ps.stats?.level || 1;
-        const agi = (ps.stats?.agi || 5) + getJobLevelStatBonus().agi;
-        const potHits = calcPotentialHits(lv, agi, false);
-        const _playerJob = JOBS[ps.jobIdx] || {};
-        const _playerCrit = { critPct: _playerJob.critPct || 0, critBonus: _playerJob.critBonus || 0 };
-        // Confused player attacks a random target with the right-hand (or only
-        // equipped) weapon. ps.atk holds the display sum (rWpn+lWpn+str/2), so
-        // strip the offhand contribution back out — otherwise a confused
-        // dual-wielder hits at sum-ATK for a single-hand roll.
-        const _cRWpnAtk = isWeapon(ps.weaponR) ? (ITEMS.get(ps.weaponR)?.atk || 0) : 0;
-        const _cLWpnAtk = isWeapon(ps.weaponL) ? (ITEMS.get(ps.weaponL)?.atk || 0) : 0;
-        const _firstHandWpnAtk = isWeapon(ps.weaponR) ? _cRWpnAtk : _cLWpnAtk;
-        const _confuseAtk = ps.atk - _cRWpnAtk - _cLWpnAtk + _firstHandWpnAtk;
+        const prof = _confusedProfile('player', ps);
         if (pick.type === 'monster') {
+          // An enemy is a target the normal animated path CAN express, so use
+          // it — full swing, slash overlay, damage number, exactly as a sane
+          // attack. Only same-side swings take the direct-damage path.
           const mon = battleSt.encounterMonsters[pick.index];
           const firstWpnId = isWeapon(ps.weaponR) ? ps.weaponR : ps.weaponL;
           const firstHandR = isWeapon(ps.weaponR) || !isWeapon(ps.weaponL);
           const bladed = isBladedWeapon(firstWpnId);
           inputSt.playerActionPending = { command: 'fight', targetIndex: pick.index,
-            hitResults: rollHits(_confuseAtk, mon.def, effHitRate, potHits, { ..._playerCrit, evade: mon.evade || 0 }),
+            hitResults: rollHits(prof.atk, mon.def, prof.hitRate, prof.potHits, { ...prof.crit, evade: mon.evade || 0 }),
             slashFrames: getSlashFramesForWeapon(firstWpnId, firstHandR),
             slashOffX: bladed ? 8 : Math.floor(Math.random() * 40) - 20,
             slashOffY: bladed ? -8 : Math.floor(Math.random() * 40) - 20,
             slashX: 0, slashY: 0 };
         } else {
-          // Self or ally: roll hits, apply damage directly, skip slash animation
-          const targetDef = pick.type === 'self' ? ps.def : (battleSt.battleAllies[pick.index].def || 0);
-          const hits = rollHits(_confuseAtk, targetDef, effHitRate, potHits, _playerCrit);
-          let totalDmg = 0;
-          for (const h of hits) { if (!h.miss && !h.shieldBlock) totalDmg += h.damage; }
-          if (totalDmg > 0) {
-            if (pick.type === 'self') {
-              dispatchDelta({ type: 'hp', target: ps, amount: -totalDmg });
-              setPlayerDamageNum({ value: totalDmg, timer: 0 });
-            } else {
-              const ally = battleSt.battleAllies[pick.index];
-              dispatchDelta({ type: 'hp', target: ally, amount: -totalDmg });
-              getAllyDamageNums()[pick.index] = { value: totalDmg, timer: 0 };
-            }
-            battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-            playSFX(SFX.ATTACK_HIT);
-          }
-          battleSt.battleState = 'poison-tick'; battleSt.battleTimer = 0;
+          _confusedFriendlyFire(prof, pick);
           return;
         }
       }
@@ -230,8 +321,30 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     if (!ally || ally.hp <= 0) { processNextTurn(); return; }
     // Ally status turn-start (paralysis/sleep). Poison damage deferred.
     if (ally.status && !turn._statusDone) {
-      const { canAct } = processTurnStart(ally.status, ally.maxHP || ally.hp);
+      const { canAct, confused } = processTurnStart(ally.status, ally.maxHP || ally.hp);
       if (!canAct) { processNextTurn(); return; }
+      // v1.7.857 — `confused` was destructured away here. A confused ally now
+      // swings at a random living combatant like the player does, and does NOT
+      // fall through to the heal / status / offensive-cast AI below: a confused
+      // caster picking an optimal Cure target is not confused.
+      if (confused) {
+        const pool = _confusedPool();
+        const pick = pool[Math.floor(rand() * pool.length)];
+        const prof = _confusedProfile('ally', ally);
+        if (pick.type === 'monster') {
+          // Enemy pick — hand it to the normal ally attack FSM with the target
+          // forced, so the swing, slash and damage number all render as usual.
+          battleSt.allyTargetIndex = pick.index;
+          battleSt.allyHitResults = rollHits(prof.atk, _confusedTarget(pick).def, prof.hitRate, prof.potHits,
+            { ...prof.crit, evade: battleSt.encounterMonsters[pick.index].evade || 0 });
+          battleSt.allyHitIdx = 0;
+          battleSt.allyHitResult = battleSt.allyHitResults[0];
+          battleSt.battleState = 'ally-attack-back'; battleSt.battleTimer = 0;
+          return;
+        }
+        _confusedFriendlyFire(prof, pick);
+        return;
+      }
     }
     // White Mage heal AI — pick lowest-HP-pct teammate (player or other ally) below 60% HP.
     // If anyone needs healing AND ally knows Cure (0x34), cast on them. Else fall through to Poisona check / attack.
@@ -306,8 +419,23 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     if (turn.index >= 0 && battleSt.encounterMonsters && battleSt.encounterMonsters[turn.index] && !turn._statusDone) {
       const mon = battleSt.encounterMonsters[turn.index];
       if (mon.status) {
-        const { canAct } = processTurnStart(mon.status, mon.maxHP);
+        const { canAct, confused } = processTurnStart(mon.status, mon.maxHP);
         if (!canAct || mon.hp <= 0) { processNextTurn(); return; }
+        // v1.7.857 — likewise discarded here, which is why casting Confu on a
+        // monster did nothing at all except tick itself back off.
+        if (confused) {
+          const pool = _confusedPool();
+          const pick = pool[Math.floor(rand() * pool.length)];
+          if (pick.type === 'monster') {
+            // Monster-on-monster has no animated path; direct damage + hold.
+            _confusedFriendlyFire(_confusedProfile('monster', mon), pick);
+            return;
+          }
+          // Player or ally — the monster's NORMAL attack path already renders
+          // both. Force the target so `_processEnemyFlash` does not re-roll it,
+          // and fall through to the usual flash → swing → damage sequence.
+          battleSt.forcedEnemyTarget = pick.type === 'player' ? -1 : pick.index;
+        }
       }
     }
     if (pvpSt.isPVPBattle) {

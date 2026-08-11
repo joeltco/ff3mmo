@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.857 — 2026-08-11
+
+**Confuse works on everyone now, not just the player.**
+
+`processTurnStart` has always returned a `confused` flag. Only the player's turn handler read it — the ally, monster and PVP handlers destructured `{ canAct }` and dropped it on the floor. So casting Confu (0x20) on a monster did nothing whatsoever except tick itself back off, and a confused ally kept playing its normal AI.
+
+A confused actor now swings at a random LIVING combatant on either side, itself included, exactly as the player always has.
+
+**One implementation, three actors.** The obvious way to do this was three more copies of the same pool-and-roll, which is the split this whole arc has been removing. Instead: `_confusedPool()` (every living combatant, sides ignored), `_confusedProfile(kind, actor)` (the one place that knows the player and allies carry a DISPLAY ATK summed across two hands while monsters carry a flat stat — and that Blind and Mini/Toad apply here as on a sane turn), and `_confusedFriendlyFire()`. The player's already-working branch was refactored onto them rather than left alongside.
+
+**Which target takes which path** follows the rule the player's branch already set: a target the normal ANIMATED path can express uses it, and only a same-side swing takes direct damage.
+
+- Player or ally picks a monster -> the ordinary attack FSM with the target forced. Full swing, slash overlay, damage number.
+- Monster picks the player or an ally -> its ordinary flash-and-swing path, via a new `battleSt.forcedEnemyTarget`. `_processEnemyFlash` consumes and clears it and **rolls no rand when it is set**, because the pick was already paid for; a null leaves the existing targeting untouched byte for byte.
+- Anything hitting its own side (player or ally on the party, monster on a monster) -> roll, apply, shake, hold in `poison-tick`, resume. No slash animation: there is no render path for a same-side swing, and inventing one would be art I cannot author.
+
+**A confused caster does not calmly pick an optimal spell target.** The ally branch now returns before `_tryAllyCure` / `_tryAllyPoisona` / `_tryAllyOffensiveCast`. Previously a confused White-Mage ally would still find the lowest-HP teammate and heal them.
+
+**Two small corrections fell out of the refactor.** The player's confused swing never applied `miniToadAtkMult`, though its sane swing (`input-handler.js`) always has — so a Mini'd, confused player hit at full strength. And friendly fire on an ally used `battleShakeTimer`, which jolts the PLAYER's portrait; it now uses that ally's own `allyShakeTimer`, the channel v1.7.854 moved to the portrait.
+
+**Gate** (28th). Drives 60 seeded turns for each of player, ally and monster through the real `processNextTurn`, and asserts each one hits BOTH sides across the run, that neither ever reaches `ally-magic-cast`, and that `forcedEnemyTarget` is consumed rather than left for the next monster to inherit. The ally is given Cure and a player at 40 HP, so its heal AI would fire if confuse did not pre-empt it. Five reverts verified to fail independently — the flag discarded again on each of the three actors, the ally falling through to its spell AI, and the flash re-rolling instead of honouring the forced target. The player is in the loop specifically because its branch already worked and a silent break there would be the worst outcome of this change.
+
+The test needs the ROM for the actor-name strings that turn dispatch queues; it reports itself SKIPPED rather than failing in a checkout without `FF3-English.nes`.
+
+**Still not fixed, deliberately:** the PVP turn handler also discards `confused`. PvP is disabled (`PVP_ENABLED = false` since v1.7.770) and its attack path is separate, so wiring it would be untestable code for a system that is off. It goes on the re-enable checklist rather than in this commit.
+
 ## 1.7.856 — 2026-08-11
 
 **The deploy hang: `pvp-wire-sim` could wedge forever, and could not be killed when it did.**

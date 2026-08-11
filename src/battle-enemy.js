@@ -167,7 +167,13 @@ function _processEnemyFlash() {
   if (battleSt.battleState !== 'enemy-flash' || battleSt.battleTimer < BOSS_PREFLASH_MS) return false;
   const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
   let targetAlly = -1;
-  if (livingAllies.length > 0) {
+  // A confused monster already picked its victim (battle-turn.js) — honour it
+  // and consume NO rand here, since the pick was already paid for. Null means
+  // a sane turn, which rolls below exactly as it always has. v1.7.857.
+  if (battleSt.forcedEnemyTarget != null) {
+    targetAlly = battleSt.forcedEnemyTarget;
+    battleSt.forcedEnemyTarget = null;
+  } else if (livingAllies.length > 0) {
     const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
     if (ps.hp <= 0) {
       targetAlly = allyOptions[Math.floor(rand() * allyOptions.length)];

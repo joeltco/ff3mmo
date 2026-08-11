@@ -111,6 +111,17 @@ const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combat
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask } = await import('../src/data/spells.js');
 const { applySpell } = await import('../src/combatant-cast.js');
 const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
+const { processNextTurn } = await import('../src/battle-turn.js');
+// Turn dispatch queues the actor's NAME on the battle strip, which reads the
+// ROM string table. Feed it the real ROM when it is there; the confuse test is
+// the only one that walks that path, and it skips itself if it is not.
+const { initTextDecoder } = await import('../src/text-decoder.js');
+let _romLoaded = false;
+try {
+  const { readFileSync } = await import('node:fs');
+  initTextDecoder(new Uint8Array(readFileSync(new URL('../FF3-English.nes', import.meta.url))));
+  _romLoaded = true;
+} catch { /* no ROM in this checkout — the confuse test reports itself skipped */ }
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
@@ -1034,6 +1045,100 @@ const tests = [
       return { pass: false, name, reason: `mini'd monster dealt ${mini}, un-mini'd dealt ${baseline}` };
     }
     return { pass: true, name, info: `baseline=${baseline} mini=${mini}` };
+  },
+  // Regression — a confused ALLY or MONSTER swings at a random living
+  // combatant on EITHER side, and a confused caster does not calmly pick an
+  // optimal spell target.
+  //
+  // `processTurnStart` has always returned a `confused` flag and only the
+  // player's handler read it; the ally, monster and PVP handlers destructured
+  // `{ canAct }` and dropped it, so Confu (0x20) cast on a monster did nothing
+  // but tick itself back off. All three now share `_confusedPool` /
+  // `_confusedProfile` / `_confusedFriendlyFire` rather than growing a fourth
+  // copy of the same logic. v1.7.857.
+  () => {
+    const name = 'regression — confused player / ally / monster attack either side';
+    if (!_romLoaded) return { pass: true, name, info: 'SKIPPED — no FF3-English.nes in this checkout' };
+    const saved = { state: battleSt.battleState, queue: battleSt.turnQueue,
+                    mons: battleSt.encounterMonsters, allies: battleSt.battleAllies,
+                    rnd: battleSt.isRandomEncounter, forced: battleSt.forcedEnemyTarget };
+    try {
+      // Drives one confused turn under a given seed and reports what happened.
+      const runTurn = (who, seed) => {
+        setupEncounter({ monster: { ...goblin, hp: 200, maxHP: 200 }, seed });
+        battleSt.encounterMonsters = [
+          { ...goblin, hp: 200, maxHP: 200, status: createStatusState() },
+          { ...goblin, hp: 200, maxHP: 200, status: createStatusState() },
+        ];
+        ps.hp = 500; if (ps.stats) ps.stats.maxHP = 500;
+        const ally = battleSt.battleAllies[0];
+        ally.hp = 300; ally.maxHP = 300; ally.atk = 20; ally.agi = 5; ally.level = 3;
+        ally.weaponId = 0xFF; ally.weaponL = 0xFF;
+        // Cure + a badly wounded player: the ally heal AI WOULD fire here if
+        // confuse did not pre-empt it. That is the sharp half of this test.
+        ally.knownSpells = [0x34]; ally.mp = 99;
+        if (who === 'player') {
+          addStatus(ps.status, STATUS.CONFUSE);
+          battleSt.turnQueue = [{ type: 'player' }];
+        } else if (who === 'ally') {
+          addStatus(ally.status, STATUS.CONFUSE);
+          ps.hp = 40;                       // < 60% -> _tryAllyCure would trigger
+          battleSt.turnQueue = [{ type: 'ally', index: 0 }];
+        } else {
+          addStatus(battleSt.encounterMonsters[0].status, STATUS.CONFUSE);
+          battleSt.turnQueue = [{ type: 'monster', index: 0 }];
+        }
+        const hpBefore = { ps: ps.hp, ally: ally.hp,
+                           m0: battleSt.encounterMonsters[0].hp, m1: battleSt.encounterMonsters[1].hp };
+        battleSt.battleState = 'menu-open';
+        processNextTurn();
+        const reached = battleSt.battleState;
+        // A monster that picked the player or an ally hands off to the normal
+        // flash -> swing path. Drive that so the forced target is actually
+        // consumed — which is half of what this test is checking.
+        if (reached === 'enemy-flash') { battleSt.battleTimer = 1000; updateBattleEnemyTurn(); }
+        return { state: reached, hpBefore,
+                 hpAfter: { ps: ps.hp, ally: ally.hp,
+                            m0: battleSt.encounterMonsters[0].hp, m1: battleSt.encounterMonsters[1].hp } };
+      };
+
+      // The player is in the loop because v1.7.857 refactored its ALREADY-WORKING
+      // confused branch onto the shared helpers; a silent break there would be
+      // the worst outcome of this change.
+      for (const who of ['player', 'ally', 'monster']) {
+        let hitOwnSide = 0, hitOtherSide = 0, cast = 0, snappedOut = 0;
+        for (let seed = 1; seed <= 60; seed++) {
+          const r = runTurn(who, seed);
+          if (r.state === 'ally-magic-cast') { cast++; continue; }
+          if (r.state === 'poison-tick') { hitOwnSide++; continue; }
+          if (r.state === 'ally-attack-back' || r.state === 'enemy-flash'
+              || r.state === 'attack-back') { hitOtherSide++; continue; }
+          // 25%/turn snap-out is inside processTurnStart and is fine.
+          snappedOut++;
+        }
+        if (cast > 0) {
+          return { pass: false, name, reason: `confused ${who} still ran its spell AI ${cast}/60 turns` };
+        }
+        if (hitOwnSide === 0) {
+          return { pass: false, name, reason: `confused ${who} never hit its own side in 60 turns (pool is one-sided)` };
+        }
+        if (hitOtherSide === 0) {
+          return { pass: false, name, reason: `confused ${who} never hit the other side in 60 turns` };
+        }
+      }
+      // A confused monster must not leave its forced target behind for the
+      // next, sane monster to inherit.
+      if (battleSt.forcedEnemyTarget != null) {
+        return { pass: false, name, reason: `forcedEnemyTarget left set (${battleSt.forcedEnemyTarget})` };
+      }
+      return { pass: true, name, info: 'player + ally + monster each swing at both sides; neither casts while confused' };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
+      battleSt.encounterMonsters = saved.mons; battleSt.battleAllies = saved.allies;
+      battleSt.isRandomEncounter = saved.rnd; battleSt.forcedEnemyTarget = saved.forced;
+    }
   },
 ];
 

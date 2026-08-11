@@ -108,7 +108,7 @@ export function resetBattleVars() {
   battleSt.projectileSubtype = null;     // fresh battle: no attack in flight
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
-  battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1;
+  battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.forcedEnemyTarget = null;
   battleSt.allyMagicCasterIdx = -1; battleSt.allyMagicTargetIdx = -1; battleSt.allyMagicSpellId = 0;
   battleSt.allyMagicHealAmount = 0; battleSt.allyMagicDamageRoll = 0;
   battleSt.allyMagicEffectApplied = false; battleSt.allyMagicSfxPlayed = false; battleSt.allyMagicTargetType = 'player';
