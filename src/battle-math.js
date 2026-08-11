@@ -47,7 +47,15 @@ export function summarizeHits(hits, opts = {}) {
 // atkElem/weakness/resist can be a string or array of strings
 export function elemMultiplier(atkElem, weakness, resist) {
   if (!atkElem) return 1;
-  // v1.7.851 — spell elements are stored as a comma-joined string, so a
+  // ⚠ v1.7.867 CORRECTION — the v1.7.851 note below was WRONG. A compound
+  // element is an ARRAY (`['ice','air']`), which the `Array.isArray` branch
+  // already handled; NO entry in the catalogue is a comma-string. Aero2 and
+  // 0x2d always resolved their weaknesses correctly. The claim came from
+  // misreading an array's stringification in a generated table. The split is
+  // kept because it is harmless and covers a shape that may appear later, but
+  // it fixed nothing. See docs/SWEEP-DISCIPLINE.md.
+  //
+  // v1.7.851 (superseded) — spell elements are stored as a comma-joined string, so a
   // compound element ('ice,air': Aero2 0x11 and 0x2d) arrived here as ONE
   // opaque token and matched no entry in a monster's weakness/resist list,
   // which holds single elements ('fire', 'holy', ...). Both spells therefore

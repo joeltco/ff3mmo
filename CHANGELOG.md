@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.869 — 2026-08-11
+
+**Captured the real impact SFX for 42 of 48 spells. Meteo included. I should have done this instead of asking Joel to.**
+
+Two turns ago I said the remaining sounds "need an EMU-tab `$Cx` write trace" and handed that back. That was wrong twice over: the work was mine, and the tooling already existed. `tools/monscan/spell-sweep.cjs` has cast all 48 spells headlessly since the art capture, and `src/debug/tabs/emu.js` already documented the mechanism — FF3J drives its sound engine through battery-backed RAM, ROM writes `0x80 | sfxId` to `$7F49`, and polling after a frame misses it because the engine consumes it mid-frame. jsnes exposes `onBatteryRamWrite`. The two halves had never been connected.
+
+**Method.** `nes.cjs` takes an optional write hook; the sweep records every `$7F49` write with its frame number, subtracts the control round the same way CHR blocks are subtracted, and takes **the first write at or after the frame the spell's OWN CHR block goes live**. Before that frame the sound belongs to the cast windup or the menu — frame correlation, not a guess about which write matters.
+
+**Parity, checked before trusting any of it.** The capture reproduces all three hand-traced entries exactly:
+
+| spell | `$7F49` | `- 0x3F` | shipped |
+|---|---|---|---|
+| Fire 0x31 | `$c1` | 130 | FIRE_BOOM (REC OAM f1301) |
+| Ice 0x32 | `$9c` | 93 | SW_HIT (REC OAM f766) |
+| Sleep 0x33 | `$d4` | 149 | SLEEP_PUFF (sleep-emu-snap) |
+
+**Captured sounds went from 9 to 42 of 56.** `src/data/spell-sfx-captured.js` is generated and consulted first; the picked rules remain only for the 14 with no capture, which is where a guess belongs — labelled.
+
+**Two of my picks were simply wrong**, which is the point of measuring:
+
+- **Quake 0x07 is 131.** I had picked `EARTHQUAKE` (153) because the name matched.
+- **Aero2 0x11 / 0x2d are 134.** Element-derivation gave 93 via the ice component.
+- **Meteo 0x02 is 73** — not the 130 it played before v1.7.867, nor the 93 it has played since.
+
+One pick was right and is now data rather than luck: bolt really is 132 across all three tiers.
+
+Six spells fired no impact sound in the capture and are deliberately absent from the map rather than filled in.
+
+**Gate** extended: the captured rule set must include the table, and the capture must still reproduce the three hand-verified entries — if a future sweep disagrees with those, the SWEEP is wrong, not the constants. Verified by corrupting 0x31 to 999.
+
+**Also written down, at Joel's instruction:** `docs/SWEEP-DISCIPLINE.md` records the half-assing pattern with the four concrete cases from this session, and the warning now sits in the code at both sites — `SPELL_SFX_RULES` and the superseded `elemMultiplier` note.
+
 ## 1.7.868 — 2026-08-11
 
 **The SFX sweep, done properly. Only 9 of 56 spell sounds are real data — the other 47 I picked, and v1.7.847 dressed some of them up as captures.**

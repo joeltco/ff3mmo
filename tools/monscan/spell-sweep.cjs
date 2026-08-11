@@ -167,7 +167,19 @@ if (!isMainThread) {
 
   /** One round. `cell` null = control (char 1 guards too). */
   function round(job, mask, cell) {
-    const n = new Nes(romPath);
+    // SFX capture. `0x80 | sfxId` written to $7F49; our music.js constant is
+    // `val - 0x3F` (verified against the shipped captures: Blizzard's $9C -> $5D
+    // = SW_HIT 93, Fire's $C1 -> $82 = FIRE_BOOM 130). Recorded with the frame
+    // number so the cast cue ($A1, written at pre-animation start) can be told
+    // apart from the spell's own impact sound.
+    const sfxWrites = [];
+    let _sfxFrame = -1;
+    const n = new Nes(romPath, {
+      onBatteryRamWrite: (addr, val) => {
+        if ((addr | 0) !== 0x7F49) return;
+        sfxWrites.push({ f: _sfxFrame, val: val & 0xFF });
+      },
+    });
     n.run(300);
     for (let i = 0; i < 25; i++) n.press('start', 6, 45);
     let ib = false;
@@ -225,7 +237,7 @@ if (!isMainThread) {
     }
 
     for (let f = 0; f < FRAMES; f++) {
-      frameNo = f;
+      frameNo = f; _sfxFrame = f;
       // Snapshot OAM + sprite palettes only while effect slots are actually on
       // screen; that window IS the animation and everything else is idle battle.
       const drawn = [];
@@ -245,7 +257,7 @@ if (!isMainThread) {
     // end. Recorded so the dump can assert it rather than the reader trusting
     // the patch landed.
     const survived = sc(n) > 12;
-    return { blocks, oamFrames, survived };
+    return { blocks, oamFrames, survived, sfxWrites };
   }
 
   const { job, mask, colBase, cells } = workerData;
@@ -258,6 +270,12 @@ if (!isMainThread) {
     try {
       const r = round(job, mask, cell);
       out.survived = r.survived;
+      // Spell-owned SFX. The control round fires the same battle-frame sounds
+      // (menu blips, the enemy's turn), so subtract it the way the CHR blocks
+      // are subtracted rather than trusting the raw list.
+      const ctrlSfx = new Set(control.sfxWrites.map((w) => w.val));
+      out.sfxWrites = r.sfxWrites;
+      out.sfxOwn = r.sfxWrites.filter((w) => !ctrlSfx.has(w.val));
       const own = [...r.blocks.entries()].filter(([off]) => !ctrlOffs.has(off)).sort((a, b) => a[0] - b[0]);
       out.blocks = own.map(([off, rec]) => ({
         off, slots: [...rec.slots].sort((a, b) => a - b), first: rec.first, last: rec.last,

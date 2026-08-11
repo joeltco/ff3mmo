@@ -22,6 +22,7 @@ import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
          getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse,
          isCurrentCastFromEquipment } from './spell-cast.js';
 import { SPELLS, spellStatusMask } from './data/spells.js';
+import { CAPTURED_SPELL_SFX } from './data/spell-sfx-captured.js';
 import { elemMultiplier } from './battle-math.js';
 import { rand } from './rng.js';
 import { dispatchDelta } from './deltas.js';
@@ -157,6 +158,14 @@ function _resolveThrowRender(role, caster, target) {
  * provenance a FIELD means a guess can no longer be mistaken for data, and the
  * deploy gate can count how much of the catalogue is actually sourced.
  *
+ * WHY THIS FILE CARRIES A WARNING: the v1.7.847 "SFX sweep" that produced the
+ * picked entries below checked only that no spell was SILENT — never that the
+ * sound was RIGHT — and shipped 23 spells playing Fire's captured impact,
+ * Meteo among them. The sweep table it generated printed Meteo and Fire with
+ * the same SFX number on adjacent rows and nobody read it. Presence is not
+ * correctness. See docs/SWEEP-DISCIPLINE.md before touching this table or
+ * declaring any audit of it complete.
+ *
  * `src`:
  *   'captured' — traced from a REC OAM / `$Cx` write capture. Real data. Do not
  *                change these without a new capture.
@@ -168,6 +177,14 @@ function _resolveThrowRender(role, caster, target) {
  * ice before bolt, so `['bolt','ice']` resolves as ice regardless of array order.
  */
 export const SPELL_SFX_RULES = [
+  // v1.7.869 — the CAPTURED table comes first, because it is measured data and
+  // everything below it is not. 42 of 48 castable spells now have their real
+  // impact sound, traced from $7F49 writes by `tools/monscan/spell-sweep.cjs`.
+  // Two of the picks below were simply wrong and this replaces them: Quake is
+  // 131, not EARTHQUAKE 153; Aero2 is 134, not its ice component's 93.
+  { id: 'captured-table', src: 'captured', ref: 'tools/monscan/spell-sweep.cjs $7F49 trace',
+    match: (s2) => CAPTURED_SPELL_SFX.has(_spellIdOf(s2)),
+    sfxFor: (s2) => CAPTURED_SPELL_SFX.get(_spellIdOf(s2)) },
   { id: 'sight',       src: 'picked',   sfx: SFX.SIGHT,           match: (s)     => s.target === 'sight' },
   { id: 'fire',        src: 'captured', ref: 'REC OAM f1301',     sfx: SFX.FIRE_BOOM,       match: (s, e) => e.includes('fire') },
   { id: 'ice',         src: 'captured', ref: 'REC OAM f766',      sfx: SFX.SW_HIT,          match: (s, e) => e.includes('ice') },
@@ -184,6 +201,17 @@ export const SPELL_SFX_RULES = [
   { id: 'fallback-status', src: 'picked', sfx: SFX.SLEEP_PUFF, match: () => true },
 ];
 
+// Catalogue id for a spell OBJECT, by identity. Callers pass the entry, not the
+// id, and changing every call site to thread one through would be a wider edit
+// than this needs. A summon's rewritten effect-spell is deliberately absent
+// from this map, so it falls through to the picked rules rather than borrowing
+// the base spell's captured sound.
+let _idBySpell = null;
+function _spellIdOf(spell) {
+  if (!_idBySpell) { _idBySpell = new Map(); for (const [id, sp] of SPELLS) _idBySpell.set(sp, id); }
+  return _idBySpell.get(spell);
+}
+
 /** Element as a component list, whatever shape the entry uses (array | string | null). */
 export function spellElementParts(spell) {
   const el = spell && spell.element;
@@ -198,9 +226,12 @@ export function spellSfxRule(spell) {
   return null;
 }
 
+/** Resolve a rule to a concrete SFX for this spell (table rules are per-id). */
+function _sfxOf(rule, spell) { return rule.sfxFor ? rule.sfxFor(spell) : rule.sfx; }
+
 export function getSpellImpactSFX(spell) {
   const r = spellSfxRule(spell);
-  return r ? r.sfx : null;
+  return r ? _sfxOf(r, spell) : null;
 }
 
 // Plays the impact SFX for a spell. One call site for all three role engines.

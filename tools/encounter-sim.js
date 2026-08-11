@@ -111,6 +111,7 @@ const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
         getCastAnimElapsedMs } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX, healStyleRenderWindow, SPELL_SFX_RULES,
         spellSfxRule, spellElementParts } = await import('../src/combatant-cast.js');
+const { CAPTURED_SPELL_SFX } = await import('../src/data/spell-sfx-captured.js');
 const { SFX: _SFXMAP } = await import('../src/music.js');
 const SFX_FIRE_BOOM = _SFXMAP.FIRE_BOOM, SFX_THUNDER = _SFXMAP.CRYSTAL_THUNDER;
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpellBuyPrice } = await import('../src/data/spells.js');
@@ -1646,8 +1647,16 @@ const tests = [
     const bad = [];
     for (const r of captured) if (!r.ref) bad.push(`${r.id} claims captured with no reference`);
     const ids = captured.map(r => r.id).sort().join(',');
-    if (ids !== 'fire,ice,sleep') {
+    if (ids !== 'captured-table,fire,ice,sleep') {
       bad.push(`captured rule set is now [${ids}] — a new one needs a real capture, not a relabel`);
+    }
+    // The capture must still reproduce the three hand-verified entries. If a
+    // re-run of the sweep ever disagrees with these, the sweep is wrong, not
+    // the shipped constants — they were traced by hand from REC OAM.
+    const PARITY = { 0x31: 130, 0x32: 93, 0x33: 149 };
+    for (const [id, want] of Object.entries(PARITY)) {
+      const got = CAPTURED_SPELL_SFX.get(Number(id));
+      if (got !== want) bad.push(`capture parity: 0x${Number(id).toString(16)} is ${got}, hand-verified ${want}`);
     }
     for (const r of SPELL_SFX_RULES) {
       if (r.src !== 'captured' && r.src !== 'picked') bad.push(`${r.id} has no provenance`);
@@ -1669,7 +1678,7 @@ const tests = [
     if (borrowing.length) {
       return { pass: false, name, reason: `non-fire spells playing Fire's captured impact: ${borrowing.join(', ')}` };
     }
-    return { pass: true, name, info: `${sourced} spells on captured sounds, ${picked} on picked ones (28 are the bare fallback — these want captures)` };
+    return { pass: true, name, info: `${sourced} spells on CAPTURED sounds, ${picked} still picked` };
   },
 ];
 

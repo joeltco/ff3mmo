@@ -22,12 +22,19 @@ const BTN = {
 };
 
 class Nes {
-  constructor(romPath = ROM) {
+  constructor(romPath = ROM, opts = {}) {
     this.fb = new Uint32Array(256 * 240);
     this.frames = 0;
     this.nes = new jsnes.NES({
       onFrame: (buf) => { this.fb.set(buf); this.frames++; },
       onAudioSample: () => {},
+      // FF3J drives its sound engine through battery-backed RAM: ROM writes
+      // `0x80 | sfxId` to $7F49 to fire a SFX. Polling that address after a
+      // frame misses it — the engine consumes and clears it mid-frame — so the
+      // only way to see it is this write hook. Same mechanism the EMU debug
+      // tab uses (`src/debug/tabs/emu.js#_onBatteryRamWriteSfx`); exposing it
+      // here lets a headless sweep capture what the tab captures by hand.
+      onBatteryRamWrite: opts.onBatteryRamWrite || (() => {}),
     });
     this.nes.loadROM(readFileSync(romPath, 'binary'));
   }
