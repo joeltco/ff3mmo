@@ -110,6 +110,8 @@ const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY,
 const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
         getCastAnimElapsedMs } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combatant-cast.js');
+const { SFX: _SFXMAP } = await import('../src/music.js');
+const SFX_FIRE_BOOM = _SFXMAP.FIRE_BOOM, SFX_THUNDER = _SFXMAP.CRYSTAL_THUNDER;
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpellBuyPrice } = await import('../src/data/spells.js');
 const { applySpell } = await import('../src/combatant-cast.js');
 const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
@@ -746,29 +748,67 @@ const tests = [
   // of v1.7.847, which is why this gate covers the multiplier too. v1.7.851.
   () => {
     const name = 'regression — compound spell elements resolve weakness and resist';
+    // v1.7.867 — this used to assert against the STRING 'ice,air'. No entry in
+    // the catalogue is a comma-string: a compound element is an ARRAY
+    // (`['ice','air']`), which `elemMultiplier` already handled. So the v1.7.851
+    // claim that these spells "dealt flat neutral damage to every monster" was
+    // WRONG, and this gate was passing on a synthetic input the game never
+    // produces. Assert the real shape.
+    for (const [id, spell] of SPELLS) {
+      if (!Array.isArray(spell.element)) continue;
+      for (const part of spell.element) {
+        if (elemMultiplier(spell.element, [part], null) !== 2) {
+          return { pass: false, name, reason: `0x${id.toString(16)} array element ignores its ${part} component` };
+        }
+      }
+      if (elemMultiplier(spell.element, ['holy'], null) !== 1) {
+        return { pass: false, name, reason: `0x${id.toString(16)} matched an unrelated weakness` };
+      }
+    }
+    // A comma-string is not a live shape, but the split is kept so one would
+    // work if it ever appeared — assert that too, labelled for what it is.
     if (elemMultiplier('ice,air', ['ice'], null) !== 2) {
-      return { pass: false, name, reason: 'compound element does not match a weakness' };
-    }
-    if (elemMultiplier('ice,air', null, ['air']) !== 0.5) {
-      return { pass: false, name, reason: 'compound element does not match a resist' };
-    }
-    if (elemMultiplier('ice,air', ['fire'], null) !== 1) {
-      return { pass: false, name, reason: 'compound element matched an unrelated weakness' };
+      return { pass: false, name, reason: 'hypothetical comma-string element stopped resolving' };
     }
     // Single elements and the no-element case must be untouched.
     if (elemMultiplier('fire', ['fire'], null) !== 2) return { pass: false, name, reason: 'single element regressed' };
     if (elemMultiplier('fire', null, ['fire']) !== 0.5) return { pass: false, name, reason: 'single resist regressed' };
     if (elemMultiplier(null, ['fire'], null) !== 1)   return { pass: false, name, reason: 'null element regressed' };
     // Every compound-element spell in the catalogue must resolve its parts.
-    const dead = [];
+    // And the SFX selector must read the same shapes the damage maths does.
+    // It normalised only comma-strings, so the two ARRAY-element spells fell
+    // through every element case and took the generic fallback — which was
+    // FIRE_BOOM, Fire's own captured impact. 23 spells sounded like Fire,
+    // including Meteo and all 8 summons. v1.7.867.
+    const borrowed = [];
     for (const [id, spell] of SPELLS) {
-      if (typeof spell.element !== 'string' || !spell.element.includes(',')) continue;
-      for (const part of spell.element.split(',')) {
-        if (elemMultiplier(spell.element, [part], null) !== 2) dead.push(`0x${id.toString(16)}:${part}`);
-      }
+      if (id > 0x37) continue;
+      const el = spell.element;
+      const parts = Array.isArray(el) ? el : (typeof el === 'string' ? el.split(',') : []);
+      if (parts.includes('fire')) continue;                       // legitimately Fire's sound
+      if (getSpellImpactSFX(spell) === SFX_FIRE_BOOM) borrowed.push(`0x${id.toString(16)}`);
     }
-    if (dead.length) return { pass: false, name, reason: `component ignored: ${dead.join(', ')}` };
-    return { pass: true, name, info: 'compound elements split; single + null unchanged' };
+    if (borrowed.length) {
+      return { pass: false, name, reason: `non-fire spells playing Fire's captured impact: ${borrowed.join(', ')}` };
+    }
+    // The two live array-element spells are BOTH ['ice','air'], and ice maps to
+    // the same SW_HIT the fallback uses — so they cannot tell whether the
+    // normaliser reads arrays at all. Assert the contract on a shape whose
+    // first component resolves to a DISTINCT sound. (Arrays are the real shape:
+    // weapon 0x03 carries ['bolt','fire'].)
+    // 'dark' has no case, so bolt is the only component that can resolve —
+    // ['bolt','ice'] would resolve to ICE, since the checks run fire/ice/bolt
+    // in that order regardless of array order.
+    const arr = getSpellImpactSFX({ element: ['bolt', 'dark'], type: 'damage' });
+    if (arr !== SFX_THUNDER) {
+      return { pass: false, name, reason: `an ARRAY element resolved to ${arr}, not its bolt component` };
+    }
+    // The three CAPTURED mappings are real data — they must not drift.
+    const fire = [...SPELLS].find(([, s2]) => s2.element === 'fire');
+    if (fire && getSpellImpactSFX(fire[1]) !== SFX_FIRE_BOOM) {
+      return { pass: false, name, reason: 'fire no longer maps to its captured FIRE_BOOM' };
+    }
+    return { pass: true, name, info: 'array + string elements resolve; no spell borrows Fire\'s sound' };
   },
   // Regression — a single-state captured animation must carry its MEASURED
   // hold, not the emitter's fallback guess.

@@ -151,11 +151,18 @@ export function getSpellImpactSFX(spell) {
   if (!spell) return null;
   if (spell.target === 'sight') return SFX.SIGHT;
   // v1.7.847 — element was compared with ===, so BOLT had no case at all and
-  // multi-element spells (Aero2 is 'ice,air') matched nothing. 37 of 56 spells
-  // cast silently, including every Bolt tier and all 8 summons — against the
-  // standing rule that SFX fire at anim-start for ALL spells. Split so a
-  // compound element still resolves, and cover the elements we have sounds for.
-  const els = typeof spell.element === 'string' ? spell.element.split(',') : [];
+  // 37 of 56 spells cast silently, including every Bolt tier and all 8 summons.
+  //
+  // v1.7.867 — that fix normalised only comma-STRINGS. A compound element is an
+  // ARRAY in this catalogue (`['ice','air']` on Aero2 0x11 and 0x2d; weapons use
+  // `['bolt','fire']` too) and NO entry is a comma-string, so the two
+  // array-element spells fell through every case here and landed on the generic
+  // fallback below — Aero2 came out sounding like Fire. Normalise all three
+  // shapes; `String(e).split(',')` also keeps a comma-string working if one ever
+  // appears, without pretending that is the live shape.
+  const _el = spell.element;
+  const els = Array.isArray(_el) ? _el
+            : (typeof _el === 'string' ? _el.split(',') : []);
   if (els.includes('fire'))  return SFX.FIRE_BOOM;        // NSF $82 — Fire impact
   if (els.includes('ice'))   return SFX.SW_HIT;           // NSF $5D — Blizzard impact
   if (els.includes('bolt'))  return SFX.CRYSTAL_THUNDER;  // NSF $84 — thunder crash
@@ -172,7 +179,14 @@ export function getSpellImpactSFX(spell) {
   // while an animation plays is the bug this replaced. Existing NSF tracks
   // only; nothing invented. These two generics are a DESIGN CHOICE, not a
   // capture: swap them freely if a spell wants its own sound.
-  if (spell.type === 'damage' || spell.type === 'death') return SFX.FIRE_BOOM;
+  // v1.7.867 — this generic was FIRE_BOOM, which is not a generic at all: it is
+  // Fire's own captured impact (NSF $82, REC OAM f1301). Every element-less
+  // damage/death spell therefore played Fire's signature — Meteo, Kill, Exit,
+  // Wall, Safe and all 8 summons, 23 spells sounding like a Fire hit. The
+  // pre-v1.7.847 function fell back to SW_HIT, a neutral impact, and that is
+  // what a fallback should be. Restored. A spell that deserves its own sound
+  // needs a capture, not a borrowed one.
+  if (spell.type === 'damage' || spell.type === 'death') return SFX.SW_HIT;
   return SFX.SLEEP_PUFF;   // status-type landing puff
 }
 
