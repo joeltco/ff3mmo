@@ -82,10 +82,15 @@ const ONLY_FILTER = args.filter || null;      // substring match on test name
 // ── Assertion plumbing ─────────────────────────────────────────────────────
 let _passed = 0, _failed = 0;
 const _failures = [];
+// v1.7.856 — the in-flight test name, so the watchdog below can say WHERE a
+// hang happened. Before this the harness would sit in epoll_wait at 0% CPU
+// with no output and no way to tell which await never settled.
+let _current = '(startup)';
 
 function test(name, fn) {
   if (ONLY_FILTER && !name.toLowerCase().includes(ONLY_FILTER.toLowerCase())) return;
   let err = null;
+  _current = name;
   try { fn(); }
   catch (e) { err = e; }
   if (err) {
@@ -101,6 +106,7 @@ function test(name, fn) {
 async function asyncTest(name, fn) {
   if (ONLY_FILTER && !name.toLowerCase().includes(ONLY_FILTER.toLowerCase())) return;
   let err = null;
+  _current = name;
   try { await fn(); }
   catch (e) { err = e; }
   if (err) {
@@ -701,7 +707,23 @@ function connectClient(port, userId, profile) {
   _testEnsureUser(userId);
   return new Promise((resolve, reject) => {
     const token = mintToken(userId);
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${token}`);
+    // Spoof a unique X-Forwarded-For per client. `ws-presence.js` caps
+    // concurrent sockets at MAX_CONN_PER_IP (10) per source IP, and this
+    // harness opens 126 clients from 127.0.0.1 while closing 81 — so late
+    // tests ran right at the cap, where the server answers the UPGRADE with a
+    // raw 429 and destroys the socket. Same trick `pvp-load-sim.js` already
+    // uses. v1.7.856.
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${token}`, {
+      headers: { 'X-Forwarded-For': '10.1.' + ((userId >> 8) & 0xFF) + '.' + (userId & 0xFF) },
+    });
+    // No wait in this harness may be unbounded. `once()` has always had a
+    // 1000 ms timeout; this promise had none, so a client that never received
+    // `ready` hung the whole run FOREVER — no summary, no exit, and (see the
+    // SIGTERM note in main) not even killable.
+    const _t = setTimeout(() => {
+      try { ws.terminate(); } catch { /* already gone */ }
+      reject(new Error(`connectClient(user ${userId}) never got 'ready' within 5000ms`));
+    }, 5000);
     // v1.7.733 — capture every message received from connect-time onward so
     // tests for hello-time-triggered traffic (e.g. the unconditional
     // party-snapshot) can inspect what arrived during the handshake window
@@ -711,12 +733,14 @@ function connectClient(port, userId, profile) {
     ws._earlyMessages = [];
     let ready = false;
     ws.on('open', () => { /* wait for ready */ });
-    ws.on('error', reject);
+    ws.on('error', (e) => { clearTimeout(_t); reject(e); });
     ws.on('message', (data) => {
-      const msg = JSON.parse(data.toString());
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
       ws._earlyMessages.push(msg);
       if (!ready && msg.type === 'ready') {
         ready = true;
+        clearTimeout(_t);
         ws.send(JSON.stringify({ type: 'hello', profile, loc: 'ur' }));
         // Wait one tick for the server to broadcast our join, then resolve.
         setTimeout(() => resolve(ws), 30);
@@ -3172,13 +3196,37 @@ async function suiteWire() {
 // ──────────────────────────────────────────────────────────────────────────
 // Main
 // ──────────────────────────────────────────────────────────────────────────
+// `ws-presence.js` installs `process.on('SIGTERM', ...)` at module load so the
+// PRODUCTION server survives pm2's SIGTERM and lets pm2 escalate to SIGKILL —
+// deliberate, and it must stay that way (see the persistence-layer notes).
+// The side effect is that ANY process importing it inherits a swallowed
+// SIGTERM: `timeout`, `pkill` and `kill` all became no-ops against this
+// harness, so every hung run had to be SIGKILLed by hand and three orphans
+// accumulated before anyone noticed. Dropping the listener here restores
+// default signal behaviour for the harness ONLY — production is untouched.
+process.removeAllListeners('SIGTERM');
+
+// Hard ceiling on the whole run. The suite takes ~2 s of real work; a minute
+// means something is wedged. Converts an unkillable silent hang into a named,
+// non-zero failure that says which test was in flight — which is the only
+// reason the connectClient bug above was findable at all. v1.7.856.
+const RUN_BUDGET_MS = 60000;
+
 async function main() {
+  const _watchdog = setTimeout(() => {
+    console.error(`\n✗ pvp-wire-sim WEDGED after ${RUN_BUDGET_MS}ms`);
+    console.error(`  in flight: ${_current}`);
+    console.error(`  completed: ${_passed} passed, ${_failed} failed`);
+    console.error('  An await never settled. Every wire wait must be bounded.');
+    process.exit(3);
+  }, RUN_BUDGET_MS);
   console.log('ff3mmo pvp-wire-sim — multiplayer regression harness');
 
   if (!ONLY_SUITE || ONLY_SUITE === 'math')   suiteMath();
   if (!ONLY_SUITE || ONLY_SUITE === 'server') suiteServer();
   if (!ONLY_SUITE || ONLY_SUITE === 'wire')   await suiteWire();
 
+  clearTimeout(_watchdog);
   console.log('\n═══ summary ═══');
   console.log(`  passed: ${_passed}`);
   console.log(`  failed: ${_failed}`);

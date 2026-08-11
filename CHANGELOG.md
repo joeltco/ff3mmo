@@ -18,6 +18,26 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.856 — 2026-08-11
+
+**The deploy hang: `pvp-wire-sim` could wedge forever, and could not be killed when it did.**
+
+Three deploys in a row sat on this gate. It was never deploy.sh's fault, and the harness passing standalone was luck — the hang is intermittent.
+
+**Root cause.** `ws-presence.js` caps concurrent sockets at `MAX_CONN_PER_IP = 10` per source IP. The harness opens **126** clients from 127.0.0.1 and closes **81**, so the later tests ran right at the cap, where the server answers the UPGRADE with a raw `429` and destroys the socket. `connectClient` was the one wait in the file with **no timeout** — `once()` has had a 1000 ms bound since it was written, but this promise resolved only on a `ready` frame that, past the cap, never arrives. No timeout, no rejection, no output: the process sat in `epoll_wait` at 0% CPU forever.
+
+Each client now spoofs a unique `X-Forwarded-For`, the same trick `pvp-load-sim.js` already uses for exactly this cap. That also explains the runtime: cap collisions were burning 1000 ms `once()` timeouts all over the suite. **The run went from ~2 minutes (or never) to 16 seconds**, five for five.
+
+**Why the hung runs became orphans.** `ws-presence.js` installs `process.on('SIGTERM', ...)` at module load so the production server survives pm2's SIGTERM and lets pm2 escalate to SIGKILL. That is deliberate and stays. The side effect is that ANY process importing it inherits a swallowed SIGTERM — so `timeout`, `pkill` and `kill` were all no-ops against a wedged harness, and three orphans accumulated at 88, 26 and 10 minutes old before anyone looked. The harness now calls `process.removeAllListeners('SIGTERM')` after import: default signal behaviour for the harness only, production untouched.
+
+**Defence in depth**, because the next unbounded await will be written by someone eventually:
+
+- `connectClient` rejects after 5 s naming the user it was waiting on.
+- A 60 s run watchdog prints the **in-flight test name**, the pass/fail count so far, and exits 3. Verified by forcing the budget to 1 ms: `✗ pvp-wire-sim WEDGED after 1ms / in flight: #18 hidden actor relay — server forwards actor.idx / completed: 41 passed`. Without that name the `connectClient` bug was not findable at all.
+- `deploy.sh` runs every gate through `timeout -k 10`, so a wedged gate always dies and the deploy aborts before any commit or push instead of hanging. **(Local-only — `deploy.sh` is gitignored.)**
+
+The stale `~1.5s` note on that gate is now `~16s, 137 tests`.
+
 ## 1.7.855 — 2026-08-11
 
 **Status-effect sweep: two cure spells cured nothing, two status spells dealt damage instead, and one ROM byte was being read two opposite ways.**
