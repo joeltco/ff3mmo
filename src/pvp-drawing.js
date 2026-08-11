@@ -142,7 +142,8 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
   const isDying = pvpSt.pvpDyingMap.has(idx) && bs === 'pvp-dissolve';
   const isCurrentTarget = isMain ? pvpSt.pvpPlayerTargetIdx < 0 : (idx - 1) === pvpSt.pvpPlayerTargetIdx;
   const isBeingKilled = isCurrentTarget && (bs === 'player-slash' || bs === 'player-hit-show' ||
-    bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-damage-show');
+    bs === 'player-damage-show' || bs === 'ally-slash' || bs === 'ally-hit-show' ||
+    bs === 'ally-damage-show');
   // Magic-hit kills: keep this PVP cell rendered through the impact burst window
   // even after HP hits 0, so the target doesn't vanish mid-animation. Player
   // cast → check `getSpellTargets` (idx convention 0 = opponent, 1+ = enemy
@@ -167,7 +168,10 @@ function _drawPVPEnemyCell(enemy, idx, gridPos, intLeft, intTop, cellW, cellH, r
     inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss;
   const allyHitLanded = bs === 'ally-slash' && battleSt.allyHitResult && !battleSt.allyHitResult.miss;
   const playerHitShowLanded = bs === 'player-hit-show' && inputSt.hitResults && inputSt.hitResults[battleSt.currentHitIdx] && !inputSt.hitResults[battleSt.currentHitIdx].miss;
-  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded ||
+  // v1.7.854 — ally counterpart of playerHitShowLanded, for the new
+  // `ally-hit-show` beat between the ally's impact and its damage number.
+  const allyHitShowLanded = bs === 'ally-hit-show' && battleSt.allyHitResult && !battleSt.allyHitResult.miss;
+  const isOppHit = isCurrentTarget && (playerHitLanded || playerHitShowLanded || allyHitLanded || allyHitShowLanded ||
     (bs === 'ally-damage-show' && battleSt.allyHitResult && !battleSt.allyHitResult.miss));
   const blinkHidden = isCurrentTarget && (playerHitLanded || allyHitLanded) && (Math.floor(battleSt.battleTimer / 60) & 1);
   const isWindUp = isThisAttacking && ((bs === 'enemy-flash' && (pvpSt.pvpPreflashDecided || !isMain)) || bs === 'pvp-second-windup');

@@ -2,7 +2,8 @@
 
 import { battleSt, getEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
-import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
+import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS,
+         BACK_SWING_MS, FWD_SWING_MS, HIT_PAUSE_MS, HIT_COMBO_PAUSE_MS } from './slash-effects.js';
 import { summarizeHits, isLeftHandHit } from './battle-math.js';
 import { applyPhysicalHitToEnemy } from './physical-attack.js';
 import { isWeapon } from './data/items.js';
@@ -36,8 +37,14 @@ export function initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped })
 // ── Combo finalization ───────────────────────────────────────────────────────
 function _finalizeAllyCombo() {
   const { totalDmg, anyCrit, allMiss } = summarizeHits(battleSt.allyHitResults);
-  setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
-  inputSt.targetIndex = battleSt.allyTargetIndex;
+  // v1.7.854 — this used to be followed by `inputSt.targetIndex =
+  // battleSt.allyTargetIndex`, purely so the damage popup (positioned off that
+  // shared cursor) landed on the monster the ALLY hit. The side effect was that
+  // the player's own target selection silently followed their ally around.
+  // The popup now carries its own index, so the cursor is left alone.
+  const _tgt = battleSt.allyTargetIndex;
+  setEnemyDmgNum(allMiss ? { miss: true, timer: 0, index: _tgt }
+                         : { value: totalDmg, crit: anyCrit, timer: 0, index: _tgt });
 }
 
 // ── After damage-show: check for death/dissolve or advance turn ──────────────
@@ -73,11 +80,11 @@ function _updateAllyJoin() {
 }
 
 // ── Ally attack combo (multi-hit with summed damage) ─────────────────────────
-const ALLY_BACK_MS = 40;
-const ALLY_FWD_MS = 40;
+// v1.7.854 — ALLY_BACK_MS / ALLY_FWD_MS (40/40) and ALLY_COMBO_PAUSE_MS are
+// gone; the melee timeline now comes from slash-effects.js, shared with the
+// player. See that file for why the player's values are the reference.
 // Slash phase dwell comes from SWING_HOLD_MS in slash-effects.js — one source
 // of truth shared across player / ally / PVP opponent paths.
-const ALLY_COMBO_PAUSE_MS = 30;
 
 function _updateAllyAttack() {
   if (battleSt.battleState === 'ally-attack-back') {
@@ -94,7 +101,7 @@ function _updateAllyAttack() {
     const willBeLeft = isLeftHandHit(battleSt.allyHitIdx, totalHits, rW, lW);
     const handChange = battleSt.allyHitIdx > 0 && battleSt.allyHitIsLeft !== willBeLeft;
     const delay = handChange ? IDLE_FRAME_MS
-                : (allyUnarmed ? 0 : (battleSt.allyHitIdx === 0 ? ALLY_BACK_MS : ALLY_COMBO_PAUSE_MS));
+                : (allyUnarmed ? 0 : BACK_SWING_MS);
     if (battleSt.battleTimer >= delay) {
       if (battleSt.allyHitIdx === 0) {
         queueBattleMsg(allyNow.name ? _nameToBytes(allyNow.name) : BATTLE_ALLY);
@@ -106,7 +113,7 @@ function _updateAllyAttack() {
     return true;
   }
   if (battleSt.battleState === 'ally-attack-fwd') {
-    if (battleSt.battleTimer >= ALLY_FWD_MS) {
+    if (battleSt.battleTimer >= FWD_SWING_MS) {
       const ally = battleSt.battleAllies[battleSt.currentAllyAttacker];
       const isLeft = battleSt.allyHitIsLeft;
       const activeWpn = isLeft ? ally.weaponL : (ally && ally.weaponId);
@@ -139,14 +146,27 @@ function _updateAllyAttack() {
           pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
         }
       }
-      // Advance combo
+      // v1.7.854 — used to advance the combo right here, so an ally went from
+      // impact straight to its damage number with no beat between. The player
+      // has always held HIT_PAUSE_MS in `player-hit-show` first. Mirror it.
+      battleSt.battleState = 'ally-hit-show';
+      battleSt.battleTimer = 0;
+    }
+    return true;
+  }
+  // Post-swing anticipation beat — the ally's `player-hit-show`. Short between
+  // the hits of one combo, full pause before the damage number lands.
+  if (battleSt.battleState === 'ally-hit-show') {
+    const results = battleSt.allyHitResults || [];
+    const more = battleSt.allyHitIdx + 1 < results.length;
+    if (battleSt.battleTimer >= (more ? HIT_COMBO_PAUSE_MS : HIT_PAUSE_MS)) {
       battleSt.allyHitIdx = battleSt.allyHitIdx + 1;
-      if (battleSt.allyHitIdx < battleSt.allyHitResults.length) {
+      if (more) {
         const nextAlly = battleSt.battleAllies[battleSt.currentAllyAttacker];
         const nrW = nextAlly && isWeapon(nextAlly.weaponId);
         const nlW = nextAlly && isWeapon(nextAlly.weaponL);
         battleSt.allyHitIsLeft = isLeftHandHit(
-          battleSt.allyHitIdx, battleSt.allyHitResults.length, nrW, nlW);
+          battleSt.allyHitIdx, results.length, nrW, nlW);
         battleSt.battleState = 'ally-attack-back';
         battleSt.battleTimer = 0;
       } else {

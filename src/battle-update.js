@@ -13,7 +13,8 @@ import { jobHasMagic } from './data/jobs.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP, grantGil } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
-import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS } from './slash-effects.js';
+import { SLASH_FRAME_MS, shouldDrawSlash, SWING_HOLD_MS,
+         BACK_SWING_MS, FWD_SWING_MS, HIT_PAUSE_MS, HIT_COMBO_PAUSE_MS } from './slash-effects.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { summarizeHits } from './battle-math.js';
 import { reseedFromEntropy } from './rng.js';
@@ -68,13 +69,8 @@ const BOSS_DISSOLVE_STEPS      = 8;
 const BOSS_DISSOLVE_FRAME_MS   = 16.67;
 const MONSTER_SLIDE_MS         = 267;
 // SLASH_FRAME_MS / shouldDrawSlash / SWING_HOLD_MS imported from slash-effects.js (above).
-const BACK_SWING_MS            = 80;
-const FWD_SWING_MS             = 80;
-// Post-swing anticipation beat — body in attack pose, no slash, no damage num.
-// NES holds this for 316 ms (OAM f14608 frames 50-71) before the damage popup;
-// gives the strike weight before the number lands. Was 100 ms.
-const HIT_PAUSE_MS             = 316;
-const HIT_COMBO_PAUSE_MS       = 30;
+// BACK_SWING_MS / FWD_SWING_MS / HIT_PAUSE_MS / HIT_COMBO_PAUSE_MS now come
+// from slash-effects.js (single source, shared with the ally path).
 // How long `player-damage-show` holds. This MUST be the damage number's own
 // lifetime — the state exists to show that number and nothing else.
 //
@@ -643,7 +639,13 @@ function _emitWirePVPAction(pending) {
 
 function _finalizeComboHits() {
   const { totalDmg, anyCrit, allMiss, hitsLanded } = summarizeHits(inputSt.hitResults);
-  setEnemyDmgNum(allMiss ? { miss: true, timer: 0 } : { value: totalDmg, crit: anyCrit, timer: 0 });
+  // `index` (v1.7.854): the popup carries the monster it belongs to, the way
+  // `enemyHealNum` always has. The draw used to position this by the shared
+  // `inputSt.targetIndex` cursor instead, which forced the ally path to
+  // overwrite the PLAYER's cursor just to land its number in the right place.
+  const _tgt = inputSt.targetIndex;
+  setEnemyDmgNum(allMiss ? { miss: true, timer: 0, index: _tgt }
+                         : { value: totalDmg, crit: anyCrit, timer: 0, index: _tgt });
   if (pvpSt.isPVPBattle && !allMiss) pvpSt.pvpOpponentShakeTimer = BATTLE_SHAKE_MS;
   // Replace strip message: status > crit > multi-hit
   if (!allMiss) {

@@ -115,6 +115,26 @@ export function shouldDrawSlash(hit) {
 // `ENEMY_SLASH_TOTAL_MS` constants.
 export const SWING_HOLD_MS = 200;
 
+// ── The rest of the melee timeline ─────────────────────────────────────────
+// v1.7.854 — SWING_HOLD_MS was already shared by every combatant, but the
+// beats around it were not: the player used 80/80 with a 316 ms hit-pause, and
+// the ally used its own 40/40 with NO hit-pause at all. Same action, two
+// animations — 1376 ms for the player against 980 ms for an ally.
+//
+// The player's values are the reference because they are the measured ones,
+// so the ally adopts them rather than the reverse. Living here, next to
+// SWING_HOLD_MS, for the same reason that constant does: a per-role copy is
+// how the two drifted.
+export const BACK_SWING_MS = 80;
+export const FWD_SWING_MS  = 80;
+// Post-swing anticipation beat — body out of the attack pose, no slash, no
+// damage number yet. NES holds this for 316 ms (OAM f14608 frames 50-71)
+// before the damage popup; gives the strike weight before the number lands.
+export const HIT_PAUSE_MS       = 316;
+// Between hits of one combo the beat is short, so a multi-hit reads as one
+// flurry rather than several separate strikes.
+export const HIT_COMBO_PAUSE_MS = 30;
+
 // Total slash flash hold (ms) for a weapon — sum of per-position holdFrames
 // across the slash overlay pattern. ONLY governs the white slash flash overlay
 // animation timing (per-frame scatter offsets); does NOT govern body-pose

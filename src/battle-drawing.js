@@ -442,7 +442,10 @@ function _drawBossDmgNum() {
   if (!getEnemyDmgNum() || (battleSt.enemyDefeated && !battleSt.isRandomEncounter)) return;
   let bx, baseY;
   if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-    ({ bx, baseY } = _encounterMonsterPos(inputSt.targetIndex));
+    // Position by the popup's OWN target. Falls back to the cursor for any
+    // writer that predates the `index` field (PVP arbiter deltas, boss path).
+    const _dn = getEnemyDmgNum();
+    ({ bx, baseY } = _encounterMonsterPos(_dn.index != null ? _dn.index : inputSt.targetIndex));
   } else if (pvpSt.isPVPBattle) {
     const tidx = pvpSt.pvpPlayerTargetIdx < 0 ? 0 : pvpSt.pvpPlayerTargetIdx + 1;
     const { x: cx, y: cy } = pvpEnemyCellCenterLocal(tidx);

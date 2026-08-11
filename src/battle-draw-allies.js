@@ -48,8 +48,18 @@ const ROSTER_ROW_H = 32;
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 
 function _drawAllyRow(i, ally, panelTop, weaponDraws) {
+  // v1.7.854 — this offset used to be added to `rowY`, which shook the ally's
+  // whole roster ROW vertically: both HUD boxes, the name, the LV/HP row and
+  // the damage number with them. The player's hit shake (battle-draw-player.js)
+  // moves only the PORTRAIT, and moves it on X. Same event, same +/-2 px, same
+  // 67 ms cadence, different axis and different scope.
+  //
+  // Matched to the player: portrait group only, horizontal. The row furniture
+  // now holds still, and the damage number anchored at `rowY + 16` no longer
+  // rides the shake — the player's never did, and the number already has its
+  // own motion from the bounce table.
   const shakeOff = (battleSt.allyShakeTimer[i] > 0) ? (Math.floor(battleSt.allyShakeTimer[i] / 67) & 1 ? 2 : -2) : 0;
-  const rowY = panelTop + i * ROSTER_ROW_H + shakeOff;
+  const rowY = panelTop + i * ROSTER_ROW_H;
   const isVicPose = isVictoryBattleState();
   const isAllyHit = ((battleSt.battleState === 'ally-hit' || battleSt.battleState === 'ally-damage-show-enemy') &&
     battleSt.enemyTargetAllyIdx === i && getAllyDamageNums()[i] && !getAllyDamageNums()[i].miss) ||
@@ -99,7 +109,7 @@ function _drawAllyRow(i, ally, panelTop, weaponDraws) {
       : (bsc.cureSparkleFrames.length === 2 ? bsc.cureSparkleFrames : null);
   }
   const _allyHealSparkleSet = _allyMagicSparkle || _allyItemSparkle || _allyAllyCureSparkle;
-  const ppx = HUD_RIGHT_X + 8, ppy = rowY + 8;
+  const ppx = HUD_RIGHT_X + 8 + shakeOff, ppy = rowY + 8;
   drawHudBox(HUD_RIGHT_X, rowY, 32, ROSTER_ROW_H, ally.fadeStep);
   drawHudBox(HUD_RIGHT_X + 32, rowY, HUD_RIGHT_W - 32, ROSTER_ROW_H, ally.fadeStep);
 

@@ -113,7 +113,8 @@ const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
 const { updateBattleAlly } = await import('../src/battle-ally.js');
-const { DMG_SHOW_MS } = await import('../src/damage-numbers.js');
+const { DMG_SHOW_MS, getEnemyDmgNum } = await import('../src/damage-numbers.js');
+const { BACK_SWING_MS, FWD_SWING_MS, HIT_PAUSE_MS, SWING_HOLD_MS } = await import('../src/slash-effects.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -826,6 +827,114 @@ const tests = [
       battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
       inputSt.targetIndex = saved.tgt; battleSt.allyTargetIndex = saved.allyTgt;
       battleSt.dyingMonsterIndices = saved.dying;
+    }
+  },
+  // Regression — an ally's physical attack runs the PLAYER's melee timeline,
+  // and its damage popup carries its own target instead of hijacking the
+  // player's cursor.
+  //
+  // v1.7.854 fixed two halves of the same divergence:
+  //
+  //  - The ally used its own 40/40 ms swings and went from impact STRAIGHT to
+  //    its damage number, where the player holds the OAM-measured 316 ms
+  //    `player-hit-show` beat first. Same action, two animations: 980 ms for an
+  //    ally against 1376 ms for the player. The ally now runs the identical
+  //    back -> fwd -> slash -> hit-show sequence off the shared constants in
+  //    slash-effects.js.
+  //  - `_finalizeAllyCombo` used to assign `inputSt.targetIndex =
+  //    battleSt.allyTargetIndex`, purely so the popup — positioned off that
+  //    shared cursor — landed on the right monster. The side effect was that
+  //    the PLAYER's target selection silently followed their ally around. The
+  //    popup carries `index` now, like `enemyHealNum` always has.
+  () => {
+    const name = 'regression — ally melee timeline matches the player, popup carries its own target';
+    const saved = {
+      state: battleSt.battleState, timer: battleSt.battleTimer,
+      mons: battleSt.encounterMonsters, rnd: battleSt.isRandomEncounter,
+      tgt: inputSt.targetIndex, allyTgt: battleSt.allyTargetIndex,
+      allies: battleSt.battleAllies, results: battleSt.allyHitResults,
+      hitIdx: battleSt.allyHitIdx, attacker: battleSt.currentAllyAttacker,
+      isLeft: battleSt.allyHitIsLeft,
+    };
+    try {
+      battleSt.isRandomEncounter = true;
+      battleSt.encounterMonsters = [{ monsterId: 0x00, hp: 30, maxHP: 30 }];
+      battleSt.battleAllies = [{ hp: 50, maxHP: 50, weaponId: 0x01, weaponL: 0xFF,
+                                 level: 1, status: createStatusState() }];
+      battleSt.currentAllyAttacker = 0;
+      battleSt.allyTargetIndex = 0;
+      battleSt.allyHitIdx = 0;
+      battleSt.allyHitIsLeft = false;
+      // A MISS keeps the timeline identical (slash dwell is hit/miss agnostic
+      // by design — see slash-effects.js) while skipping the damage plumbing.
+      battleSt.allyHitResults = [{ miss: true }];
+      // Sentinel: the player's cursor must come out untouched.
+      const CURSOR = 3;
+      inputSt.targetIndex = CURSOR;
+
+      battleSt.battleState = 'ally-attack-back';
+      battleSt.battleTimer = 0;
+      const seq = [];
+      let last = battleSt.battleState, elapsed = 0, guard = 0;
+      while (battleSt.battleState !== 'ally-damage-show' && guard++ < 10000) {
+        battleSt.battleTimer += 1; elapsed += 1;
+        updateBattleAlly(0);
+        if (battleSt.battleState !== last) {
+          seq.push({ from: last, to: battleSt.battleState, at: elapsed });
+          last = battleSt.battleState;
+        }
+      }
+      if (battleSt.battleState !== 'ally-damage-show') {
+        return { pass: false, name, reason: `never reached ally-damage-show (stuck in ${battleSt.battleState})` };
+      }
+      // The hit-pause is a MEASUREMENT (OAM f14608 frames 50-71), not a taste
+      // knob, so pin its value outright — the rest of the timeline is asserted
+      // against the shared constants, which is the real invariant: whatever the
+      // player uses, the ally uses.
+      if (HIT_PAUSE_MS !== 316) {
+        return { pass: false, name, reason: `HIT_PAUSE_MS is ${HIT_PAUSE_MS}, the OAM capture says 316` };
+      }
+      const want = [
+        ['ally-attack-back', 'ally-attack-fwd',   BACK_SWING_MS],
+        ['ally-attack-fwd',  'ally-slash',        FWD_SWING_MS],
+        ['ally-slash',       'ally-hit-show',     SWING_HOLD_MS],
+        ['ally-hit-show',    'ally-damage-show',  HIT_PAUSE_MS],
+      ];
+      if (seq.length !== want.length) {
+        return { pass: false, name, reason: `sequence was ${seq.map(s => s.to).join(' -> ')}, wanted ${want.map(w => w[1]).join(' -> ')}` };
+      }
+      let prev = 0;
+      for (let i = 0; i < want.length; i++) {
+        const [from, to, dur] = want[i];
+        const got = seq[i];
+        if (got.from !== from || got.to !== to) {
+          return { pass: false, name, reason: `step ${i}: ${got.from} -> ${got.to}, wanted ${from} -> ${to}` };
+        }
+        const took = got.at - prev; prev = got.at;
+        if (took !== dur) {
+          return { pass: false, name, reason: `${from} lasted ${took}ms, wanted ${dur}ms (the player's value)` };
+        }
+      }
+      // The popup knows which monster it belongs to...
+      const dn = getEnemyDmgNum();
+      if (!dn) return { pass: false, name, reason: 'no enemy damage popup after the combo' };
+      if (dn.index !== 0) {
+        return { pass: false, name, reason: `popup index ${dn.index}, wanted the ally's target 0` };
+      }
+      // ...so the player's cursor is left alone.
+      if (inputSt.targetIndex !== CURSOR) {
+        return { pass: false, name, reason: `ally combo moved the player's cursor ${CURSOR} -> ${inputSt.targetIndex}` };
+      }
+      return { pass: true, name, info: `back ${BACK_SWING_MS} / fwd ${FWD_SWING_MS} / slash ${SWING_HOLD_MS} / hit-pause ${HIT_PAUSE_MS} = ${prev}ms, cursor untouched` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
+      inputSt.targetIndex = saved.tgt; battleSt.allyTargetIndex = saved.allyTgt;
+      battleSt.battleAllies = saved.allies; battleSt.allyHitResults = saved.results;
+      battleSt.allyHitIdx = saved.hitIdx; battleSt.currentAllyAttacker = saved.attacker;
+      battleSt.allyHitIsLeft = saved.isLeft;
     }
   },
 ];

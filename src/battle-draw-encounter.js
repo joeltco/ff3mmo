@@ -63,7 +63,8 @@ export function isMonsterStillVisible(i) {
      battleSt.battleState === 'pre-monster-death');
   if (isPlayerHit) return true;
   const isAllyHit = i === battleSt.allyTargetIndex &&
-    (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show');
+    (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-hit-show' ||
+     battleSt.battleState === 'ally-damage-show');
   if (isAllyHit) return true;
   return false;
 }
@@ -107,7 +108,8 @@ function _drawEncounterMonsters(gridPos, sprH, boxX, boxY, boxW, boxH, isSlideIn
       (battleSt.battleState === 'player-slash' || battleSt.battleState === 'player-hit-show' ||
        battleSt.battleState === 'player-damage-show' ||
        battleSt.battleState === 'pre-monster-death')) ||
-      (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' || battleSt.battleState === 'ally-damage-show')) ||
+      (i === battleSt.allyTargetIndex && (battleSt.battleState === 'ally-slash' ||
+        battleSt.battleState === 'ally-hit-show' || battleSt.battleState === 'ally-damage-show')) ||
       isMagicHitTarget || isAllyMagicHitTarget;
 
     const pos = gridPos[i];
