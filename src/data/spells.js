@@ -3,6 +3,8 @@
 // Stats from Data Crystal ROM map ($618D0, 8 bytes per spell)
 // IDs 0-55: player/enemy magic, 56+: monster-only abilities
 
+import { JOBS, MAG_WHITE, MAG_BLACK, MAG_CALL } from './jobs.js';
+
 export const SPELLS = new Map([
   [0x00, { power: 200, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Flare
   [0x01, { power:   0, hit:  35, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Death
@@ -190,27 +192,59 @@ const SPELL_SCHOOL = new Map([
   [0x3a, 'black'],  // Blizzara / Bzzra Lv2 (also delivered by SouthWind item via animSpellId)
 ]);
 
-export function getSpellSchool(spellId) {
-  return SPELL_SCHOOL.get(spellId) || null;
+/**
+ * Magic level of a player-castable spell, 1-8, or 0 if it is not one.
+ *
+ * Layout read off the game's own magic menu: levels 8 down to 2 are blocks of
+ * SEVEN — 3 black, 3 white, 1 summon — and level 1 is the short block $31-$36
+ * with the summon at $37. IDs $38+ are monster-only abilities.
+ */
+export function getSpellLevel(spellId) {
+  if (spellId == null || spellId < 0) return 0;
+  if (spellId <= 0x30) return 8 - Math.floor(spellId / 7);
+  if (spellId <= 0x37) return 1;
+  return 0;
 }
 
-// Job → schools the job can cast. WM (3) and BM (4) are single-school; RM
-// (5) is hybrid (both white + black, lower-level only in NES canon — not
-// enforced here yet). Caller (9) is reserved for future call magic.
-const JOB_SCHOOLS = {
-  3: new Set(['white']),
-  4: new Set(['black']),
-  5: new Set(['white', 'black']),
-  9: new Set(['call']),
-};
+/**
+ * School of a spell: 'black' | 'white' | 'call' | null.
+ *
+ * DERIVED, not enumerated. The old table listed seven spells — the ones that
+ * shipped first — so every other spell resolved to null and was uncastable no
+ * matter the job. That is why granting a full school produced an empty magic
+ * menu. SPELL_SCHOOL now only holds exceptions the position rule cannot know,
+ * such as $3a (a monster-ability ID the SouthWind item routes through).
+ */
+export function getSpellSchool(spellId) {
+  const override = SPELL_SCHOOL.get(spellId);
+  if (override) return override;
+  if (spellId == null || spellId > 0x37 || spellId < 0) return null;
+  const col = spellId <= 0x30 ? spellId % 7 : spellId - 0x31;
+  if (col <= 2) return 'black';
+  if (col <= 5) return 'white';
+  return 'call';
+}
 
-// Returns true if `jobIdx` is allowed to cast `spellId` (school + job match).
-// Used to filter battle/pause magic menus and gate magic-shop "Learn X?".
+/**
+ * Can `jobIdx` cast `spellId`? School match AND magic-level cap.
+ *
+ * Reads the job's own `magic` flags rather than a hardcoded job list. The old
+ * table covered jobs 3, 4, 5 and 9 only — so Sage, Conjurer, Summoner, Devout,
+ * Magus, Ranger and Magic Knight could cast nothing at all, and its "9 = Caller"
+ * entry was wrong anyway (job 9 is the Scholar).
+ *
+ * The level cap is real and the ROM enforces it: Black and White Mage stop at
+ * magic level 7 and the game refuses a level-8 pick outright.
+ */
 export function canCastSpell(jobIdx, spellId) {
   const school = getSpellSchool(spellId);
   if (!school) return false;
-  const allowed = JOB_SCHOOLS[jobIdx];
-  return !!(allowed && allowed.has(school));
+  const job = JOBS[jobIdx];
+  if (!job || !job.magic) return false;
+  const bit = school === 'white' ? MAG_WHITE : school === 'black' ? MAG_BLACK : MAG_CALL;
+  if (!(job.magic & bit)) return false;
+  const lvl = getSpellLevel(spellId);
+  return lvl > 0 && lvl <= job.maxMagicLv;
 }
 
 export function canLearnSpell(jobIdx, spellId) {
@@ -233,9 +267,16 @@ const _warnedMissingMP = new Set();
 export function getSpellMPCost(spellId) {
   const v = SPELL_MP_COST.get(spellId);
   if (v != null) return v;
+  // Scale by magic LEVEL rather than defaulting to 99. The explicit table holds
+  // seven spells — the ones that shipped first — so the other fifty cost 99 MP
+  // and were uncastable even once the menu listed them. Level x 2 matches the
+  // entries that do exist (level-1 spells cost 2-3, the one level-2 entry 5),
+  // so nothing already balanced moves; the table still wins where it has a row.
+  const lvl = getSpellLevel(spellId);
+  if (lvl > 0) return lvl * 2;
   if (!_warnedMissingMP.has(spellId)) {
     _warnedMissingMP.add(spellId);
-    console.warn(`[spells] no SPELL_MP_COST entry for spell $${spellId.toString(16).padStart(2,'0')} — defaulting to 99`);
+    console.warn(`[spells] no SPELL_MP_COST entry and no level for spell $${spellId.toString(16).padStart(2,'0')} — defaulting to 99`);
   }
   return 99;
 }

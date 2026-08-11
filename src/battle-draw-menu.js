@@ -24,6 +24,7 @@ import { ui } from './ui-state.js';
 import { isVictoryBattleState } from './battle-update.js';
 import { drawCursorFaded, drawBorderedBox } from './hud-drawing.js';
 import { isMonsterStillVisible } from './battle-draw-encounter.js';
+import { JOBS } from './data/jobs.js';
 
 // ── Layout constants (match battle-drawing.js) ────────────────────────────
 const HUD_BOT_Y = 176, HUD_BOT_H = 64;
@@ -37,8 +38,15 @@ const VICTORY_BOX_H = HUD_BOT_H;
 const VICTORY_BOX_ROWS = HUD_BOT_H / 8;
 const VICTORY_ROW_FRAME_MS = 16.67;
 
-// Mage jobs (White, Black, Red) see "Magic" in slot 1 instead of "Guard".
-const _MAGE_JOBS = new Set([3, 4, 5]);
+// A job shows "Magic" in slot 1 instead of "Guard" if it has ANY magic school.
+// Derived from the job's own flags rather than a hardcoded set: the old
+// `new Set([3, 4, 5])` covered White, Black and Red Mage only, so Sage,
+// Conjurer, Summoner, Devout, Magus, Ranger and Magic Knight all showed Guard
+// and had no way to cast in battle at all.
+function _isMageJob(jobIdx) {
+  const job = JOBS[jobIdx];
+  return !!(job && job.magic);
+}
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 
@@ -350,7 +358,7 @@ function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, m
     } else {
       menuPal = isVictory ? [0x0F, 0x10, 0x0F, 0x30] : fadedPal;
     }
-    const isMage = _MAGE_JOBS.has(ps.jobIdx);
+    const isMage = _isMageJob(ps.jobIdx);
     for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
       const label = (i === 1 && isMage) ? BATTLE_MAGIC : BATTLE_MENU_ITEMS[i];
       drawText(ui.ctx, positions[i][0], positions[i][1], label, menuPal);
