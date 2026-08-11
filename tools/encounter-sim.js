@@ -105,6 +105,8 @@ const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowM
         CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
 const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
 const { spellUsesCastAnim } = await import('../src/spell-cast.js');
+const { getSpellImpactSFX } = await import('../src/combatant-cast.js');
+const { SPELLS } = await import('../src/data/spells.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -551,6 +553,23 @@ const tests = [
       return { pass: false, name, reason: `spills into the roster box (x>=${HUD_VIEW_W}): ${spills.join(', ')}` };
     }
     return { pass: true, name, info: `all screen-anchored effects within x<${HUD_VIEW_W}` };
+  },
+  // Regression — no player-castable spell may cast SILENTLY.
+  //
+  // `getSpellImpactSFX` compared `spell.element` with ===, so BOLT had no case
+  // at all and compound elements ('ice,air') matched nothing: 37 of 56 spells
+  // made no sound, including every Bolt tier and all 8 summons. That breaks the
+  // standing rule that SFX fire at anim-start for ALL spells, and it only
+  // became audible once v1.7.845 made those spells render. v1.7.847.
+  () => {
+    const name = 'regression — every castable spell has an impact SFX';
+    const silent = [];
+    for (const [id, spell] of SPELLS) {
+      if (id > 0x37) continue;                 // 0x38+ are monster-only abilities
+      if (getSpellImpactSFX(spell) == null) silent.push('0x' + id.toString(16));
+    }
+    if (silent.length) return { pass: false, name, reason: `cast silently: ${silent.join(', ')}` };
+    return { pass: true, name, info: 'no castable spell is silent' };
   },
 ];
 

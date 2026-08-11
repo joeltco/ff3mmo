@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.847 — 2026-08-11
+
+**Fix: 37 of 56 castable spells made no sound at all — including every Bolt tier and all 8 summons.**
+
+Reported: "you never picked up the sfx". Correct. This came out of the gate audit and I had not reported it yet.
+
+`getSpellImpactSFX` compared `spell.element` with `===` against a list of three: fire, ice, and the `sleep` type. So:
+
+- **`bolt` had no case whatsoever** — Bolt, Bolt2 and Bolt3 cast silently even though they were among the 13 spells that always rendered. That one has been silent the whole time, not just since v1.7.845.
+- **Compound elements never matched.** Aero2 is `'ice,air'`, which `=== 'ice'` rejects.
+- Every non-elemental spell (Meteo, Flare, Kill, Wall, Warp, the status family) and every summon fell through to `null`.
+
+Against the standing rule that SFX fire at anim-start for ALL spells. It only became audible now that v1.7.845 made those spells render.
+
+Element is now split before matching, so a compound element resolves, and every element with an existing NSF track is covered — **nothing invented, all from the existing `SFX` table**:
+
+| element | track |
+|---|---|
+| bolt | `CRYSTAL_THUNDER` ($84 thunder crash) |
+| earth | `EARTHQUAKE` ($99 rumble) |
+| air | `FALL` ($30 wind whoosh) |
+
+Anything still uncovered but carrying a visual falls back to `FIRE_BOOM` for damage/death types and `SLEEP_PUFF` for status types, so nothing plays an animation in silence. **Those two fallbacks are a design choice, not a capture** — flagged plainly because they are the one part of this not derived from ROM or an existing mapping, and they should be swapped freely when a spell wants its own sound.
+
+Regression gate in `tools/encounter-sim.js` fails if any spell id <= 0x37 resolves to no SFX. Verified by removing the bolt case and the fallbacks: it names all 33 affected. 18 passed.
+
 ## 1.7.846 — 2026-08-11
 
 **Fix: screen-anchored spell effects were drawn across the player roster box instead of inside the battle HUD.**

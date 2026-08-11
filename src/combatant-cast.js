@@ -122,16 +122,30 @@ function _resolveThrowRender(role, caster, target) {
 export function getSpellImpactSFX(spell) {
   if (!spell) return null;
   if (spell.target === 'sight') return SFX.SIGHT;
-  if (spell.element === 'fire')  return SFX.FIRE_BOOM;   // NSF $82 — Fire impact
-  if (spell.element === 'ice')   return SFX.SW_HIT;      // NSF $5D — Blizzard impact
-  if (spell.type === 'sleep')    return SFX.SLEEP_PUFF;  // NSF $95 — Sleep puff
+  // v1.7.847 — element was compared with ===, so BOLT had no case at all and
+  // multi-element spells (Aero2 is 'ice,air') matched nothing. 37 of 56 spells
+  // cast silently, including every Bolt tier and all 8 summons — against the
+  // standing rule that SFX fire at anim-start for ALL spells. Split so a
+  // compound element still resolves, and cover the elements we have sounds for.
+  const els = typeof spell.element === 'string' ? spell.element.split(',') : [];
+  if (els.includes('fire'))  return SFX.FIRE_BOOM;        // NSF $82 — Fire impact
+  if (els.includes('ice'))   return SFX.SW_HIT;           // NSF $5D — Blizzard impact
+  if (els.includes('bolt'))  return SFX.CRYSTAL_THUNDER;  // NSF $84 — thunder crash
+  if (els.includes('earth')) return SFX.EARTHQUAKE;       // NSF $99 — quake rumble
+  if (els.includes('air'))   return SFX.FALL;             // NSF $30 — wind whoosh
+  if (spell.type === 'sleep')    return SFX.SLEEP_PUFF;   // NSF $95 — Sleep puff
   // Heal-style — sparkle visuals, no projectile, no impact burst. SFX still
   // syncs with the sparkle render window per the user's pipeline rule.
-  if (spell.element === 'recovery')  return SFX.CURE;
+  if (els.includes('recovery'))       return SFX.CURE;
   if (spell.target === 'cure_status') return SFX.CURE;
   if (spell.target === 'ally')        return SFX.CURE;   // generic ally-target heal fallback
   if (spell.target === 'revive')      return SFX.CURE;
-  return null;  // truly non-visual spells (revive on dead-only edge cases, etc.)
+  // Everything else that still has a VISUAL must still make a sound — silence
+  // while an animation plays is the bug this replaced. Existing NSF tracks
+  // only; nothing invented. These two generics are a DESIGN CHOICE, not a
+  // capture: swap them freely if a spell wants its own sound.
+  if (spell.type === 'damage' || spell.type === 'death') return SFX.FIRE_BOOM;
+  return SFX.SLEEP_PUFF;   // status-type landing puff
 }
 
 // Plays the impact SFX for a spell. One call site for all three role engines.
