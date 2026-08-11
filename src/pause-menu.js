@@ -1341,6 +1341,10 @@ function _equipBestLeftHand() {
 function _equipOptimum() {
   _equipBestMainSlots();
   _equipBestLeftHand();
+  // Each half picks its own hand, so "optimum" could land a two-hander beside
+  // an offhand. Combat normalises that anyway (normalizeGrip), but the screen
+  // would show a loadout that cannot exist. v1.7.860.
+  releaseOffhandForTwoHanded(-100);
   recalcCombatStats();
   saveSlotsToDB();
   playSFX(SFX.CONFIRM);

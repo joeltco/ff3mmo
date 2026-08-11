@@ -37,6 +37,7 @@ import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, SWING_HOLD_MS } from './slash-effects.js';
 import { removeStatus, hasStatus, STATUS, blindHitPenalty, miniToadAtkMult, canCastMagic, createStatusState } from './status-effects.js';
 import { normalizeGrip, isDualWield } from './realized-stats.js';
+import { elemMultiplier } from './battle-math.js';
 import { _nameToBytes } from './text-utils.js';
 import { getSpellNameShrinesClean } from './text-decoder.js';
 import { queueBattleMsg, replaceBattleMsg } from './battle-msg.js';
@@ -755,11 +756,19 @@ function _processEnemyFlash() {
   pvpSt.pvpEnemyUnarmed = isUnarmed; // still needed by renderer to pick fist canvas vs blade
   const def = targetAlly >= 0 ? battleSt.battleAllies[targetAlly].def : ps.def;
   const attackerJob = JOBS[attackerStats?.jobIdx || 0] || {};
+  // v1.7.860 — same omission as the ally path: no `elemMult`, so a PVP
+  // opponent's elemental weapon was inert against a target's resistances.
+  const _pRes = targetAlly >= 0
+    ? (battleSt.battleAllies[targetAlly].elemResist || null)
+    : (ps.elemResist || null);
+  const _pElem = (id) => elemMultiplier(isWeapon(id) ? (ITEMS.get(id)?.element || null) : null, null, _pRes);
   const baseOpts = {
     critPct: attackerJob.critPct || 0,
     critBonus: attackerJob.critBonus || 0,
     lAtk: pvpLAtk,
     splitRH: dualWield,
+    elemMult:  _pElem(dualWield ? _pGrip.weaponR : (aRw ? _pGrip.weaponR : _pGrip.weaponL)),
+    lElemMult: _pElem(_pGrip.weaponL),
   };
   const opts = targetAlly >= 0 ? {
     // PVP enemy hits one of player's roster allies — apply that ally's shield/evade

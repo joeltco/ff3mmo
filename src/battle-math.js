@@ -180,6 +180,11 @@ export function resolveLivingTarget(picked, factionList) {
 export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
   const { shieldEvade = 0, evade = 0, defendHalve = false, targetProtected = false,
           elemMult = 1, critPct = 0, critBonus = 0, lAtk = 0, splitRH = false } = opts;
+  // v1.7.860 — the left hand's elemental multiplier, mirroring `lAtk`. Hands
+  // can hold different weapons, so a fire sword paired with an ice blade must
+  // resolve each swing against the target's own weakness. Defaults to
+  // `elemMult`, so every existing caller behaves identically.
+  const lElemMult = opts.lElemMult != null ? opts.lElemMult : elemMult;
   // v1.7.749 P-3 — per-battle RNG injection. Defaults to singleton so
   // existing client callers (battle-update / battle-ally / pvp) behave
   // identically.
@@ -187,14 +192,16 @@ export function rollHits(atk, def, hitRate, potentialHits, opts = {}) {
   const results = [];
   const splitIdx = splitRH ? (potentialHits >> 1) : potentialHits;
   for (let i = 0; i < potentialHits; i++) {
-    const handAtk = (splitRH && i >= splitIdx) ? lAtk : atk;
+    const isOffhand = splitRH && i >= splitIdx;
+    const handAtk = isOffhand ? lAtk : atk;
+    const handElemMult = isOffhand ? lElemMult : elemMult;
     if (shieldEvade > 0 && rng() * 100 < shieldEvade) {
       results.push({ shieldBlock: true });
     } else if (evade > 0 && rng() * 100 < evade) {
       results.push({ miss: true });
     } else if (rng() * 100 < hitRate) {
       const crit = critPct > 0 && rng() * 100 < critPct;
-      let dmg = calcDamage(handAtk, def, crit, critBonus, elemMult, opts);
+      let dmg = calcDamage(handAtk, def, crit, critBonus, handElemMult, opts);
       if (defendHalve) dmg = Math.max(1, Math.floor(dmg / 2));
       if (targetProtected) dmg = Math.max(1, Math.floor(dmg / 2));
       results.push({ damage: dmg, crit });

@@ -114,7 +114,7 @@ const { addStatus, tryInflictStatus } = await import('../src/status-effects.js')
 const { processNextTurn } = await import('../src/battle-turn.js');
 const { addItem, releaseOffhandForTwoHanded } = await import('../src/inventory.js');
 const { normalizeGrip, isDualWield, computeRealizedStats } = await import('../src/realized-stats.js');
-const { calcPotentialHits } = await import('../src/battle-math.js');
+const { calcPotentialHits, rollHits } = await import('../src/battle-math.js');
 const { hasStatus } = await import('../src/status-effects.js');
 // Turn dispatch queues the actor's NAME on the battle strip, which reads the
 // ROM string table. Feed it the real ROM when it is there; the confuse test is
@@ -1292,6 +1292,63 @@ const tests = [
       return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
     } finally {
       ps.weaponR = savedR; ps.weaponL = savedL;
+    }
+  },
+  // Regression — an elemental weapon resolves against the target on EVERY
+  // attack path, and each hand resolves its own element.
+  //
+  // 43 weapons carry `element`. The PLAYER's path has always passed
+  // `elemMult`, because it rolls each hand with a separate `rollHits` call.
+  // The ally and PVP paths roll both hands in ONE call using `splitRH`/`lAtk`
+  // and passed no `elemMult` at all — so an ally swinging a fire sword at a
+  // fire-weak monster dealt flat neutral damage where the player with the same
+  // sword got double. `rollHits` gained `lElemMult` alongside the `lAtk` it
+  // already had, so a mixed pair resolves per hand. v1.7.860.
+  () => {
+    const name = 'regression — elemental weapons resolve per hand on every path';
+    const FIRE_SWORD = 0x0a;   // element: 'fire'
+    const saved = { state: battleSt.battleState, queue: battleSt.turnQueue,
+                    mons: battleSt.encounterMonsters, allies: battleSt.battleAllies };
+    try {
+      // 1. The mechanic: with the hands split, each half takes its own
+      //    multiplier. Fixed rand → fully determined damage.
+      const half = () => 0.5;
+      const hits = rollHits(10, 0, 100, 4, { splitRH: true, lAtk: 10, elemMult: 2, lElemMult: 1, rand: half });
+      const dmg = hits.map(h => h.damage);
+      if (dmg.length !== 4 || dmg[0] !== dmg[1] || dmg[2] !== dmg[3] || dmg[0] !== dmg[2] * 2) {
+        return { pass: false, name, reason: `per-hand elements did not split: ${JSON.stringify(dmg)}` };
+      }
+      // A caller that passes only `elemMult` must still get it on BOTH hands.
+      const legacy = rollHits(10, 0, 100, 4, { splitRH: true, lAtk: 10, elemMult: 2, rand: half });
+      if (legacy.some(h => h.damage !== legacy[0].damage)) {
+        return { pass: false, name, reason: 'omitting lElemMult changed the offhand — not backward compatible' };
+      }
+
+      // 2. The plumbing: drive a real ally turn and confirm the call site
+      //    actually passes it. Same seed, same weapon, two targets.
+      const allyTurnDamage = (weakness) => {
+        setupEncounter({ monster: { ...goblin, hp: 500, maxHP: 500, def: 0, evade: 0, weakness }, seed: 11 });
+        const ally = battleSt.battleAllies[0];
+        ally.hp = 100; ally.maxHP = 100; ally.atk = 30; ally.agi = 5; ally.level = 3;
+        ally.weaponId = FIRE_SWORD; ally.weaponL = 0xFF;
+        ally.knownSpells = []; ally.status = createStatusState();
+        battleSt.turnQueue = [{ type: 'ally', index: 0 }];
+        battleSt.battleState = 'menu-open';
+        processNextTurn();
+        return (battleSt.allyHitResults || []).reduce((t, h) => t + (h.damage || 0), 0);
+      };
+      const vsWeak    = allyTurnDamage(['fire']);
+      const vsNeutral = allyTurnDamage(null);
+      if (vsNeutral === 0) return { pass: false, name, reason: 'ally rolled no damage at all — setup is wrong' };
+      if (vsWeak <= vsNeutral) {
+        return { pass: false, name, reason: `ally's fire sword dealt ${vsWeak} to a fire-WEAK target vs ${vsNeutral} to a neutral one` };
+      }
+      return { pass: true, name, info: `per-hand split ok; ally fire sword ${vsNeutral} -> ${vsWeak} vs weakness` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
+      battleSt.encounterMonsters = saved.mons; battleSt.battleAllies = saved.allies;
     }
   },
 ];

@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.860 — 2026-08-11
+
+**Equipment sweep: an ally's elemental weapon was inert.**
+
+43 weapons in the catalogue carry `element`. The PLAYER's attack has always applied it, because that path rolls each hand with a **separate** `rollHits` call and passes `elemMult: elemMultiplier(handElem, mon.weakness, mon.resist)` on each. The ally and PVP paths roll both hands in ONE call, using `splitRH` + `lAtk` to split ATK per hand — and passed no `elemMult` at all. So an ally swinging a fire sword at a fire-weak monster dealt flat neutral damage where the player with the same sword dealt double. Same weapon, same target, half the damage, decided entirely by who was holding it.
+
+`rollHits` gained `lElemMult` alongside the `lAtk` it already had, so a mixed pair (fire in one hand, ice in the other) resolves each swing against the target's own weakness rather than sharing one multiplier. It defaults to `elemMult`, so every existing caller — including the PVP arbiter on the server — behaves identically. Both the ally and PVP sites now pass per-hand values, reading the ids through `normalizeGrip` so a two-hander's phantom offhand cannot contribute an element either.
+
+Weapons with a compound element (`0x03` is `'bolt,fire'`) work here for free: `elemMultiplier` learned to split those in v1.7.851 for spells, and this is the same function.
+
+**Also:** `_equipOptimum` now releases the offhand. Its two halves pick each hand independently, so "optimum" could seat a two-hander beside an offhand — harmless in combat since `normalizeGrip` ignores it, but the screen showed a loadout that cannot exist. The manual and in-battle equip sites got this in v1.7.859; the auto-equip path was missed.
+
+**Gate** (31st), in two halves so a revert of either the mechanic or the plumbing is caught. The pure half fixes the RNG and asserts a split pair takes two different multipliers, and that omitting `lElemMult` still applies `elemMult` to both hands (backward compatibility). The behavioural half drives a real ally turn twice under one seed — fire sword against a fire-weak monster, then a neutral one — and asserts the weak target takes more. Both reverts verified to fail: `rollHits` ignoring `lElemMult` (`[26,26,26,26]`), and the ally call site dropping the option (`39` against weak and neutral alike).
+
+**Checked and found correct — stated rather than implied:**
+
+- Every equipment stat field is consumed. `atk`/`hit` (per hand), `def` (all five slots incl. both hands), `evade` (head/body/arms), `mdef` and `resist` (all five), `sResist`, and all five stat bonuses (`strBonus`/`agiBonus`/`vitBonus`/`intBonus`/`mndBonus`) flow through `computeEffectiveStats`. Nothing in the catalogue is dead data.
+- No weapon carries `evade`, so the head/body/arms-only evade sum drops nothing; the 10 shields that do carry it are read by `computeShieldEvade`, which checks BOTH hands.
+- Weapon status-on-hit (9 weapons) applies with the target's resist honoured, on the ally path as well as the player's.
+- The unarmed hit rate agrees across the split: `BASE_HIT_RATE` is 80 and the player's per-hand fallback is `wpn.hit || 80`.
+- All three equip routes do the same bookkeeping — return the old item to the bag, emit the mirror event, recalc, save.
+
 ## 1.7.859 — 2026-08-11
 
 **`twoHanded` is enforced. It occupies both hands.**

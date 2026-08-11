@@ -1,7 +1,7 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
 import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, setActiveCast } from './battle-state.js';
-import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget } from './battle-math.js';
+import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget, elemMultiplier } from './battle-math.js';
 import { rand } from './rng.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
 import { getMonsterName, getSpellNameShrinesClean, getItemNameShrinesClean } from './text-decoder.js';
@@ -397,9 +397,19 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // the player-attack site in input-handler.js. See
     // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
     const oppDefending = pvpTgt === pvpSt.pvpOpponentStats && !!pvpSt.pvpOpponentIsDefending;
+    // v1.7.860 — the ally path passed no `elemMult` at all, so an ally swinging
+    // an elemental weapon (43 in the catalogue carry `element`) dealt flat
+    // neutral damage where the PLAYER with the same weapon gets the weakness
+    // multiplier. Per hand, matching how the player's path rolls each hand with
+    // its own element.
+    const _aWeak = monTgt ? monTgt.weakness : null;
+    const _aRes  = monTgt ? monTgt.resist : (pvpTgt ? pvpTgt.elemResist : null);
+    const _aElem = (id) => elemMultiplier(isWeapon(id) ? (ITEMS.get(id)?.element || null) : null, _aWeak, _aRes);
     battleSt.allyHitResults = rollHits(allyMainAtk, targetDef, allyHitRate, potentialHits, {
       critPct: _allyJob.critPct || 0,
       critBonus: _allyJob.critBonus || 0,
+      elemMult:  _aElem(dualWield ? _aGrip.weaponR : (aRw ? _aGrip.weaponR : _aGrip.weaponL)),
+      lElemMult: _aElem(_aGrip.weaponL),
       shieldEvade: pvpTgt ? (pvpTgt.shieldEvade || 0) : 0,
       evade: monTgt ? (monTgt.evade || 0) : pvpTgt ? (pvpTgt.evade || 0) : 0,
       defendHalve: oppDefending,
