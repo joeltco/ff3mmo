@@ -48,6 +48,8 @@ import {
 // calcDamage / rollHits / rollInitiative are already imported at line 24
 // (Suite 1 RNG determinism tests). Reuse those for the P-3 parity tests.
 import { attachWebSocketPresence, _testHooks } from '../ws-presence.js';
+import { readFileSync } from 'node:fs';
+import { PER_KIND_RATES, UNCAPPED_WIRE_KINDS } from '../ws-presence.js';
 import { MAX_LEVEL, INV_CAP } from '../src/data/limits.js';
 import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testMirrorSync, _testMirrorSyncRuntime,
@@ -381,6 +383,32 @@ function suiteServer() {
   // exactly what `saveSlotsToDB()` writes, with each field in its REAL type
   // (`unlockedJobs` is a BITMASK number, not an array — getting that wrong is
   // how this check first reported a false positive).
+  // v1.7.864 — every kind the message dispatcher handles must have had a rate
+  // decision: a per-kind bucket, or an explicit place in UNCAPPED_WIRE_KINDS.
+  //
+  // `PER_KIND_RATES` grew reactively — its own comments record the economy
+  // wires shipping "without per-kind caps" and being retro-fitted a version
+  // later. A missing entry looks exactly like a deliberate one, so this reads
+  // the dispatcher's own `case` labels out of the source and fails on any kind
+  // that appears in neither list. It does not demand a cap; it demands that
+  // somebody chose.
+  test('wire rate-limit coverage — every dispatched kind has a decision', () => {
+    const src = readFileSync(new URL('../ws-presence.js', import.meta.url), 'utf8');
+    // Scope to the message-dispatch switch, so the profile-field normalizer's
+    // own `case 'agi'` / `case 'hp'` labels are not mistaken for wire kinds.
+    const start = src.indexOf('switch (parsed.type)');
+    assertTrue(start > 0, 'could not find the message dispatch switch');
+    const body = src.slice(start, src.indexOf('\n  }', start));
+    const kinds = [...body.matchAll(/case '([a-z0-9-]+)':/g)].map(m => m[1]);
+    assertTrue(kinds.length > 20, `only found ${kinds.length} dispatched kinds — regex drifted`);
+    const undecided = kinds.filter(k => !(k in PER_KIND_RATES) && !UNCAPPED_WIRE_KINDS.has(k));
+    assertEqual(undecided, [], 'dispatched wire kinds with no rate-limit decision');
+    // And the uncapped list must not rot: every name in it should still be a
+    // kind the dispatcher actually handles.
+    const stale = [...UNCAPPED_WIRE_KINDS].filter(k => !kinds.includes(k));
+    assertEqual(stale, [], 'UNCAPPED_WIRE_KINDS names kinds the dispatcher no longer handles');
+  });
+
   test('save round-trip — every client-serialized field survives the validator', () => {
     const input = {
       name: [0x80, 0x81], playTime: 12345,

@@ -489,7 +489,7 @@ function _rateAllow(entry) {
 // These smaller per-kind buckets cap the kinds that are user-action-driven
 // (not poll-driven) so spamming one can't starve the others. Frames not
 // listed here are global-bucket-only. v1.7.426.
-const PER_KIND_RATES = {
+export const PER_KIND_RATES = {
   'chat':                      { cap: 20, refill: 5 },
   'give-item':                 { cap: 6,  refill: 1 },
   'party-invite':              { cap: 6,  refill: 1 },
@@ -516,6 +516,32 @@ const PER_KIND_RATES = {
   'pve-battle-end':            { cap: 4,  refill: 1 },
   'trade-offer':               { cap: 6,  refill: 1 },
 };
+// Kinds that run on the GLOBAL bucket alone (60 burst / 20 per second), by
+// decision rather than by omission.
+//
+// v1.7.864 — `PER_KIND_RATES` grew reactively: its own comments record the
+// economy wires landing across v1.7.598/779/780 "without per-kind caps" and
+// being retro-fitted in v1.7.793. A missing entry is indistinguishable from a
+// deliberate one, so the next wire type ships uncapped by accident the same
+// way. This set makes the decision explicit and the deploy gate asserts every
+// dispatched kind appears in one list or the other — it does not have to be
+// capped, it has to have been THOUGHT about.
+//
+// Why each of these is fine on the global bucket: they are small, they mutate
+// nothing an attacker profits from, and the expensive paths they could reach
+// are bounded elsewhere. `update`/`location` fan out to the room but the client
+// only emits them from a 500 ms poll on CHANGE (~4/s worst case in battle), so
+// a per-kind cap tight enough to matter would risk legitimate play. `pve-intent`
+// writes into a turn-indexed slot bounded by MAX_TURN_IDX, so spamming it
+// cannot grow memory. The `pvp-*` family is inert while PVP_ENABLED is false.
+export const UNCAPPED_WIRE_KINDS = new Set([
+  'hello', 'location', 'update', 'inv-state-request', 'party-resync',
+  'party-cancel', 'party-disband', 'party-dismiss', 'party-invite-response',
+  'party-leave', 'trade-cancel', 'trade-response', 'pve-intent',
+  'pvp-action', 'pvp-ally-join', 'pvp-arb-start', 'pvp-cancel', 'pvp-encounter',
+  'pvp-end', 'pvp-intent', 'pvp-result', 'pvp-search',
+]);
+
 function _rateAllowKind(entry, kind) {
   const rate = PER_KIND_RATES[kind];
   if (!rate) return true;

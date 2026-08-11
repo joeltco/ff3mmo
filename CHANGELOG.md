@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.864 — 2026-08-11
+
+**Multiplayer sweep. The wire contract is intact in both directions; the finding is that the rate-limit list grew by accident.**
+
+**Wire contract — checked, no orphans.** Every one of the 30 message types the client sends has a server handler. Every type the server emits has a client branch. That second direction is the one the standing rule cares about — a server verdict with no client ear is a silent failure, where the player is told nothing — and it holds today.
+
+Worth noting how the first pass nearly reported two false positives: `location` and `update` appeared as server-emitted with no client handler. They are not emitted at all; both matches came from the **protocol documentation comment** at the top of `ws-presence.js`. Grepping a source file for `type: '...'` finds prose as readily as code.
+
+**The real finding: `PER_KIND_RATES` is a reactive list.** 11 of 31 dispatched kinds have a per-kind bucket; the other 20 fall through to the global one (60 burst / 20 per second). That distribution is not the problem — the problem is that the list's own comments record how it got that way: the economy wires shipped across v1.7.598/779/780 *"without per-kind caps"* and were retro-fitted in v1.7.793 after someone noticed. **A missing entry is indistinguishable from a deliberate one**, so the next wire type ships uncapped the same way.
+
+`UNCAPPED_WIRE_KINDS` now states the decision, with the reasoning for each: they are small, they mutate nothing an attacker profits from, and the expensive paths they could reach are bounded elsewhere. `pve-intent` writes into a turn-indexed slot bounded by `MAX_TURN_IDX`, so spamming it cannot grow memory. The `pvp-*` family is inert while `PVP_ENABLED` is false.
+
+**I deliberately did NOT add caps to `update` / `location`.** They fan out to the whole room, which makes them the obvious candidates — but the client emits them from a 500 ms poll only when the payload signature CHANGES, so legitimate play peaks around 4/s during a battle where HP moves every tick. A cap tight enough to matter would sit close enough to that to risk cutting off real players, for an amplification the global bucket already bounds. Tightening those is a judgement call about live traffic, not a defect fix.
+
+**Gate** (in `pvp-wire-sim`'s server suite, 139 -> 140): it reads the dispatcher's own `case` labels out of `ws-presence.js` and fails on any kind appearing in neither list. It does not demand a cap — it demands that somebody chose. The regex is scoped to the message-dispatch switch so the profile normalizer's `case 'agi'` / `case 'hp'` labels are not mistaken for wire kinds, and it asserts it found more than 20 kinds so a drifted regex fails loudly instead of passing vacuously. It also checks the uncapped list for rot — a name there that the dispatcher no longer handles fails too.
+
+Three drift modes verified to fail independently: a new dispatched kind with no decision, an existing cap deleted without moving to the uncapped list, and a stale name left in the uncapped list.
+
+**Checked and found correct:**
+
+- Every field on the `update` broadcast passes through `_normalizeProfileField` before it reaches other players, so a client cannot broadcast `agi: 9999` and corrupt everyone else's hook-chance maths.
+- `recordIntent` bounds `turnIdx` and writes into a keyed slot, so PvE intents cannot grow memory.
+- The economy wires validate server-side against the mirror rather than trusting client numbers (swept in v1.7.862).
+- `slot` is updated per-connection and deliberately kept out of the peer fan-out.
+
+**Not gated:** the wire-contract parity above is verified by reading, not by a test. A robust check would have to parse both sides' sources, and a brittle gate that false-fails is worse than none.
+
 ## 1.7.863 — 2026-08-11
 
 **Save sweep. The parity rule this project cares most about held — so the finding is that nothing enforced it.**
