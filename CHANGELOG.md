@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.850 — 2026-08-11
+
+**Fix: 52 of 56 spells could only ever be aimed at ONE target. Multi-target is now derived instead of hand-listed.**
+
+`MULTI_TARGET_SPELLS` held four entries — Fire, Blizzard, Sleep, Cure — and `isMultiTargetSpell` was a straight lookup into it. Everything else was single-target only: Meteo, every Fire2/3, Bolt2/3, Ice2/3, Cure2/3/4, and the entire status family. Same shape as the animation and SFX gates: a list written when four spells existed, never widened.
+
+**The ROM does not answer this, and I checked rather than assumed.** No player-castable id (0x00-0x37) uses the `all_enemies` target byte — 0x17 and 0x33 in `targetJS` belong to monster-only abilities at 0x38+. Byte +5, which the generator reads under the name `targeting` and then discards, is not a scope flag either: it takes 40 distinct values across 56 spells and tracks the spell's level/index (8, 9, 10, 13 up the black line). In FF3 the player chooses at target-select and the rolled amount is divided, exactly as the existing comment describes.
+
+So the four entries were never arbitrary — they are **one per category**:
+
+| category | entry |
+|---|---|
+| `enemy` | Fire `0x31`, Blizzard `0x32` |
+| `enemy_status` | Sleep `0x33` |
+| `ally` | Cure `0x34` |
+
+That rule is now generalized. Inventing a per-spell list would have meant guessing canon the ROM does not carry.
+
+**4 -> 33 multi-target.** The set stays as an explicit override for anything the scope rule cannot know.
+
+**Summons are deliberately excluded** and stay single here — all 8 of them are the remaining `enemy`-scope singles. `summon-tier.js` already decides all-vs-single per job tier (an Evoker's pick is single-target, a Summoner's is always all); offering the picker as well would let the player override the tier.
+
+Left single-target, as specialized utility rather than an oversight: revive, drain, cure_status, reflect, haste, erase, protect, libra, toggle_status, sight. `cure_status` (Poisona / Soft / Wash) is the debatable one — the conservative call was to generalize only what the four entries actually demonstrate.
+
+Low blast radius: `isMultiTargetSpell` has exactly ONE call site (the target picker in `input-handler.js`); the division math is `_baseAmount / _targets.length` and already generalizes to any count. Regression gate asserts the derivation, that the overrides survive, and that no summon bypasses its tier — verified against the old lookup, which it names 29 spells for. 20 passed.
+
 ## 1.7.849 — 2026-08-11
 
 **Screen-anchored spells now shake the screen when the animation STARTS, not when damage lands.**

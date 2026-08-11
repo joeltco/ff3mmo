@@ -108,7 +108,8 @@ const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
 const { isScreenAnchoredSpell, CAST_T_HEAL, CAST_PHASE_MS } = await import('../src/cast-anim.js');
 const { spellUsesCastAnim } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX } = await import('../src/combatant-cast.js');
-const { SPELLS } = await import('../src/data/spells.js');
+const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS } = await import('../src/data/spells.js');
+const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -616,6 +617,37 @@ const tests = [
     }
     if (bad.length) return { pass: false, name, reason: bad.join(', ') };
     return { pass: true, name, info: `shake at t=${animStart}ms, inside every screen animation` };
+  },
+  // Regression — multi-target must be DERIVED, not a hand list.
+  //
+  // `MULTI_TARGET_SPELLS` had four entries, so 52 of 56 spells could only be
+  // aimed at one target — Meteo, every Fire2/3, Bolt2/3, Cure2/3/4 and the
+  // whole status family. The ROM does not encode single-vs-all for player
+  // spells, so the rule is generalized from the categories those four
+  // demonstrate: enemy / enemy_status / ally. v1.7.850.
+  () => {
+    const name = 'regression — multi-target derives from target scope, summons excluded';
+    const SCOPES = new Set(['enemy', 'enemy_status', 'ally']);
+    const wrong = [];
+    for (const [id, spell] of SPELLS) {
+      if (id > 0x37) continue;
+      const got = isMultiTargetSpell(id);
+      // Summons must stay single here: `summon-tier.js` decides all-vs-single
+      // per job tier, and the picker offering it too would override the tier.
+      const want = MULTI_TARGET_SPELLS.has(id) ? true
+                 : SUMMON_TIERS.has(id)        ? false
+                 : SCOPES.has(spell.target);
+      if (got !== want) wrong.push(`0x${id.toString(16)} got=${got} want=${want} (${spell.target})`);
+    }
+    if (wrong.length) return { pass: false, name, reason: wrong.join(', ') };
+    for (const id of MULTI_TARGET_SPELLS) {
+      if (!isMultiTargetSpell(id)) return { pass: false, name, reason: `override 0x${id.toString(16)} lost` };
+    }
+    for (const [id] of SUMMON_TIERS) {
+      if (isMultiTargetSpell(id)) return { pass: false, name, reason: `summon 0x${id.toString(16)} bypasses its tier` };
+    }
+    const n = [...SPELLS.keys()].filter(i => i <= 0x37 && isMultiTargetSpell(i)).length;
+    return { pass: true, name, info: `${n} multi-target, all 8 summons left to their tier` };
   },
 ];
 

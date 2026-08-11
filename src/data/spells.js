@@ -15,6 +15,7 @@
 // IDs 0-55: player/enemy magic, 56+: monster-only abilities
 
 import { JOBS, MAG_WHITE, MAG_BLACK, MAG_CALL } from './jobs.js';
+import { SUMMON_TIERS } from './summon-tiers.js';
 
 // ─── BEGIN GENERATED (tools/gen-spells-js.js) ───
 export const SPELLS = new Map([
@@ -178,13 +179,41 @@ export function getSpellBuyPrice(spellId) {
 // Spells whose target picker offers all-allies / all-enemies / column modes,
 // with one rolled amount divided across the chosen targets — same Southwind-
 // style split. Item path (potions) never reads this; it stays single-target.
+// v1.7.850 — this used to BE the whole answer, and it listed four spells, so 52
+// of 56 could only ever be aimed at a single target: Meteo, every Fire2/3,
+// Bolt2/3, Ice2/3, Cure2/3/4 and the whole status family.
+//
+// The ROM does NOT encode single-vs-all for player spells — checked, not
+// assumed: no castable id uses the `all_enemies` target byte (0x17 / 0x33),
+// those values belong to monster-only abilities at 0x38+. In FF3 the player
+// chooses at target-select and the rolled amount is divided, which is what the
+// comment above already describes.
+//
+// So the four entries were never arbitrary — they are ONE PER CATEGORY:
+//   'enemy'         Fire 0x31, Blizzard 0x32
+//   'enemy_status'  Sleep 0x33
+//   'ally'          Cure 0x34
+// The rule they demonstrate is generalized below rather than a per-spell list
+// being invented, which would mean guessing canon the ROM does not carry.
+const MULTI_TARGET_SCOPES = new Set(['enemy', 'enemy_status', 'ally']);
+
+// Kept as an explicit OVERRIDE set for spells the scope rule cannot know about.
 export const MULTI_TARGET_SPELLS = new Set([
   0x31,  // Fire    (BM Lv1)
   0x32,  // Blizzard (BM Lv1)
   0x33,  // Sleep   (BM Lv1 status)
   0x34,  // Cure    (WM Lv1)
 ]);
-export function isMultiTargetSpell(spellId) { return MULTI_TARGET_SPELLS.has(spellId); }
+
+export function isMultiTargetSpell(spellId) {
+  if (MULTI_TARGET_SPELLS.has(spellId)) return true;
+  // Summons decide all-vs-single through the TIER system (`summon-tier.js`):
+  // an Evoker's pick is single-target and a Summoner's is always all. Offering
+  // the picker as well would let the player override the tier.
+  if (SUMMON_TIERS.has(spellId)) return false;
+  const spell = SPELLS.get(spellId);
+  return !!spell && MULTI_TARGET_SCOPES.has(spell.target);
+}
 
 // ── Spell school dispatch (job gating) ────────────────────────────────────
 //
