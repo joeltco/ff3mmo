@@ -16,7 +16,7 @@ import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, S
 import { isSummonSpell, summonTotalMs, summonCastMs } from './summon-anim.js';
 import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
-         CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
+         CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START, hasCapturedSpellAnim, healImpactWindowMs, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicDrain,
          applyMagicRecovery, applyMagicAllStatus, applyMagicInstakill,
@@ -722,9 +722,25 @@ function _isCastAnimSpell() {
   // Items skip the BM/WM cast pose entirely — they go straight from throw to
   // hit with no buildup window, so timing falls back to legacy 250ms→1100ms.
   if (_isItemUse) return false;
-  const spell = SPELLS.get(_spellId);
+  return spellUsesCastAnim(_spellId);
+}
+
+/**
+ * Does this spell drive the cast-animation timeline? Pure in the spell ID so
+ * it can be asserted directly — the module-level `_isCastAnimSpell` reads
+ * mutable cast state, which made the coverage gate unable to see this half of
+ * the wiring at all. v1.7.845.
+ */
+export function spellUsesCastAnim(spellId) {
+  const spell = SPELLS.get(spellId);
   if (!spell) return false;
-  return spell.element === 'recovery'
+  // v1.7.845 — having a CAPTURED animation qualifies on its own. The
+  // element/target list below was written when only Fire/Ice/Bolt/Cure
+  // existed; 24 of the 37 captured animations matched none of it, so
+  // `getCastAnimElapsedMs` returned -1 for them and the renderer bailed on
+  // its very first check. The animation was built at boot and never drawn.
+  return hasCapturedSpellAnim(spellId)
+      || spell.element === 'recovery'
       || spell.target === 'cure_status'
       || spell.target === 'revive'
       || spell.target === 'sight'
@@ -764,9 +780,18 @@ export function updateSpellCast(dt) {
   // - Throw-style (Fire): effect at impact END so the damage number doesn't
   //   pop mid-burst — extend total by 500 ms so the number's bounce
   //   actually plays before the state transitions to monster-death.
+  // A one-shot captured sweep (Meteo 1071 ms, Kill 1819 ms) is longer than the
+  // 283 ms sparkle window the heal-style pipeline was built around. Stretch the
+  // window to fit it so damage does not pop while the animation is still
+  // playing. Cycling bursts report 0 and are unaffected, so every spell that
+  // already worked keeps its exact timing. Shared with the renderer via
+  // `healImpactWindowMs` — see that helper for why it must not be duplicated.
+  const _animExtraMs = isThrown
+    ? 0
+    : Math.max(0, healImpactWindowMs(_spellId) - CAST_PHASE_MS_HEAL.impact);
   const hitEffectMs = useCastAnim
     ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup)
-                : (CAST_T_HEAL_APPLY - CAST_PHASE_MS.buildup))
+                : (CAST_T_HEAL_APPLY - CAST_PHASE_MS.buildup + _animExtraMs))
     : 400;
   const hitTotalMs  = useCastAnim
     ? (isThrown ? (CAST_T_THROW_RETURN - CAST_PHASE_MS.buildup + 500)

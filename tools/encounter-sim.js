@@ -101,7 +101,10 @@ const battleTurn   = await import('../src/battle-turn.js');
 const { inputSt, keys, handleBattleInput } = await import('../src/input-handler.js');
 const { executeBattleCommand } = await import('../src/battle-update.js');
 const { JOBS, jobHasMagic } = await import('../src/data/jobs.js');
-const { jobToCastKey } = await import('../src/cast-anim.js');
+const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowMs,
+        CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
+const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
+const { spellUsesCastAnim } = await import('../src/spell-cast.js');
 
 const { updateBattleEnemyTurn, initBattleEnemy } = battleEnemy;
 const { createStatusState, STATUS } = statusMod;
@@ -492,6 +495,39 @@ const tests = [
       battleSt.battleState = savedState; inputSt.menuMode = savedMode;
       battleSt.isDefending = savedDefending; inputSt.playerActionPending = savedPending;
     }
+  },
+  // Regression — EVERY captured spell animation must actually be reachable in
+  // battle, and long one-shots must not be cut off.
+  //
+  // Reported live: "just casted meteo, wheres the meteors". 24 of the 37
+  // captured animations were built at boot and never drawn, because which
+  // spells got an animation was decided by two hardcoded element/target
+  // whitelists (`_isCastAnimSpell`, `isThrown`) written when only
+  // Fire/Ice/Bolt/Cure existed. Meteo is non-elemental, so it matched neither
+  // and `getCastAnimElapsedMs` returned -1 — the renderer bailed on its first
+  // check. This test fails if a future capture lands without being reachable,
+  // which is exactly how the gap went unnoticed. v1.7.845.
+  () => {
+    const name = 'regression — every captured spell animation is reachable and untruncated';
+    const dark = [], truncated = [];
+    for (const [id] of CAPTURED_SPELL_ANIMS) {
+      // BOTH halves: the shared helper AND the engine gate that consumes it.
+      if (!hasCapturedSpellAnim(id) || !spellUsesCastAnim(id)) dark.push('0x' + id.toString(16));
+      const need = capturedOneShotMs(id);
+      if (need > healImpactWindowMs(id)) truncated.push(`0x${id.toString(16)} needs ${need}ms`);
+    }
+    if (dark.length) return { pass: false, name, reason: `captured but unreachable: ${dark.join(', ')}` };
+    if (truncated.length) return { pass: false, name, reason: `impact window too short: ${truncated.join(', ')}` };
+    // Cycling target bursts must NOT be stretched — they loop, so a longer
+    // window would delay the damage number for no visual gain.
+    const stretched = [];
+    for (const [id, e] of CAPTURED_SPELL_ANIMS) {
+      if (e.anchor !== 'screen' && healImpactWindowMs(id) !== CAST_PHASE_MS_HEAL.impact) {
+        stretched.push('0x' + id.toString(16));
+      }
+    }
+    if (stretched.length) return { pass: false, name, reason: `cycling burst wrongly stretched: ${stretched.join(', ')}` };
+    return { pass: true, name, info: `${CAPTURED_SPELL_ANIMS.size} captured animations reachable, none truncated` };
   },
 ];
 

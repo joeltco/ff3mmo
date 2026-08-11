@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.845 — 2026-08-11
+
+**Fix: 24 of the 37 captured spell animations were built at boot and never drawn. Meteo among them.**
+
+Reported: "just casted meteo, wheres the meteors". The animation data, the screen-anchored band mapping and the draw branch were all correct and in place — the engine simply never asked for them.
+
+Which spells got an animation at all was decided by two hardcoded whitelists written when only Fire/Ice/Bolt/Cure existed:
+
+- `_isCastAnimSpell()` in `spell-cast.js` — element `recovery` / target `cure_status` / `revive` / `sight` / element in {fire, ice, bolt} / type `sleep`.
+- `isThrown` in `combatant-cast.js#_resolvePlayerThrow` — the same list again.
+
+Meteo is non-elemental damage, so it matched neither. `getCastAnimElapsedMs()` returned `-1`, and the renderer's first line — `if (cureMs < CAST_T_LUNGE) return null` — bailed before drawing anything. Same for Kill, Quake, Death, Flare, Confu, Mute, Toad, Mini, Venom, Aero2, Wall, Warp and eleven more. **13 of 37 rendered; 24 did not.**
+
+Having a captured animation now qualifies on its own, so the set of spells with visuals tracks the set of captured animations instead of a list nobody remembers to update.
+
+**Long one-shots no longer truncate.** The screen sweeps hold on their final frame rather than cycling, so they have a real length: Meteo 1071 ms, Kill 1819 ms, Drain 374 ms — against a heal-style sparkle window of 283 ms. `healImpactWindowMs(spellId)` in `cast-anim.js` is the SINGLE source for that window, used by the engine to size `magic-hit` and by the renderer to gate the draw. Computed in one place on purpose: if the two derived it separately, damage would pop mid-animation or the draw would outlive the state.
+
+Cycling target bursts report a length of 0 and are deliberately left at 283 ms — they loop, so stretching would only delay the damage number. **Every previously-working spell keeps its exact timing**, with one intended exception: Drain (screen-anchored) was being cut off at 283 ms of its 374 ms and now plays in full.
+
+`_isCastAnimSpell()` was reading mutable module state, which made it untestable; the decision is now a pure exported `spellUsesCastAnim(spellId)`.
+
+Regression gate in `tools/encounter-sim.js` asserts every captured animation is reachable through BOTH halves of the wiring and that no one-shot is truncated. Verified by reverting each half independently: reverting the engine gate names all 24 spells, reverting the window helper names Meteo, Drain and Kill. It fails if a future capture lands unreachable — which is exactly how this went unnoticed. 16 passed.
+
 ## 1.7.844 — 2026-08-11
 
 **Fix: picking Magic as a Sage ran the Guard sequence. The battle menu had TWO answers to "is this job a caster" and they disagreed for SEVEN jobs.**

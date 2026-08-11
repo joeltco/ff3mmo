@@ -14,7 +14,7 @@
 // code — only the (role, idx) input differs.
 
 import { drawCasterCastBehind, drawCasterCastFront,
-         CAST_PHASE_MS_THROW, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN } from './cast-anim.js';
+         CAST_PHASE_MS_THROW, CAST_T_LUNGE, CAST_T_HEAL, CAST_T_RETURN, healImpactWindowMs } from './cast-anim.js';
 import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { pvpSt } from './pvp.js';
@@ -450,7 +450,10 @@ function _resolvePlayerThrow(_caster) {
     const projWindow = CAST_T_HEAL - CAST_T_LUNGE;
     return { phase: 'projectile', targets: enemyTargets, t01: (cureMs - CAST_T_LUNGE) / projWindow, spellId, spell };
   }
-  if (cureMs < CAST_T_RETURN) {
+  // Window is the sparkle length OR the captured animation's own length,
+  // whichever is longer — same helper the engine sizes magic-hit with, so the
+  // draw cannot outlive the state or stop before the animation finishes.
+  if (cureMs < CAST_T_HEAL + healImpactWindowMs(spellId)) {
     return { phase: 'impact', targets: enemyTargets, impactMs: cureMs - CAST_T_HEAL, spellId, spell };
   }
   return null;

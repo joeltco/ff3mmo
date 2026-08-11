@@ -25,6 +25,7 @@
 
 import { _makeCanvas16, _make8Canvas } from './canvas-utils.js';
 import { getSpellSchool } from './data/spells.js';
+import { CAPTURED_SPELL_ANIMS } from './data/spell-anim-captured.js';
 import { jobHasMagic } from './data/jobs.js';
 
 // ── Per-job default palettes ──────────────────────────────────────────────
@@ -98,6 +99,45 @@ export const CAST_PHASE_MS_HEAL = {
   postImpactGap: 100,  // breathing room: sparkle ends, beat, then heal-num pops
 };
 export const CAST_T_HEAL_ANIM_START = CAST_PHASE_MS_HEAL.buildup + CAST_PHASE_MS_HEAL.preImpactGap;
+
+// ── Captured-animation coverage + length ──────────────────────────────────
+//
+// v1.7.845 — which spells get an animation at all was decided by two hardcoded
+// whitelists written when only Fire/Ice/Bolt/Cure existed: `_isCastAnimSpell`
+// in spell-cast.js and `isThrown` in combatant-cast.js, both keyed on
+// element/target. 24 of the 37 CAPTURED animations matched neither, so they
+// were built at boot and never asked for — Meteo (non-elemental) among them.
+// Having a captured animation is now itself sufficient.
+//
+// Reads the DATA rather than the built bundles on purpose: `spell-anim.js`
+// builds canvases and needs a DOM, but these two answers are needed by the
+// engine, which runs headless in the sims.
+export function hasCapturedSpellAnim(spellId) {
+  return spellId != null && CAPTURED_SPELL_ANIMS.has(spellId);
+}
+
+// One-shot animations (the screen sweeps: Meteo, Kill, Quake, Drain) hold on
+// their final frame instead of cycling, so they have a real length that the
+// impact window has to fit. Cycling target bursts return 0 — they loop, so the
+// standard window shows them fine and must NOT be stretched.
+export function capturedOneShotMs(spellId) {
+  const e = CAPTURED_SPELL_ANIMS.get(spellId);
+  if (!e || e.anchor !== 'screen') return 0;
+  return (e.layouts ? e.layouts.length : 0) * (e.holdMs || 17);
+}
+
+/**
+ * Length of the heal-style impact window for a spell — the standard sparkle
+ * duration, or the captured animation's own length when that is longer.
+ *
+ * SINGLE SOURCE for the engine and the renderer. `spell-cast.js` sizes the
+ * magic-hit state with it and `combatant-cast.js` gates the draw with it; if
+ * they each computed their own, a long spell would either apply damage
+ * mid-animation or keep drawing after the state moved on.
+ */
+export function healImpactWindowMs(spellId) {
+  return Math.max(CAST_PHASE_MS_HEAL.impact, capturedOneShotMs(spellId));
+}
 export const CAST_T_HEAL_ANIM_END   = CAST_T_HEAL_ANIM_START + CAST_PHASE_MS_HEAL.impact;
 export const CAST_T_HEAL_APPLY      = CAST_T_HEAL_ANIM_END + CAST_PHASE_MS_HEAL.postImpactGap;
 
