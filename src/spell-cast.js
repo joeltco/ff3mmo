@@ -14,6 +14,7 @@ import { setPlayerHealNum, setPlayerDamageNum, getAllyDamageNums, setEnemyDmgNum
 import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
 import { STATUS, addStatus, removeStatus, tryInflictStatus, STATUS_NAME_BYTES, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { isSummonSpell, summonTotalMs, summonCastMs } from './summon-anim.js';
+import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
 import { CAST_PHASE_MS, CAST_PHASE_MS_THROW, CAST_TOTAL_MS, CAST_T_THROW_RETURN, CAST_T_THROW_IMPACT_START,
          CAST_T_HEAL_APPLY, CAST_T_HEAL_ANIM_START } from './cast-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
@@ -35,6 +36,7 @@ export function initSpellCast({ processNextTurn }) { _processNextTurn = processN
 
 // ── Module-local state, reset per cast ──────────────────────────────────────
 let _spellId = 0;
+let _summonEffect = null;      // tier-resolved effect for the active summon
 let _targets = [];      // [{type: 'player'|'ally'|'enemy', index?}]
 let _hitIdx = 0;
 let _effectApplied = false;
@@ -104,7 +106,7 @@ export function getCurrentSpellId() { return _spellId; }
 // to impact) and to align the impact-phase timer to magic-hit start (0 ms).
 export function isCurrentCastItemUse() { return _isItemUse; }
 export function resetSpellCastVars() {
-  _spellId = 0; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
+  _spellId = 0; _summonEffect = null; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
   _sfxPlayed = false;
   _magicHitPhase = 'impact-walk';
   clearActiveCast();
@@ -195,6 +197,11 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   const spell = SPELLS.get(spellId);
   if (!spell) { _processNextTurn(); return; }
   _spellId = spellId;
+  // Which of the summon's three effects fires depends on the caster's job:
+  // the Conjurer (FF3's Evoker) rolls between the first two, Summoner and Sage
+  // always get the third. Resolved once per cast so the roll cannot change
+  // mid-animation between the render and the apply.
+  _summonEffect = isTieredSummon(spellId) ? resolveSummonEffect(spellId, ps.jobIdx) : null;
   _hitIdx = 0;
   _effectApplied = false;
   _baseAmount = -1;
@@ -262,6 +269,21 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   // picker may have selected an enemy but the buff applies to the player.
   if (spell.target === 'haste' || spell.target === 'protect' || spell.target === 'reflect') {
     _targets = [{ type: 'player' }];
+  }
+
+  // Summon tier targeting. The Evoker's direct-attack effects hit ONE enemy;
+  // the Summoner's third effect hits ALL. Summons are cast at everyone, so an
+  // Evoker roll that lands on the single-target attack has to be narrowed here
+  // — otherwise Icy Stare at power 53 would hit the whole formation and read as
+  // stronger than Diamond Dust, which is the opposite of how the tiers rank.
+  // Support effects ('heal', 'buff') go to the party instead of the enemies.
+  if (_summonEffect) {
+    if (_summonEffect.kind === 'heal' || _summonEffect.kind === 'buff') {
+      _targets = [{ type: 'player' }];
+    } else if (!_summonEffect.all) {
+      const firstEnemy = _targets.find((t) => t.type === 'enemy');
+      if (firstEnemy) _targets = [firstEnemy];
+    }
   }
 
   // Multi-target enemy walk order: top→bottom, left→right (visual reading
@@ -574,7 +596,10 @@ function _applyFriendlyOffensive(target, spell) {
 }
 
 function _applySpellEffect(target) {
-  const spell = SPELLS.get(_spellId);
+  // A tiered summon stands in a rewritten spell here: the effect's power,
+  // element and type replace the catalogue entry's, so the damage path needs no
+  // knowledge of summons at all.
+  const spell = _summonEffect ? summonEffectAsSpell(_spellId, _summonEffect) : SPELLS.get(_spellId);
   if (!spell) return;
 
   if (target.type === 'enemy') {
