@@ -570,78 +570,45 @@ SCENARIOS.explore = (rec) => {
 
 // What does each battle COMMAND ROW play?
 //
-// The battle window reads Attack / Guard / Run / Item — read off a screenshot,
-// not remembered. That matters twice over: it means escape is a menu pick, not
-// the held button 36 combos and 600-frame holds were hunting for; and it means
-// row 1 is Guard while row 2 is Run, which is worth checking against DEFEND_HIT.
-// Single selections proved nothing earlier (one $c6 on row 1, one $a0 on row 2),
-// so this repeats each row many times over many battles and tallies.
+//   PER_ROW=48 node tools/monscan/world-sfx-sweep.cjs rowsweep
+//
+// The window is Attack / Guard / Run / Item, read off a screenshot. A single
+// selection per row proved nothing (v1.7.875 saw one $c6 on Guard and one $a0 on
+// Run and correctly refused to move a user-confirmed constant on that).
+//
+// Two things make this a measurement rather than a bigger anecdote:
+//
+//  1. The command is picked for ALL FOUR characters, so the whole round is that
+//     one command. Picking it for one member and mashing A for the rest fills the
+//     round with Attack — which is what hid the escape sound for two versions.
+//  2. Rows are COMPARED, not read in isolation. A battle is full of sounds the
+//     player did not cause (the monster's hit, deaths, the turn cadence), and
+//     those appear under every row. A sound that shows up under ONE row and not
+//     the others is that row's. Same contrast test that identified BATTLE_SWIPE.
 SCENARIOS.rowsweep = (rec) => {
   const n = boot(rec);
   const ROWS = (process.env.ROWS || '0,1,2,3').split(',').map(Number);
-  const PER = parseInt(process.env.PER_ROW || '30', 10);
+  const PER = parseInt(process.env.PER_ROW || '48', 10);
   for (const row of ROWS) {
-    let done = 0, guard = 0;
-    while (done < PER && guard++ < 40) {
+    let rounds = 0, battles = 0, dry = 0;
+    while (rounds < PER && dry < 6) {
       if (spriteCount(n) <= 12) {
-        rec.phase = 'rewalk';
-        if (!reachBattle(n, rec)) break;
-        n.run(150);
+        rec.phase = 'walk';
+        if (!reachBattle(n, rec)) { dry++; continue; }
+        battles++; n.run(150);
       }
       rec.phase = 'row' + row;
-      // Clear the encounter message, home the cursor by acting from the top of
-      // a fresh character menu, then step down to the row and confirm.
-      n.press('a', 6, 20);
-      for (let d = 0; d < row; d++) n.press('down', 6, 16);
-      n.press('a', 6, 34);
-      n.run(70);
-      done++;
+      for (let ch = 0; ch < 4 && spriteCount(n) > 12; ch++) {
+        n.press('a', 6, 16);                    // clear any message; menu opens fresh at Attack
+        for (let d = 0; d < row; d++) n.press('down', 6, 16);
+        n.press('a', 6, 30);
+        n.run(60);
+      }
+      rounds++;
+      n.run(150);
     }
-    console.log(`  [rowsweep] row ${row}: ${done} selections`);
+    console.log(`  [rowsweep] row ${row}: ${rounds} rounds over ${battles} battles`);
   }
-};
-
-// Drink from the pond.
-//
-//   MAP=115 SPAWN=29,9 WALK=up node ... pond
-//
-// Pressing A at the water on a FULL-HP party does nothing and makes no sound —
-// the same trap that made the cure-status spells look artless in v1.7.872, where
-// a spell with nothing to cure is a silent no-op indistinguishable from a spell
-// with no effect at all. So this alternates: face the water and press A, then
-// pace back and forth to provoke a random encounter and take some damage, then
-// come back and press again. Sooner or later the A press lands on a wounded
-// party, which is the only state in which a heal has anything to say.
-SCENARIOS.pond = (rec) => {
-  const n = boot(rec);
-  const dir = process.env.WALK || 'up';
-  const back = { up: 'down', down: 'up', left: 'right', right: 'left' }[dir];
-  rec.phase = 'settle';
-  n.run(180);
-  const ROUNDS = parseInt(process.env.POND_ROUNDS || '40', 10);
-  let fights = 0;
-  for (let i = 0; i < ROUNDS; i++) {
-    if (spriteCount(n) > 12) {                 // wounded by whatever turned up
-      rec.phase = 'fight';
-      fights++;
-      for (let k = 0; k < 70 && spriteCount(n) > 12; k++) n.press('a', 6, 20);
-      n.run(140);
-      continue;
-    }
-    rec.phase = 'drink';
-    n.press(dir, 4, 10);                       // tap into the water to face it
-    n.press('a', 6, 44);
-    n.press('a', 6, 30);                       // dismiss whatever it says
-    // Pace FAR enough to actually trip an encounter. A one-tile shuffle does
-    // not accumulate steps — the first version of this ran 60 rounds and got 0
-    // fights, so every A press landed on a full-HP party and the no-op case was
-    // never tested at all.
-    rec.phase = 'pace';
-    const PACE = parseInt(process.env.POND_PACE || '6', 10);
-    for (let k = 0; k < PACE; k++) { n.hold(back, 20); n.run(4); }
-    for (let k = 0; k < PACE; k++) { n.hold(dir, 20); n.run(4); }
-  }
-  console.log(`  [pond] ${fights} fights across ${ROUNDS} rounds`);
 };
 
 // Leave the cave.

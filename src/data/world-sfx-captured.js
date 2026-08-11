@@ -148,6 +148,52 @@ export const OBSERVED_UNATTRIBUTED = new Map([]);
 export const NOT_CAPTURED = [];
 
 /**
+ * SETTLED: what each battle command row plays. v1.7.877.
+ *
+ * v1.7.875 saw ONE `$c6` while selecting Guard and ONE `$a0` while selecting
+ * Run, and raised the possibility that DEFEND_HIT (97 = `$a0`) belonged to the
+ * Run row and Guard's real sound was 135 (`$c6`). It reported that rather than
+ * acting on it, because one sample is not a measurement. Good call — it is wrong.
+ *
+ * Measured in a sandbox battle: every encounter patched to a single goblin with
+ * 0x7FFF HP (cannot be killed) and hit% + attack power zeroed (cannot kill the
+ * party), so a fight runs indefinitely and one command can be picked for all
+ * four characters, round after round. Three earlier attempts died because Guard
+ * and Run kill nothing, the party wipes, and the run ends — "3 rounds over 0
+ * battles" is not data.
+ *
+ *   value  nsf    Attack(25)  Guard(25)  Run(11)  Item(0)
+ *   $85     70          99         96       45        0     confirm, every pick
+ *   $98     89           0         48       46        0     cursor — MY down-presses, not the command
+ *   $b6    119          49         51       20        0     the monster's turn, every row alike
+ *   $ff    192          98        102       40        0     stop-sfx, every row alike
+ *   $a0     97           0          0        2        0
+ *   $b3    116           0          0        1        0     escape success
+ *
+ * Findings:
+ *  - `$c6` NEVER APPEARS. Not once in 25 Guard rounds. The v1.7.875 sighting was
+ *    noise, and "Guard plays 135" is refuted. DEFEND_HIT is not moving.
+ *  - Guard produces NO sound of its own — nothing distinguishes it from Attack
+ *    except the cursor beeps my own navigation caused.
+ *  - `$a0` appears only under Run, twice, alongside the one `$b3`; consistent
+ *    with escape attempts, not with guarding.
+ *
+ * So FF3's Guard row is silent, and our DEFEND_HIT is OUR cue for OUR defend
+ * command (battle-turn.js, plus two PvP paths) — user-confirmed, and ff3mmo is
+ * its own game. Its `$a0` measurement came from the Safe spell's impact, which
+ * is a real capture of a different event; that is why it never contradicted this.
+ *
+ * GAP, stated rather than glossed: the Item row got 0 rounds (the battle ended
+ * and no fresh one was reached) and Run only 11. Nothing here describes Item.
+ */
+export const BATTLE_ROW_SOUNDS = Object.freeze({
+  Attack: 'no row-unique sound; party hits play $b6',
+  Guard: 'no row-unique sound at all (25 rounds)',
+  Run: '$b3 escape success; $a0 seen twice alongside it',
+  Item: 'NOT MEASURED — 0 rounds',
+});
+
+/**
  * Sounds the game demonstrably plays that NO constant in music.js accounts for.
  * Recorded so they are not rediscovered as "new" a third time; none is wired to
  * anything and none is claimed to be any particular event.

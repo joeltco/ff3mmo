@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.877 — 2026-08-11
+
+**The Guard/Run question, settled: my own suspicion was wrong and DEFEND_HIT does not move.**
+
+v1.7.875 saw ONE `$c6` while selecting Guard and ONE `$a0` while selecting Run, and raised the possibility that `DEFEND_HIT` (97 = `$a0`) really belonged to the Run row while Guard's sound was 135. It reported that instead of acting on it, because one sample per row is not a measurement and the constant is user-confirmed. That was the right call — the idea is wrong.
+
+**Three earlier attempts at this died the same way and none of them said so loudly enough.** Guard, Run and Item kill nothing, so the party gets worn down, wipes, and the run ends. "3 rounds over 0 battles" is not data. `tools/monscan/battle-row-sweep.cjs` (new) builds a battle that cannot end instead: every encounter patched to a single goblin with `0x7FFF` HP so it cannot be killed, and its hit% *and* attack power zeroed so it cannot kill the party. Then one command is picked for **all four characters**, round after round — the same per-character detail that hid the escape sound for two versions.
+
+| value | nsf | Attack(25) | Guard(25) | Run(11) | Item(0) | |
+|---|---|---|---|---|---|---|
+| `$85` | 70 | 99 | 96 | 45 | 0 | confirm, every pick |
+| `$98` | 89 | 0 | 48 | 46 | 0 | cursor — *my* down-presses, not the command |
+| `$b6` | 119 | 49 | 51 | 20 | 0 | the monster's turn, every row alike |
+| `$ff` | 192 | 98 | 102 | 40 | 0 | stop-sfx, every row alike |
+| `$a0` | 97 | 0 | 0 | 2 | 0 | |
+| `$b3` | 116 | 0 | 0 | 1 | 0 | escape success |
+
+**`$c6` never appears.** Not once in 25 Guard rounds. The v1.7.875 sighting was noise, and "Guard plays 135" is refuted.
+
+**Guard plays nothing at all.** Nothing separates it from Attack except the cursor beeps my own navigation caused — which is a good reminder that the loudest column in a table like this can be an artifact of the harness rather than the game.
+
+**`$a0` shows up only under Run**, twice, beside the single `$b3`. Consistent with escape attempts, not with guarding.
+
+So FF3's Guard row is silent, and `DEFEND_HIT` is **our** cue for **our** defend command (`battle-turn.js` plus two PvP paths) — user-confirmed, and ff3mmo is its own game. Its `$A0` measurement came from the Safe spell's impact, a real capture of a genuinely different event, which is why the two never actually contradicted each other. The constant is unchanged.
+
+**Gap, stated rather than glossed:** the Item row got **0 rounds** — the battle ended and no fresh one was reached — and Run only managed 11. Nothing here describes what Item plays. Recorded in `BATTLE_ROW_SOUNDS` alongside the rest.
+
 ## 1.7.876 — 2026-08-11
 
 **All twelve are captured. The last three — RUN_AWAY, FALL, POND_DRINK — each failed for a different reason, and each reason was a wrong assumption rather than a hard limit.**
