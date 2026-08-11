@@ -110,11 +110,14 @@ const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY,
 const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
         getCastAnimElapsedMs } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combatant-cast.js');
-const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask } = await import('../src/data/spells.js');
+const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpellBuyPrice } = await import('../src/data/spells.js');
 const { applySpell } = await import('../src/combatant-cast.js');
 const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
 const { processNextTurn } = await import('../src/battle-turn.js');
 const { addItem, releaseOffhandForTwoHanded } = await import('../src/inventory.js');
+const { isQuestItem, QUEST_ITEM_TYPES, ITEMS } = await import('../src/data/items.js');
+const { isSellable } = await import('../src/shop.js');
+const { SHOPS } = await import('../src/data/shops.js');
 const { normalizeGrip, isDualWield, computeRealizedStats } = await import('../src/realized-stats.js');
 const { calcPotentialHits, rollHits } = await import('../src/battle-math.js');
 const { hasStatus } = await import('../src/status-effects.js');
@@ -1461,6 +1464,58 @@ const tests = [
       battleSt.encounterMonsters = saved.mons; battleSt.turnQueue = saved.queue;
       inputSt.playerActionPending = saved.pending;
     }
+  },
+  // Regression — quest items cannot be sold, and every shop catalog is real.
+  //
+  // All three key items (0x98 Magic Key, 0x99, 0xa4) carry a `price`, and the
+  // sell list was built from "has a price". So the shop bought the Magic Key —
+  // the thing that opens the Altar Cave locked rooms — for 100 gil, and the
+  // server agreed. The TRADE path had blocked key items since v1.7.616 with its
+  // own `new Set(['key'])`, stating the reason plainly: they are quest flags,
+  // not goods. One rule, enforced in one sibling and not the other. Both now
+  // read the shared `isQuestItem`. v1.7.862.
+  () => {
+    const name = 'regression — quest items are unsellable and shop catalogs are valid';
+    const bad = [];
+    // 0. Pin the known key items BY ID. Looping the type set alone passes
+    //    vacuously if someone empties `QUEST_ITEM_TYPES` — which is exactly
+    //    what the first version of this gate did.
+    for (const id of [0x98, 0x99, 0xa4]) {
+      if (!isQuestItem(id)) bad.push(`0x${id.toString(16)} is no longer a quest item`);
+      if (isSellable(id))   bad.push(`0x${id.toString(16)} is SELLABLE`);
+    }
+    if (!QUEST_ITEM_TYPES.has('key')) bad.push("QUEST_ITEM_TYPES no longer covers 'key'");
+    // 1. And nothing else in a quest type may be sellable either.
+    for (const [id, it] of ITEMS) {
+      if (!QUEST_ITEM_TYPES.has(it.type)) continue;
+      if (!isQuestItem(id)) bad.push(`0x${id.toString(16)} not flagged quest`);
+      if (isSellable(id))   bad.push(`0x${id.toString(16)} (${it.type}) is SELLABLE`);
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join(', ') };
+    if (!isSellable(0xa6)) return { pass: false, name, reason: 'an ordinary potion stopped being sellable' };
+    if (isQuestItem(0xa6)) return { pass: false, name, reason: 'a potion is flagged as a quest item' };
+
+    // 2. Every shop catalog entry exists and has a price — a missing price
+    //    silently reads as free on one side and rejects on the other.
+    const shopBad = [];
+    for (const [shopId, shop] of SHOPS) {
+      for (const id of (shop.items || [])) {
+        const it = ITEMS.get(id);
+        if (!it) { shopBad.push(`${shopId}: 0x${id.toString(16)} not in ITEMS`); continue; }
+        if (!(it.price > 0)) shopBad.push(`${shopId}: 0x${id.toString(16)} has no price`);
+        if (isQuestItem(id)) shopBad.push(`${shopId}: sells quest item 0x${id.toString(16)}`);
+      }
+      // 3. A shop that ever declares `spells` must price them. `SPELL_BUY_PRICE`
+      //    covers 6 of 56 and `getSpellBuyPrice` returns 0 for the rest, so the
+      //    day someone adds a spell catalog, 50 spells would be free. No shop
+      //    declares one today, so this is a tripwire rather than a live check.
+      for (const sid of (shop.spells || [])) {
+        if (!(getSpellBuyPrice(sid) > 0)) shopBad.push(`${shopId}: spell 0x${sid.toString(16)} would be FREE`);
+      }
+    }
+    if (shopBad.length) return { pass: false, name, reason: shopBad.join(', ') };
+    const quest = [...ITEMS].filter(([id]) => isQuestItem(id)).length;
+    return { pass: true, name, info: `${quest} quest items unsellable, ${SHOPS.size} shop catalogs valid` };
   },
 ];
 

@@ -9,7 +9,7 @@
 // Wire shapes: docs/PVE-REWRITE-PLAN.md "Shops / Chests + vases / Inn".
 
 import { SHOPS, getShopType } from './src/data/shops.js';
-import { ITEMS } from './src/data/items.js';
+import { ITEMS, isQuestItem } from './src/data/items.js';
 import { mirrorReadFullState, consumedTileConsumedAt } from './api.js';
 import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.js';
 
@@ -84,6 +84,8 @@ export function validateShopTransaction(userId, slot, payload) {
   }
 
   if (action === 'sell') {
+    // Quest items carry a price but must never leave the player. v1.7.862.
+    if (isQuestItem(itemId | 0)) return { ok: false, reason: 'quest-item-not-sellable' };
     const unit = _sellPrice(item);
     if (unit <= 0) return { ok: false, reason: 'item-not-sellable' };
     const mirror = mirrorReadFullState(userId, slot);

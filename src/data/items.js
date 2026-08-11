@@ -29,6 +29,26 @@ const Ni = 1 << 21;  // Ninja
 const ALL_BUT_MK = On|Fi|Mo|Ww|Bw|Rw|Hu|Kn|Th|Sc|Ge|Dr|Vi|Ka|Co|Ba|Su|Sh|Wa|Sa|Ni;
 const ALL = ALL_BUT_MK | Mk;
 
+// ── Quest items ────────────────────────────────────────────────────────────
+// Items that must never leave the player's possession. They are quest FLAGS
+// carried in the item table, not goods — the Magic Key (0x98) is what opens the
+// Altar Cave locked rooms, and once it is gone it is gone.
+//
+// v1.7.862 — the TRADE path had enforced this since v1.7.616 with a local
+// `NON_TRADEABLE_ITEM_TYPES` set, and the SHOP had not: all three key items
+// carry a `price`, so `_rebuildSellList` listed them and both the client and
+// the server happily bought the Magic Key for 100 gil. One rule, enforced in
+// one sibling and not the other. Lives here because it is item DATA, and
+// because this module is import-clean enough for the server to use it —
+// `economy-arbiter.js` and `ws-presence.js` both already pull ITEMS from it.
+export const QUEST_ITEM_TYPES = new Set(['key']);
+
+/** Must this item stay with the player — untradeable AND unsellable? */
+export function isQuestItem(itemId) {
+  const it = ITEMS.get(itemId | 0);
+  return !!it && QUEST_ITEM_TYPES.has(it.type);
+}
+
 export const ITEMS = new Map([
   [0x01, { type: 'weapon', subtype: 'claw', atk: 36, hit: 100, price:  7000, jobs: Ka|Ni }],
   [0x02, { type: 'weapon', subtype: 'claw', atk: 42, hit: 100, price: 14000, jobs: Ka|Ni }],

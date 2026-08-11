@@ -17,7 +17,7 @@ import { drawBorderedBox, drawCursorFaded, clipToViewport } from './hud-drawing.
 import { _makeFadedPal, _stepPalFade } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { getItemNameClean, getItemNameShrines, getSpellNameClean, getSpellNameShrines } from './text-decoder.js';
-import { ITEMS } from './data/items.js';
+import { ITEMS, isQuestItem } from './data/items.js';
 import { SHOPS, getShopType } from './data/shops.js';
 import { getShopSprite, SHOPKEEP_IMAGE_LAYOUT } from './data/shop-sprites.js';
 import { decodeTile, drawTile } from './tile-decoder.js';
@@ -209,14 +209,26 @@ function _atkOf(id)       { const i = ITEMS.get(id); return (i && i.type === 'we
 function _defOf(id)       { const i = ITEMS.get(id); return (i && i.type === 'armor') ? (i.def || 0) : 0; }
 function _shieldDefOf(id) { const i = ITEMS.get(id); return (i && i.type === 'armor' && i.subtype === 'shield') ? (i.def || 0) : 0; }
 
+/**
+ * Can this item be sold at a shop? Exported so the deploy gate reads the REAL
+ * predicate the sell list is built from, rather than re-deriving one.
+ *
+ * Quest items carry a `price` — all three key items do — so a price check alone
+ * put the Magic Key on the counter for 100 gil. See `isQuestItem`. v1.7.862.
+ */
+export function isSellable(itemId) {
+  const item = ITEMS.get(itemId);
+  if (!item || !item.price) return false;
+  return !isQuestItem(itemId);
+}
+
 function _rebuildSellList() {
   const out = [];
   for (const [k, count] of Object.entries(playerInventory)) {
     if (count <= 0) continue;
     const id = Number(k);
-    const item = ITEMS.get(id);
-    if (!item || !item.price) continue;
-    out.push({ id, count, price: sellPrice(item) });
+    if (!isSellable(id)) continue;
+    out.push({ id, count, price: sellPrice(ITEMS.get(id)) });
   }
   shopSt.sellList = out;
 }

@@ -50,7 +50,7 @@ import {
   consumedTileMark, consumedTilesReap,          // v1.7.787 chest/vase replay block
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
-import { ITEMS } from './src/data/items.js';
+import { ITEMS, isQuestItem } from './src/data/items.js';
 // v1.7.747 P-1 — server-arbitrated PvP battle FSM. Behind PVP_ARBITER flag.
 // Module is self-contained; ws-presence just plumbs the wire frames through.
 import {
@@ -73,7 +73,8 @@ import { validateShopTransaction, validateChestOpen, validateVaseSearch } from '
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
 // (weapon/armor/consumable/battle_item/scroll) is tradeable.
-const NON_TRADEABLE_ITEM_TYPES = new Set(['key']);
+// v1.7.862 — was a local `new Set(['key'])`. Same rule as the shop's, so it
+// reads the shared `isQuestItem` now rather than a second copy that could drift.
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
 
@@ -1435,7 +1436,7 @@ function _handleMessage(entry, msg) {
       // local "consume before send" doesn't burn the key on a no-op. The
       // refund channel (`give-item-failed`) re-grants the item. v1.7.793.
       const itemMeta = ITEMS.get(itemId);
-      if (!itemMeta || NON_TRADEABLE_ITEM_TYPES.has(itemMeta.type)) {
+      if (!itemMeta || isQuestItem(itemId | 0)) {
         _send(entry.ws, {
           type:         'give-item-failed',
           targetUserId,
@@ -1483,7 +1484,7 @@ function _handleMessage(entry, msg) {
       // can't validate ownership, but type filtering blocks the obvious
       // dup-equivalent on key/quest items.
       const itemMeta = ITEMS.get(itemId);
-      if (!itemMeta || NON_TRADEABLE_ITEM_TYPES.has(itemMeta.type)) {
+      if (!itemMeta || isQuestItem(itemId | 0)) {
         tradeLog(entry.userId, entry.profile?.name, targetUserId, '', itemId, 0, 'blocked-type');
         _send(entry.ws, {
           type: 'trade-result', targetUserId, targetName: '', accept: false, reason: 'blocked',

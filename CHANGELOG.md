@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.862 — 2026-08-11
+
+**Shop sweep: the shop would buy your Magic Key for 100 gil.**
+
+All three key items carry a `price` — 0x98 (the Altar Cave locked-room key) at 100, 0x99 at 150, 0xa4 at 200 — and the sell list was built from "has a price". So they appeared on the counter, and `economy-arbiter.js` agreed: its sell branch checked only that `_sellPrice(item) > 0`. Client and server were consistent with each other and both wrong.
+
+**The codebase already had the rule, in the wrong place.** The TRADE path has blocked key items since v1.7.616 with its own `NON_TRADEABLE_ITEM_TYPES = new Set(['key'])`, and stated the reason plainly in a comment: *they're quest flags carried in the item table, not inventory*. Selling one is the same loss as trading one away, and permanent.
+
+`isQuestItem(itemId)` now lives in `src/data/items.js` — item data, in the one module the client, `economy-arbiter.js` and `ws-presence.js` all already import. The shop's sell list and the server's sell validation both consult it, and the trade path was switched from its private Set to the shared predicate rather than becoming a third copy.
+
+**Gate** (33rd), and the first two versions of it were weak in ways worth recording:
+
+- It looped `QUEST_ITEM_TYPES` to find things that must not be sellable — which passes **vacuously** the moment someone empties that set. It now pins 0x98/0x99/0xa4 by ID and asserts the set still covers `'key'`, so hollowing out either half fails.
+- The spell-catalog tripwire "passed" its revert test because the edit that was supposed to break it never applied — the source reads `items: [0xE4]` and the patch searched for `items: [228]`. Re-run against the real text, it fires correctly.
+
+The gate also validates every shop catalog: each entry exists in ITEMS, has a price above zero, and is not a quest item.
+
+**Tripwire for a known-latent hazard.** `SPELL_BUY_PRICE` covers 6 of 56 spells and `getSpellBuyPrice` returns 0 for the rest, so `_attemptBuySpell` would `spendGil(0)` — 50 free spells. It is unreachable today because `_isSpellShop()` keys off a `spells` field and **no shop declares one**, which is why this was reported as latent during the magic sweep rather than fixed. The gate now asserts that any shop declaring `spells` prices every one of them: vacuous today, and it fails the moment a spell catalog is added. Verified by adding `spells: [0x02]` to `ur_magic` — `ur_magic: spell 0x2 would be FREE`.
+
+**Checked and found correct:**
+
+- All 16 catalog entries across the 4 shops resolve to real items with real prices.
+- Sell price is `floor(buy / 2)` in both `shop.js` and `economy-arbiter.js`, from the same rule, and the 24 priceless gear/consumables are unsellable on both sides.
+- The server re-checks catalog membership, price, gil and inventory room against its own mirror; it does not trust the client's numbers.
+- The `item.jobs` check in `shop.js` drives the upgrade-arrow indicator, not a purchase block — you can buy for a future job, which is intended.
+- The trade key-item block still fires after the switch to the shared predicate: `pvp-wire-sim` covers it directly and passes 137/137.
+
 ## 1.7.861 — 2026-08-11
 
 **Split `isItemUse`. A weapon's `casts:` spell now runs the full cast timeline; only the caster pose is suppressed.**
