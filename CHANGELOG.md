@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.870 — 2026-08-11
+
+**1 of the 6 recovered — Safe (0x1a) = 97. The other 5 are blocked on a broken harness path, and I am not inventing them.**
+
+Chasing the six turned up two derivation traps, one of which had already cost a real capture and the other of which would have invented five.
+
+**Trap 1 — do not subtract the control round by VALUE.** Safe fires `$a0`, and the control round (char 2 guarding) plays `$a0` too, so the subtraction erased a genuine capture. Safe's sound was in yesterday's trace the whole time, 77 frames after its animation started. Removing the value-subtraction recovers it.
+
+**Trap 2 — bound the window.** `$b6` (119) is the ambient ENEMY-TURN sound and appears in **47 of 48** traces. "First write after the animation starts" grabs it 185 frames later for any spell that fired nothing — which would have handed an invented impact sound to all five silent spells, and to 0x04, dressed as measured data. Every real impact lands **48-98 frames** after its own CHR block goes live; 185 was the only value outside. The bound is 120.
+
+Checked before trusting yesterday's file: **no shipped entry was outside the window.** The only one that was, 0x04, had already been correctly omitted. The 42 shipped in v1.7.869 stand, and are now **43**.
+
+**Why the remaining 5 fired nothing** — measured, not assumed:
+
+- **0x0b Heal, 0x12 Soft, 0x28 Wash, 0x35 Pure** — a cure-status spell on a HEALTHY target does nothing at all. The harness has a documented path for exactly this (`AFFLICT=1`, which poisons the party so there is something to cure), and **that path is currently broken: 0 of 24 spells produce an animation block under it**, at the default frame budget and at 2600. Two attempts, then I stopped rather than keep guessing at its input sequence. `AFFLICT_MASK` is now parameterised, because Wash cures BLIND and would stay silent under poison even once the path works.
+- **0x04 Life2** — revive needs a valid dead target the game will accept.
+
+They are absent from `spell-sfx-captured.js`, with the reason written at the top of the file, and they fall through to the picked rules — which is where a guess belongs, labelled.
+
+**Gate** extended: no captured entry may be 119. If the enemy-turn cadence ever shows up as a spell's impact, the window has slipped and silent spells are being given invented sounds. Verified by adding `[0x0b, 119]`.
+
+**Honest scoreboard: 43 of 48 captured, 1 of the 6 fixed.** The blocker on 4 of the rest is a tooling defect I could not clear in two attempts, and the fifth needs a battle state the sweep does not set up. Saying "fixed the 6" would have meant inventing five sounds — which is the exact failure `docs/SWEEP-DISCIPLINE.md` was written about this morning.
+
 ## 1.7.869 — 2026-08-11
 
 **Captured the real impact SFX for 42 of 48 spells. Meteo included. I should have done this instead of asking Joel to.**

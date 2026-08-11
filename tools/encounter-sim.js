@@ -1653,6 +1653,13 @@ const tests = [
     // The capture must still reproduce the three hand-verified entries. If a
     // re-run of the sweep ever disagrees with these, the sweep is wrong, not
     // the shipped constants — they were traced by hand from REC OAM.
+    // 119 is the ambient ENEMY-TURN sound ($b6), present in 47 of 48 capture
+    // traces. If it ever appears as a spell's impact, the derivation window in
+    // spell-sweep.cjs has slipped and silent spells are being given invented
+    // sounds. v1.7.870.
+    for (const [sid, v] of CAPTURED_SPELL_SFX) {
+      if (v === 119) bad.push(`0x${sid.toString(16)} captured as 119 — that is the enemy-turn cadence, not an impact`);
+    }
     const PARITY = { 0x31: 130, 0x32: 93, 0x33: 149 };
     for (const [id, want] of Object.entries(PARITY)) {
       const got = CAPTURED_SPELL_SFX.get(Number(id));

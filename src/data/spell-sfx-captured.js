@@ -3,60 +3,73 @@
 // Impact SFX per spell, CAPTURED — not picked. FF3J drives its sound engine
 // through battery-backed RAM: ROM writes `0x80 | sfxId` to $7F49, and the
 // music.js constant is `written - 0x3F`. The headless sweep casts each spell
-// against an unkillable goblin, records every $7F49 write with its frame, and
-// takes the first write at or after the frame the spell's OWN CHR block goes
-// live — before that frame the sound belongs to the cast windup or the menu.
+// against an unkillable goblin and records every $7F49 write with its frame.
 //
-// Parity: reproduces all three previously-shipped captures exactly —
+// DERIVATION (v1.7.870 — two traps, both hit):
+//  1. Do NOT subtract the control round by VALUE. Safe (0x1a) plays $a0, which
+//     the control round also plays, so value-subtraction erased a real capture.
+//  2. Bound the window. $b6 (119) is the ambient ENEMY-TURN sound and appears
+//     in 47 of 48 traces. "First write after the animation starts" grabs it,
+//     185 frames later, for any spell that fired nothing — which would have
+//     invented an impact sound for five silent spells.
+//     Every real impact lands 48-98 frames after its own CHR block goes live.
+//     The bound is 120; 185 is the only thing outside it.
+//
+// Parity: reproduces all three hand-traced captures exactly —
 //   Fire 0x31 -> $c1 -> 130 (FIRE_BOOM, REC OAM f1301)
 //   Ice  0x32 -> $9c -> 93  (SW_HIT,    REC OAM f766)
 //   Sleep 0x33 -> $d4 -> 149 (SLEEP_PUFF, REC OAM sleep-emu-snap)
 //
-// Spells absent from this map fired no impact sound in the capture. They fall
-// through to the picked rules in combatant-cast.js — which is where a guess
-// belongs, clearly labelled, rather than dressed up as data.
+// ABSENT ON PURPOSE — these fired no impact sound because the cast was a
+// genuine no-op in the harness, and inventing one is what this file exists to
+// prevent. See docs/SWEEP-DISCIPLINE.md.
+//   0x0b Heal / 0x12 Soft / 0x28 Wash / 0x35 Pure — a cure-status spell on a
+//     HEALTHY target does nothing. Needs the AFFLICT path, which is currently
+//     broken: 0 of 24 spells capture under AFFLICT=1 at any frame budget.
+//   0x04 Life2 — revive needs a valid dead target the game will accept.
 
 export const CAPTURED_SPELL_SFX = new Map([
-  [0x00, 131],  // $7F49=$c2 at frame 641 (anim from 584)
-  [0x01,  91],  // $7F49=$9a at frame 714 (anim from 636)
-  [0x02,  73],  // $7F49=$88 at frame 701 (anim from 636)
-  [0x03,  74],  // $7F49=$89 at frame 713 (anim from 636)
-  [0x05,  90],  // $7F49=$99 at frame 713 (anim from 636)
-  [0x07, 131],  // $7F49=$c2 at frame 493 (anim from 436)
-  [0x08,  91],  // $7F49=$9a at frame 602 (anim from 524)
-  [0x09,  73],  // $7F49=$88 at frame 589 (anim from 524)
-  [0x0a,  74],  // $7F49=$89 at frame 601 (anim from 524)
-  [0x0c,  90],  // $7F49=$99 at frame 601 (anim from 524)
-  [0x0e, 130],  // $7F49=$c1 at frame 602 (anim from 524)
-  [0x0f,  66],  // $7F49=$81 at frame 602 (anim from 524)
-  [0x10, 136],  // $7F49=$c7 at frame 602 (anim from 524)
-  [0x11, 134],  // $7F49=$c5 at frame 622 (anim from 524)
-  [0x13,  74],  // $7F49=$89 at frame 601 (anim from 524)
-  [0x15, 132],  // $7F49=$c3 at frame 602 (anim from 524)
-  [0x16,  78],  // $7F49=$8d at frame 484 (anim from 436)
-  [0x17, 138],  // $7F49=$c9 at frame 602 (anim from 524)
-  [0x18,  74],  // $7F49=$89 at frame 601 (anim from 524)
-  [0x19, 146],  // $7F49=$d1 at frame 601 (anim from 524)
-  [0x1c,  92],  // $7F49=$9b at frame 603 (anim from 525)
-  [0x1d,  93],  // $7F49=$9c at frame 602 (anim from 524)
-  [0x1e, 138],  // $7F49=$c9 at frame 602 (anim from 524)
-  [0x1f, 122],  // $7F49=$b9 at frame 622 (anim from 524)
-  [0x20, 117],  // $7F49=$b4 at frame 622 (anim from 524)
-  [0x21, 117],  // $7F49=$b4 at frame 622 (anim from 524)
-  [0x23, 130],  // $7F49=$c1 at frame 602 (anim from 524)
-  [0x24,  93],  // $7F49=$9c at frame 602 (anim from 524)
-  [0x25, 132],  // $7F49=$c3 at frame 602 (anim from 524)
-  [0x26,  74],  // $7F49=$89 at frame 601 (anim from 524)
-  [0x27, 136],  // $7F49=$c7 at frame 622 (anim from 524)
-  [0x2a, 132],  // $7F49=$c3 at frame 602 (anim from 524)
-  [0x2b, 138],  // $7F49=$c9 at frame 603 (anim from 525)
-  [0x2c, 138],  // $7F49=$c9 at frame 602 (anim from 524)
-  [0x2d, 134],  // $7F49=$c5 at frame 622 (anim from 524)
-  [0x2e, 121],  // $7F49=$b8 at frame 622 (anim from 524)
-  [0x2f, 121],  // $7F49=$b8 at frame 622 (anim from 524)
-  [0x31, 130],  // $7F49=$c1 at frame 602 (anim from 524)
-  [0x32,  93],  // $7F49=$9c at frame 602 (anim from 524)
-  [0x33, 149],  // $7F49=$d4 at frame 602 (anim from 524)
-  [0x34,  74],  // $7F49=$89 at frame 601 (anim from 524)
-  [0x36, 122],  // $7F49=$b9 at frame 622 (anim from 524)
+  [0x00, 131],  // $7F49=$c2, 57f after anim
+  [0x01,  91],  // $7F49=$9a, 78f after anim
+  [0x02,  73],  // $7F49=$88, 65f after anim
+  [0x03,  74],  // $7F49=$89, 77f after anim
+  [0x05,  90],  // $7F49=$99, 77f after anim
+  [0x07, 131],  // $7F49=$c2, 57f after anim
+  [0x08,  91],  // $7F49=$9a, 78f after anim
+  [0x09,  73],  // $7F49=$88, 65f after anim
+  [0x0a,  74],  // $7F49=$89, 77f after anim
+  [0x0c,  90],  // $7F49=$99, 77f after anim
+  [0x0e, 130],  // $7F49=$c1, 78f after anim
+  [0x0f,  66],  // $7F49=$81, 78f after anim
+  [0x10, 136],  // $7F49=$c7, 78f after anim
+  [0x11, 134],  // $7F49=$c5, 98f after anim
+  [0x13,  74],  // $7F49=$89, 77f after anim
+  [0x15, 132],  // $7F49=$c3, 78f after anim
+  [0x16,  78],  // $7F49=$8d, 48f after anim
+  [0x17, 138],  // $7F49=$c9, 78f after anim
+  [0x18,  74],  // $7F49=$89, 77f after anim
+  [0x19, 146],  // $7F49=$d1, 77f after anim
+  [0x1a,  97],  // $7F49=$a0, 77f after anim
+  [0x1c,  92],  // $7F49=$9b, 78f after anim
+  [0x1d,  93],  // $7F49=$9c, 78f after anim
+  [0x1e, 138],  // $7F49=$c9, 78f after anim
+  [0x1f, 122],  // $7F49=$b9, 98f after anim
+  [0x20, 117],  // $7F49=$b4, 98f after anim
+  [0x21, 117],  // $7F49=$b4, 98f after anim
+  [0x23, 130],  // $7F49=$c1, 78f after anim
+  [0x24,  93],  // $7F49=$9c, 78f after anim
+  [0x25, 132],  // $7F49=$c3, 78f after anim
+  [0x26,  74],  // $7F49=$89, 77f after anim
+  [0x27, 136],  // $7F49=$c7, 98f after anim
+  [0x2a, 132],  // $7F49=$c3, 78f after anim
+  [0x2b, 138],  // $7F49=$c9, 78f after anim
+  [0x2c, 138],  // $7F49=$c9, 78f after anim
+  [0x2d, 134],  // $7F49=$c5, 98f after anim
+  [0x2e, 121],  // $7F49=$b8, 98f after anim
+  [0x2f, 121],  // $7F49=$b8, 98f after anim
+  [0x31, 130],  // $7F49=$c1, 78f after anim
+  [0x32,  93],  // $7F49=$9c, 78f after anim
+  [0x33, 149],  // $7F49=$d4, 78f after anim
+  [0x34,  74],  // $7F49=$89, 77f after anim
+  [0x36, 122],  // $7F49=$b9, 98f after anim
 ]);

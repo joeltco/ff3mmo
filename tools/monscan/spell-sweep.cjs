@@ -62,6 +62,11 @@ const ROWS = (process.env.ROWS || '0,1,2,3,4,5,6,7').split(',').map(Number);
 // deferred to round 2, so by the time the spell goes off there is something to
 // cure. Off by default: it changes the conditions of every other capture too.
 const AFFLICT = process.env.AFFLICT === '1';
+// Which status the goblin inflicts when AFFLICT is on. Poison (0x02) is the
+// default because it is what Poisona needed, but a cure spell only fires its
+// sound when there is something IT can cure — Wash (0x28) clears BLIND, so it
+// stays a silent no-op under poison. v1.7.870.
+const AFFLICT_MASK = parseInt(process.env.AFFLICT_MASK || '2', 10);
 
 /**
  * Spell ID for a menu cell.
@@ -118,7 +123,7 @@ if (!isMainThread) {
     // just misses. Zero the goblin's status resistance (+13) and force every
     // spell to 100% hit so a status actually lands.
     p[props + 13] = 0x00;
-    if (AFFLICT) p[props + 10] = 0x02;                 // statusOnAtk = poison
+    if (AFFLICT) p[props + 10] = AFFLICT_MASK & 0xFF;  // statusOnAtk
     for (let sp = 0; sp < 88; sp++) p[SPELL_DATA + sp * 8 + 1] = 100;
     p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
     for (const g of gob) { p[ENCOUNTER_SET + g * 2] = list; p[ENCOUNTER_SET + g * 2 + 1] &= 0xC0; }
