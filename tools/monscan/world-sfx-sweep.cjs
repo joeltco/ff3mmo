@@ -60,6 +60,51 @@ const WATCH = new Set((process.env.WATCH || '').split(',').filter(Boolean)
   .map((v) => parseInt(v, 16)));
 const SHOT_DIR = process.env.SHOT_DIR || (__dirname + '/world-sfx-shots');
 const rom = readFileSync(ROM_PATH);
+
+// ── MAP=<id>: play the sweep somewhere else in the game ────────────────────
+//
+// 200k frames of scripted walking never left the Altar Cave, which is where the
+// intro drops you — so the door, inn and dialogue sounds were simply out of
+// reach. Rather than try to PLAY to a town, relocate the town: every map is
+// described by three per-map ROM tables (a 16-byte property row with tileset /
+// entrance / palettes / song / NPC index / entrance-destination pointer, a
+// tilemap ID, and a graphics-subset ID). Copy one map's rows over ALL 512 and it
+// no longer matters which map the intro picks — whatever loads is the map you
+// asked for. Same move as spell-sweep.cjs patching the encounter tables to force
+// a goblin; no RAM address or start-map hunt needed.
+//
+// Only DATA tables are touched, never code, so every $7F49 store stays at the
+// ROM offset the resolver expects and site identification is unaffected.
+const MAP_PROPS_BASE = 0x004010, TILEMAP_ID_BASE = 0x000A10, GFX_SUBSET_ID_BASE = 0x000C10;
+const MAP = process.env.MAP ? parseInt(process.env.MAP, 10) : null;
+// SPAWN=x,y moves where the party appears. Walking to a door took 200k frames and
+// never arrived; the map's own entrance coords put it one tile away instead.
+// Byte 0 is `tileset<<5 | entranceX` and byte 1 carries flags in its top three
+// bits, so only the low 5 bits of each may be touched — overwriting the whole
+// byte would silently change the tileset and load the wrong graphics.
+const SPAWN = process.env.SPAWN ? process.env.SPAWN.split(',').map(Number) : null;
+
+function patchedRomPath(mapId) {
+  const out = Buffer.from(rom);
+  const props = Buffer.from(out.slice(MAP_PROPS_BASE + mapId * 16, MAP_PROPS_BASE + mapId * 16 + 16));
+  if (SPAWN) {
+    props[0] = (props[0] & 0xE0) | (SPAWN[0] & 0x1F);
+    props[1] = (props[1] & 0xE0) | (SPAWN[1] & 0x1F);
+  }
+  const tid = out[TILEMAP_ID_BASE + mapId], gid = out[GFX_SUBSET_ID_BASE + mapId];
+  for (let m = 0; m < 512; m++) {
+    props.copy(out, MAP_PROPS_BASE + m * 16);
+    out[TILEMAP_ID_BASE + m] = tid;
+    out[GFX_SUBSET_ID_BASE + m] = gid;
+  }
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'wsfx-'));
+  const path = require('path').join(dir, `map${mapId}.nes`);
+  writeFileSync(path, out);
+  console.log(`  [MAP ${mapId}] tileset ${(props[0] >> 5) & 7}, entrance ${props[0] & 0x1F},${props[1] & 0x1F}, `
+    + `song ${props[10]}, npcIdx ${props[4]}, tilemapId ${tid}`);
+  return path;
+}
+const ROM_USE = MAP === null ? ROM_PATH : patchedRomPath(MAP);
 if (SHOOT) { try { require('fs').mkdirSync(SHOT_DIR, { recursive: true }); } catch { /* exists */ } }
 
 const SFX_REG = 0x7F49;
@@ -123,7 +168,7 @@ function resolveSite(win, winBase, pc) {
 
 // ── recorder ───────────────────────────────────────────────────────────────
 function makeRecorder(scenario) {
-  const rec = { phase: 'boot', log: [], nes: null, seen: new Set(), shot: null, shots: [], mapDelta: [], watchBattle: [] };
+  const rec = { phase: 'boot', log: [], nes: null, seen: new Set(), shot: null, shots: [], mapDelta: [], watchBattle: [], fades: [], wasBlack: false };
   rec.hook = (addr, value) => {
     if (addr !== SFX_REG) return;
     const n = rec.nes;
@@ -192,6 +237,11 @@ function armShots(n, rec) {
                            label: rec.shot, bg: mapFingerprint(n), black: false });
         rec.shot = null;
       }
+      // Continuous map-transition log. A fade to black that is NOT a battle is
+      // a map change — the only way to know whether a trek ever left the cave.
+      const black = screenIsBlack(n);
+      if (black && !rec.wasBlack) rec.fades.push({ frame: n.frames, phase: rec.phase });
+      rec.wasBlack = black;
       for (const w of rec.watchBattle) {
         if (!w.sawBattle && n.frames > w.frame && n.frames <= w.until && spriteCount(n) > 12) w.sawBattle = true;
       }
@@ -265,7 +315,7 @@ function printRows(rows, title) {
 // repeated, walks the name grid through all four characters; the game then runs
 // on into the Altar Cave on its own.
 function boot(rec, { name = true } = {}) {
-  const n = armShots(new Nes(ROM_PATH, { onBatteryRamWrite: rec.hook }), rec);
+  const n = armShots(new Nes(ROM_USE, { onBatteryRamWrite: rec.hook }), rec);
   rec.nes = n;
   rec.phase = 'title';
   n.run(300);
@@ -322,7 +372,7 @@ SCENARIOS.selftest = (rec) => { boot(rec); };
 // The opening: FF3 starts with an earthquake that drops the party into the
 // Altar Cave. If EARTHQUAKE and FALL fire anywhere, it is here.
 SCENARIOS.intro = (rec) => {
-  const n = armShots(new Nes(ROM_PATH, { onBatteryRamWrite: rec.hook }), rec);
+  const n = armShots(new Nes(ROM_USE, { onBatteryRamWrite: rec.hook }), rec);
   rec.nes = n;
   rec.phase = 'title';
   n.run(300);
@@ -404,7 +454,7 @@ SCENARIOS.flee = (rec) => {
       n.run(120);
     }
     rec.phase = 'try-' + c.join('+');
-    holdCombo(n, c, 50);
+    holdCombo(n, c, parseInt(process.env.FLEE_HOLD || '50', 10));
     n.run(60);
   }
   console.log(`  [flee] ${combos.length} combos, ${missed} skipped for want of a battle`);
@@ -510,6 +560,131 @@ SCENARIOS.explore = (rec) => {
   }
 };
 
+// What does each battle COMMAND ROW play?
+//
+// The battle window reads Attack / Guard / Run / Item — read off a screenshot,
+// not remembered. That matters twice over: it means escape is a menu pick, not
+// the held button 36 combos and 600-frame holds were hunting for; and it means
+// row 1 is Guard while row 2 is Run, which is worth checking against DEFEND_HIT.
+// Single selections proved nothing earlier (one $c6 on row 1, one $a0 on row 2),
+// so this repeats each row many times over many battles and tallies.
+SCENARIOS.rowsweep = (rec) => {
+  const n = boot(rec);
+  const ROWS = (process.env.ROWS || '0,1,2,3').split(',').map(Number);
+  const PER = parseInt(process.env.PER_ROW || '30', 10);
+  for (const row of ROWS) {
+    let done = 0, guard = 0;
+    while (done < PER && guard++ < 40) {
+      if (spriteCount(n) <= 12) {
+        rec.phase = 'rewalk';
+        if (!reachBattle(n, rec)) break;
+        n.run(150);
+      }
+      rec.phase = 'row' + row;
+      // Clear the encounter message, home the cursor by acting from the top of
+      // a fresh character menu, then step down to the row and confirm.
+      n.press('a', 6, 20);
+      for (let d = 0; d < row; d++) n.press('down', 6, 16);
+      n.press('a', 6, 34);
+      n.run(70);
+      done++;
+    }
+    console.log(`  [rowsweep] row ${row}: ${done} selections`);
+  }
+};
+
+// Leave the cave.
+//
+// `explore` walks a FIXED 16-direction cycle, which is very nearly a closed loop
+// — 200k frames of it never found a staircase, and that is a property of the
+// route, not of the cave. This walks a seeded pseudo-random route instead, so
+// coverage actually grows with time. Seeded (not Math.random) because a run that
+// finds something has to be reproducible.
+SCENARIOS.trek = (rec) => {
+  const n = boot(rec);
+  let seed = parseInt(process.env.TREK_SEED || '20260811', 10) >>> 0;
+  const rnd = () => {                                  // mulberry32
+    seed = (seed + 0x6D2B79F5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const DIRS = ['up', 'down', 'left', 'right'];
+  const BUDGET = parseInt(process.env.TREK_FRAMES || '400000', 10);
+  let fights = 0;
+  while (n.frames < BUDGET) {
+    if (spriteCount(n) > 12) {
+      rec.phase = 'fight';
+      fights++;
+      for (let i = 0; i < 80 && spriteCount(n) > 12; i++) n.press('a', 6, 20);
+      n.run(120);
+      continue;
+    }
+    rec.phase = 'trek';
+    n.hold(DIRS[(rnd() * 4) | 0], 8 + ((rnd() * 40) | 0));
+    n.run(4);
+    if (rnd() < 0.35) { rec.phase = 'act'; n.press('a', 6, 22); }
+    if (rnd() < 0.05) { rec.phase = 'cancel'; n.press('b', 6, 22); }
+  }
+  console.log(`  [trek] ${n.frames} frames, ${fights} fights`);
+};
+
+// Walk around whatever MAP=<id> put us on, pressing A at everything. In a town
+// that means talking to NPCs (which opens and closes a dialogue window) and
+// walking into building doors (which is a real map transition) — the two things
+// the Altar Cave could never provide.
+SCENARIOS.town = (rec) => {
+  const n = boot(rec);
+  let seed = parseInt(process.env.TREK_SEED || '20260811', 10) >>> 0;
+  const rnd = () => {
+    seed = (seed + 0x6D2B79F5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const DIRS = ['up', 'down', 'left', 'right'];
+  const BUDGET = parseInt(process.env.TOWN_FRAMES || '60000', 10);
+  while (n.frames < BUDGET) {
+    if (spriteCount(n) > 12 && rec.phase !== 'fight') {
+      rec.phase = 'fight';
+      for (let i = 0; i < 60 && spriteCount(n) > 12; i++) n.press('a', 6, 20);
+      n.run(90);
+      continue;
+    }
+    rec.phase = 'walk';
+    n.hold(DIRS[(rnd() * 4) | 0], 8 + ((rnd() * 30) | 0));
+    n.run(4);
+    rec.phase = 'talk';                       // A into whatever is in front
+    n.press('a', 6, 26);
+    if (rnd() < 0.4) { rec.phase = 'dismiss'; n.press('a', 6, 26); n.press('b', 6, 26); }
+  }
+};
+
+// Spawn beside a specific trigger tile and walk into it.
+//
+//   MAP=114 SPAWN=21,27 WALK=up node ... trigger
+//
+// Door / vase / chest coordinates come from the ROM's own tilemap (see
+// tools/map-trigger-dump.mjs), so this is aimed, not a search. Each pass nudges
+// back and forth across the tile so a missed step still lands.
+SCENARIOS.trigger = (rec) => {
+  const n = boot(rec);
+  const dir = process.env.WALK || 'up';
+  const back = { up: 'down', down: 'up', left: 'right', right: 'left' }[dir];
+  rec.phase = 'settle';
+  n.run(180);
+  for (let pass = 0; pass < 14; pass++) {
+    rec.phase = 'into-' + dir;
+    n.hold(dir, 26); n.run(30);
+    rec.phase = 'act';
+    n.press('a', 6, 40);                       // chests/vases need the button
+    rec.phase = 'back';
+    n.hold(back, 22); n.run(20);
+  }
+};
+
 // ── main ───────────────────────────────────────────────────────────────────
 const want = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const names = want.length ? want : Object.keys(SCENARIOS);
@@ -528,6 +703,11 @@ for (const name of names) {
     for (const d of rec.mapDelta) {
       console.log(`    ${d.faded ? 'FADED-TO-BLACK' : 'no fade       '}  ${d.changed ? 'bg-changed' : 'bg-same   '}  ${d.label}`);
     }
+  }
+  if (rec.fades.length) {
+    const nb = rec.fades.filter((f) => f.phase !== 'fight');
+    console.log(`  ${rec.fades.length} fade-to-black events (${nb.length} outside a fight):`);
+    for (const f of nb.slice(0, 25)) console.log(`    f${f.frame}  ${f.phase}`);
   }
   if (rec.watchBattle.length) {
     const agg = new Map();

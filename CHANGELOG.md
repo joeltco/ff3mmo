@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.875 — 2026-08-11
+
+**Stopped trying to walk to a town and patched the ROM to put one under the party. 9 of the 12 leftover SFX are now measured against the event that fires them; 3 are not, and are named.**
+
+v1.7.874 measured 5 and left 7 short for one reason: 200k frames of scripted walking never left the Altar Cave, so doors, warps and dialogue were physically out of reach. Playing harder was not going to fix that.
+
+**The fix is a data patch, not a better route.** Every map is described by three per-map ROM tables — a 16-byte property row (tileset / entrance / palettes / song / NPC index / entrance-destination pointer), a tilemap ID, and a graphics-subset ID. Copy one map's rows over all 512 and it stops mattering which map the intro picks: whatever loads is the map you asked for. `MAP=<id>` does that; `SPAWN=x,y` then rewrites the entrance coordinates so the party materialises one tile from the target. Coordinates come from the ROM's own tilemaps via `tools/map-trigger-dump.mjs` (new). Only DATA tables are touched, never code, so every `$7F49` store stays where the PC resolver expects it.
+
+That confirmed Ur is map 114 by its own destination list — `2,3,5,4,6,8`, exactly our shop map IDs.
+
+**Newly measured:**
+
+| constant | wrote | nsf | what triggered it |
+|---|---|---|---|
+| DOOR | `$83` | 68 ✓ | walked into Ur's door (114 @ 21,26) — ROM's only `LDA #$83`, **14/14**, each with a fade to black |
+| WARP | `$dc` | 157 ✓ | the crystal-chamber warp tile (149 @ 6,5), **5/5** with fades; the shot shows a glowing portal |
+| SCREEN_CLOSE | `$93` | 84 ✓ | closing half of the transition wipe, own site 0x7c1cd — 14/14 after the door, 4/5 after the warp |
+| SCREEN_OPEN | `$94` | 85 ✓ | opening half, own site 0x7e2e4, 5/5 with fades |
+
+The fade to black is what makes DOOR a door. v1.7.874 heard `$83` wandering the cave and deliberately refused to call it attributed — same value, no transition. That refusal was right, and it is the difference between the two entries.
+
+**WARP is the one to remember.** v1.7.874 noted that `$dc` appears at no immediate site in the ROM and called that *suggestive* the constant might be wrong, while explicitly refusing to treat it as proof. It was not wrong — the write arrives through the `LDA $CA` dispatcher. The same argument is still outstanding against POND_DRINK, and it is worth exactly as little.
+
+**Three still uncaptured, listed rather than glossed:**
+
+- **RUN_AWAY** — the routine is confirmed; a natural escape is not. The ROM's single `LDA #$B3` sits in a routine at `$BC89` that loops 32 times setting a per-character flag across all four party slots, then plays it. Patching the party-hit store to `JMP $BC89` fires `$b3` → 116 and visibly clears the battlefield — routine and value both right — but a forced jump is not a player escaping, so it stays uncaptured. **Two dead ends recorded so they are not walked again:** that loop's `JSR $8AE6 / AND #$20 / BEQ` reads exactly like a joypad test and is not (`$8AE6` is `INC $B6 / LDA $B6 / RTS`, a counter), and **Run is a menu row** — the window reads Attack / Guard / Run / Item — so 36 button combos and 600-frame holds were chasing a control scheme the game does not have.
+- **POND_DRINK** — never heard. See WARP above for why its absence proves nothing.
+- **FALL** — a *song* (0x30), not an SFX; `nsf + 0x3F` does not apply, so this method cannot touch it either way.
+
+**Four sounds the game plays that no constant accounts for**, recorded in `UNACCOUNTED_SFX` so they are not rediscovered a third time: `$8f`→80 (village event, map 69), `$d9`→154 (map 125; sits beside EARTHQUAKE in ROM), `$be`→127 (intro), `$c6`→135 (battle, Guard row). None is wired to anything.
+
+**Gate:** `OBSERVED_UNATTRIBUTED` is now empty because both members graduated — the tier stays, and the gate still asserts nothing crosses into "measured" without its event, because "we heard the number" is the half that keeps getting shipped as if it were the whole job.
+
 ## 1.7.874 — 2026-08-11
 
 **The 11 leftover SFX: 5 measured against the event that fires them, 5 still unmeasured and named as such, 2 heard but not attributed.**
