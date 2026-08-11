@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.879 — 2026-08-11
+
+**Found the real cursor, and measured the Item row. The cursor is the reusable part.**
+
+**It is an OAM sprite after all — tile `0x59`.** v1.7.878 concluded it was a background tile and went looking in the nametable; that was wrong. My original OAM scan filtered to `y > 140` and the cursor was sitting at **y 61, parked on the monster** — because the game was in *target select*, not command select. That single misread is why `down` appeared to do nothing for four attempts.
+
+Its position is the whole state signal:
+
+| cursor | meaning |
+|---|---|
+| x 40, y 168/184/200/216 | COMMAND window — row = Attack/Guard/Run/Item |
+| x 0, y 168..216 | the ITEM LIST |
+| x ~24 or ~192 | TARGET SELECT (on a monster, or a party member) |
+
+Read it and every press is verifiable instead of counted. Two false trails recorded so nobody repeats them: nothing in the nametable blinks or moves, and tile `0xD5` in column 4 is the **`l` of "Gobl"**, the monster's name — a closed loop keyed on it looked like it was working and silently never advanced the menu.
+
+**Using an item takes FOUR confirms, not three:** open list, pick item, enter target select, confirm. Stopping at three leaves the action unfinished and every pick decays into the error buzz — indistinguishable from an empty bag, which is exactly what two runs reported before the cursor trace exposed it.
+
+**The Item row, 8-12 verified picks per arm:**
+
+| value | nsf | STOCKED | EMPTY |
+|---|---|---|---|
+| `$85` | 70 | 24 | 2 | confirm — exactly 3 per completed use |
+| `$86` | 71 | **0** | **29** | the error buzz |
+
+So Item plays CONFIRM, and refuses with ERROR when nothing is usable. The contrast is strong and reproducible: 0 errors stocked vs 29-53 empty across runs.
+
+**Not claimed:** that item use plays no sound of its own. None appeared even with the window widened 3x to 420 frames — but the Bomb Shard produced no impact either, so its effect may not have resolved under a poked inventory. "No dedicated item sound was observed" is what the data supports; "FF3 plays nothing for item use" is not.
+
+**A Potion is the wrong probe**, for the same reason the pond was: a heal on a full-HP party is refused, and 16 verified picks produced nothing but the error buzz. Third time that no-op trap has cost a run this arc.
+
+New tool: `tools/monscan/battle-item-sweep.cjs`.
+
 ## 1.7.878 — 2026-08-11
 
 **Item row: not captured. And a correction to v1.7.877, which stated one of its findings more confidently than the data supported.**

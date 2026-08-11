@@ -195,34 +195,66 @@ export const BATTLE_ROW_SOUNDS = Object.freeze({
   Attack: 'no row-unique sound; party hits play $b6',
   Guard: 'no row-unique sound observed, but ~half of down-presses never landed, so not conclusive',
   Run: '$b3 escape success; $a0 seen twice alongside it',
-  Item: 'NOT MEASURED — the menu could not be driven to it; see below',
+  Item: 'reachable and selectable; CONFIRM x3 per use, ERROR only when nothing is usable',
 });
 
 /**
- * Why the Item row is still not captured. v1.7.878.
+ * The battle command cursor — the state signal that unblocked all of this.
+ * v1.7.879.
  *
- * Not for want of a battle: the sandbox fixes that. The blocker is that this
- * harness cannot reliably move the battle command cursor. Measured, not guessed:
- * pressing `down` at the command window changes ZERO background tiles on most
- * attempts, and when it does change something it repaints 76-105 tiles — a whole
- * window — rather than stepping a 4-row list. Across 50 consecutive closed-loop
- * attempts the selection never left the first row.
+ * It is OAM sprite tile 0x59 (top-left of a 2x2 blob), and its POSITION is the
+ * menu's state:
  *
- * Two false trails, recorded so they are not walked again:
- *  - The cursor is NOT an OAM sprite. Scanning the whole menu area of OAM finds
- *    nothing; menu glyphs are background tiles in this game.
- *  - Tile 0xD5 in column 4 is NOT the cursor either. It is the 'l' of the
- *    monster's name "Gobl". A closed loop keyed on it looked like it was working
- *    and silently never advanced the menu at all.
+ *   x 40, y 168/184/200/216  -> COMMAND window, row Attack/Guard/Run/Item
+ *   x 0,  y 168..216         -> the ITEM LIST, row index by the same spacing
+ *   x ~24 or ~192            -> TARGET SELECT (parked on a monster or a member)
  *
- * Item also needs stock to be meaningful — an empty bag just buzzes, which would
- * be a fact about the inventory rather than the command. Writing a Potion (0xa6)
- * into $60C0/$60E0 sticks, but the game rewrites that area during a fight, so
- * the poke needs to survive battle start, not merely precede it.
+ * Read it and navigation becomes verifiable per press. Four earlier attempts at
+ * the Item row failed because direction presses were being swallowed during
+ * target-select while the script counted them anyway. Two false trails first:
+ * the cursor is NOT in the nametable (nothing there blinks or moves), and tile
+ * 0xD5 in column 4 is NOT it either — that is the 'l' of the monster's name
+ * "Gobl", and a loop keyed on it silently never advanced the menu at all.
  *
- * What this needs is a state signal for "the command window is awaiting input"
- * — the real cursor tile and its column — so navigation can be verified per
- * press instead of counted. That is a piece of work, not a retry.
+ * Using an item takes FOUR confirms, not three: open list, pick item, enter
+ * target select, confirm. Stopping at three leaves the action unfinished and
+ * every pick decays into the error buzz — indistinguishable from an empty bag,
+ * which is exactly what two runs reported before the cursor trace showed it.
+ */
+export const BATTLE_MENU_CURSOR = Object.freeze({
+  oamTile: 0x59,
+  commandRows: { x: 40, y: [168, 184, 200, 216] },
+  itemListRows: { x: 0, y: [168, 184, 200, 216] },
+  confirmsPerItemUse: 4,
+});
+
+/**
+ * The Item row, measured. v1.7.879.
+ *
+ * Sandbox battle (unkillable, harmless goblin), navigation verified against
+ * BATTLE_MENU_CURSOR, and the bag stocked by re-asserting inventory EVERY FRAME
+ * at $60C0/$60E0 — a poke made before the fight gets rewritten once combat
+ * starts. Confirmed visually: the item list reads "Potion" instead of empty
+ * slots. Two arms, 8-12 verified picks each:
+ *
+ *   value  nsf    STOCKED   EMPTY
+ *   $85     70        24        2     confirm — exactly 3 per completed use
+ *   $86     71         0       29     the error buzz
+ *
+ * So the Item row plays CONFIRM, and refuses with ERROR when there is nothing
+ * usable. The stocked/empty contrast is strong and reproducible (0 errors vs
+ * 29-53 across runs).
+ *
+ * NOT established, and deliberately not claimed: that item use plays no sound of
+ * its own. None appeared even with the sampling window widened 3x to 420 frames
+ * — but a Bomb Shard (0xb1, an offensive item) also produced no impact, so its
+ * effect may not have resolved at all under a poked inventory. "No dedicated
+ * item sound was observed" is what the data supports; "FF3 plays nothing for
+ * item use" is not.
+ *
+ * A Potion is the wrong probe here for the same reason the pond was: a heal on a
+ * full-HP party is refused, so 16 verified picks produced nothing but the error
+ * buzz, identical to an empty bag.
  */
 
 /**
