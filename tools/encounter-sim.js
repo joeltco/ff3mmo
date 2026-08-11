@@ -529,6 +529,29 @@ const tests = [
     if (stretched.length) return { pass: false, name, reason: `cycling burst wrongly stretched: ${stretched.join(', ')}` };
     return { pass: true, name, info: `${CAPTURED_SPELL_ANIMS.size} captured animations reachable, none truncated` };
   },
+  // Regression — a screen-anchored effect must stay inside the map/battle HUD.
+  //
+  // The captured band is the full 256 px NES screen, but the battle view is
+  // only the LEFT 144 px; x 144..256 is the player roster box. Mapping x 1:1
+  // put Quake's crack at x 160..208 — entirely INSIDE the roster box — and
+  // spilled Meteo out to 248. Reported live as "why isnt meteo staying within
+  // the map hud" and "why the fuck is quake in the player roster box". v1.7.846.
+  () => {
+    const name = 'regression — screen-anchored effects stay inside the battle HUD';
+    const HUD_VIEW_W = 144, TILE = 8;
+    const spills = [];
+    for (const [id, e] of CAPTURED_SPELL_ANIMS) {
+      if (e.anchor !== 'screen') continue;
+      const f = HUD_VIEW_W / e.width;
+      let maxX = 0;
+      for (const layout of e.layouts) for (const l of layout) maxX = Math.max(maxX, Math.round(l[1] * f) + TILE);
+      if (maxX > HUD_VIEW_W) spills.push(`0x${id.toString(16)} reaches x=${maxX}`);
+    }
+    if (spills.length) {
+      return { pass: false, name, reason: `spills into the roster box (x>=${HUD_VIEW_W}): ${spills.join(', ')}` };
+    }
+    return { pass: true, name, info: `all screen-anchored effects within x<${HUD_VIEW_W}` };
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────

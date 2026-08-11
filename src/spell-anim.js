@@ -337,10 +337,21 @@ function _buildBlizzardImpactFrames(pal) {
  */
 // Screen-anchored effects replay ABSOLUTE captured coordinates across the whole
 // map-HUD band instead of being centred on a target. The NES scene above the
-// message boxes is 256x152; our band is 256x144 (battle-drawing.js clips to
-// `0, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H`), so x is 1:1 and y is squeezed by
-// 144/152. Tiles stay 8x8 — only positions are mapped, so nothing blurs.
-const SCREEN_BAND_W = 256, SCREEN_BAND_H = 144;
+// message boxes is 256x152.
+//
+// v1.7.846 — the band used to be 256 wide with x mapped 1:1, on the assumption
+// that it was clipped to the full canvas. It is NOT: the map/battle HUD view is
+// only the LEFT 144 px (HUD_VIEW_W); x 144..256 is the player roster box
+// (HUD_RIGHT_X 144, HUD_RIGHT_W 112). A 256-wide band drawn at x=0 therefore
+// spilled 112 px straight across the roster — Meteo overflowed the map HUD, and
+// Quake's crack, captured near the NES screen's right edge, landed INSIDE the
+// roster box instead of on the battle box's right edge.
+//
+// The band is now the view itself: x squeezes by 144/256 and y by 144/152, so
+// the whole effect lands inside the map HUD and a right-edge capture stays on
+// the right edge of the battle box. Tiles stay 8x8 — only positions are mapped,
+// so nothing blurs.
+const SCREEN_BAND_W = 144, SCREEN_BAND_H = 144;
 
 function _buildCapturedFrames(entry) {
   const screen = entry.anchor === 'screen';

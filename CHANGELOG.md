@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.846 — 2026-08-11
+
+**Fix: screen-anchored spell effects were drawn across the player roster box instead of inside the battle HUD.**
+
+Reported: "why isnt meteo staying within the map hud" and "why the fuck is quake in the player roster box, AND NOT ON THE RIGHT EDGE OF THE BATTLE BOX". Both are one root cause, visible for the first time now that these spells actually render (v1.7.845).
+
+The captured band is the full 256 px NES screen and x was mapped 1:1, on a stated assumption in the code that the band was clipped to the whole canvas. It is not: the map/battle view is only the LEFT 144 px (`HUD_VIEW_W`); x 144..256 is the player roster box (`HUD_RIGHT_X` 144, `HUD_RIGHT_W` 112). A 256-wide canvas drawn at x=0 spilled 112 px straight across the roster.
+
+Measured from the captured data:
+
+| | before (x 1:1) | after (x x144/256) |
+|---|---|---|
+| Quake `0x07` | 160..208 — **entirely inside the roster box** | 90..121 |
+| Meteo `0x02` | 8..248 | 5..143 |
+
+Quake's crack was captured near the NES screen's right edge, so mapping it 1:1 put it wholly in the roster. The band is now the view itself — x squeezes by 144/256, y by 144/152 as before — so effects land inside the battle box and a right-edge capture stays on the battle box's right edge. Tiles stay 8x8; only positions map, so nothing blurs.
+
+**`summon-anim.js` deliberately stays at 256.** Checked rather than assumed: the summon presentation fades the roster to black and the creature is MEANT to occupy the player box at x 144..256, so squeezing it would be wrong. Only the spell band was miscalibrated.
+
+Regression gate in `tools/encounter-sim.js` fails if any screen-anchored capture maps outside `x < 144`. 17 passed.
+
 ## 1.7.845 — 2026-08-11
 
 **Fix: 24 of the 37 captured spell animations were built at boot and never drawn. Meteo among them.**
