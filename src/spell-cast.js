@@ -52,6 +52,16 @@ let _sfxPlayed = false;
 // than a spellcaster job action. Items skip the BM/WM cast pose, MP cost, and
 // MAGIC_CAST SFX — they go straight from a 250 ms throw window to magic-hit.
 let _isItemUse = false;
+// v1.7.861 — `isItemUse` was doing two jobs: "no caster pose / no MP / item
+// name on the strip" AND "skip the cast timeline entirely". Those agree for a
+// consumable battle-item (LamiaScale is a throw, not a cast) and disagree for a
+// weapon's `casts:` field — a magic sword is still a spell going off, it just
+// isn't the character casting it. Conflating them meant the four friendly-target
+// casting weapons (Cure, Cure3, Safe, Wall) rendered NOTHING on the target: the
+// enemy path has an early item-use branch that draws the burst directly, but the
+// friendly sparkle needs `getCastAnimElapsedMs()`, which returned -1 for any
+// item-use cast. Split: equipment keeps the full timeline, only the POSE goes.
+let _isEquipmentCast = false;
 // Substate within 'magic-hit' for thrown cross-faction spells. 'projectile'
 // runs the parallel fan-out (single battleTimer 0..150). 'impact-walk' runs
 // the per-target serial impact bursts (battleTimer resets per target). Single-
@@ -122,6 +132,14 @@ export function getCurrentSpellId() { return _spellId; }
 // action. Render paths use this to skip the throw projectile (items go straight
 // to impact) and to align the impact-phase timer to magic-hit start (0 ms).
 export function isCurrentCastItemUse() { return _isItemUse; }
+/** Cast from an equipped weapon's `casts:` field, rather than a consumable. */
+export function isCurrentCastFromEquipment() { return _isEquipmentCast; }
+/**
+ * Does this cast skip the normal cast timeline (buildup -> projectile ->
+ * impact)? True only for CONSUMABLE item-use. The distinction exists because
+ * `_isItemUse` alone cannot tell a thrown flask from a magic sword.
+ */
+function _skipsCastTimeline() { return _isItemUse && !_isEquipmentCast; }
 export function resetSpellCastVars() {
   _spellId = 0; _summonEffect = null; _targets = []; _hitIdx = 0; _effectApplied = false; _baseAmount = -1;
   _sfxPlayed = false; _shakeFired = false;
@@ -224,6 +242,7 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   _baseAmount = -1;
   _sfxPlayed = false;
   _isItemUse = !!opts.isItemUse;
+  _isEquipmentCast = !!opts.fromEquipment;
 
   // Strip name: item name on item-use, spell name on spell-cast. Replace
   // (don't queue) so the actor name already on the strip swaps in-place;
@@ -778,7 +797,7 @@ function _applySpellEffect(target) {
 function _isCastAnimSpell() {
   // Items skip the BM/WM cast pose entirely — they go straight from throw to
   // hit with no buildup window, so timing falls back to legacy 250ms→1100ms.
-  if (_isItemUse) return false;
+  if (_skipsCastTimeline()) return false;
   return spellUsesCastAnim(_spellId);
 }
 
@@ -879,7 +898,7 @@ export function updateSpellCast(dt) {
   // — fire SFX immediately. Spell-cast keeps the projectile-end offset.
   let sfxStartMs;
   if (_isThrownToEnemy) {
-    sfxStartMs = _isItemUse ? 0 : (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup);
+    sfxStartMs = _skipsCastTimeline() ? 0 : (CAST_T_THROW_IMPACT_START - CAST_PHASE_MS.buildup);
   } else if (useCastAnim && !isThrown && spell && spell.target !== 'sight') {
     // Heal-style sparkle starts at preImpactGap into magic-hit phase.
     sfxStartMs = healStyleRenderWindow(_spellId).start - CAST_PHASE_MS.buildup;
@@ -897,7 +916,7 @@ export function updateSpellCast(dt) {
       // duration. Item-use skips the projectile sub-phase entirely (legacy
       // SouthWind behavior: items have no projectile flight, just the per-
       // target impact walk).
-      _magicHitPhase = (isThrown && _hasCrossFactionTarget && !_isItemUse) ? 'projectile' : 'impact-walk';
+      _magicHitPhase = (isThrown && _hasCrossFactionTarget && !_skipsCastTimeline()) ? 'projectile' : 'impact-walk';
       _sfxPlayed = false;
       battleSt.battleState = 'magic-hit'; battleSt.battleTimer = 0;
     }

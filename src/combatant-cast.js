@@ -19,7 +19,8 @@ import { battleSt } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { pvpSt } from './pvp.js';
 import { getCastAnimElapsedMs, getCurrentSpellId, getSpellTargets,
-         getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse } from './spell-cast.js';
+         getMagicHitPhase, getSpellHitIdx, isCurrentCastItemUse,
+         isCurrentCastFromEquipment } from './spell-cast.js';
 import { SPELLS, spellStatusMask } from './data/spells.js';
 import { elemMultiplier } from './battle-math.js';
 import { rand } from './rng.js';
@@ -38,6 +39,11 @@ import { playSFX, SFX } from './music.js';
 function _resolveCastContext(role, idx) {
   if (role === 'player') {
     if (battleSt.battleState !== 'magic-cast') return null;
+    // An equipment cast runs the full timeline but draws NO caster pose — the
+    // weapon is doing the magic, not the character. Previously this fell out of
+    // `getCastAnimElapsedMs()` returning -1, which also killed the on-target
+    // visuals; now the two are separate. v1.7.861.
+    if (isCurrentCastFromEquipment()) return null;
     const elapsed = getCastAnimElapsedMs();
     if (elapsed < 0) return null;
     return { jobIdx: ps.jobIdx, spellId: getCurrentSpellId(), elapsed };
@@ -487,7 +493,7 @@ function _resolvePlayerThrow(_caster) {
   if (!spell) return null;
   // Item-use (battle items routed via animSpellId): skip cast windup AND
   // projectile, go straight to impact at the current hit-walk target.
-  if (isCurrentCastItemUse()) {
+  if (isCurrentCastItemUse() && !isCurrentCastFromEquipment()) {
     const idx = Math.min(getSpellHitIdx(), enemyTargets.length - 1);
     if (idx < 0) return null;
     return { phase: 'impact', targets: [enemyTargets[idx]], impactMs: battleSt.battleTimer, spellId, spell };

@@ -105,8 +105,10 @@ const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowM
         CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
 const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
 const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
-const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY } = await import('../src/cast-anim.js');
-const { spellUsesCastAnim, screenShakeCueMs } = await import('../src/spell-cast.js');
+const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY,
+        CAST_T_HEAL_ANIM_START, CAST_T_HEAL_ANIM_END } = await import('../src/cast-anim.js');
+const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
+        getCastAnimElapsedMs } = await import('../src/spell-cast.js');
 const { getSpellImpactSFX, healStyleRenderWindow } = await import('../src/combatant-cast.js');
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask } = await import('../src/data/spells.js');
 const { applySpell } = await import('../src/combatant-cast.js');
@@ -1349,6 +1351,115 @@ const tests = [
     } finally {
       battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
       battleSt.encounterMonsters = saved.mons; battleSt.battleAllies = saved.allies;
+    }
+  },
+  // Regression — a cast from an equipped weapon's `casts:` field keeps the
+  // full cast timeline; only a CONSUMABLE skips it.
+  //
+  // `isItemUse` was doing two jobs: "no caster pose / no MP / item name on the
+  // strip" AND "skip the cast timeline entirely". Those agree for a thrown
+  // flask and disagree for a magic sword, which is still a spell going off. The
+  // conflation made `getCastAnimElapsedMs()` return -1 for every item-use cast,
+  // and the friendly-target sparkle is gated on that — so the four
+  // friendly-target casting weapons (0x14 Cure, 0xdd Cure3, 0x31 Safe,
+  // 0xd2 Wall) landed their effect and rendered nothing at all. Enemy-target
+  // casts were unaffected: that path has its own early item-use branch.
+  // v1.7.861.
+  () => {
+    const name = 'regression — equipment casts keep the cast timeline, consumables skip it';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    mons: battleSt.encounterMonsters, queue: battleSt.turnQueue,
+                    pending: inputSt.playerActionPending };
+    try {
+      // Runs a cast to the end of its windup and reports how long the
+      // `magic-cast` state lasted, plus the range `getCastAnimElapsedMs()`
+      // covered — which is what every on-target visual keys off.
+      const runWindup = (spellId, target, opts) => {
+        setupEncounter({ monster: { ...goblin, hp: 400, maxHP: 400 }, seed: 3 });
+        ps.hp = 200; ps.maxHP = 200; ps.mp = 99;
+        startSpellCast(spellId, target, opts);
+        if (battleSt.battleState !== 'magic-cast') return { castMs: -1, maxElapsed: -1 };
+        let t = 0, maxElapsed = getCastAnimElapsedMs();
+        while (battleSt.battleState === 'magic-cast' && t < 5000) {
+          battleSt.battleTimer += 1; t += 1;
+          updateSpellCast(1);
+          const e = getCastAnimElapsedMs();
+          if (e > maxElapsed) maxElapsed = e;
+        }
+        return { castMs: t, maxElapsed };
+      };
+
+      const ENEMY = { enemyIndex: 0, targetMode: 'single' };
+      const SELF  = { allyIndex: -1, targetMode: 'single' };
+      const FIRE = 0x31, CURE = 0x34;
+      const BUILDUP = CAST_PHASE_MS.buildup;
+
+      // 1. A normal cast is the reference.
+      const normal = runWindup(FIRE, ENEMY, {});
+      if (normal.castMs !== BUILDUP) {
+        return { pass: false, name, reason: `normal cast windup was ${normal.castMs}ms, wanted ${BUILDUP}` };
+      }
+      // 2. An equipment cast matches it — that is the whole point.
+      const equip = runWindup(FIRE, ENEMY, { isItemUse: true, itemId: 0x0f, fromEquipment: true });
+      if (equip.castMs !== BUILDUP) {
+        return { pass: false, name, reason: `equipment cast windup was ${equip.castMs}ms, wanted ${BUILDUP}` };
+      }
+      // 3. A consumable still skips it. Unchanged behaviour, asserted so this
+      //    fix cannot quietly re-time LamiaScale and friends.
+      const consumable = runWindup(FIRE, ENEMY, { isItemUse: true, itemId: 0xb1 });
+      if (consumable.castMs >= BUILDUP) {
+        return { pass: false, name, reason: `consumable windup grew to ${consumable.castMs}ms — it should skip the timeline` };
+      }
+      if (consumable.maxElapsed !== -1) {
+        return { pass: false, name, reason: 'a consumable cast now reports a live cast clock' };
+      }
+
+      // 4. The actual bug: a friendly-target equipment cast must reach the
+      //    sparkle window. Every on-target visual is gated on this clock, and
+      //    it used to sit at -1 for the entire cast.
+      const healEquip = runWindup(CURE, SELF, { isItemUse: true, itemId: 0x14, fromEquipment: true });
+      if (healEquip.maxElapsed < 0) {
+        return { pass: false, name, reason: 'friendly equipment cast still reports no cast clock — sparkle stays dark' };
+      }
+      // Walk the hit phase too: the window opens inside `magic-hit`.
+      let sawSparkleWindow = false;
+      for (let t = 0; t < 4000 && battleSt.battleState === 'magic-hit'; t++) {
+        const e = getCastAnimElapsedMs();
+        if (e >= CAST_T_HEAL_ANIM_START && e < CAST_T_HEAL_ANIM_END) { sawSparkleWindow = true; break; }
+        battleSt.battleTimer += 1;
+        updateSpellCast(1);
+      }
+      if (!sawSparkleWindow) {
+        return { pass: false, name, reason: 'friendly equipment cast never entered the sparkle window' };
+      }
+      // 5. The CALL SITE. Everything above drives `startSpellCast` directly, so
+      //    it all still passed with `opts.fromEquipment` deleted from
+      //    `_playerTurnMagic` — the gate proved the engine and not the wiring.
+      //    Drive a real weapon cast through the turn dispatcher instead.
+      setupEncounter({ monster: { ...goblin, hp: 400, maxHP: 400 }, seed: 3 });
+      ps.hp = 200; ps.maxHP = 200; ps.mp = 99;
+      inputSt.playerActionPending = { command: 'magic', spellId: FIRE, fromItemId: 0x0f };
+      inputSt.itemTargetType = 'enemy'; inputSt.itemTargetIndex = 0;
+      battleSt.turnQueue = [{ type: 'player' }];
+      battleSt.battleState = 'menu-open';
+      processNextTurn();
+      if (battleSt.battleState !== 'magic-cast') {
+        return { pass: false, name, reason: `weapon cast did not reach magic-cast (got ${battleSt.battleState})` };
+      }
+      let wired = 0;
+      while (battleSt.battleState === 'magic-cast' && wired < 5000) {
+        battleSt.battleTimer += 1; wired += 1; updateSpellCast(1);
+      }
+      if (wired !== BUILDUP) {
+        return { pass: false, name, reason: `weapon cast through the turn dispatcher ran ${wired}ms, wanted ${BUILDUP} — is opts.fromEquipment still set?` };
+      }
+      return { pass: true, name, info: `equipment windup ${equip.castMs}ms = normal, consumable ${consumable.castMs}ms, sparkle reached, call site wired` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.encounterMonsters = saved.mons; battleSt.turnQueue = saved.queue;
+      inputSt.playerActionPending = saved.pending;
     }
   },
 ];

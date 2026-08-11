@@ -18,6 +18,23 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.861 — 2026-08-11
+
+**Split `isItemUse`. A weapon's `casts:` spell now runs the full cast timeline; only the caster pose is suppressed.**
+
+One flag was doing two jobs:
+
+- *no caster pose, no MP cost, the ITEM's name on the battle strip* — correct for both a consumable and a magic sword;
+- *skip the cast timeline entirely* — correct for a thrown flask, wrong for a sword, which is still a spell going off.
+
+They agree for a consumable and disagree for equipment, and 19 weapons carry `casts`. The visible consequence: `getCastAnimElapsedMs()` returns -1 for any item-use cast, and every friendly-target visual is gated on that clock — so the four friendly-target casting weapons (0x14 Cure, 0xdd Cure3, 0x31 Safe, 0xd2 Wall) applied their effect, played their sound and message, and **rendered nothing on the target**. The other fifteen were fine only by accident: the enemy path has its own early item-use branch that draws the impact burst directly.
+
+`_skipsCastTimeline()` now means "consumable item-use", and the three timeline decisions read it — whether the cast animation drives (`_isCastAnimSpell`), where the SFX cue sits, and whether the projectile sub-phase runs. MP, the strip name and the shared cast bag still read `_isItemUse`, because those are right for both kinds. The caster pose is suppressed on its own line in `_resolveCastContext`, where it belongs: the weapon is doing the magic, not the character.
+
+**What changes in play:** those 19 weapon casts gain the normal 800 ms windup in place of 250 ms, get the projectile flight on thrown spells, and the four friendly ones finally show their sparkle. Consumable battle-items are untouched.
+
+**Gate** (32nd) — and the first pass of it was hollow. It drove `startSpellCast` directly, so it still passed with `opts.fromEquipment` deleted from `_playerTurnMagic`: it proved the engine and not the wiring. It now also drives a real weapon cast through `processNextTurn` and asserts the windup at the dispatcher. Three reverts verified to fail: un-splitting the flag (equipment windup back to 250 ms), the call site dropping `fromEquipment` (250 ms through the dispatcher), and over-correcting so consumables get the timeline too (their windup grows to 800 ms).
+
 ## 1.7.860 — 2026-08-11
 
 **Equipment sweep: an ally's elemental weapon was inert.**

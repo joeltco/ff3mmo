@@ -972,7 +972,11 @@ function _playerTurnMagic() {
   // spell-cast skips the MP deduction (the whole point — it is free) and puts
   // the ITEM's name on the battle strip rather than the spell's. The weapon is
   // equipment, not an expendable, so nothing is consumed.
-  if (pending.fromItemId != null) { opts.isItemUse = true; opts.itemId = pending.fromItemId; }
+  if (pending.fromItemId != null) {
+    opts.isItemUse = true; opts.itemId = pending.fromItemId;
+    // Keeps the full cast timeline; only the caster POSE is suppressed. v1.7.861.
+    opts.fromEquipment = true;
+  }
   if (pending.target === 'player') {
     startSpellCast(pending.spellId, { allyIndex: pending.allyIndex ?? -1, targetMode: tm }, opts);
   } else {
