@@ -112,7 +112,7 @@ const { spellUsesCastAnim, screenShakeCueMs, startSpellCast, updateSpellCast,
 const { getSpellImpactSFX, healStyleRenderWindow, SPELL_SFX_RULES,
         spellSfxRule, spellElementParts } = await import('../src/combatant-cast.js');
 const { CAPTURED_SPELL_SFX } = await import('../src/data/spell-sfx-captured.js');
-const { CAPTURED_WORLD_SFX, OBSERVED_UNATTRIBUTED, NOT_CAPTURED } =
+const { CAPTURED_WORLD_SFX, CAPTURED_WORLD_SONGS, OBSERVED_UNATTRIBUTED, NOT_CAPTURED } =
   await import('../src/data/world-sfx-captured.js');
 const { SFX: _SFXMAP } = await import('../src/music.js');
 const SFX_FIRE_BOOM = _SFXMAP.FIRE_BOOM, SFX_THUNDER = _SFXMAP.CRYSTAL_THUNDER;
@@ -1749,6 +1749,14 @@ const tests = [
     for (const [k, want] of CAPTURED_WORLD_SFX) {
       if (_SFXMAP[k] !== want) bad.push(`SFX.${k} is ${_SFXMAP[k]}, measured ${want}`);
     }
+    // Songs are NOT `written - 0x3F`; they are the song id written to $7F43
+    // verbatim. Keeping them in a separate table stops the two derivations from
+    // being quietly mixed — applying the SFX arithmetic to FALL would be wrong
+    // by 0x3F and would still look like a tidy passing check.
+    for (const [k, want] of CAPTURED_WORLD_SONGS) {
+      if (CAPTURED_WORLD_SFX.has(k)) bad.push(`${k} is in both the SFX and SONG tables`);
+      if (_SFXMAP[k] !== want) bad.push(`SFX.${k} is ${_SFXMAP[k]}, measured song ${want}`);
+    }
     // The tiers must stay disjoint, and nothing may claim both.
     for (const [k, want] of OBSERVED_UNATTRIBUTED) {
       if (CAPTURED_WORLD_SFX.has(k)) {
@@ -1764,7 +1772,8 @@ const tests = [
     }
     if (bad.length) return { pass: false, name, reason: bad.join('; ') };
     return { pass: true, name,
-      info: `${CAPTURED_WORLD_SFX.size} world SFX attributed, ${OBSERVED_UNATTRIBUTED.size} observed-only, `
+      info: `${CAPTURED_WORLD_SFX.size} world SFX + ${CAPTURED_WORLD_SONGS.size} song attributed, `
+        + `${OBSERVED_UNATTRIBUTED.size} observed-only, `
         + `${NOT_CAPTURED.length} still unmeasured (${NOT_CAPTURED.join('/')})` };
   },
 ];

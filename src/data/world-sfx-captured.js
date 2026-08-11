@@ -74,6 +74,57 @@ export const CAPTURED_WORLD_SFX = new Map([
   // uses them.
   ['SCREEN_CLOSE', 84],
   ['SCREEN_OPEN', 85],
+  // A successful escape from a random battle, on an UNPATCHED ROM. Run is a
+  // MENU ROW — the battle window reads Attack / Guard / Run / Item — and it is
+  // PER CHARACTER: earlier attempts picked Run for one party member and then
+  // mashed A (= Attack) for the other three, so the party never actually left.
+  // Choosing Run for all four, round after round, escapes. Fired once in 34
+  // full-party rounds across 9 battles, at frame 30655; escape is a roll, so
+  // most rounds fail. Corroborated independently by forcing entry to the routine
+  // at $BC89 (patching the party-hit store to `JMP $BC89`), which plays the same
+  // $b3 and visibly clears the battlefield.
+  //
+  // ONE natural occurrence, reproducible rather than replicated — jsnes is
+  // deterministic, so re-running the identical script reproduces the same escape
+  // rather than sampling a new one.
+  ['RUN_AWAY', 116],
+  // Drinking from the Altar Cave pond (map 115, water at 29,8, party spawned at
+  // 29,9). A pressed at the water fired $d0 on 69 of 70 rounds, and $89 -> 74
+  // (CURE) follows every single time as the heal lands — which is exactly the
+  // two-sound sequence our own `handlePondHeal` already plays. The screenshot
+  // shows the party standing at the pool.
+  //
+  // This was the last one, and it was nearly written off. Across a sweep of all
+  // 215 event triggers in the game, every Altar Cave floor, and ~300k frames of
+  // play, $d0 had never once appeared, and an earlier attempt at this very tile
+  // produced silence. The pond is not an event trigger at all — it is plain
+  // walkable water, so no trigger sweep could ever have found it. Had that
+  // negative been reported as "the ROM never plays this", it would have been
+  // confidently wrong.
+  ['POND_DRINK', 145],
+]);
+
+/**
+ * Songs, which do NOT come through $7F49 at all.
+ *
+ * FALL is a SONG (track 0x30), so `nsf - 0x3F` never applied to it and the SFX
+ * sweep had nothing to see — v1.7.874/875 correctly reported it as out of reach
+ * rather than pretending. Songs are requested by writing the id to $7F43, found
+ * from the ROM: only two literals are ever stored there and one is $37, exactly
+ * our TITLE_SCREEN track.
+ *
+ * Value is the song id, i.e. what `SFX.FALL` must equal directly — no
+ * arithmetic. The instrument is self-checking: the same runs report song 31 on
+ * Ur (which is literally the `songId` byte in Ur's ROM property row) and song 32
+ * when a battle starts (our `TRACKS.BATTLE`).
+ */
+export const CAPTURED_WORLD_SONGS = new Map([
+  // The intro's fall into the Altar Cave. Requested at frame 2733, immediately
+  // after the name grid closes and the screen blacks out; frame 2860 shows a
+  // lone character against pure black (the fall), and by 2980 the party is
+  // standing in the cave. Song 2 (the cave theme) is requested at 2941, so song
+  // 48 spans exactly the falling sequence and nothing else.
+  ['FALL', 48],
 ]);
 
 /**
@@ -89,27 +140,12 @@ export const OBSERVED_UNATTRIBUTED = new Map([]);
  * Never heard. Listed rather than glossed — see the CHANGELOG for what each
  * would take.
  */
-export const NOT_CAPTURED = [
-  // The escape sound. The ROM has exactly one `LDA #$B3` (0x67cc9), in a routine
-  // starting at $BC89 that runs a 32-iteration loop setting a per-character flag
-  // ($7D83,X |= $80) for all four party slots and only then plays the sound.
-  // FORCING entry (patching the party-hit store to `JMP $BC89`) does produce
-  // $b3 -> 116 and visibly empties the battlefield, so the routine and the value
-  // are right — but a forced jump is not the player escaping, so this stays
-  // uncaptured. Two dead ends worth not repeating: that loop's
-  // `JSR $8AE6 / AND #$20 / BEQ` looks exactly like a joypad test and is not
-  // ($8AE6 is `INC $B6 / LDA $B6 / RTS`, a counter), and Run is a MENU ROW, not
-  // a held button — 36 combos and 600-frame holds were chasing a control scheme
-  // the game does not have.
-  'RUN_AWAY',
-  // Never heard; its implied write $d0 has not appeared at any site. Explicitly
-  // NOT evidence it is wrong — that is exactly what was true of WARP right up
-  // until the crystal-chamber capture. It needs the right tile found.
-  'POND_DRINK',
-  // FALL is a SONG (0x30), not an SFX, so `nsf + 0x3F` does not apply and no
-  // store to $7F49 can confirm or refute it. Out of this method's reach.
-  'FALL',
-];
+/**
+ * Empty: all twelve are captured. Kept, with the tier machinery, because the
+ * gate uses these lists to keep "we heard the number" from being filed as "we
+ * know what it is" the next time a constant needs measuring.
+ */
+export const NOT_CAPTURED = [];
 
 /**
  * Sounds the game demonstrably plays that NO constant in music.js accounts for.
@@ -121,4 +157,6 @@ export const UNACCOUNTED_SFX = [
   { wrote: 0xd9, nsf: 154, where: 'event trigger, map 125 at 17,17; sits beside EARTHQUAKE $d8 in ROM' },
   { wrote: 0xbe, nsf: 127, where: 'intro sequence' },
   { wrote: 0xc6, nsf: 135, where: 'battle, seen on the Guard row' },
+  { wrote: 0xc0, nsf: 129, where: 'Altar Cave floor, map 108' },
+  { wrote: 0xc8, nsf: 137, where: 'Altar Cave floors — maps 111, 112, 113, 325, 338' },
 ];

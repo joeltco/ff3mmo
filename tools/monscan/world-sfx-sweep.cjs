@@ -108,6 +108,13 @@ const ROM_USE = MAP === null ? ROM_PATH : patchedRomPath(MAP);
 if (SHOOT) { try { require('fs').mkdirSync(SHOT_DIR, { recursive: true }); } catch { /* exists */ } }
 
 const SFX_REG = 0x7F49;
+// Songs do NOT come through $7F49. FALL is a SONG (track 0x30), which is why the
+// $7F49 method could never confirm or refute it — there is nothing for it to see.
+// The song id is written to $7F43 instead, usually followed by a command byte to
+// $7F42. Identified from the ROM: $7F43 takes only two literals in the entire
+// game and one of them is $37, which is exactly our TITLE_SCREEN track. Recording
+// it costs nothing and puts every song request in reach of the same harness.
+const SONG_REG = 0x7F43;
 
 // ── ROM site index ─────────────────────────────────────────────────────────
 // Every store to $7F49, with the immediate value when the store is fed by a
@@ -168,11 +175,12 @@ function resolveSite(win, winBase, pc) {
 
 // ── recorder ───────────────────────────────────────────────────────────────
 function makeRecorder(scenario) {
-  const rec = { phase: 'boot', log: [], nes: null, seen: new Set(), shot: null, shots: [], mapDelta: [], watchBattle: [], fades: [], wasBlack: false };
+  const rec = { phase: 'boot', log: [], nes: null, seen: new Set(), shot: null, shots: [], mapDelta: [], watchBattle: [], fades: [], wasBlack: false, songs: [] };
   rec.hook = (addr, value) => {
-    if (addr !== SFX_REG) return;
     const n = rec.nes;
     if (!n) return;
+    if (addr === SONG_REG) { rec.songs.push({ frame: n.frames, phase: rec.phase, song: value }); return; }
+    if (addr !== SFX_REG) return;
     const pc = n.nes.cpu.REG_PC;
     const base = Math.max(0, pc - 24);
     const win = [];
@@ -593,6 +601,49 @@ SCENARIOS.rowsweep = (rec) => {
   }
 };
 
+// Drink from the pond.
+//
+//   MAP=115 SPAWN=29,9 WALK=up node ... pond
+//
+// Pressing A at the water on a FULL-HP party does nothing and makes no sound —
+// the same trap that made the cure-status spells look artless in v1.7.872, where
+// a spell with nothing to cure is a silent no-op indistinguishable from a spell
+// with no effect at all. So this alternates: face the water and press A, then
+// pace back and forth to provoke a random encounter and take some damage, then
+// come back and press again. Sooner or later the A press lands on a wounded
+// party, which is the only state in which a heal has anything to say.
+SCENARIOS.pond = (rec) => {
+  const n = boot(rec);
+  const dir = process.env.WALK || 'up';
+  const back = { up: 'down', down: 'up', left: 'right', right: 'left' }[dir];
+  rec.phase = 'settle';
+  n.run(180);
+  const ROUNDS = parseInt(process.env.POND_ROUNDS || '40', 10);
+  let fights = 0;
+  for (let i = 0; i < ROUNDS; i++) {
+    if (spriteCount(n) > 12) {                 // wounded by whatever turned up
+      rec.phase = 'fight';
+      fights++;
+      for (let k = 0; k < 70 && spriteCount(n) > 12; k++) n.press('a', 6, 20);
+      n.run(140);
+      continue;
+    }
+    rec.phase = 'drink';
+    n.press(dir, 4, 10);                       // tap into the water to face it
+    n.press('a', 6, 44);
+    n.press('a', 6, 30);                       // dismiss whatever it says
+    // Pace FAR enough to actually trip an encounter. A one-tile shuffle does
+    // not accumulate steps — the first version of this ran 60 rounds and got 0
+    // fights, so every A press landed on a full-HP party and the no-op case was
+    // never tested at all.
+    rec.phase = 'pace';
+    const PACE = parseInt(process.env.POND_PACE || '6', 10);
+    for (let k = 0; k < PACE; k++) { n.hold(back, 20); n.run(4); }
+    for (let k = 0; k < PACE; k++) { n.hold(dir, 20); n.run(4); }
+  }
+  console.log(`  [pond] ${fights} fights across ${ROUNDS} rounds`);
+};
+
 // Leave the cave.
 //
 // `explore` walks a FIXED 16-direction cycle, which is very nearly a closed loop
@@ -704,6 +755,18 @@ for (const name of names) {
       console.log(`    ${d.faded ? 'FADED-TO-BLACK' : 'no fade       '}  ${d.changed ? 'bg-changed' : 'bg-same   '}  ${d.label}`);
     }
   }
+  if (rec.songs.length) {
+    const t = new Map();
+    for (const g of rec.songs) {
+      const k = `${g.phase}|${g.song}`;
+      if (!t.has(k)) t.set(k, { phase: g.phase, song: g.song, n: 0, first: g.frame });
+      t.get(k).n++;
+    }
+    console.log('  song requests ($7F43):');
+    for (const g of [...t.values()].sort((a, b) => a.first - b.first)) {
+      console.log(`    ${g.phase.padEnd(16)} song 0x${g.song.toString(16)} (${g.song})  x${g.n}  f${g.first}`);
+    }
+  }
   if (rec.fades.length) {
     const nb = rec.fades.filter((f) => f.phase !== 'fight');
     console.log(`  ${rec.fades.length} fade-to-black events (${nb.length} outside a fight):`);
@@ -722,7 +785,7 @@ for (const name of names) {
     }
   }
   all.push({ scenario: name, error: err, rows, shots: rec.shots, mapDelta: rec.mapDelta,
-             watchBattle: rec.watchBattle });
+             watchBattle: rec.watchBattle, songs: rec.songs });
 
   if (name === 'selftest') {
     const checks = [];

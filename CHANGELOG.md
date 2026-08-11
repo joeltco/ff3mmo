@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.876 — 2026-08-11
+
+**All twelve are captured. The last three — RUN_AWAY, FALL, POND_DRINK — each failed for a different reason, and each reason was a wrong assumption rather than a hard limit.**
+
+**RUN_AWAY: I was hunting a button that does not exist.** The escape routine's `AND #$20` reads exactly like a joypad test, so v1.7.874-875 threw 36 button combos and 600-frame holds at it. `$8AE6` is `INC $B6 / LDA $B6 / RTS` — a loop counter. A screenshot of the battle window settled it: the menu reads **Attack / Guard / Run / Item**. Run is a *menu row*, and it is *per character* — picking it for one member and mashing A for the other three (which is Attack) never leaves the fight. Choose Run for all four and the party escapes: `$b3` → **116 ✓**, frame 30655, unpatched ROM, one success in 34 full-party rounds because escape is a roll. Corroborated by forcing entry to the routine at `$BC89`, which plays the same sound and clears the field.
+
+**FALL: it was never on the register I was watching.** FALL is a *song*, and songs are requested at **`$7F43`**, not `$7F49` — so the SFX sweep had nothing to see and correctly reported it out of reach. The intro requests **song 48 ✓** at frame 2733, right as the name grid closes and the screen blacks out; frame 2860 is a lone character falling through darkness, and by 2980 the party is standing in the Altar Cave. The cave theme (song 2) starts at 2941, so 48 spans the fall and nothing else. The instrument self-checks: the same runs report song 31 in Ur — literally the `songId` byte in Ur's ROM property row — and song 32 when a battle starts, our `TRACKS.BATTLE`.
+
+**POND_DRINK: the negative evidence was strong and would have been wrong.** `$d0` had never appeared once — not in a sweep of **all 215 event triggers in the game**, not while walking every Altar Cave floor, not in ~300k frames of play — and its implied write appears at no immediate site in the ROM. That is exactly the shape of argument that was made against WARP one version ago, when WARP was right.
+
+It was right again. The pond is on Altar Cave map 115, and it is **plain walkable water, not an event trigger** — so no trigger sweep could ever have found it, however exhaustive. Spawn the party beside it and press A: `$d0` → **145 ✓** on 69 of 70 rounds, with CURE (`$89` → 74) following every time as the heal lands — the same two-sound sequence `handlePondHeal` already plays. Thanks to Joel for pointing at the last floor; the map was the part I could not get to.
+
+**Final tally — 11 SFX + 1 song, every one tied to the event that fires it:**
+
+| | wrote | nsf | trigger |
+|---|---|---|---|
+| CURSOR | `$98` | 89 | cursor movement |
+| ERROR | `$86` | 71 | selecting a nonexistent command row |
+| TREASURE | `$bf` | 128 | chest opened |
+| BATTLE_SWIPE | `$95` | 86 | encounter swoosh, 11/11 |
+| EARTHQUAKE | `$d8` | 153 | the opening quake |
+| DOOR | `$83` | 68 | Ur's door, 14/14 with fades |
+| WARP | `$dc` | 157 | crystal-chamber portal, 5/5 |
+| SCREEN_CLOSE | `$93` | 84 | transition wipe closing |
+| SCREEN_OPEN | `$94` | 85 | transition wipe opening |
+| RUN_AWAY | `$b3` | 116 | full-party Run |
+| POND_DRINK | `$d0` | 145 | drinking at the Altar Cave pond, 69/70 |
+| FALL | song | 48 | the intro's fall into the cave |
+
+Not one of the twelve turned out to be wrong. The point was never to find them wrong — it was to stop them resting on a formula, and to stop three separate "it cannot be reached" conclusions from being final.
+
+**Six sounds the game plays that no constant accounts for**, recorded in `UNACCOUNTED_SFX`: `$8f`→80, `$d9`→154, `$be`→127, `$c6`→135, `$c0`→129, `$c8`→137. None is wired to anything.
+
+`NOT_CAPTURED` is now empty. The tier machinery stays, and the gate still refuses to let a value cross into "measured" without its event.
+
 ## 1.7.875 — 2026-08-11
 
 **Stopped trying to walk to a town and patched the ROM to put one under the party. 9 of the 12 leftover SFX are now measured against the event that fires them; 3 are not, and are named.**
