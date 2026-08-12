@@ -59,10 +59,25 @@ export class MapRenderer {
         const m = mid < 128 ? mid : mid & 0x7F;
         const coll = collision[m];
 
-        if ((coll & 0x07) === 3) continue;
-        if (coll & 0x80) continue;
-
         const trig = this._triggerMap.get(`${nx},${ny}`);
+        // v1.7.951 — EVENT tiles ($60-$63, trigger type 0) must not stop this
+        // walk. They carry collision bit $80, so the `coll & 0x80` test below
+        // treated them as walls. Since v1.7.944 made them PASSABLE, the player
+        // could walk through one into the rest of a town while this room-bounds
+        // walk still stopped dead at it — so the clip rectangle covered only the
+        // entry area and everything beyond it was never drawn. You walked into
+        // blackness. That is the "map is in pieces" report, and it hit every one
+        // of the 30 maps that event fix opened, towns included.
+        //
+        // This walk MUST agree with `isPassable`. Where they disagree, the
+        // player can reach tiles the renderer refuses to paint.
+        const isEventTile = trig && trig.type === 0;
+        if (!isEventTile) {
+          if ((coll & 0x07) === 3) continue;
+          if (coll & 0x80) continue;
+        }
+        // Doors still stop the walk on purpose: the clip must not bleed into
+        // the next room through a doorway.
         if (trig && trig.type === 1) continue;
 
         visited[nidx] = 1;

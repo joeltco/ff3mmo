@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.951 — 2026-08-12
+
+### Fixed — "the map is in pieces" (regression I introduced in v1.7.944)
+- **The renderer was not drawing most of the towns I had just opened.** `MapRenderer._computeRoomBounds` walks out from the spawn to decide the clip rectangle for shared indoor tilemaps, and it skips any tile with collision bit `$80` — which **includes event tiles**. v1.7.944 made those passable so towns stopped being sealed off, but this walk still stopped dead at them, so the clip covered only the entry area and everything past it was never painted. The player walked into blackness.
+
+| map | tiles DRAWN before | after | tiles reachable |
+|---|---|---|---|
+| 31 | **27** | whole map | 493 |
+| 55 | **45** | whole map | 293 |
+| 43 | **18** | 525 | 146 |
+| 10 | **132** | 812 | 196 |
+
+- Event tiles no longer stop the room-bounds walk. Doors (`type === 1`) still do, on purpose — the clip must not bleed through a doorway into the next room.
+
+### Added
+- `tools/check-room-clip.mjs` — asserts the invariant directly: **every tile reachable from the spawn must lie inside the drawn area.** `_computeRoomBounds` and `isPassable` are two separate implementations of "can you be here", and any disagreement puts the player in un-drawn space. Wired into `deploy.sh`.
+- **Proven in both directions:** all 69 play-area maps pass now; reverting the fix fails 4 maps, worst being map 10 with 139 walkable tiles outside the drawn area.
+
+### Process note
+- This was found by rendering every play-area map to PNG and looking at them, not by asking. `tools/map-sheet.mjs` (new) renders many maps into one contact sheet for exactly that.
+
 ## 1.7.950 — 2026-08-12
 
 ### Fixed — map 22 is explorable
