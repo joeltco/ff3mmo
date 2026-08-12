@@ -21,6 +21,7 @@ import { SPELLS, spellStatusMask } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { isSummonSpell, summonCastMs, summonTotalMs } from './summon-anim.js';
+import { livingEnemyIndices, enemyAtIndex } from './combatant-cast.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicErase,
          applySpell, playSpellImpactSFX } from './combatant-cast.js';
@@ -282,9 +283,9 @@ function _allyMagicEnemyTarget() {
 // (per-target indexed) so the number lands on the actual target slot, not
 // on the player's currently-selected enemy. `drawSWDamageNumbers` is the
 // renderer; gated to fire during 'ally-magic-hit' as well as 'magic-hit'.
-function _setAllyMagicEnemyDmgNum(num) {
+function _setAllyMagicEnemyDmgNum(num, idx = battleSt.allyMagicTargetIdx) {
   if (battleSt.allyMagicTargetType !== 'enemy' && battleSt.allyMagicTargetType !== 'pvp-enemy') return;
-  setSwDmgNum(battleSt.allyMagicTargetIdx, num.value || 0, { miss: !!num.miss });
+  setSwDmgNum(idx, num.value || 0, { miss: !!num.miss });
 }
 
 function _applyAllyMagicEffect() {
@@ -312,6 +313,28 @@ function _applyAllyMagicEffect() {
   else if (isPlayerTgt) target = ps;
   else if (tType === 'ally') target = battleSt.battleAllies[tIdx];
   if (!target) return;
+
+  // A SUMMON hits every living enemy, the same as a player-cast summon
+  // (spell-cast.js walks its whole `_targets` list once at scene end). One
+  // pre-rolled amount is applied to each, which is also what the player does —
+  // `_baseAmount` is rolled once and reused per target. Damage numbers are set
+  // per index so each enemy shows its own.
+  if (isEnemy && isSummonSpell(spellId)) {
+    const idxs = livingEnemyIndices(tType);
+    for (const i of idxs) {
+      const t = enemyAtIndex(tType, i);
+      if (!t) continue;
+      applySpell(spell, t, {
+        amount: battleSt.allyMagicDamageRoll | 0,
+        statusFlag: 0,
+        onDmgNum: (dmg) => _setAllyMagicEnemyDmgNum({ value: dmg, timer: 0 }, i),
+        onMiss:   () => _setAllyMagicEnemyDmgNum({ miss: true, timer: 0 }, i),
+        onLand:   () => _setAllyMagicEnemyDmgNum({ value: 0, timer: 0 }, i),
+        onStatusMsg: replaceBattleMsg,
+      });
+    }
+    return;
+  }
 
   // Pick amount channel. Heal / cure-status / revive spells ride
   // `healAmount`; everything else rides `damageRoll`. Both pre-rolled by the
@@ -382,13 +405,8 @@ function _updateAllyMagicCast(dt) {
     // battle-drawing.js refused to hook this path until the timeline existed.
     // SFX fires at scene start, per the standing spell-anim-start rule.
     //
-    // SCOPE, stated so it is not mistaken for finished: this wires the ally
-    // summon's PRESENTATION and TIMELINE. Effect application still goes through
-    // `_applyAllyMagicEffect`, which resolves ONE target (allyMagicTargetIdx) —
-    // whereas a player summon applies to every target. So an ally summon looks
-    // right and lands on a single enemy. Making it hit the whole encounter is a
-    // MECHANICS change, not a presentation one, and was deliberately not made
-    // here.
+    // Effect application matches the player as of v1.7.890: a summon hits every
+    // living enemy (see `_applyAllyMagicEffect`), not just the picked one.
     const _sid2 = battleSt.allyMagicSpellId;
     const isSummon = isSummonSpell(_sid2);
     const isHeal = !isSummon && _isAllyMagicHealSpell(_sid2);

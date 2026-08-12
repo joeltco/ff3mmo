@@ -1232,60 +1232,67 @@ function _applyPVPEnemyMagicEffect() {
   const partyIdx = pvpSt.pvpMagicPartyTargetIdx;
   if (partyIdx > -100) {
     const sid = pvpSt.pvpMagicSpellId;
-    const partyTgt = partyIdx === -1 ? ps : (battleSt.battleAllies[partyIdx] || null);
-    if (!partyTgt || partyTgt.hp <= 0) {
-      pvpSt.pvpMagicPartyTargetIdx = -100;
-      return;
-    }
-    // Reflect MVP (v1.7.214) — if the player has Reflect, block hostile
-    // spell damage/status entirely. NES canon bounces to the caster's team;
-    // we keep MVP scope to "full block + Reflected! message" until the
-    // bounce-back targeting ships (see BUFFS-AUDIT.md #7). Allies don't
-    // have buffs per buffs.js v0 scope, so only player target gates here.
-    if (partyIdx === -1 && hasBuff(ps, BUFF_REFLECT)) {
-      replaceBattleMsg(BATTLE_REFLECT);
-      playSFX(SFX.SW_HIT);
-      pvpSt.pvpMagicPartyTargetIdx = -100;
-      return;
-    }
-    // Damage / status routes through the SHARED applyMagicDamage / applyMagicStatus
-    // helpers in combatant-cast.js — same pattern player + ally use. Per-role
-    // callbacks handle role-specific damage-num + shake placement (player has
-    // its own damage num, allies have an indexed map).
-    const setDmgNum = (n) => {
-      if (partyIdx === -1) setPlayerDamageNum({ ...n, timer: 0 });
-      else getAllyDamageNums()[partyIdx] = { ...n, timer: 0 };
-    };
-    const triggerShake = () => {
-      if (partyIdx === -1) battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
-      else battleSt.allyShakeTimer[partyIdx] = BATTLE_SHAKE_MS;
-    };
-    // SFX already fired at impact start (engine timer-driven); helpers don't double-fire.
-    if (sid === 0x33) {
-      const spell = SPELLS.get(0x33);
-      applyMagicStatus(partyTgt, 'sleep', spell ? spell.hit : 15, {
-        onStatusMsg: replaceBattleMsg,
-        onMiss: () => setDmgNum({ miss: true }),
-      });
-    } else {
-      const spell = SPELLS.get(sid);
-      applyMagicDamage(partyTgt, pvpSt.pvpMagicDamageRoll | 0, spell, {
-        onDmgNum: (dmg) => setDmgNum({ value: dmg }),
-        onShake: triggerShake,
-      });
-    }
-    // Death trigger — roster ally KO from a spell needs the same death-anim
-    // hookup the SouthWind path uses (pvp.js:816). `deathTimer` drives the
-    // fall/fade; pulling the turn from `turnQueue` stops the dead ally from
-    // taking actions. Without this, ally HP drops to 0 but they keep standing
-    // and the game still hands them turns. Player KO (partyIdx === -1) is
-    // handled by the existing top-level death timer in `hudSt`, no-op here.
-    if (partyIdx >= 0) {
-      const ally = battleSt.battleAllies[partyIdx];
-      if (ally && ally.hp <= 0 && ally.deathTimer == null) {
-        ally.deathTimer = 0;
-        battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === partyIdx));
+    // Apply to ONE party slot: -1 = player, 0+ = roster ally. Extracted so a
+    // summon can hit every living party member without a second copy of the
+    // reflect gate, the damage-num routing or the ally death hookup.
+    const applyToPartySlot = (idx) => {
+      const tgt = idx === -1 ? ps : (battleSt.battleAllies[idx] || null);
+      if (!tgt || tgt.hp <= 0) return;
+      // Reflect MVP (v1.7.214) — full block + message; NES canon bounces to the
+      // caster's team, out of scope until the bounce targeting ships. Allies
+      // have no buffs (buffs.js v0), so only the player slot gates. For a
+      // multi-target summon this blocks THIS slot and lets the rest resolve,
+      // which is the faithful generalisation of a single-target block.
+      if (idx === -1 && hasBuff(ps, BUFF_REFLECT)) {
+        replaceBattleMsg(BATTLE_REFLECT);
+        playSFX(SFX.SW_HIT);
+        return;
       }
+      const setDmgNum = (n) => {
+        if (idx === -1) setPlayerDamageNum({ ...n, timer: 0 });
+        else getAllyDamageNums()[idx] = { ...n, timer: 0 };
+      };
+      const triggerShake = () => {
+        if (idx === -1) battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
+        else battleSt.allyShakeTimer[idx] = BATTLE_SHAKE_MS;
+      };
+      // SFX already fired at impact start (engine timer-driven); helpers don't double-fire.
+      if (sid === 0x33) {
+        const spell = SPELLS.get(0x33);
+        applyMagicStatus(tgt, 'sleep', spell ? spell.hit : 15, {
+          onStatusMsg: replaceBattleMsg,
+          onMiss: () => setDmgNum({ miss: true }),
+        });
+      } else {
+        const spell = SPELLS.get(sid);
+        applyMagicDamage(tgt, pvpSt.pvpMagicDamageRoll | 0, spell, {
+          onDmgNum: (dmg) => setDmgNum({ value: dmg }),
+          onShake: triggerShake,
+        });
+      }
+      // Death trigger — a roster ally KO'd by a spell needs the same death-anim
+      // hookup the SouthWind path uses. Player KO is handled by the existing
+      // top-level death timer in `hudSt`.
+      if (idx >= 0) {
+        const ally = battleSt.battleAllies[idx];
+        if (ally && ally.hp <= 0 && ally.deathTimer == null) {
+          ally.deathTimer = 0;
+          battleSt.turnQueue = battleSt.turnQueue.filter(t => !(t.type === 'ally' && t.index === idx));
+        }
+      }
+    };
+
+    if (isSummonSpell(sid)) {
+      // A summon hits the whole opposing side, exactly as a player-cast summon
+      // walks its full target list once at scene end. One pre-rolled amount is
+      // reused per target, which is also what the player does.
+      applyToPartySlot(-1);
+      const allies = battleSt.battleAllies || [];
+      for (let i = 0; i < allies.length; i++) {
+        if (allies[i] && allies[i].hp > 0) applyToPartySlot(i);
+      }
+    } else {
+      applyToPartySlot(partyIdx);
     }
     pvpSt.pvpMagicPartyTargetIdx = -100;
     return;
@@ -1344,9 +1351,8 @@ function _processPVPEnemyMagic(dt) {
     // inside a ~500 ms window and cut it off mid-entrance, which is precisely
     // why battle-drawing.js refused to hook this path until now.
     //
-    // SCOPE: presentation + timeline. `_applyPVPEnemyMagicEffect` still resolves
-    // ONE target, while a player summon applies to every target — same
-    // deliberate limit as the ally path. Widening it is a MECHANICS change.
+    // Effect application matches the player as of v1.7.890: a summon hits the
+    // whole opposing party (see `_applyPVPEnemyMagicEffect`), not one slot.
     const _psid2 = pvpSt.pvpMagicSpellId;
     const isSummon = isSummonSpell(_psid2);
     const isHeal = !isSummon && _isPVPMagicHealSpell(_psid2);

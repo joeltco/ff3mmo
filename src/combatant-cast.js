@@ -213,6 +213,44 @@ function _spellIdOf(spell) {
 }
 
 /** Element as a component list, whatever shape the entry uses (array | string | null). */
+/**
+ * Every LIVING enemy index on the given side, in the index convention that
+ * `spell-cast.js:_getEnemyAt`, `battle-ally.js` and `pvp.js` all already share:
+ *
+ *   'enemy'     -> battleSt.encounterMonsters[i]
+ *   'pvp-enemy' -> 0 is pvpSt.pvpOpponentStats; 1+ is pvpEnemyAllies[i - 1]
+ *
+ * Lives here because ally-cast and PVP-cast both need it and it must not be
+ * written twice — two copies of "who is alive" is exactly the kind of split
+ * that drifts. The player path builds the same set inline while resolving its
+ * own targetSpec, so this is the second and last implementation, not a third.
+ */
+export function livingEnemyIndices(targetType) {
+  const out = [];
+  if (targetType === 'enemy') {
+    const ms = battleSt.encounterMonsters || [];
+    for (let i = 0; i < ms.length; i++) if (ms[i] && ms[i].hp > 0) out.push(i);
+    return out;
+  }
+  if (targetType === 'pvp-enemy') {
+    if (pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0) out.push(0);
+    const as = pvpSt.pvpEnemyAllies || [];
+    for (let i = 0; i < as.length; i++) if (as[i] && as[i].hp > 0) out.push(i + 1);
+    return out;
+  }
+  return out;
+}
+
+/** The combatant object at an enemy index, same convention as above. */
+export function enemyAtIndex(targetType, idx) {
+  if (targetType === 'enemy') return (battleSt.encounterMonsters || [])[idx] || null;
+  if (targetType === 'pvp-enemy') {
+    if (idx === 0) return pvpSt.pvpOpponentStats || null;
+    return (pvpSt.pvpEnemyAllies || [])[idx - 1] || null;
+  }
+  return null;
+}
+
 export function spellElementParts(spell) {
   const el = spell && spell.element;
   return Array.isArray(el) ? el : (typeof el === 'string' ? el.split(',') : []);

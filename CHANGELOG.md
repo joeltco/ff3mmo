@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.890 — 2026-08-11
+
+**Ally and PVP summons now hit every target, matching the player. The caveat I flagged twice is closed.**
+
+v1.7.888 and v1.7.889 wired the presentation and timeline and said explicitly that effect application still resolved ONE target while a player summon hits all of them. That is the mechanics change, and it is now made deliberately rather than as a side effect.
+
+- **Ally summon** → every living enemy (`battleSt.encounterMonsters`, or the PVP enemy cells).
+- **PVP summon** → the whole opposing party: the player plus every living roster ally.
+- **One pre-rolled amount is reused per target**, which is exactly what the player does — `_baseAmount` is rolled once and applied to each target in its walk.
+
+**One shared source for "who is alive", not three.** `livingEnemyIndices()` and `enemyAtIndex()` live in `combatant-cast.js`, which already imports `battleSt` and `pvpSt` and is already the shared home for cast logic. Two copies of that would be exactly the kind of split that drifts — the player builds the same set inline while resolving its own targetSpec, so this is the second and last implementation.
+
+**PVP needed a small restructure rather than a loop bolted on.** The per-slot work — the Reflect gate, damage-number routing (player vs indexed ally), shake, and the ally death/turn-queue hookup — was inline for a single target. It is now `applyToPartySlot(idx)`, called once for an ordinary spell and once per living slot for a summon. Reflect blocks only the slot that has it and the rest still resolve, which is the faithful generalisation of a single-target block.
+
+**Gates #42 and #43, and the second half of each is the point.** Both assert the summon hits all THREE and that an ordinary Fire still hits exactly ONE. A test that only checked "the summon hit 3" would pass just as happily if Fire had started hitting 3 too. Both fail in **both** directions — reverting the widening, and over-widening it to every spell:
+
+| revert | result |
+|---|---|
+| summon branch removed | FAIL — summon damaged 1/3 |
+| widened to all spells | FAIL — ordinary Fire damaged 3, want 1 |
+
+Gates: lint 0, encounter-sim 43, pvp-wire-sim 140, wire-stats lossless.
+
 ## 1.7.889 — 2026-08-11
 
 **Summon presentation wired into the PVP path. All three roles now run a summon as one scene.**

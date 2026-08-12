@@ -1958,6 +1958,123 @@ const tests = [
       pvpSt.isPVPBattle = saved.isPvp; pvpSt.pvpMagicSpellId = saved.sid;
     }
   },
+  // Regression — an ally summon hits EVERY living enemy; an ordinary spell
+  // still hits exactly one.
+  //
+  // The second half is the point. Widening the summon case is easy to get wrong
+  // in the direction of widening everything, and a test that only checked "the
+  // summon hit 3" would pass just as happily if Fire had started hitting 3 too.
+  () => {
+    const name = 'regression — ally summon hits all living enemies, ordinary spells still hit one';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    mons: battleSt.encounterMonsters, rnd: battleSt.isRandomEncounter,
+                    sid: battleSt.allyMagicSpellId };
+    try {
+      const SHIVA = 0x30, FIRE = 0x31;
+      const run = (spellId) => {
+        setupEncounter({ monster: { ...goblin, hp: 900, maxHP: 900 }, seed: 7 });
+        battleSt.encounterMonsters = [
+          { ...goblin, hp: 900, maxHP: 900 },
+          { ...goblin, hp: 900, maxHP: 900 },
+          { ...goblin, hp: 900, maxHP: 900 },
+        ];
+        battleSt.isRandomEncounter = true;
+        battleSt.battleState = 'ally-magic-hit';
+        battleSt.battleTimer = 0;
+        battleSt.allyMagicSpellId = spellId;
+        battleSt.allyMagicCasterIdx = 0;
+        battleSt.allyMagicTargetType = 'enemy';
+        battleSt.allyMagicTargetIdx = 0;
+        battleSt.allyMagicDamageRoll = 40;
+        battleSt.allyMagicHealAmount = 0;
+        battleSt.allyMagicEffectApplied = false;
+        battleSt.allyMagicSfxPlayed = false;
+        const before = battleSt.encounterMonsters.map(m => m.hp);
+        let g = 0;
+        while (!battleSt.allyMagicEffectApplied && g < 40000) {
+          battleSt.battleTimer += 16; g += 16; updateBattleAlly(16);
+        }
+        const after = battleSt.encounterMonsters.map(m => m.hp);
+        return before.map((h, i) => h - after[i]);
+      };
+      const summonDmg = run(SHIVA);
+      const fireDmg   = run(FIRE);
+      const nSummon = summonDmg.filter(d => d > 0).length;
+      const nFire   = fireDmg.filter(d => d > 0).length;
+      if (nSummon !== 3) {
+        return { pass: false, name,
+          reason: `ally summon damaged ${nSummon}/3 living enemies (per-enemy: ${summonDmg.join(',')})` };
+      }
+      if (nFire !== 1) {
+        return { pass: false, name,
+          reason: `ordinary ally Fire damaged ${nFire} enemies, want exactly 1 (per-enemy: ${fireDmg.join(',')}) `
+                + '— the summon widening leaked into every spell' };
+      }
+      return { pass: true, name,
+        info: `summon hit 3/3 (${summonDmg.join(',')}), Fire hit 1 (${fireDmg.join(',')})` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
+      battleSt.allyMagicSpellId = saved.sid;
+    }
+  },
+  // Regression — a PVP summon hits the whole party; an ordinary PVP spell still
+  // hits one slot. Mirror of the ally gate, opposite side of the field.
+  () => {
+    const name = 'regression — PVP summon hits the whole party, ordinary spells still hit one';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    isPvp: pvpSt.isPVPBattle, sid: pvpSt.pvpMagicSpellId,
+                    allies: battleSt.battleAllies };
+    try {
+      const SHIVA = 0x30, FIRE = 0x31;
+      const run = (spellId) => {
+        setupEncounter({ monster: { ...goblin, hp: 900, maxHP: 900 }, seed: 11 });
+        ps.hp = 900; ps.maxHP = 900; ps.buffs = {};
+        battleSt.battleAllies = [
+          { ...battleSt.battleAllies[0], hp: 900, maxHP: 900, deathTimer: null },
+          { ...battleSt.battleAllies[0], hp: 900, maxHP: 900, deathTimer: null },
+        ];
+        battleSt.allyShakeTimer = [0, 0];
+        pvpSt.isPVPBattle = true;
+        pvpSt.pvpMagicSpellId = spellId;
+        pvpSt.pvpMagicPartyTargetIdx = -1;         // aimed at the player slot
+        pvpSt.pvpMagicDamageRoll = 40;
+        pvpSt.pvpMagicEffectApplied = false;
+        pvpSt.pvpMagicSfxPlayed = false;
+        battleSt.battleState = 'pvp-enemy-magic-hit';
+        battleSt.battleTimer = 0;
+        const before = [ps.hp, ...battleSt.battleAllies.map(a => a.hp)];
+        let g = 0;
+        while (!pvpSt.pvpMagicEffectApplied && g < 40000) {
+          battleSt.battleTimer += 16; g += 16; updatePVPBattle(16);
+        }
+        const after = [ps.hp, ...battleSt.battleAllies.map(a => a.hp)];
+        return before.map((h, i) => h - after[i]);
+      };
+      const summonDmg = run(SHIVA);
+      const fireDmg   = run(FIRE);
+      const nSummon = summonDmg.filter(d => d > 0).length;
+      const nFire   = fireDmg.filter(d => d > 0).length;
+      if (nSummon !== 3) {
+        return { pass: false, name,
+          reason: `PVP summon damaged ${nSummon}/3 party members (per-slot: ${summonDmg.join(',')})` };
+      }
+      if (nFire !== 1) {
+        return { pass: false, name,
+          reason: `ordinary PVP Fire damaged ${nFire} slots, want exactly 1 (per-slot: ${fireDmg.join(',')})` };
+      }
+      return { pass: true, name,
+        info: `summon hit 3/3 (${summonDmg.join(',')}), Fire hit 1 (${fireDmg.join(',')})` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      pvpSt.isPVPBattle = saved.isPvp; pvpSt.pvpMagicSpellId = saved.sid;
+      battleSt.battleAllies = saved.allies;
+    }
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────
