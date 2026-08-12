@@ -18,6 +18,37 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.905 — 2026-08-12
+
+- **New: `tools/dis6502.mjs`** — a 6502 disassembler that speaks the `BB/AAAA`
+  bank/address form the code comments already cite, so those citations are
+  checkable instead of taken on faith. Address math (`bank*0x2000 + 0x10 +
+  (addr - window)`) verified by dumping 3A/921F and matching all 32 bytes of
+  `TRIGGER_TYPE_TABLE` against `map-loader.js`.
+- **`$64-$6F` are NOT unhandled triggers — retracting the v1.7.903 note.** The
+  ROM's own range check at 3A/91A4 is `CMP #$60/BCC skip, CMP #$64/BCC process,
+  CMP #$70/BCC skip, CMP #$7D/BCS skip`, so those tiles are excluded before
+  `TRIGGER_TYPE_TABLE` is read and its "4" entries are never consulted for them.
+  Our ranges match exactly. The 1,817 such tiles across 396 maps are ordinary
+  metatiles governed by their collision byte — no work owed.
+- **Collision-trigger type 1: the ROM blocks it, and blocks types 0/4/5 too.**
+  Both collision routines (3B/90EB, and 3B/B0C5 which `isPassable` already
+  cited) open `LDA $0400,Y / BMI blocked` — bit 7 set is blocked unconditionally
+  and the trigger type is never inspected. The ROM fires triggers on the ATTEMPT
+  to enter, so the player never stands on a door tile. Our engine lets the
+  player stand on the tile and fires from there, which is why types 0/4/5 are
+  passable. Documented in `map-renderer.js` as the deliberate divergence it is.
+- Consequence, recorded but NOT worked around: type-1 tiles sit at the entrances
+  of maps 43, 96, 124 and 167, which is why `map-explorable.mjs` flags them.
+  The real fix is adopting fire-on-attempt; widening the passable-type list is
+  not, because the player would stand inside doorways.
+- Also settled: `trigId` is a per-TYPE counter, matching `LDA $0760,Y` at
+  3A/91D7. The ROM additionally writes a computed index BACK into the tilemap
+  (base table at 3A/923F + per-tile-id count) which the PPU loader at 3B/8A16
+  uses to fetch trigger graphics from `$0500/$0580/$0600`; we resolve triggers
+  by position instead. `processTriggerTiles`' comment claimed it replaced tile
+  ids and never did — corrected.
+
 ## 1.7.904 — 2026-08-12
 
 - **Fixed the spawn model in `tools/map-explorable.mjs`; 4 of its 12 flagged

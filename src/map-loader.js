@@ -272,8 +272,26 @@ function readNPCs(romData, npcIdx) {
 }
 
 // Scan decompressed tilemap for placeholder tiles ($60-$63, $70-$7C),
-// assign sequential trigger IDs per type, and replace them with special tile IDs.
+// assign sequential trigger IDs per type.
 // Returns Map<"x,y", {type, trigId}> for quick position lookup.
+//
+// v1.7.905 — verified against the ROM routine at 3A/9197 (disassemble with
+// `node tools/dis6502.mjs 3A 9195 30`). Two things it settles:
+//
+//   RANGES. The ROM's own check is CMP #$60/BCC skip, CMP #$64/BCC process,
+//   CMP #$70/BCC skip, CMP #$7D/BCS skip — so $64-$6F and $7D+ are skipped
+//   BEFORE `TRIGGER_TYPE_TABLE` is consulted, and the table's "4" entries are
+//   never read for them. The ranges below match exactly. The 1,817 tiles in
+//   $64-$6F across 396 maps are ordinary metatiles by design, not unhandled
+//   triggers; their walkability comes from their collision byte like any other.
+//
+//   TRIG IDS. `trigId` is a per-TYPE counter, matching `LDA $0760,Y` / ADC #$01
+//   at 3A/91D7 where Y is the type. (The ROM ALSO keeps a per-tile-id counter at
+//   $0740,X, adds it to a base from a second table at 3A/923F, and writes that
+//   sum BACK into the tilemap — the tile becomes an index into the $0500/$0580/
+//   $0600 trigger-graphics tables the PPU loader reads at 3B/8A16. We keep the
+//   original ids and resolve triggers by position instead, which is why this
+//   returns a Map rather than mutating `tilemap` as the old comment claimed.)
 export function processTriggerTiles(tilemap) {
   const perTypeCounts = new Array(8).fill(0);
   const trigMap = new Map();

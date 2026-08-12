@@ -500,6 +500,23 @@ export class MapRenderer {
     const collByte = this.mapData.collision[m];
 
     // Bit 7 = collision-based trigger tile
+    //
+    // v1.7.905 — this is a DELIBERATE divergence from the ROM, now confirmed
+    // rather than assumed. Both ROM collision routines (3B/90EB and the
+    // 3B/B0C5 one cited below) open with `LDA $0400,Y / BMI blocked`: bit 7
+    // set means BLOCKED, full stop, and the trigger type is never inspected.
+    // The ROM fires a trigger on the ATTEMPT to enter, so the player never
+    // stands on a door tile.
+    //
+    // We let the player stand on the tile and fire the trigger from there, so
+    // some types have to be passable. Verify with:
+    //   node tools/dis6502.mjs 3B 90E0 22
+    //
+    // The consequence is real and unfixed: type 1 is solid here, and type-1
+    // tiles sit at the entrances of maps 43, 96, 124 and 167, which
+    // `tools/map-explorable.mjs` flags as having no exit from spawn. Moving to
+    // the ROM's fire-on-attempt model is the actual fix; widening this list is
+    // not, because then the player stands inside doorways.
     if (collByte & 0x80) {
       const b2 = this._collisionByte2[metatileId];
       const trigType = (b2 >> 4) & 0x0F;
