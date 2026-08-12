@@ -336,6 +336,13 @@ export class MapRenderer {
       // wallpaper. Interiors sit in void, where a shorter clip really does mean
       // "draw nothing" — which is what the real game does.
       bottom = Math.max(bottom, Math.min(MAP_SIZE, rmaxY + (isEnclosedRoom ? 1 : 2)));
+      // NOT also a ceiling. Map 44's room ends at row 23 while the wall-overhang
+      // loop above walks down two more all-wall rows and paints them full width
+      // (14 stray tiles). Capping `bottom` at rmaxY + 1 for interiors does fix
+      // that map — and MEASURED against the real ROM it costs ~83 cells across
+      // nine other interiors (112 and 179 lose 15 each, 166 loses 14, 20/175/176
+      // seven each). Their overhang rows are real. Map 44 stays imperfect on
+      // purpose; it is the cheaper of the two errors.
       left   = Math.min(left,   Math.max(0, rminX - 1));
       right  = Math.max(right,  Math.min(MAP_SIZE, rmaxX + 2));
     }

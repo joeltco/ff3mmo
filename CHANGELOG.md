@@ -43,7 +43,8 @@ This is the thing every previous fix in this arc was missing. Four room-clip cha
 
 ### Still open (filed, not swept under)
 - **Map 122** renders completely different content than the real ROM (a small brick stairwell there, a large pale structure here). A tilemap/tileset decode mismatch, not a clip issue.
-- **Map 44** spawns the player at (2,29) inside the decorative bottom band of a shared tilemap, where exactly ONE tile is walkable — the player cannot move. That degenerate room is also what makes the overhang loop paint its 2 spare rows. A spawn bug, not a clip bug.
+- **Map 44** draws 14 tiles the real game leaves blank. Its room ends at row 23 and the wall-overhang loop in `_computeRoomBounds` walks down two more all-wall rows and paints them full width. Capping `bottom` at `rmaxY + 1` for interiors fixes it — and **measured against the real ROM it costs ~83 cells across nine other interiors** (112 and 179 lose 15 each, 166 loses 14, 20/175/176 seven each), whose overhang rows are genuine. Left alone deliberately: it is the cheaper of the two errors.
+  - *Correction:* I first reported this as a spawn bug — "lands in a decorative band with one walkable tile". That was wrong, and came from a throwaway diagnostic that used the raw ROM entrance (2,29) instead of the computed spawn. `map-shot` and `map-audit` agree the real spawn is **(2,21)**, 54 walkable tiles, 2/7 exits, audit verdict ok.
 
 ## 1.7.960 — 2026-08-12
 
