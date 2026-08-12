@@ -311,6 +311,7 @@ export class MapRenderer {
     //
     // Drawing a little extra is a cosmetic flaw. Drawing too little deletes the
     // town. When the two disagree, err toward drawing more.
+    const bottomBeforeUnion = bottom;
     if (rmaxX >= 0) {
       top    = Math.min(top,    Math.max(0, rminY - 1));
       // The drawn region ENDS at the room's last walkable row. Measured against
@@ -336,15 +337,42 @@ export class MapRenderer {
       // wallpaper. Interiors sit in void, where a shorter clip really does mean
       // "draw nothing" — which is what the real game does.
       bottom = Math.max(bottom, Math.min(MAP_SIZE, rmaxY + (isEnclosedRoom ? 1 : 2)));
-      // NOT also a ceiling. Map 44's room ends at row 23 while the wall-overhang
-      // loop above walks down two more all-wall rows and paints them full width
-      // (14 stray tiles). Capping `bottom` at rmaxY + 1 for interiors does fix
-      // that map — and MEASURED against the real ROM it costs ~83 cells across
-      // nine other interiors (112 and 179 lose 15 each, 166 loses 14, 20/175/176
-      // seven each). Their overhang rows are real. Map 44 stays imperfect on
-      // purpose; it is the cheaper of the two errors.
+      // Below the room, the wall band continues only while it is ATTACHED to
+      // the room. A flat "stop at rmaxY + 1" is wrong — measured, it cost ~83
+      // cells across nine interiors whose lower rows are the room's own curved
+      // wall. Map 20 is the clearest: an oval tower whose rows 8-9 (`~#######~`,
+      // `~~#####~~`) mirror rows 0-1 and are unmistakably part of it. Map 13's
+      // Kazus inn is the opposite: below its one-tile exit column sits the FILL
+      // tile, so the building has ended and the full-width row beneath is the
+      // next room's — 8 stray tiles.
+      //
+      // So walk down column-wise from the room's own bottom tiles and keep a
+      // row only where the tile directly beneath a still-attached column is not
+      // void. Interiors only; a town's scenery below its walkable area is real.
+      if (isEnclosedRoom) {
+        let attach = new Set();
+        for (let x = 0; x < MAP_SIZE; x++) if (roomSet.has(rmaxY * MAP_SIZE + x)) attach.add(x);
+        let attachedBottom = rmaxY + 1;
+        for (let y = rmaxY + 1; y < MAP_SIZE && attach.size; y++) {
+          const stillAttached = new Set();
+          for (const x of attach) if (tilemap[y * MAP_SIZE + x] !== fillTile) stillAttached.add(x);
+          if (!stillAttached.size) break;
+          attachedBottom = y + 1;
+          attach = stillAttached;
+        }
+        bottom = Math.min(bottom, attachedBottom);
+      }
       left   = Math.min(left,   Math.max(0, rminX - 1));
       right  = Math.max(right,  Math.min(MAP_SIZE, rmaxX + 2));
+      // Why this map's clip came out the way it did. Read by
+      // tools/clip-info.mjs — without it, diagnosing a trailing-tile report
+      // means rebuilding a throwaway script, and the last one I wrote seeded
+      // from the raw ROM entrance and produced a wrong diagnosis.
+      this._clipDiag = {
+        rminY, rmaxY, rminX, rmaxX,
+        bottomBeforeUnion, roomSize: roomSet.size, roomFraction,
+        totalWalkable, fillIsVoid, isEnclosedRoom,
+      };
     }
     let l = left, r = right;
 

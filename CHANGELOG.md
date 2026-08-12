@@ -18,6 +18,24 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.962 — 2026-08-12
+
+### Fixed — the Kazus inn (map 13). This is the one that was still wrong.
+- **8 trailing tiles below the inn's room.** v1.7.961 fixed three interiors but missed this one, because its stray row comes from a different code path: the wall-overhang loop, not the `rmaxY + 2` union term. Reported as "KAZUS INN IS STILL FUCKED UP".
+- **The wall band below a room now extends only while it stays ATTACHED to that room.** Walk down column-wise from the room's own bottom tiles; keep a row only where the tile directly beneath a still-attached column isn't void.
+  - Map 13's exit is a one-tile column, and directly below it sits the **fill tile** — the building has ended, so the full-width row beneath belongs to the next room. Now dropped.
+  - Map 20 is an oval tower whose rows 8-9 (`~#######~`, `~~#####~~`) mirror rows 0-1 and are its own curved wall. Still drawn.
+- This is why the flat "stop at `rmaxY + 1`" rule was rejected in v1.7.961 — it could not tell those two apart and cost ~83 cells across nine interiors. Attachment can.
+- **Measured: of all 69 play-area maps, exactly ONE render changed — map 13.** Against the real ROM at the matched camera it goes from 8 stray cells to **0**, agreement 71.7% → **79.3%**, with the only remaining difference being the party sprite we don't draw.
+- Gate: map 13 added to `check-room-clip.mjs`'s trailing-tile set. **Proven by reverting** — the gate fails naming map 13, and passes with the fix.
+
+### Added — `tools/clip-info.mjs`
+- Prints a map's clip rectangle beside the numbers that produced it (room bbox, `rmaxY`, phase-1 vs final bottom, the three `isEnclosedRoom` inputs) plus an ASCII grid of the clipped area. `MapRenderer` now records those in `_clipDiag`.
+- Every trailing-tile investigation needs exactly this, and rebuilding it ad hoc is how a wrong diagnosis got filed last time — a throwaway script seeded from the raw ROM entrance instead of the computed spawn and reported a room with one walkable tile. It seeds from the spawn the game actually uses.
+
+### Note on finding it
+The v1.7.961 sweep reported map 13 as clean. It wasn't — the stray row only enters the 9-tile window when the camera is near the spawn, and the sweep compared at a camera the real capture never sat at. Locating the real game's camera by grid-searching ours (seed pinned at the spawn) is what exposed it. `--seed` existing separately from `--at` is what made that possible.
+
 ## 1.7.961 — 2026-08-12
 
 ### Fixed — the trailing tiles, measured against the real ROM instead of inferred

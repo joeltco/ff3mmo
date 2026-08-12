@@ -40,7 +40,7 @@ const W = 32, TILE = 16;
 // Pinned by id rather than re-deriving "is this an interior" here, so the gate
 // tests the fix rather than restating the renderer's own heuristic and
 // agreeing with itself.
-const TRAILING_MAPS = new Set([3, 15, 47]);
+const TRAILING_MAPS = new Set([3, 13, 15, 47]);
 
 // Maps reachable on foot — see tools/map-audit.mjs --play.
 const PLAY = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25,26,27,28,29,30,
@@ -121,7 +121,7 @@ for (const id of IDS) {
   // "trailing tiles outside of the rooms" bug. Verified against the real ROM
   // with tools/gt-sweep.mjs (jsnes warps to each map; the actual PPU output is
   // diffed against ours): maps 3, 15 and 47 each drew a 7-tile band the real
-  // game leaves blank.
+  // game leaves blank, and map 13 — the Kazus inn — an 8-tile one.
   //
   // Interiors ONLY. A town's scenery legitimately sits below its walkable
   // tiles, and enforcing this everywhere is what deleted Kazus in v1.7.954.
