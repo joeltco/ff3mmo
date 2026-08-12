@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.896 — 2026-08-11
+
+**Checked the other harnesses for vacuous comparisons. Three found — including one that gates every deploy.**
+
+**`wire-stats-diag` would certify a corpse as lossless.** Its whole verdict is `diverged === 0`, which is trivially true when there is nothing to diverge. Two modes, both confirmed by mutation:
+
+| mutation | old result |
+|---|---|
+| `fields` emptied | **"No divergence detected — wire profile is lossless." exit 0** |
+| a field zeroed on BOTH sides | **"lossless"** — the values matched because both were dead |
+
+It runs on every deploy, so either would have waved through a completely broken stats build. It now asserts LIVENESS first: 18 fields compared, and 15 named stats non-zero on both sides. `statusResist` and `elemResist` are deliberately excluded — they are legitimately `0`/`[]` for this fixture, and asserting them would fail honest profiles. The diagnostic names the dead field: `local.maxHP is 0`.
+
+**Two dungeon gates passed over empty sweeps.** `every dungeon floor is generable and traversable` printed **"0 floors x 60 timestamp seeds = 0 maps, all traversable"** and passed when the floor list was emptied. `dungeon walkability set is never more permissive` did the same with **"0 tiles compared, 0 optimistic"**. Both now pin the shape of the work — 5 floors / 300 maps, and ~61k tiles compared — not merely its silence.
+
+**Two harnesses came back clean, and one was already armed.** `pvp-wire-sim`'s rate-limit coverage test carries `assertTrue(kinds.length > 20, 'regex drifted')` — exactly this guard, written by whoever added it. Its save round-trip flagged in my scan and is a false positive: `input` is a hardcoded literal so `Object.keys` cannot be empty, and it already asserts scalars survive *unchanged*, "not merely survive".
+
+**The shape to look for**, now that it has turned up in five places across two versions: any verdict of the form "no differences", "no failures", "none optimistic" is free when the collection is empty. The fix is never to the comparison — it is to assert the work happened at all.
+
+Gates: lint 0, encounter-sim 46, pvp-wire-sim 140, wire-stats lossless (18 fields, all live).
+
 ## 1.7.895 — 2026-08-11
 
 **Audited the gates my parser had missed. Nine of them were vacuous under a whole class of regression — fixed.**

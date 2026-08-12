@@ -1628,7 +1628,17 @@ const tests = [
     if (hard.length) {
       return { pass: false, name, reason: hard.slice(0, 4).join('; ') + (hard.length > 4 ? ` (+${hard.length - 4} more)` : '') };
     }
+    // LIVENESS. `hard.length === 0` is trivially true when nothing was swept:
+    // emptying the floor list makes this print "0 floors x 60 seeds = 0 maps,
+    // all traversable" and PASS. Verified by mutation. Pin the shape of the
+    // sweep, not just its silence.
     const seeds = rows.reduce((a, r) => a + r.seeds, 0);
+    const WANT_FLOORS = 5, WANT_SEEDS = WANT_FLOORS * 60;
+    if (rows.length !== WANT_FLOORS || seeds !== WANT_SEEDS) {
+      return { pass: false, name,
+        reason: `swept ${rows.length} floors / ${seeds} maps, expected ${WANT_FLOORS} / ${WANT_SEEDS} `
+              + '— "all traversable" over an empty sweep is vacuous' };
+    }
     return { pass: true, name, info: `${rows.length} floors x 60 timestamp seeds = ${seeds} maps, all traversable` };
   },
   // Regression — the dungeon sweep's walkability approximation must never be
@@ -1668,6 +1678,14 @@ const tests = [
     if (optimistic.size) {
       const list = [...optimistic].map(([t, n]) => `0x${t.toString(16)} x${n}`).join(', ');
       return { pass: false, name, reason: `PASS claims walkable where the game blocks: ${list}` };
+    }
+    // LIVENESS, same reason as the sweep gate above: `optimistic.size === 0` is
+    // free when nothing was compared, so an empty loop would report
+    // "0 tiles compared, 0 optimistic" and pass. Real runs compare ~61k tiles.
+    if (compared < 10000) {
+      return { pass: false, name,
+        reason: `only ${compared} tiles compared (expect ~61k) — "0 optimistic" over an empty `
+              + 'comparison is vacuous' };
     }
     return { pass: true, name, info: `${compared} tiles compared, 0 optimistic, ${stricter} conservatively strict` };
   },

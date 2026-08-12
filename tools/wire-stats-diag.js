@@ -199,8 +199,36 @@ for (const k of fields) {
   process.stdout.write(`${marker} ${k.padEnd(18)}${a.padEnd(28)}${b}\n`);
 }
 process.stdout.write('\n');
+
+// ── Liveness, BEFORE trusting "no divergence" ──────────────────────────────
+//
+// `diverged === 0` is trivially true when there is nothing to diverge. Two ways
+// this harness could certify a corpse, both verified by mutation:
+//   1. `fields` empty  -> the loop never runs -> "lossless", exit 0.
+//   2. every value 0 on BOTH sides -> every comparison matches -> "lossless".
+// It is a deploy gate, so either would wave through a completely dead stats
+// build. Same class as the symmetry gates in encounter-sim, which passed while
+// the monster dealt zero damage.
+//
+// statusResist and elemResist are legitimately 0/[] for this fixture, so they
+// are deliberately NOT in the liveness set — asserting them would fail honestly
+// built profiles.
+const MUST_BE_LIVE = ['level', 'jobLevel', 'atk', 'def', 'evade', 'mdef', 'hitRate',
+                      'agi', 'int', 'mnd', 'hp', 'maxHP', 'mp', 'maxMP', 'knownSpellsLen'];
+const dead = [];
+if (fields.length < 18) dead.push(`only ${fields.length} fields compared, expected 18`);
+for (const k of MUST_BE_LIVE) {
+  if (!(Number(local[k]) > 0)) dead.push(`local.${k} is ${JSON.stringify(local[k])}`);
+  if (!(Number(reconstructed[k]) > 0)) dead.push(`wire.${k} is ${JSON.stringify(reconstructed[k])}`);
+}
+if (dead.length) {
+  process.stdout.write('PROFILE IS DEAD — "no divergence" here would be vacuous, not lossless:\n');
+  for (const d of dead) process.stdout.write('  ' + d + '\n');
+  process.exit(1);
+}
+
 if (diverged === 0) {
-  process.stdout.write('No divergence detected — wire profile is lossless.\n');
+  process.stdout.write(`No divergence detected — wire profile is lossless (${fields.length} fields, all live).\n`);
   process.exit(0);
 } else {
   process.stdout.write(`${diverged} field(s) diverge between local ps and wire-reconstructed ally.\n`);
