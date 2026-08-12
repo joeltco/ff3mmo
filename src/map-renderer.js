@@ -311,13 +311,37 @@ export class MapRenderer {
         }
       }
     }
-    // v1.7.956 — MASK DISABLED. It clipped away everything outside the
-    // walkable area plus one ring, which is right for a small interior room and
-    // WRONG for a town: a town's buildings, trees and scenery sit outside the
-    // walkable tiles and are most of the picture. Kazus (map 10) rendered as
-    // scattered fragments. Kept the computation for reference; nothing reads it.
-    this._visibleMask = null;
-    void mask;
+    // v1.7.957 — the mask applies ONLY to small enclosed building interiors.
+    //
+    // Applying it everywhere is what tore Kazus apart: a town's buildings,
+    // trees and scenery sit OUTSIDE the walkable tiles and are most of the
+    // picture, so masking to "walkable + one ring" deletes the town. The fix is
+    // not a better mask, it is knowing which maps are rooms. Three conditions,
+    // all of which a town fails:
+    //
+    //   1. The fill tile is NOT walkable — interiors sit in void; a town's fill
+    //      is ground or hedge you can see past.
+    //   2. The player's room is SMALL (<= 60 tiles). Kazus's village room is
+    //      145, Ur's 291, the castle's 240.
+    //   3. The room is a minority of the map's walkable tiles (< 50%), i.e. the
+    //      tilemap really does hold other rooms. Towns and caves run 0.85-0.98;
+    //      the inn is 0.22.
+    //
+    // Measured verdicts: inn (17) 13 tiles / 0.22 -> masked. Village (164) 145
+    // / 0.38, castle (18) 240 / 0.52, Ur (114) 291 / 0.88, mountain town (10)
+    // 196 / 0.94, Altar Cave (111) 0.85 -> all UNMASKED.
+    const fillM = fillTile < 128 ? fillTile : fillTile & 0x7F;
+    const fillColl = collision[fillM];
+    const fillIsVoid = (fillColl & 0x07) === 3 || (fillColl & 0x80) !== 0;
+    let totalWalkable = 0;
+    for (let y = 0; y < MAP_SIZE; y++) {
+      for (let x = 0; x < MAP_SIZE; x++) {
+        if (this.isPassable(x, y, 0) || this.isPassable(x, y, 1) || this.isPassable(x, y, 2)) totalWalkable++;
+      }
+    }
+    const roomFraction = totalWalkable ? roomSet.size / totalWalkable : 1;
+    const isEnclosedRoom = fillIsVoid && roomSet.size <= 60 && roomFraction < 0.5;
+    this._visibleMask = isEnclosedRoom ? mask : null;
 
     this._roomClip = {
       x: l * TILE_SIZE,

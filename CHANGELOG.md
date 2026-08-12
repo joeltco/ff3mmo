@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.957 — 2026-08-12
+
+### Fixed — the inn's trailing tiles, WITHOUT touching towns
+- The precise per-tile mask is back, but it now applies **only to small enclosed building interiors**. Applying it everywhere is what tore Kazus apart in v1.7.954: a town's buildings, trees and scenery sit OUTSIDE the walkable tiles and are most of the picture, so masking to "walkable + one ring" deletes the town.
+- The missing piece was never a better mask — it was **knowing which maps are rooms**. Three conditions, all of which a town fails:
+  1. **The fill tile is not walkable.** Interiors sit in void; a town's fill is ground or hedge.
+  2. **The room is small** (≤ 60 tiles). The inn's is 13; Kazus's village room is 145, Ur's 291, the castle's 240.
+  3. **The room is a minority of the map's walkable tiles** (< 50%) — the tilemap really does hold other rooms. Towns and caves measure 0.85-0.98; the inn is 0.22.
+
+### Verified by rendering both kinds
+- **165 maps masked** (building interiors), **91 unmasked**. Every town (10, 114, 164, 253, 254), castle (18, 186, 171), cave (111, 22) and the ship (180) is unmasked; the inn (17) and its neighbours (11, 14) are masked.
+- Rendered map 10 through the live mask logic: the town draws **complete** — mountains, forest, lake, INN, shop row, houses. Rendered map 17: the counter room plus the exit corridor **at its true 3-tile width**, no full-width band, no bedroom above.
+- All gates green: room-clip on 256 maps, event-tiles, tree-occlusion, encounter-zones, npc-placement, boot-order, wire-sim 153/153, smoke.
+
 ## 1.7.956 — 2026-08-12
 
 ### Fixed — Kazus rendered as fragments. My regression, from v1.7.953/954.
