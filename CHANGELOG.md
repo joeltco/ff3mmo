@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.958 — 2026-08-12
+
+### Reverted — the visibility mask, everywhere. Third attempt, third regression.
+- Restricting the mask to enclosed rooms (v1.7.957) stopped it deleting towns, but **the mask is still wrong for a room**: it is the walkable area dilated by ONE tile, and these rooms have wall bands **two tiles thick**. It shaved the outer wall off the inn — worse than the trailing tiles it was meant to fix.
+- Rendering map 17 in isolation looked correct to me, which is exactly why this kept shipping: a room drawn tight against its inner wall reads fine in a still image and wrong in the game.
+
+### Where this stands
+- The rectangular clip is back — the behaviour that has shipped for months. Its only known flaw is a strip of a neighbouring room on shared tilemaps: **cosmetic, and smaller than every regression my three fixes produced** (v1.7.953 clipped town scenery, v1.7.954 tore Kazus apart, v1.7.957 shaved the inn's walls).
+- I am not shipping a fourth guess. A correct fix needs the room's **true extent — its full wall band** — not a 1-tile dilation of the floor, and I do not have a reliable way to derive that from the tile data yet.
+
+### Kept
+- `isPassable` stays pure (v1.7.955) and floods stay z-aware; that removed a real class of order-dependent disagreement and needed no exemptions.
+- `check-room-clip` still enforces the one invariant that protects the player: everything you can walk on gets painted. Green on all 256 maps.
+
 ## 1.7.957 — 2026-08-12
 
 ### Fixed — the inn's trailing tiles, WITHOUT touching towns

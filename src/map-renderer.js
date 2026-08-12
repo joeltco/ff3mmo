@@ -341,7 +341,21 @@ export class MapRenderer {
     }
     const roomFraction = totalWalkable ? roomSet.size / totalWalkable : 1;
     const isEnclosedRoom = fillIsVoid && roomSet.size <= 60 && roomFraction < 0.5;
-    this._visibleMask = isEnclosedRoom ? mask : null;
+    // v1.7.958 — MASK OFF EVERYWHERE. Third attempt, third regression.
+    //
+    // Restricting it to enclosed rooms stopped it deleting towns, but the mask
+    // itself is still wrong for a room: it is the walkable area dilated by ONE
+    // tile, and these rooms have wall bands TWO tiles thick. So it shaved the
+    // outer wall off the inn and made it look worse than the trailing tiles it
+    // was meant to fix.
+    //
+    // The rectangular clip has shipped for months and its only known flaw is a
+    // strip of a neighbouring room on shared tilemaps. That is a cosmetic flaw.
+    // Every mask attempt has produced a WORSE, more visible one. Not shipping a
+    // fourth guess at this: it needs a definition of the room's true extent
+    // (its full wall band, not a 1-tile dilation), which I do not have yet.
+    void isEnclosedRoom; void mask;
+    this._visibleMask = null;
 
     this._roomClip = {
       x: l * TILE_SIZE,

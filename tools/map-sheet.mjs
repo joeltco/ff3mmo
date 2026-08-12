@@ -19,6 +19,20 @@ const rom = new Uint8Array(fs.readFileSync(ROM));
 const { loadMap } = await import('../src/map-loader.js');
 const { NES_SYSTEM_PALETTE } = await import('../src/tile-decoder.js');
 
+// `--mask` renders what the game DRAWS (MapRenderer._visibleMask) rather than
+// the raw tilemap, so a contact sheet shows the real player-facing output.
+let MapRenderer = null;
+if (process.argv.includes('--mask')) {
+  const _c = {
+    createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w) * Math.max(1, h) * 4), width: w, height: h }),
+    putImageData() {}, drawImage() {}, fillRect() {}, clearRect() {}, save() {}, restore() {},
+    translate() {}, scale() {}, beginPath() {}, rect() {}, clip() {}, createPattern: () => ({}),
+  };
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => _c }) };
+  ({ MapRenderer } = await import('../src/map-renderer.js'));
+}
+
 const args = process.argv.slice(2);
 const outPath = args[0] || 'map-sheet.png';
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : args[i + 1]; };
@@ -81,10 +95,15 @@ for (const id of ids) {
       if (md.tilemap[i] === 0x5C) md.tilemap[i] = 0x5E;
     }
   }
+  let vmask = null;
+  if (MapRenderer) {
+    try { vmask = new MapRenderer(md, md.entranceX, md.entranceY)._visibleMask; } catch { vmask = null; }
+  }
   drawId(id, ox + 1, oy - LABEL + 1);
   const { metatiles, chrTiles, palettes, tileAttrs, tilemap } = md;
   for (let ty = 0; ty < W; ty++) {
     for (let tx = 0; tx < W; tx++) {
+      if (vmask && !vmask[ty * W + tx]) continue;
       const raw = tilemap[ty * W + tx];
       const m = raw < 128 ? raw : raw & 0x7F;
       const meta = metatiles[m];
