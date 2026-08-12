@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.930 — 2026-08-12
+
+### Added
+- **ROM-picker telemetry.** A player reported "can't get past the start screen after login" and left ZERO server-side trace — no save, no inventory row, no client error. That silence was the actual obstacle: every failure mode on that screen looks identical from the server. `_pickerBeacon(stage, extra)` now reports each stage to `/api/client-error` (existing endpoint — already carries UA, already rate-bucketed):
+  - `tap` — a label was pressed, with which input it targets. **A `tap` with no following `change` means the file chooser never returned a file**, which is the Android `display:none` class of bug v1.7.929 addressed.
+  - `change` / `change-no-file` — chooser returned, with file name + size, or returned nothing.
+  - `extract-failed` — the file came back but wasn't a usable ROM (bad zip, wrong file).
+  - `waiting` — fewer than three ROMs loaded, naming which are missing. Not an error, but it IS the state a stuck player sits in, and it was invisible before.
+  - `launched` / `launch-failed` — the terminal states.
+- Every beacon carries the client's `build`, so a stale cached page is distinguishable from a current one — which no other signal on this path could tell us.
+
+### Notes
+- Telemetry is wrapped so it can never break the picker: the `fetch` is `keepalive`, `.catch()`-swallowed, and the whole helper sits in a try/catch.
+
 ## 1.7.929 — 2026-08-12
 
 ### Fixed

@@ -1127,6 +1127,41 @@
     }
 
     // --- Launch ---
+    // ── ROM-picker telemetry (v1.7.930) ──────────────────────────────────
+    // A player reported "can't get past the start screen after login" with
+    // ZERO server-side trace — no save, no inventory row, no client error.
+    // That silence is the problem: every failure mode on this screen (tap
+    // doesn't open the picker / picker opens but no file comes back / file
+    // rejected / fewer than three ROMs loaded) looks identical from the
+    // server. This reports each stage so the next attempt is diagnosable
+    // instead of guessable. Reuses /api/client-error — no new endpoint, and
+    // it already carries UA + shares the error rate bucket.
+    function _pickerBeacon(stage, extra) {
+      try {
+        fetch('/api/client-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            msg: '[rom-picker] ' + stage,
+            ctx: Object.assign({
+              build: 'v{{VERSION}}',
+              ua: navigator.userAgent.slice(0, 120),
+              have: [ff3Buffer && 'FF3', ff1Buffer && 'FF1', ff2Buffer && 'FF2'].filter(Boolean).join('+') || 'none',
+            }, extra || {}),
+          }),
+          keepalive: true,
+        }).catch(function () {});
+      } catch (_) { /* never let telemetry break the picker */ }
+    }
+
+    // Tap tracking. If we see `tap` with no matching `change`, the file
+    // chooser never returned a file — either it didn't open (the Android
+    // `display:none` class of bug) or she backed out of it.
+    document.getElementById('rom-picker')?.addEventListener('pointerdown', (e) => {
+      const label = e.target.closest('label[for]');
+      if (label) _pickerBeacon('tap', { which: label.getAttribute('for') });
+    });
+
     function _romStatusText() {
       const have = [ff3Buffer && 'FF3', ff1Buffer && 'FF1', ff2Buffer && 'FF2'].filter(Boolean);
       const missing = ['FF3', 'FF1', 'FF2'].filter(t => !{ FF3: ff3Buffer, FF1: ff1Buffer, FF2: ff2Buffer }[t]);
@@ -1134,7 +1169,15 @@
     }
 
     async function tryLaunch() {
-      if (!ff3Buffer || !ff1Buffer || !ff2Buffer) return;
+      if (!ff3Buffer || !ff1Buffer || !ff2Buffer) {
+        // Not an error — the screen needs all three — but it IS the state a
+        // stuck player sits in, and it was previously invisible to us.
+        _pickerBeacon('waiting', {
+          missing: ['FF3', 'FF1', 'FF2']
+            .filter(t => !({ FF3: ff3Buffer, FF1: ff1Buffer, FF2: ff2Buffer })[t]).join('+'),
+        });
+        return;
+      }
       try {
         loadFF1ROM(ff1Buffer);
         loadFF2ROM(ff2Buffer);
@@ -1148,7 +1191,9 @@
         document.getElementById('rom-picker-wrap').style.display = 'none';
         document.querySelector('h1').style.display = 'none';
         document.getElementById('rom-info').style.display = 'none';
+        _pickerBeacon('launched');
       } catch (err) {
+        _pickerBeacon('launch-failed', { err: String(err && err.message).slice(0, 120) });
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         console.error(err);
       }
@@ -1188,10 +1233,12 @@
 
     document.getElementById('rom-file')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) { _pickerBeacon('change-no-file', { which: 'FF3' }); return; }
+      _pickerBeacon('change', { which: 'FF3', name: String(file.name).slice(0, 60), size: file.size });
       try {
         ff3Buffer = await extractRomFromZip(await file.arrayBuffer());
       } catch (err) {
+        _pickerBeacon('extract-failed', { which: 'FF3', name: String(file.name).slice(0, 60), err: String(err && err.message).slice(0, 80) });
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         return;
       }
@@ -1204,10 +1251,12 @@
 
     document.getElementById('rom-file-ff1')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) { _pickerBeacon('change-no-file', { which: 'FF1' }); return; }
+      _pickerBeacon('change', { which: 'FF1', name: String(file.name).slice(0, 60), size: file.size });
       try {
         ff1Buffer = await extractRomFromZip(await file.arrayBuffer());
       } catch (err) {
+        _pickerBeacon('extract-failed', { which: 'FF1', name: String(file.name).slice(0, 60), err: String(err && err.message).slice(0, 80) });
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         return;
       }
@@ -1220,10 +1269,12 @@
 
     document.getElementById('rom-file-ff2')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) { _pickerBeacon('change-no-file', { which: 'FF2' }); return; }
+      _pickerBeacon('change', { which: 'FF2', name: String(file.name).slice(0, 60), size: file.size });
       try {
         ff2Buffer = await extractRomFromZip(await file.arrayBuffer());
       } catch (err) {
+        _pickerBeacon('extract-failed', { which: 'FF2', name: String(file.name).slice(0, 60), err: String(err && err.message).slice(0, 80) });
         document.getElementById('rom-info').textContent = `Error: ${err.message}`;
         return;
       }
