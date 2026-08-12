@@ -406,6 +406,20 @@ const PVP_HOOK_MIN   = 0.10;
 const PVP_HOOK_MAX   = 0.75;
 const PVP_JOB_BONUS  = { 6: 0.08, 8: 0.15 };  // Ranger, Thief
 
+// v1.7.902 — the encounter-hook roll, injectable. Production always uses
+// `Math.random`; only `_testHooks.setHookRand` ever replaces it.
+//
+// This exists because the roll made two wire-sim tests probabilistic. Both
+// fired 10 `pvp-encounter` frames and asserted a hook landed somewhere in
+// there; at the ~29.5% chance those profiles produce, all ten miss 0.705^10
+// = 3.1% of runs. One of them says so in its own comment ("10 retries → ≤3%
+// chance of total miss"), so the flake was known and accepted — it just cost
+// more than it looked like, because a failing test skips its `.close()` and
+// the leaked socket used to wedge teardown for 60s under another test's name.
+// Injecting the roll keeps `_pvpHookChance` and the whole hook path under
+// test while removing the coin flip. Same seam as `calcDamage(..., {rand})`.
+let _hookRand = Math.random;
+
 // Range clamps for trusted profile fields. The hook-chance formula reads
 // `agi` and `jobIdx` straight out of the broadcast profile, so any
 // unvalidated value lets a malicious client manipulate match-making.
@@ -641,7 +655,7 @@ function _resolveEncounterHook(targetEntry) {
   let hookedChallenger = null;
   for (const ch of challengers) {
     const chance = _pvpHookChance(ch.profile, targetEntry.profile);
-    const roll = Math.random();
+    const roll = _hookRand();
     console.log('[pvp-hook] roll challenger=' + ch.userId + ' chance=' + chance.toFixed(3) + ' roll=' + roll.toFixed(3) + ' hit=' + (roll < chance));
     if (roll < chance) { hookedChallenger = ch; break; }
   }
@@ -2490,6 +2504,9 @@ export const _testHooks = {
   setPveArbiter(v) { PVE_ARBITER = !!v; },
   setServerEconomy(v) { SERVER_ECONOMY = !!v; },
   pvpHookChance: _pvpHookChance,
+  // Pass null to restore production `Math.random`. A test that pins this
+  // MUST restore it, or every later hook roll in the run is pinned too.
+  setHookRand(fn) { _hookRand = fn || Math.random; },
   inSameParty: _inSameParty,
   rateAllow: _rateAllow,
   rateAllowKind: _rateAllowKind,

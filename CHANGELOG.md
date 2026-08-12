@@ -18,6 +18,40 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.902 — 2026-08-12
+
+- **Fixed the pvp-wire-sim flake that had been aborting deploys.** It presented
+  as `WEDGED after 60000ms / in flight: v1.7.802 trade rolls back sender remove
+  when receiver stack at cap`. That name was wrong every time — `_current` is
+  only written by `test()`/`asyncTest()`, so it named the last test to START,
+  and the hang was in teardown after all 140 had run.
+- **The wedge was `httpServer.close()`**, which only calls back once every
+  connection has ended — an unbounded wait dressed as a one-liner. Any test that
+  threw skipped its own `A.close(); B.close();`, and that one leaked socket hung
+  teardown until the watchdog fired. Confirmed by adding a single deliberately
+  unclosed client, which reproduced the signature exactly, misattribution
+  included. Teardown now names its phase, terminates every tracked client, and
+  bounds the close. Same experiment after the fix: 15.8s, exit 0.
+- **The underlying failure was two probabilistic tests**, not the trade test.
+  Both P-9 tests fired 10 `pvp-encounter` frames and asserted a hook landed in
+  one of them; `_pvpHookChance` puts those profiles (AGI 12 vs 9) at 0.295, so
+  all ten miss on `0.705^10` = 3.1% of runs each. One test's own comment said so
+  — "10 retries → ≤3% chance of total miss" — so the odds were known and
+  accepted; what wasn't visible is that losing the coin flip cost a 60s wedge
+  under an innocent test's name rather than a clean failure.
+- `_resolveEncounterHook`'s roll is now injectable (`_testHooks.setHookRand`),
+  defaulting to `Math.random` — same seam as `calcDamage(..., {rand})`. The two
+  tests pin it to 0 and hook on the first encounter. `roll < chance` still runs
+  the real formula against the real chance (logged `chance=0.295`); only the
+  coin flip is gone. Proved non-vacuous by pinning the roll to 0.999 instead,
+  which fails both tests deterministically — if the seam weren't wired they'd
+  have passed anyway.
+- **A wire-wait timeout now says what the socket actually received** instead of
+  a bare "timeout waiting for predicate". `connectClient` was already recording
+  every frame; the message now carries the count and the last 8 types. Chasing
+  one of these previously took a full investigation to establish that the server
+  had answered and the client simply never matched it.
+
 ## 1.7.901 — 2026-08-12
 
 - **Fixed the PVP opponent's target pick to use the seeded RNG.** `pvp.js`'s

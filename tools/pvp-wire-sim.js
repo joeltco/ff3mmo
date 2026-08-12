@@ -762,9 +762,24 @@ function mintToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 }
 
+// v1.7.902 — every client this harness opens, so teardown can guarantee they
+// are gone. See `_closeAllClients` for why that guarantee has to exist.
+const _openClients = new Set();
+
 function once(ws, predicate, timeoutMs = 1000) {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('timeout waiting for predicate')), timeoutMs);
+    const t = setTimeout(() => {
+      // v1.7.902 — say what DID arrive. `connectClient` already records every
+      // frame in `_earlyMessages`, and a bare "timeout waiting for predicate"
+      // threw that away: chasing one of these cost a full investigation to
+      // establish that the server had answered and the client just never
+      // matched it. The tail of the traffic distinguishes "server never sent"
+      // from "sent something that failed the predicate" for free.
+      const seen = (ws._earlyMessages || []).map(m => m.type);
+      const tail = seen.slice(-8).join(', ') || '(nothing)';
+      reject(new Error(`timeout waiting for predicate after ${timeoutMs}ms `
+        + `— socket saw ${seen.length} frame(s), last: [${tail}]`));
+    }, timeoutMs);
     const onMsg = (data) => {
       let msg;
       try { msg = JSON.parse(data.toString()); } catch { return; }
@@ -776,6 +791,24 @@ function once(ws, predicate, timeoutMs = 1000) {
     };
     ws.on('message', onMsg);
   });
+}
+
+/**
+ * Terminate every client still open, so teardown can't inherit a socket some
+ * failing test left behind. `terminate()` rather than `close()` on purpose —
+ * `close()` starts a handshake that needs the peer to answer, which is the
+ * kind of wait that got us here.
+ */
+async function _closeAllClients() {
+  const stragglers = [..._openClients];
+  if (stragglers.length) {
+    console.log(`  ! teardown: ${stragglers.length} client(s) left open by a failing test — terminating`);
+  }
+  for (const ws of stragglers) {
+    try { ws.terminate(); } catch { /* already gone */ }
+  }
+  _openClients.clear();
+  await new Promise(r => setTimeout(r, 50));
 }
 
 function connectClient(port, userId, profile) {
@@ -809,6 +842,8 @@ function connectClient(port, userId, profile) {
     // resolve. The collector keeps running after resolve; `once` and other
     // post-resolve helpers see live traffic the same as before.
     ws._earlyMessages = [];
+    _openClients.add(ws);
+    ws.on('close', () => _openClients.delete(ws));
     let ready = false;
     ws.on('open', () => { /* wait for ready */ });
     ws.on('error', (e) => { clearTimeout(_t); reject(e); });
@@ -2652,14 +2687,17 @@ async function suiteWire() {
     // the hook (same-loc, default 100% hook for level-1 vs level-1).
     A.send(JSON.stringify({ type: 'pvp-search', targetUserId: 7531 }));
     await new Promise(r => setTimeout(r, 30));
-    // Hook chance is ~30% per roll (AGI-differential). On miss, search
-    // persists and we can retry. 10 retries → ≤3% chance of total miss.
+    // v1.7.902 — pin the hook roll to 0 so the first `pvp-encounter` hooks.
+    // This used to fire 10 encounters and hope: the roll is compared against
+    // `_pvpHookChance`, which these profiles (AGI 12 vs 9) put at 0.295, so
+    // all ten missed on 0.705^10 = 3.1% of runs. The comment below admitted
+    // the odds and accepted them. `roll < chance` still runs the real formula
+    // — PVP_HOOK_MIN is 0.10, so a 0 roll hits whatever the chance works out
+    // to, and nothing about the hook path is stubbed out.
+    _testHooks.setHookRand(() => 0);
     const aStart = once(A, m => m.type === 'pvp-battle-start', 4000);
     const bStart = once(B, m => m.type === 'pvp-battle-start', 4000);
-    for (let i = 0; i < 10; i++) {
-      B.send(JSON.stringify({ type: 'pvp-encounter' }));
-      await new Promise(r => setTimeout(r, 60));
-    }
+    B.send(JSON.stringify({ type: 'pvp-encounter' }));
     const [sa, sb] = await Promise.all([aStart, bStart]);
     assertEqual(sa.battleId, sb.battleId, 'both sides see same arbiter battleId');
     assertEqual(sa.yourSide, 'A', 'challenger is side A');
@@ -2667,6 +2705,7 @@ async function suiteWire() {
     assertTrue(sa.sides.A.length >= 1, 'A has at least main combatant');
     assertTrue(sa.sides.B.length >= 1, 'B has at least main combatant');
     A.close(); B.close();
+    _testHooks.setHookRand(null);
     _testHooks.setPvpEnabled(false);
     _testHooks.setPvpArbiterServer(false);
     await new Promise(r => setTimeout(r, 40));
@@ -2682,16 +2721,18 @@ async function suiteWire() {
     const B = await connectClient(port, 7533, { ...targetProfile, name: 'LegB', loc: 'world' });
     A.send(JSON.stringify({ type: 'pvp-search', targetUserId: 7533 }));
     await new Promise(r => setTimeout(r, 30));
+    // v1.7.902 — same pinned roll as the arbiter-flag-on test above. This is
+    // the copy that actually flaked in measurement (3 wedges traced back to
+    // it), for the same 3.1% reason.
+    _testHooks.setHookRand(() => 0);
     const aMatch = once(A, m => m.type === 'pvp-match', 4000);
     const bMatch = once(B, m => m.type === 'pvp-match', 4000);
-    for (let i = 0; i < 10; i++) {
-      B.send(JSON.stringify({ type: 'pvp-encounter' }));
-      await new Promise(r => setTimeout(r, 60));
-    }
+    B.send(JSON.stringify({ type: 'pvp-encounter' }));
     const [ma, mb] = await Promise.all([aMatch, bMatch]);
     assertTrue(!!ma.opponent && !!mb.opponent, 'legacy pvp-match path intact');
     assertEqual(typeof ma.seed, 'number', 'legacy seed present');
     A.close(); B.close();
+    _testHooks.setHookRand(null);
     _testHooks.setPvpEnabled(false);
     await new Promise(r => setTimeout(r, 40));
   });
@@ -3268,7 +3309,31 @@ async function suiteWire() {
   });
 
   // ── teardown ─────────────────────────────────────────────────────────────
-  await new Promise(r => httpServer.close(r));
+  // v1.7.902 — `httpServer.close()` only calls back once every connection has
+  // ended, so it was an unbounded wait dressed up as a one-liner. Any test
+  // that threw skipped its own `A.close(); B.close();` on the way out, and
+  // that one leaked socket hung teardown forever: the run burned the full
+  // 60s budget and died as "WEDGED ... in flight: <last test>". The name was
+  // always wrong — `_current` is only written by test()/asyncTest(), so it
+  // still held the last test to START, not the one that failed. Two aborted
+  // deploys were read as "the trade test hangs"; the trade test was fine, and
+  // the real failure was a P-9 hook roll ~90 tests earlier.
+  //
+  // Reproduced deliberately before fixing: one unclosed client added here
+  // produced that exact signature, right down to the misattributed name.
+  //
+  // So: name the phase, force the sockets shut, and bound the close.
+  _current = '(teardown — closing clients)';
+  await _closeAllClients();
+  _current = '(teardown — httpServer.close)';
+  httpServer.closeAllConnections();
+  await Promise.race([
+    new Promise(r => httpServer.close(r)),
+    new Promise(r => setTimeout(() => {
+      console.log('  ! teardown: httpServer.close() did not settle in 3000ms — continuing');
+      r();
+    }, 3000)),
+  ]);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -3284,10 +3349,16 @@ async function suiteWire() {
 // default signal behaviour for the harness ONLY — production is untouched.
 process.removeAllListeners('SIGTERM');
 
-// Hard ceiling on the whole run. The suite takes ~2 s of real work; a minute
-// means something is wedged. Converts an unkillable silent hang into a named,
-// non-zero failure that says which test was in flight — which is the only
-// reason the connectClient bug above was findable at all. v1.7.856.
+// Hard ceiling on the whole run. Converts an unkillable silent hang into a
+// named, non-zero failure that says which phase was in flight — which is the
+// only reason the connectClient bug above was findable at all. v1.7.856.
+//
+// v1.7.902 — the budget stays 60s but the claim it rested on was stale: the
+// suite is ~17s of real work, not "~2 s", measured over six clean runs. That
+// still leaves 43s of slack, so a wedge is a genuine block rather than a slow
+// machine. Note `_current` names the last phase to START; teardown now sets it
+// too, because when it didn't, every teardown hang was reported under an
+// innocent test's name.
 const RUN_BUDGET_MS = 60000;
 
 async function main() {
