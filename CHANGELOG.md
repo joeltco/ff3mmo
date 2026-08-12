@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.938 — 2026-08-12
+
+### Fixed
+- **`initMonsterSprites()` no longer force-builds every monster at boot.** It walked the whole `MONSTER_REGISTRY` building a battle canvas, a white-flash canvas and a full death-frame set for all **231** monsters, synchronously, inside `initSpriteAssets()` — before the title screen, for monsters the player may never meet.
+
+| | canvases | RGBA backing |
+|---|---|---|
+| old — all 231 monsters (white + death) | **3,927** | ~46.2 MB |
+| new — at boot | **0** | 0 |
+
+- This was the SECOND boot allocation killing the same Android device. After v1.7.937 made fake-player sprites lazy, her stage recorder moved from `DIED-AT stage=initSpriteAssets` to `DIED-AT stage=sa:monsterSprites` — the next hog in the same function. Combined, boot was allocating roughly **22,000 canvases and ~67 MB** of backing store before drawing a title screen.
+- `buildMonsterCanvas` was already lazy and cached; the white-flash and death-frame variants now build the same way, off the three getters. `initMonsterSprites` is kept as an exported no-op because `boot.js` calls it and the name documents where monster art used to be forced.
+
+### Behaviour note
+- `hasMonsterSprites()` now reports whether monster art is **obtainable** (`MONSTER_REGISTRY.size > 0`) rather than whether it has already been built. Under lazy building "nothing built yet" is the normal state before the first encounter, and the old meaning would have made the early-exit guard in `battle-draw-encounter.js` skip the very draw that triggers the build.
+
+### Verified
+- `initMonsterSprites()` measured at 0 canvases allocated. Full `pvp-wire-sim` 153/153, `encounter-sim` 51/51, smoke OK.
+
+### Player status
+- On v1.7.937 the stuck Android player reached `[boot] title` and `[rom-picker] launched` — a complete boot — confirming the fake-player allocation was the blocker. The same build still produced `DIED-AT sa:monsterSprites` and `DIED-AT loadSaves` on other attempts, i.e. she was passing only marginally. This change removes the next 46 MB so it isn't a coin flip.
+
 ## 1.7.937 — 2026-08-12
 
 ### Fixed

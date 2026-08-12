@@ -118,31 +118,58 @@ export function buildMonsterCanvas(monsterId) {
   return canvas;
 }
 
-/** Initialize all monster sprites from ROM-extracted data. Call once after DOM ready. */
-export function initMonsterSprites() {
-  for (const monsterId of MONSTER_REGISTRY.keys()) {
-    const canvas = buildMonsterCanvas(monsterId);
-    monsterWhiteCanvas.set(monsterId, _makeWhiteCanvas(canvas));
-    monsterDeathFrames.set(monsterId, _makeDeathFrames(canvas));
-  }
-}
+/**
+ * v1.7.938 — NO-OP. This used to walk the whole MONSTER_REGISTRY and build a
+ * battle canvas, a white-flash canvas and a full death-frame set for EVERY
+ * monster in the game, synchronously, inside `initSpriteAssets()` — before the
+ * title screen, for monsters the player may never meet.
+ *
+ * That was the second boot allocation that killed an Android 10 renderer. After
+ * the fake-player sprites went lazy in v1.7.937, the same device's stage
+ * recorder moved from `DIED-AT stage=initSpriteAssets` to `DIED-AT
+ * stage=sa:monsterSprites` — the next hog in the same function.
+ *
+ * `buildMonsterCanvas` was ALREADY lazy and cached; the white/death variants
+ * now build the same way, off the three getters below. Kept as an exported
+ * no-op because `boot.js` calls it and the name documents where monster art
+ * used to be forced.
+ */
+export function initMonsterSprites() { /* built on demand — see the getters */ }
 
-/** Get the battle canvas for a monster. Falls back to fallback if not found. */
+/** Get the battle canvas for a monster. Builds on first ask. */
 export function getMonsterCanvas(monsterId, fallback) {
-  return monsterBattleCanvas.get(monsterId) || fallback;
+  return buildMonsterCanvas(monsterId) || fallback;
 }
 
-/** Get the white flash canvas for a monster. Falls back to fallback. */
+/** White flash canvas, derived from the battle canvas. Builds on first ask. */
 export function getMonsterWhiteCanvas(monsterId, fallback) {
-  return monsterWhiteCanvas.get(monsterId) || fallback;
+  const cached = monsterWhiteCanvas.get(monsterId);
+  if (cached) return cached;
+  const base = buildMonsterCanvas(monsterId);
+  if (!base) return fallback;
+  const white = _makeWhiteCanvas(base);
+  monsterWhiteCanvas.set(monsterId, white);
+  return white;
 }
 
-/** Get the death frame array for a monster. Falls back to fallback. */
+/** Death frames, derived from the battle canvas. Builds on first ask. */
 export function getMonsterDeathFrames(monsterId, fallback) {
-  return monsterDeathFrames.get(monsterId) || fallback;
+  const cached = monsterDeathFrames.get(monsterId);
+  if (cached) return cached;
+  const base = buildMonsterCanvas(monsterId);
+  if (!base) return fallback;
+  const frames = _makeDeathFrames(base);
+  monsterDeathFrames.set(monsterId, frames);
+  return frames;
 }
 
-/** Check if any sprites are loaded (for early-exit guards). */
+/**
+ * Is monster art available at all? Used as an early-exit guard in
+ * `battle-draw-encounter.js`. Under lazy building "nothing built yet" is the
+ * normal state before the first encounter, so this must report whether art is
+ * OBTAINABLE, not whether it has already been built — otherwise the guard
+ * would skip the draw that would have triggered the build.
+ */
 export function hasMonsterSprites() {
-  return monsterBattleCanvas.size > 0;
+  return MONSTER_REGISTRY.size > 0 || monsterBattleCanvas.size > 0;
 }
