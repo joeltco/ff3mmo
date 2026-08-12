@@ -54,7 +54,7 @@ import { connectNet, setNetInvStateHandler } from './net.js';   // v1.7.742 Phas
 import { ps, getEffectiveStats, getShieldEvade, getJobLevel } from './player-stats.js';
 import { selectCursor } from './save-state.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
-import { setStage, clearStage, readStage, BOOT_DONE } from './boot-stage.js';
+import { setStage, clearStage, readStage, parseStage, setBuildTag } from './boot-stage.js';
 import { SPRITE_PAL_TOP, SPRITE_PAL_BTM } from './job-sprites.js';
 export { loadFF1ROM, loadFF2ROM } from './boot.js';
 
@@ -327,9 +327,13 @@ const _stage = setStage;
 const _stageClear = clearStage;
 /** If the previous boot never reached `done`, report where it stopped. */
 function _reportPreviousBootCrash() {
-  const prev = readStage();
-  if (!prev || prev === BOOT_DONE) return;
-  _bootBeacon('DIED-AT', { stage: prev });
+  const prev = parseStage(readStage());
+  if (!prev) return;
+  // `crashBuild` is the build that actually died; the beacon's own `build` is
+  // whichever build is reporting it. They differ whenever a crash on an old
+  // build is first reported after an update, and conflating them makes a fixed
+  // stage look like it is still failing.
+  _bootBeacon('DIED-AT', { stage: prev.stage, crashBuild: prev.crashBuild });
 }
 
 /** Report a boot stage so a hang is locatable instead of silent. */
@@ -360,6 +364,7 @@ function _bootBeacon(stage, extra) {
 export async function loadROM(arrayBuffer) {
   const _bootStart = performance.now();
   const romBytes = new Uint8Array(arrayBuffer);
+  setBuildTag((() => { try { return localStorage.getItem('ff3_build') || '?'; } catch (_) { return '?'; } })());
   _bootBeacon('start', { bytes: romBytes.length });
   // Must run BEFORE this boot overwrites the key.
   _reportPreviousBootCrash();
