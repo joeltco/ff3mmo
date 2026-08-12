@@ -13,7 +13,21 @@
 //   D door (trigType 4/5, or tilemap $70-$77)  C chest/treasure   e event
 
 import fs from 'node:fs';
-import { loadMap } from '../src/map-loader.js';
+
+// Use the REAL MapRenderer for passability. This tool used to reimplement it,
+// and the copy drifted: after v1.7.944 made event tiles passable, the game
+// reported map 10 as 196 reachable tiles while this printed 31. A map viewer
+// that disagrees with the game is worse than no viewer.
+const _ctx = {
+  createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+  getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w) * Math.max(1, h) * 4), width: w, height: h }),
+  putImageData() {}, drawImage() {}, fillRect() {}, clearRect() {},
+  save() {}, restore() {}, translate() {}, scale() {}, beginPath() {}, rect() {}, clip() {},
+};
+globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => _ctx }) };
+
+const { loadMap } = await import('../src/map-loader.js');
+const { MapRenderer } = await import('../src/map-renderer.js');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -47,18 +61,9 @@ function calcSpawnY(m, ex, ey) {
   return ey;
 }
 
-function passable(x, y) {
-  if (x < 0 || x >= W || y < 0 || y >= W) return false;
-  if (x === r.entranceX && y === r.entranceY) return true;
-  const t = r.triggerMap.get(`${x},${y}`);
-  if (t) return t.type === 1 || t.type === 4;
-  const mid = r.tilemap[y * W + x];
-  const c = r.collision[mid < 128 ? mid : mid & 0x7F];
-  if (c & 0x80) { const tt = (r.collisionByte2[mid] >> 4) & 0x0F; return tt === 0 || tt === 4 || tt === 5; }
-  return (c & 0x07) !== 3;
-}
-
 const sx = r.entranceX, sy = calcSpawnY(r, r.entranceX, r.entranceY);
+const _renderer = new MapRenderer(r, sx, sy);
+const passable = (x, y) => (x >= 0 && x < W && y >= 0 && y < W) && _renderer.isPassable(x, y);
 const reach = new Set();
 if (passable(sx, sy)) {
   const q = [[sx, sy]]; reach.add(sy * W + sx);

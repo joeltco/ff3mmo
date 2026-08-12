@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.944 — 2026-08-12
+
+### Fixed
+- **Event tiles ($60-$63) are PASSABLE — this was sealing off most of several towns.** They sit in doorways with plain floor either side, and treating them as walls left the player in a corner of the map. Map 10 is the clearest case: the entire town hid behind ONE event tile at (8,28), with walkable floor at (7,28) and (9,28).
+
+| map | reachable before → after |
+|---|---|
+| 31 | 200 → **493** |
+| 55 | 54 → **293** |
+| 10 | 31 → **196** |
+| 43 | 2 → **146** |
+| 128 | 26 → 96 |
+
+  **30 maps** gain reachable area in total.
+
+### The ROM says so
+- A tile whose collision byte2 high nibble is `$F` routes to the player's event handler at `3F/$E6BE`, which runs the event and exits via `LDA $2D / LSR A / BCC $E714`. `$E714` is a bare `RTS` reached with carry **CLEAR**, and carry clear is "move allowed" — identical to the type-0 handler at `$E689` (`LDA #$40 / STA $AB / CLC / RTS`).
+- The v1.7.906 comment that justified blocking cited `3B/90EB` and `3B/B0C5` as proof. **Those are the NPC/entity collision routines, not the player's** — the same misreading that produced the reverted v1.7.907. Comment replaced with the disassembly above.
+- Treasure ($78-$7C) stays blocked: the player walks UP to a chest and opens it, never stands on it. Verified.
+
+### Added
+- `tools/check-event-tiles.mjs` — pins the behaviour, since it has flip-flopped across v1.7.906/907/908. Asserts the specific tile is an event trigger and passable, map 10 stays ~196 tiles with all 7 town doors reachable, and treasure tiles stay blocked. Wired into `deploy.sh`. **Proven in both directions:** passes with the fix, and reverting it fails 3 checks (town collapses to 31 tiles, 0/7 doors reachable) while the treasure check stays green.
+- `tools/map-ascii.mjs` now renders using the **real** `MapRenderer.isPassable` instead of its own copy. The copy had already drifted — it printed 31 reachable tiles for map 10 while the game had 196. A map viewer that disagrees with the game is worse than no viewer.
+
+### Still barred
+- Maps 22 / 24 / 178 / 180 remain walled in on entry (75 / 24 / 7 / 102 tiles, no reachable exit) and stay refused at the door. Unrelated to event tiles — re-verified after this change.
+
 ## 1.7.943 — 2026-08-12
 
 ### Changed

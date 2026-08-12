@@ -492,6 +492,26 @@ export class MapRenderer {
     const trig = this._triggerMap.get(key);
     if (trig) {
       if (trig.type === 1 || trig.type === 4) return true; // entrance/door/passage — passable
+      // v1.7.944 — EVENT tiles ($60-$63, TRIGGER_TYPE_TABLE type 0) are
+      // PASSABLE. The player's own tile dispatch says so: byte2 high nibble $F
+      // routes to 3F/$E6BE, which runs the event and exits via
+      // `LDA $2D / LSR A / BCC $E714`, and $E714 is a bare RTS reached with
+      // carry CLEAR — carry clear is "move allowed", exactly like the type-0
+      // handler at $E689 (`LDA #$40 / STA $AB / CLC / RTS`).
+      //
+      // Treating them as walls sealed off most of several towns, because these
+      // tiles sit in doorways. Measured across all 256 maps: 30 maps gain
+      // reachable area, map 10 goes 31 -> 196 tiles (the whole town was behind
+      // ONE event tile at (8,28), with plain floor either side), map 31
+      // 200 -> 493, map 55 54 -> 293, map 43 2 -> 146.
+      //
+      // The stale comment below cited 3B/90EB and 3B/B0C5 as proof the ROM
+      // blocks these. Those are the NPC/entity collision routines, not the
+      // player's — the same misreading that produced the reverted v1.7.907.
+      if (trig.type === 0) return true;
+      //
+      // Treasure ($78-$7C) stays blocked: the player walks UP to a chest and
+      // opens it, never stands on it.
       // v1.7.906 — "blocked for now" was right, and it is not provisional.
       // Events ($60-$63) and treasure ($78-$7C) carry collision bit 7 in ALL 7
       // tilesets (119/119 trigger tiles do), so the ROM blocks every one of them
