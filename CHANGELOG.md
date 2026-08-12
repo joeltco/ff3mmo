@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.897 — 2026-08-11
+
+**battle-sim had no verdict at all — and I have been citing it as a gate.**
+
+It is not a vacuous comparison, because it makes no comparison. It prints a battle and exits 0 whatever happens. Measured, by stubbing `calcDamage` to return 0 so no physical attack can land:
+
+| harness | result with combat dead |
+|---|---|
+| encounter-sim | **7 gates FAILED** |
+| battle-sim | printed *"Stalemate after 30 turns. P1 HP 70/70, P2 HP 52/52"* and **exited 0** |
+
+It named the symptom in prose and still reported success. Anything reading the exit code saw green — including me: several changelogs in this arc list "battle-sim clean" among the gates, which meant nothing more than "the process did not crash".
+
+**Added `--assert`**, deliberately narrow. It fails only on a DEAD simulation — zero damage across all runs, or every run stalemating — not on a badly balanced one. Balance is what the statistical output is for and is a judgement call, not a gate. With `calcDamage` stubbed it now exits 1 with *"zero damage dealt across 5 run(s) — combat is dead"*; healthy, it prints *"ok (5 run(s), combat live)"*.
+
+**Also found:** `--runs=0` is silently ignored and falls through to a single battle, because the flag is falsy-checked. Left as-is and noted rather than fixed — nothing depends on it, and a real zero-run request is now caught by `--assert`'s "no runs were executed" branch.
+
+**Correction to the record:** "battle-sim clean" in v1.7.888-896 was not evidence. From here it is only worth quoting when run with `--assert`.
+
+Gates: lint 0, encounter-sim 46, pvp-wire-sim 140, wire-stats lossless (18 fields, all live), battle-sim --assert ok.
+
 ## 1.7.896 — 2026-08-11
 
 **Checked the other harnesses for vacuous comparisons. Three found — including one that gates every deploy.**

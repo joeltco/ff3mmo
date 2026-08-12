@@ -1133,6 +1133,40 @@ function buildEncounter(args) {
   };
 }
 
+// `--assert` turns battle-sim's prose into an exit code. Module scope so
+// runStats can read it without threading a flag through every caller.
+const ASSERT = process.argv.includes('--assert');
+
+/**
+ * Degeneracy check for a set of runs. Returns a reason string, or null if the
+ * simulation actually did something.
+ *
+ * battle-sim has no pass/fail: it prints a battle and exits 0 whatever happens.
+ * Measured — with `calcDamage` stubbed to return 0, encounter-sim failed SEVEN
+ * gates while this tool printed "Stalemate after 30 turns. P1 HP 70/70, P2 HP
+ * 52/52" and exited 0. It named the symptom in prose and still reported success,
+ * so anything reading the exit code (a person skimming included) saw green.
+ *
+ * `--assert` turns that prose into a verdict. Deliberately narrow: it only
+ * catches a DEAD simulation, not a badly balanced one. Balance is what the
+ * statistical output is for and is a judgement call, not a gate.
+ */
+function degenerateReason(results, kind) {
+  if (!results.length) return 'no runs were executed';
+  let dmg = 0;
+  for (const r of results) {
+    dmg += kind === 'duel'
+      ? (r.dmgP1to2 | 0) + (r.dmgP2to1 | 0)
+      : (r.dmgPartyToEnemy | 0) + (r.dmgEnemyToParty | 0);
+  }
+  if (dmg === 0) return `zero damage dealt across ${results.length} run(s) — combat is dead`;
+  const stalemates = results.filter((r) => !r.winner || r.winner === 'stalemate').length;
+  if (stalemates === results.length) {
+    return `every one of ${results.length} run(s) stalemated — nothing resolved`;
+  }
+  return null;
+}
+
 function runStats({ runs, seed, build, runOnce, format, kind }) {
   const results = [];
   for (let i = 0; i < runs; i++) {
@@ -1150,6 +1184,14 @@ function runStats({ runs, seed, build, runOnce, format, kind }) {
   if (format === 'json') console.log(JSON.stringify(aggregateStats(results, kind), null, 2));
   else if (format === 'csv') console.log(formatCSV(results, kind));
   else console.log(formatStatsText(results, kind, runs));
+  if (ASSERT) {
+    const why = degenerateReason(results, kind);
+    if (why) {
+      console.error(`\nbattle-sim --assert: DEGENERATE — ${why}`);
+      process.exit(1);
+    }
+    console.error(`battle-sim --assert: ok (${results.length} run(s), combat live)`);
+  }
 }
 
 function aggregateStats(results, kind) {
