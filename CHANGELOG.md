@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.909 — 2026-08-12
+
+- **The last 4 maps (22, 24, 178, 180) need the EVENT SYSTEM, not another
+  trigger type.** Event tiles `$60-$63` carry byte2 `$F0` in all 7 tilesets →
+  handler type **15**, whose entry in the $E669 jump table is $E6BE:
+  `LDA $45 / AND #$0F / TAX / LDA $0720,X` (per-instance event id), then a
+  16-bit pointer fetch and a jump through it. Events run SCRIPTS — dialogue,
+  flag checks, cutscenes, transitions. Not a fixed destination like type 0/1.
+  (The trigId in that low nibble is written by the preprocessing pass at
+  3A/91ED, `LDA $0500,Y / ORA $89 / STA $0500,Y`.)
+- **New: `tools/map-ascii.mjs`** — renders a map as a grid with the spawn, the
+  flood-filled reachable region, and every trigger classified (W exit-to-world,
+  P exit_prev, D door, C chest, e event). This is what made the four legible.
+- What it shows, per map:
+  - **180** — spawn (19,11) sits in a 98-tile cave region whose only exits are
+    two event tiles, one at (18,11) directly beside the spawn. The `$70` door at
+    (2,27) is in a different region entirely.
+  - **22** — 67-tile region, one event at (3,6); the `$72` door at (13,1) is
+    elsewhere on the tilemap.
+  - **24** — 24-tile spawn room; the `P` exit_prev at (1,18) belongs to a
+    different room of the same shared tilemap.
+  - **178** — 7-tile pocket; its exit_prev at (27,21) and event at (27,17) are
+    both outside the reachable set.
+- So these are not broken maps and not missing bytes. Three of the four are
+  gated behind scripted events, and one (24) spawns in a room whose exit lives
+  in a neighbouring room — the same shared-tilemap structure as the Ur shops.
+  Implementing FF3's event interpreter is its own project; nothing here is a
+  one-line fix, and nothing was faked to close the number.
+
 ## 1.7.908 — 2026-08-12
 
 - **Collision trigType 1 = EXIT TO THE WORLD MAP.** Pulled from the ROM, not
