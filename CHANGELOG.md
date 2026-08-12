@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.900 — 2026-08-11
+
+- **Gated the other four dead-target redirects.** v1.7.899 covered the two
+  `resolveLivingTarget` call sites; a sweep for the same shape found four more,
+  and mutation-testing confirmed every one could be deleted outright with
+  encounter-sim at 47 passed and battle-sim `--assert` at exit 0. Three gates
+  added (50 total), six legs, each verified by reverting the thing it guards:
+  - **Fight on a corpse** (`battle-turn.js#_playerTurnFight`) — open-codes the
+    enemy redirect with its own `findIndex` instead of calling the helper.
+    Asserts the swing retargets to the living enemy, *and* the all-dead tail,
+    where this site diverges from the helper's two call sites: it skips the turn
+    where they fall through onto the corpse.
+  - **Heal on a dead ally** (`spell-cast.js`) — the friendly-side redirect, which
+    has no shared helper; `resolveLivingTarget` was only ever wired to the enemy
+    path, so the party-side rule is open-coded three times. Asserts both the
+    next-living-ally leg and the player-fallback leg.
+  - **Item on a dead ally** (`battle-turn.js`) — a separate copy again; the item
+    branch never routes through `spell-cast.js`.
+- **The fourth redirect is unreachable, and is documented as such rather than
+  gated.** `battle-turn.js:899`'s dead-player leg sits behind a one-caller chain
+  (`_playerTurnConsumable` ← `_playerTurnItem` ← the `cmd === 'item'` dispatch)
+  that opens with `if (ps.hp <= 0) { processNextTurn(); return; }`
+  (`battle-turn.js:247`). Nothing between the guard and the dispatch writes
+  `ps.hp`, and `processTurnStart` does not touch HP, so `ps.hp > 0` always holds
+  by the time that branch is evaluated. The gate asserts **the guard** instead:
+  a dead player's queued item turn is skipped and the item is not consumed.
+  Deleting line 247 fires it — which is the same edit that would bring the
+  dormant branch to life.
+- Found while gating: the fixture for that fourth leg failed against unmodified
+  code. That was the fixture reaching for an unreachable branch, not a bug —
+  established by tracing the caller chain before touching anything.
+
 ## 1.7.899 — 2026-08-11
 
 - **Gated the dead-target redirect** — the coverage hole found in v1.7.898 is closed.

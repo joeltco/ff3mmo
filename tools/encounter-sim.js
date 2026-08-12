@@ -123,7 +123,7 @@ const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpe
 const { applySpell } = await import('../src/combatant-cast.js');
 const { addStatus, tryInflictStatus } = await import('../src/status-effects.js');
 const { processNextTurn } = await import('../src/battle-turn.js');
-const { addItem, releaseOffhandForTwoHanded } = await import('../src/inventory.js');
+const { addItem, getItemCount, releaseOffhandForTwoHanded } = await import('../src/inventory.js');
 const { isQuestItem, QUEST_ITEM_TYPES, ITEMS } = await import('../src/data/items.js');
 const { isSellable } = await import('../src/shop.js');
 const { SHOPS } = await import('../src/data/shops.js');
@@ -2435,6 +2435,197 @@ const tests = [
     } finally {
       battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
       battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
+    }
+  },
+
+  // The other four dead-target redirects, found by sweeping for the v1.7.899
+  // shape and mutation-tested: every one of them could be deleted outright
+  // with encounter-sim at 47 passed and battle-sim --assert at exit 0.
+  //
+  // Two live on the enemy side, three on the friendly side, and the friendly
+  // side has no shared helper at all — `resolveLivingTarget` was only ever
+  // wired to the enemy path, so the party-side rule is open-coded three times.
+  // These gates pin the BEHAVIOUR at each site; they deliberately do not
+  // assume the sites share an implementation, because today they don't.
+
+  // A. Physical attack. `_playerTurnFight` open-codes the enemy redirect with
+  // its own findIndex instead of calling the helper, and diverges on the
+  // all-dead tail: it SKIPS the turn where the two helper call sites fall
+  // through onto the corpse. Both halves are asserted.
+  () => {
+    const name = 'regression — a Fight aimed at a dead enemy retargets, and skips when all are dead';
+    const saved = { state: battleSt.battleState, queue: battleSt.turnQueue,
+                    mons: battleSt.encounterMonsters, pending: inputSt.playerActionPending,
+                    ti: inputSt.targetIndex, rnd: battleSt.isRandomEncounter };
+    try {
+      const runFight = (monHps) => {
+        setupEncounter({ monster: { ...goblin, hp: 300, maxHP: 300 }, seed: 21 });
+        battleSt.isRandomEncounter = true;
+        battleSt.encounterMonsters = monHps.map((hp) => ({ ...goblin, hp, maxHP: 300, status: createStatusState() }));
+        inputSt.targetIndex = -1;
+        battleSt.turnQueue = [{ type: 'player' }];
+        inputSt.playerActionPending = { command: 'fight', targetIndex: 0, hitResults: [] };
+        battleSt.battleState = 'menu-open';
+        processNextTurn();
+        return { ti: inputSt.targetIndex, state: battleSt.battleState };
+      };
+      // Slot 0 is a corpse, slot 1 lives → the swing must land on slot 1.
+      const r = runFight([0, 300]);
+      if (r.ti !== 1) {
+        return { pass: false, name,
+          reason: `Fight aimed at the corpse in slot 0 kept targetIndex ${r.ti} — expected 1, the living enemy` };
+      }
+      // Everything dead → the turn is skipped, NOT resolved against a corpse.
+      const r2 = runFight([0, 0]);
+      if (r2.state === 'attack-back') {
+        return { pass: false, name, reason: 'Fight with every enemy dead still entered attack-back' };
+      }
+      return { pass: true, name, info: `retargeted to slot ${r.ti}; all-dead skipped to '${r2.state}'` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
+      battleSt.encounterMonsters = saved.mons; inputSt.playerActionPending = saved.pending;
+      inputSt.targetIndex = saved.ti; battleSt.isRandomEncounter = saved.rnd;
+    }
+  },
+
+  // B. Friendly single-target SPELL (spell-cast.js). Picked teammate died during
+  // windup → next living ally, then the player. Both legs asserted: the
+  // ally leg and the `if (!redirected && ps.hp > 0)` player fallback, which is
+  // a separate line that an ally-only fixture leaves untouched.
+  () => {
+    const name = 'regression — a heal aimed at a dead ally redirects to a living teammate';
+    const CURE = 0x34;
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    allies: battleSt.battleAllies, mons: battleSt.encounterMonsters,
+                    rnd: battleSt.isRandomEncounter };
+    try {
+      const castAtAlly0 = ({ allyHps, psHp }) => {
+        setupEncounter({ monster: { ...goblin, hp: 300, maxHP: 300 }, seed: 23 });
+        battleSt.isRandomEncounter = true;
+        battleSt.battleAllies = allyHps.map((hp) => ({
+          userId: 0, def: 10, evade: 0, shieldEvade: 0, mdef: 0, statusResist: 0,
+          elemResist: [], buffs: {}, hp, maxHP: 300, isDefending: false,
+          status: createStatusState(),
+        }));
+        ps.hp = psHp; ps.maxHP = 300; ps.stats = { ...(ps.stats || {}), maxHP: 300, level: 1, agi: 5 };
+        ps.mp = 99;
+        const beforeAllies = battleSt.battleAllies.map((a) => a.hp);
+        const beforePs = ps.hp;
+        startSpellCast(CURE, { allyIndex: 0 }, {});
+        for (let t = 0; t < 6000 && battleSt.battleState !== 'none'; t++) {
+          battleSt.battleTimer += 1;
+          updateSpellCast(1);
+          if (battleSt.battleAllies.some((a, i) => a.hp !== beforeAllies[i]) || ps.hp !== beforePs) break;
+        }
+        return { allies: battleSt.battleAllies.map((a) => a.hp), ps: ps.hp,
+                 beforeAllies, beforePs };
+      };
+
+      // Ally leg — slot 0 is dead, slot 1 is hurt and alive.
+      const r = castAtAlly0({ allyHps: [0, 100], psHp: 200 });
+      if (r.allies[1] <= r.beforeAllies[1]) {
+        return { pass: false, name,
+          reason: `Cure aimed at the dead ally in slot 0 left the LIVING ally in slot 1 at ${r.allies[1]} `
+                + `— the friendly redirect in spell-cast.js did not fire` };
+      }
+      if (r.allies[0] !== 0) {
+        return { pass: false, name, reason: `the heal landed on the DEAD ally (hp ${r.allies[0]})` };
+      }
+
+      // Player-fallback leg — every ally dead, player hurt but alive.
+      const r2 = castAtAlly0({ allyHps: [0, 0], psHp: 100 });
+      if (r2.ps <= r2.beforePs) {
+        return { pass: false, name,
+          reason: `with every ally dead the heal did not fall back to the player (hp stayed ${r2.ps})` };
+      }
+      return { pass: true, name,
+        info: `ally leg +${r.allies[1] - r.beforeAllies[1]} to slot 1; player fallback +${r2.ps - r2.beforePs}` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.battleAllies = saved.allies; battleSt.encounterMonsters = saved.mons;
+      battleSt.isRandomEncounter = saved.rnd;
+    }
+  },
+
+  // C + D. The item path's own two friendly redirects (battle-turn.js). These
+  // are a THIRD and FOURTH copy of the same rule — the item branch does not
+  // call into spell-cast.js, so gate B above does not cover either of them.
+  () => {
+    const name = 'regression — an item aimed at a dead ally redirects; a dead player gets no turn';
+    if (!_romLoaded) return { pass: true, name, info: 'SKIPPED — no FF3-English.nes in this checkout' };
+    const POTION = 0xa6;
+    const saved = { state: battleSt.battleState, queue: battleSt.turnQueue,
+                    allies: battleSt.battleAllies, mons: battleSt.encounterMonsters,
+                    pending: inputSt.playerActionPending };
+    try {
+      const useOn = ({ allyHps, psHp, allyIndex }) => {
+        setupEncounter({ monster: { ...goblin, hp: 300, maxHP: 300 }, seed: 27 });
+        battleSt.battleAllies = allyHps.map((hp) => ({
+          userId: 0, def: 10, evade: 0, shieldEvade: 0, mdef: 0, statusResist: 0,
+          elemResist: [], buffs: {}, hp, maxHP: 300, isDefending: false,
+          status: createStatusState(),
+        }));
+        ps.hp = psHp; ps.maxHP = 300; ps.stats = { ...(ps.stats || {}), maxHP: 300, level: 1, agi: 5 };
+        ps.status = createStatusState();
+        addItem(POTION, 1);
+        battleSt.turnQueue = [{ type: 'player' }];
+        inputSt.playerActionPending = { command: 'item', itemId: POTION, target: 'player',
+                                        allyIndex, targetMode: 'single' };
+        battleSt.battleState = 'menu-open';
+        processNextTurn();
+        return { allies: battleSt.battleAllies.map((a) => a.hp), ps: ps.hp };
+      };
+
+      // C — picked ALLY is dead, another ally lives.
+      const c = useOn({ allyHps: [0, 100], psHp: 200, allyIndex: 0 });
+      if (c.allies[1] <= 100) {
+        return { pass: false, name,
+          reason: `a Potion aimed at the dead ally in slot 0 left the LIVING ally in slot 1 at ${c.allies[1]}` };
+      }
+      if (c.allies[0] !== 0) {
+        return { pass: false, name, reason: `the Potion healed the DEAD ally (hp ${c.allies[0]})` };
+      }
+
+      // D — the FOURTH redirect, `target === 'player' && allyIndex < 0` with the
+      // player dead (battle-turn.js:899), is UNREACHABLE, so what is asserted
+      // here is the guard that makes it unreachable rather than the branch.
+      //
+      // Chain: `_playerTurnConsumable` has one caller, `_playerTurnItem`, which
+      // has one caller, the `cmd === 'item'` dispatch inside processNextTurn's
+      // `turn.type === 'player'` block — and that block opens with
+      // `if (ps.hp <= 0) { processNextTurn(); return; }` (battle-turn.js:247).
+      // Nothing between the guard and the dispatch writes ps.hp, and
+      // processTurnStart does not touch HP. So `ps.hp > 0` holds by the time
+      // that redirect is evaluated and its dead-player leg can never run.
+      //
+      // Asserting it directly is therefore impossible; asserting the guard is
+      // not. If someone deletes line 247, a dead player's queued item turn
+      // starts resolving, the item gets consumed, and that dormant branch goes
+      // live all at once — this fires on exactly that change.
+      const held = getItemCount(POTION);
+      const d = useOn({ allyHps: [100], psHp: 0, allyIndex: -1 });
+      if (getItemCount(POTION) !== held + 1) {
+        return { pass: false, name,
+          reason: `a dead player's queued item turn was RESOLVED, not skipped — the Potion was consumed. `
+                + `battle-turn.js:247's dead-player guard is gone, which also un-shadows the unreachable `
+                + `dead-player redirect at battle-turn.js:899` };
+      }
+      if (d.allies[0] !== 100) {
+        return { pass: false, name,
+          reason: `a dead player's item turn healed the ally (hp ${d.allies[0]}) — the turn should be skipped` };
+      }
+      return { pass: true, name,
+        info: `dead-ally leg +${c.allies[1] - 100} to slot 1; dead-player turn skipped, item not consumed` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.turnQueue = saved.queue;
+      battleSt.battleAllies = saved.allies; battleSt.encounterMonsters = saved.mons;
+      inputSt.playerActionPending = saved.pending;
     }
   },
 ];
