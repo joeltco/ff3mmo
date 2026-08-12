@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.961 — 2026-08-12
+
+### Fixed — the trailing tiles, measured against the real ROM instead of inferred
+- **The room clip drew one row past the room on enclosed building interiors**, painting a full-width wall band belonging to the NEXT room on the same shared tilemap. That is the "the inn in Kazus had trailing tiles outside of the rooms" report. Gone on maps **3, 15 and 47** — 7 stray tiles each, counted by diffing the actual NES output.
+- The bottom edge now stops at the room's last walkable row (`rmaxY + 1`) **for enclosed interiors only**; towns and caves keep `rmaxY + 2`. Scoping matters: applying the tighter edge everywhere fixed 4 maps but cost drawn area on 16 (map 29 lost 27 cells, map 183 lost 18, map 20's bottom two rows started rendering wrong). Shrinking the clip does not reveal *nothing* — it reveals the fill-tile background, and outside interiors that fill is not black, so a correct row gets replaced by wallpaper. Interiors sit in void, where a shorter clip really does mean "draw nothing", which is what the real game does.
+- `isEnclosedRoom` moved above the bounding-box calculation (it now gates the bottom edge). **One definition only** — a second would silently win.
+- **Known cost, stated plainly:** map 45 loses one row (5 cells) it previously drew correctly. Net across 69 maps: 21 trailing tiles removed, map 2 improved by 15 cells, 5 cells lost.
+- Map 2 improved on its own: `differ` 17 → 2, `agree` 39 → 47.
+
+### Added — ground-truth harness: run the real ROM and diff it against us
+This is the thing every previous fix in this arc was missing. Four room-clip changes shipped on inference and all four were regressions.
+- **`tools/nes-run.mjs`** — boots the real FF3 ROM headlessly in jsnes and screenshots the actual PPU output. `--warp <map>` uses the ROM's OWN go-to-map path (opcode `$FA` writes the map id to `$0700` and sets `$AB = $80`), held across frames because a one-shot poke gets eaten while the engine is in a dialogue/battle state. `--loadstate`/`--savestate`, `--pal` (live BG palette), `--findpos`, `--probe`, `--pc`, `--pcdiff`.
+- **`tools/rom-patch.mjs`** — byte patches applied to a COPY of the ROM, with `--verify` to assert what is being overwritten. FF3's name-entry screen has no confirm button and blocked all headless progress; `3D:B8E6 = 18 60` (`CLC` / `RTS`) skips it. Reaching free roam also means winning the FORCED opening Goblin battle — hence the savestate, which turns a 17s replay into a 1.2s capture.
+- **`tools/gt-diff.mjs`** — overlays a real capture and one of ours, searching whole-tile offsets for best alignment (the two cameras are never framed the same). Compares **structure, not RGB**: jsnes and `tile-decoder.js` use different NES-to-RGB tables, so the same tile is `#e7d5c4` there and `#ababab` here — real, but not a map bug, and comparing raw colour drowns every finding. `--color` opts back in.
+- **`tools/gt-sweep.mjs`** — runs the whole pipeline over every play-area map and reports **OURS-ONLY** cells: places we draw and the real game draws nothing. That single number is the trailing-tile bug.
+- Baseline before this fix: 5 maps with trailing tiles (3, 15, 44, 47, 122). After: 2, both a different root cause (see below).
+
+### Verified NOT a bug — the map palettes
+- Our loader hardcodes colour 0 of every BG palette to `$0F`; the live PPU has `$1A` in palettes 1-3. Twelve of sixteen entries match exactly, so this looked like the smoking gun. It is not: jsnes skips background pattern-0 pixels (`if (col !== 0)`) and fills the backdrop from `$3F00`, exactly as hardware does, so `$3F04/$3F08/$3F0C` are never rendered. **Our `0x0F` is correct** — checked before "fixing" it.
+
+### Gate
+- `tools/check-room-clip.mjs` now also asserts the opposite direction for maps 3/15/47: the clip must not run past the room's last walkable row. **Proven by reverting the fix** — the gate fails with all three named, and passes with it applied.
+
+### Still open (filed, not swept under)
+- **Map 122** renders completely different content than the real ROM (a small brick stairwell there, a large pale structure here). A tilemap/tileset decode mismatch, not a clip issue.
+- **Map 44** spawns the player at (2,29) inside the decorative bottom band of a shared tilemap, where exactly ONE tile is walkable — the player cannot move. That degenerate room is also what makes the overhang loop paint its 2 spare rows. A spawn bug, not a clip bug.
+
 ## 1.7.960 — 2026-08-12
 
 ### Reverted the room mask again — and found why my verification was worthless

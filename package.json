@@ -1,7 +1,7 @@
 {
   "name": "ff3mmo",
-  "version": "1.7.960",
-  "description": "NES RPG engine \u2014 runtime ROM extraction, procedural dungeons, NSF music",
+  "version": "1.7.961",
+  "description": "NES RPG engine — runtime ROM extraction, procedural dungeons, NSF music",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@napi-rs/canvas": "^1.0.5",
     "eslint": "^10.3.0",
-    "globals": "^17.6.0"
+    "globals": "^17.6.0",
+    "jsnes": "^2.1.0"
   }
 }

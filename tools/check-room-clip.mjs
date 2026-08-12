@@ -35,6 +35,13 @@ const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url
 const rom = new Uint8Array(fs.readFileSync(ROM));
 const W = 32, TILE = 16;
 
+// The enclosed building interiors that were measured drawing a neighbouring
+// room's wall band below their own (tools/gt-sweep.mjs against the real ROM).
+// Pinned by id rather than re-deriving "is this an interior" here, so the gate
+// tests the fix rather than restating the renderer's own heuristic and
+// agreeing with itself.
+const TRAILING_MAPS = new Set([3, 15, 47]);
+
 // Maps reachable on foot — see tools/map-audit.mjs --play.
 const PLAY = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25,26,27,28,29,30,
               44,45,46,47,50,52,53,54,101,102,111,112,113,114,115,122,123,147,148,160,163,164,
@@ -107,11 +114,35 @@ for (const id of IDS) {
     failed++;
     if (!worst || outside > worst.n) worst = { id, n: outside };
   }
+
+  // The OTHER direction, for enclosed building interiors only: the clip must
+  // not run past the room's last walkable row. Overshooting paints a
+  // full-width wall band from a NEIGHBOURING room below the player's — the
+  // "trailing tiles outside of the rooms" bug. Verified against the real ROM
+  // with tools/gt-sweep.mjs (jsnes warps to each map; the actual PPU output is
+  // diffed against ours): maps 3, 15 and 47 each drew a 7-tile band the real
+  // game leaves blank.
+  //
+  // Interiors ONLY. A town's scenery legitimately sits below its walkable
+  // tiles, and enforcing this everywhere is what deleted Kazus in v1.7.954.
+  if (TRAILING_MAPS.has(id)) {
+    let lastWalkRow = -1;
+    for (const k of seen) {
+      const y = (k - (k % W)) / W;
+      if (y > lastWalkRow) lastWalkRow = y;
+    }
+    if (y1 > lastWalkRow + 1) {
+      console.error(`  ✗ map ${id}: clip bottom row ${y1 - 1} is past the room's last walkable row ` +
+        `${lastWalkRow} — ${(y1 - 1 - lastWalkRow) * (x1 - x0)} trailing tiles from the next room`);
+      failed++;
+    }
+  }
 }
 
 if (!checked) { console.error('check-room-clip: no maps checked'); process.exit(2); }
 if (failed) {
-  console.error(`\ncheck-room-clip: FAIL — ${failed} of ${checked} maps let the player walk into un-drawn space` +
+  console.error(`\ncheck-room-clip: FAIL — ${failed} of ${checked} maps draw the wrong area ` +
+    `(walkable tiles left unpainted, or a neighbouring room's tiles trailing below)` +
     (worst ? ` (worst: map ${worst.id}, ${worst.n} tiles)` : ''));
   process.exit(1);
 }

@@ -246,6 +246,32 @@ export class MapRenderer {
         }
       }
     }
+    // Is this a small enclosed building interior, or a town/cave? Three
+    // conditions, all of which a town fails:
+    //   1. The fill tile is NOT walkable — interiors sit in void; a town's fill
+    //      is ground or hedge you can see past.
+    //   2. The player's room is SMALL (<= 60 tiles).
+    //   3. The room is a minority of the map's walkable tiles (< 50%), i.e. the
+    //      tilemap really does hold other rooms.
+    // Measured: inn (17) 13 tiles / 0.22 -> room. Village (164) 145 / 0.38,
+    // castle (18) 240 / 0.52, Ur (114) 291 / 0.88, mountain town (10) 196 /
+    // 0.94, Altar Cave (111) 0.85 -> all NOT rooms.
+    //
+    // Computed HERE, before the bounding box, because the bottom edge rule
+    // below depends on it. It used to live further down; there is exactly one
+    // definition — a second one would silently win and undo this.
+    const fillM = fillTile < 128 ? fillTile : fillTile & 0x7F;
+    const fillColl = collision[fillM];
+    const fillIsVoid = (fillColl & 0x07) === 3 || (fillColl & 0x80) !== 0;
+    let totalWalkable = 0;
+    for (let y = 0; y < MAP_SIZE; y++) {
+      for (let x = 0; x < MAP_SIZE; x++) {
+        if (this.isPassable(x, y, 0) || this.isPassable(x, y, 1) || this.isPassable(x, y, 2)) totalWalkable++;
+      }
+    }
+    const roomFraction = totalWalkable ? roomSet.size / totalWalkable : 1;
+    const isEnclosedRoom = fillIsVoid && roomSet.size <= 60 && roomFraction < 0.5;
+
     const foreignAt = (x, y) => !roomSet.has(y * MAP_SIZE + x) && this.isPassable(x, y);
     // Only peel an edge that is ENTIRELY outside the player's room and shows
     // another room's floor. An edge still containing the room's own tiles must
@@ -287,7 +313,29 @@ export class MapRenderer {
     // town. When the two disagree, err toward drawing more.
     if (rmaxX >= 0) {
       top    = Math.min(top,    Math.max(0, rminY - 1));
-      bottom = Math.max(bottom, Math.min(MAP_SIZE, rmaxY + 2));
+      // The drawn region ENDS at the room's last walkable row. Measured against
+      // the real ROM (tools/gt-sweep.mjs, which warps jsnes to each map and
+      // diffs the actual PPU output against ours): on maps 3/15/47 Phase 1
+      // already produced the correct bottom and the `+2` pushed it one row
+      // past, painting a full-width wall band the real game leaves blank —
+      // "the inn had trailing tiles outside of the rooms". Map 44 was two rows
+      // over, which is exactly the 14 stray cells the diff counted.
+      //
+      // This stays a Math.max — it must never SHRINK what Phase 1 found. I
+      // tried pinning it to rmaxY + 1 and measured the result: 4 maps fixed but
+      // 16 lost drawn area (map 29 lost 27 cells, map 183 lost 18, and map 20's
+      // bottom two rows started rendering wrong). Phase 1's bottom is legitimate
+      // wall/overhang on those maps. Lowering the ceiling from rmaxY + 2 to
+      // rmaxY + 1 only ever changes the maps where that term was the winner —
+      // which is exactly the trailing-tile maps and nothing else.
+      //
+      // The tighter edge applies ONLY to enclosed building interiors. Applying
+      // it everywhere also cost a row on maps 45/113/115/148/168: shrinking the
+      // clip does not reveal nothing, it reveals the FILL-TILE background, and
+      // on those maps the fill is not black, so a correct row was replaced by
+      // wallpaper. Interiors sit in void, where a shorter clip really does mean
+      // "draw nothing" — which is what the real game does.
+      bottom = Math.max(bottom, Math.min(MAP_SIZE, rmaxY + (isEnclosedRoom ? 1 : 2)));
       left   = Math.min(left,   Math.max(0, rminX - 1));
       right  = Math.max(right,  Math.min(MAP_SIZE, rmaxX + 2));
     }
@@ -351,17 +399,8 @@ export class MapRenderer {
     // Measured verdicts: inn (17) 13 tiles / 0.22 -> masked. Village (164) 145
     // / 0.38, castle (18) 240 / 0.52, Ur (114) 291 / 0.88, mountain town (10)
     // 196 / 0.94, Altar Cave (111) 0.85 -> all UNMASKED.
-    const fillM = fillTile < 128 ? fillTile : fillTile & 0x7F;
-    const fillColl = collision[fillM];
-    const fillIsVoid = (fillColl & 0x07) === 3 || (fillColl & 0x80) !== 0;
-    let totalWalkable = 0;
-    for (let y = 0; y < MAP_SIZE; y++) {
-      for (let x = 0; x < MAP_SIZE; x++) {
-        if (this.isPassable(x, y, 0) || this.isPassable(x, y, 1) || this.isPassable(x, y, 2)) totalWalkable++;
-      }
-    }
-    const roomFraction = totalWalkable ? roomSet.size / totalWalkable : 1;
-    const isEnclosedRoom = fillIsVoid && roomSet.size <= 60 && roomFraction < 0.5;
+    // (isEnclosedRoom is computed above, before the bounding box is decided —
+    // the bottom-edge rule needs it.)
     // v1.7.958 — MASK OFF EVERYWHERE. Third attempt, third regression.
     //
     // Restricting it to enclosed rooms stopped it deleting towns, but the mask
