@@ -75,14 +75,29 @@ export function validateBattleOutcome(battle, claimedOutcome) {
     cpGained:  Math.max(1, Math.floor(sumCp  / 4)),
   };
 
+  // v1.7.933 — a reward mismatch is no longer a REJECT.
+  //
+  // Rejecting threw the whole battle away, and the client has already granted
+  // exp/gil locally by the time it submits (battle-update.js#_updateVictoryFsm
+  // calls grantExp/grantGil before the claim is built). So the player watched
+  // their rewards appear and then get rolled back by the next inv-state push —
+  // for a fight they legitimately won. That is real damage to a legitimate
+  // player caused by a bug we have not yet root-caused.
+  //
+  // The server has ALREADY computed the authoritative numbers from its own
+  // canonical monster list, five lines up. Applying those is strictly more
+  // authoritative than trusting the claim, so a cheater gains exactly nothing
+  // by lying — their claim is overwritten either way. The divergence is
+  // recorded and returned so the caller can log it loudly.
+  const divergences = [];
   if ((claim.expGained | 0) !== expected.expGained) {
-    return { accepted: false, reason: 'exp-mismatch claim=' + (claim.expGained|0) + ' expected=' + expected.expGained };
+    divergences.push('exp claim=' + (claim.expGained | 0) + ' expected=' + expected.expGained);
   }
   if ((claim.gilGained | 0) !== expected.gilGained) {
-    return { accepted: false, reason: 'gil-mismatch claim=' + (claim.gilGained|0) + ' expected=' + expected.gilGained };
+    divergences.push('gil claim=' + (claim.gilGained | 0) + ' expected=' + expected.gilGained);
   }
   if ((claim.cpGained | 0) !== expected.cpGained) {
-    return { accepted: false, reason: 'cp-mismatch claim=' + (claim.cpGained|0) + ' expected=' + expected.cpGained };
+    divergences.push('cp claim=' + (claim.cpGained | 0) + ' expected=' + expected.cpGained);
   }
 
   // Drop check — claimed drop must be null OR in the union of every
@@ -105,6 +120,13 @@ export function validateBattleOutcome(battle, claimedOutcome) {
 
   return {
     accepted: true,
+    // Non-empty when the client's arithmetic disagreed with ours. The battle
+    // is still applied — with OUR numbers — but the caller logs this so the
+    // underlying desync stays visible instead of being silently papered over.
+    divergences,
+    // The server's canonical monster list, so a divergence log can be diffed
+    // against the client's `monsterIds` and the desync actually diagnosed.
+    serverMonsterIds: battle.monsters.map(m => m.monsterId),
     canonical: {
       victor,
       expGained: expected.expGained,

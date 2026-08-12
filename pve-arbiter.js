@@ -223,6 +223,19 @@ export function endPveBattle(userId, payload) {
       ' claim=' + JSON.stringify(payload.claimedOutcome));
     return { status: 'rejected', reason: result.reason };
   }
+  // v1.7.933 — reward arithmetic disagreed, but the battle is applied with the
+  // server's numbers. Logged with BOTH monster lists: the desync has to be a
+  // difference in what each side thought it was fighting, since the formulas
+  // are identical, and this is the line that will prove which.
+  if (result.divergences && result.divergences.length) {
+    const claimIds = Array.isArray(payload.claimedOutcome && payload.claimedOutcome.monsterIds)
+      ? payload.claimedOutcome.monsterIds : null;
+    console.log('[pve-reward-desync] battle=' + battleId + ' user=' + userId +
+      ' ' + result.divergences.join(' ') +
+      ' serverMons=' + JSON.stringify(result.serverMonsterIds) +
+      ' clientMons=' + JSON.stringify(claimIds) +
+      ' applied=' + JSON.stringify(result.canonical));
+  }
   return { status: 'applied', canonical: result.canonical };
 }
 

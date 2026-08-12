@@ -18,6 +18,23 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.933 — 2026-08-12
+
+### Fixed
+- **A PvE reward mismatch no longer throws the whole battle away.** A live player's wins were being rejected with `exp-mismatch claim=10 expected=15` and `gil-mismatch claim=7 expected=6`. The client grants exp and gil LOCALLY before it submits (`battle-update.js#_updateVictoryFsm` calls `grantExp`/`grantGil` ahead of building the claim), so a reject meant the player watched rewards land and then get rolled back by the next inv-state push — on a fight they legitimately won.
+- The server already computes the authoritative reward from its own canonical monster list. It now **applies those numbers** instead of rejecting. A lying client gains exactly nothing, because its claim is overwritten either way — the reject was punishing legitimate players without adding any protection.
+
+### Unchanged — still hard rejects
+- `reward-on-loss-*` (rewards claimed on a wipe/flee), `drop-not-in-pool` (a forged item drop), `invalid-victor`, `no-battle`, `not-owner`. Those are real anti-cheat boundaries where the claim asks for something the server would otherwise grant; reward arithmetic is not, because the server overwrites it.
+
+### Added
+- `[pve-reward-desync]` log line carrying **both monster lists** — `serverMons` from the arbiter's canonical formation and `clientMons` from a new forensics-only `monsterIds` field on the claim. The exp/gil formulas on the two sides are identical (`sum / 4`, floored, min 1), and `_pickFormation` correctly caps at 4, so a mismatch means the two sides disagree about WHICH monsters were fought. The old log could only show THAT they disagreed; this shows why. **Root cause is not yet identified — this is instrumentation, not a claimed fix for the desync itself.**
+
+### Tests
+- 7 new `--filter=desync` cases in `pvp-wire-sim` suite 2. The two encoding the behavior change fail against the old reject-on-mismatch code; the anti-cheat boundaries pass in both directions, which is correct since they are unchanged.
+- **Contract change to an existing test.** `PvE battle-end rejects forged exp` asserted the old reject. Rather than flip its expectation, it now asserts the guarantee it existed to protect — a forged `expGained: 99999` is applied as a sane server-computed value, so the cheater does not profit. Renamed to `neutralizes forged exp (applies canonical)`.
+- Full suite: **153 passed, 0 failed.**
+
 ## 1.7.932 — 2026-08-12
 
 ### Fixed

@@ -160,6 +160,12 @@ function _buildStubClaim() {
     expGained: isVictory ? (battleSt.encounterExpGained | 0) : 0,
     cpGained:  isVictory ? (battleSt.encounterCpGained  | 0) : 0,
     gilGained: isVictory ? (battleSt.encounterGilGained | 0) : 0,
+    // v1.7.933 — forensics only; the server never trusts this for rewards.
+    // Reward desyncs are being logged with both lists because the exp/gil
+    // formulas on the two sides are identical, so a mismatch means the two
+    // sides disagree about WHICH monsters were fought. Without this the log
+    // can only show that they disagreed, never why.
+    monsterIds: (battleSt.encounterMonsters || []).map(m => m.monsterId),
   };
 }
 

@@ -62,6 +62,7 @@ import { _testEnsureUser, handleAPI, _testValidateSaveData,
        } from '../api.js';
 import { createPveBattle, recordIntent, _testReset as _pveTestReset }
        from '../pve-arbiter.js';
+import { validateBattleOutcome } from '../pve-replay.js';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
@@ -748,6 +749,76 @@ function suiteServer() {
     assertEqual(consumedTileConsumedAt(UID, SLOT, 114, 2, 2, 'vase'), vstamp,
       'vase row survives a chest reap');
     _testConsumedTilesClear(UID, SLOT);
+  });
+
+  // ── v1.7.933 — PvE reward desync is applied, not thrown away ────────────
+  // A live player's wins were being REJECTED for `exp-mismatch` /
+  // `gil-mismatch`. The client grants exp+gil locally before it submits, so a
+  // reject meant the player saw rewards land and then get rolled back on a
+  // fight they legitimately won. The server already computes the authoritative
+  // numbers from its own monster list — it now applies those.
+  const _mkBattle = (mons) => ({ monsters: mons });
+  const _mon = (id, exp, gil, cp) => ({ monsterId: id, exp, gil, cp });
+
+  test('#desync reward mismatch is APPLIED with server numbers, not rejected', () => {
+    // sumExp 60 -> 15, sumGil 24 -> 6, sumCp 4 -> 1
+    const b = _mkBattle([_mon(1, 20, 8, 1), _mon(2, 20, 8, 1), _mon(3, 20, 8, 2)]);
+    const r = validateBattleOutcome(b, {
+      victor: 'party', expGained: 10, gilGained: 7, cpGained: 1, drop: null,
+    });
+    assertTrue(r.accepted, 'a reward mismatch must no longer reject the battle');
+    assertEqual(r.canonical.expGained, 15, 'server exp wins over the claim');
+    assertEqual(r.canonical.gilGained, 6, 'server gil wins over the claim');
+    assertTrue(r.divergences.length >= 2, 'both exp and gil divergences recorded');
+  });
+
+  test('#desync a lying client gains nothing — canonical overrides inflation', () => {
+    const b = _mkBattle([_mon(1, 4, 4, 1)]);
+    const r = validateBattleOutcome(b, {
+      victor: 'party', expGained: 999999, gilGained: 999999, cpGained: 999999, drop: null,
+    });
+    assertTrue(r.accepted, 'applied');
+    assertEqual(r.canonical.expGained, 1, 'inflated exp overwritten by server value');
+    assertEqual(r.canonical.gilGained, 1, 'inflated gil overwritten by server value');
+    assertEqual(r.canonical.cpGained, 1, 'inflated cp overwritten by server value');
+  });
+
+  test('#desync exact match records NO divergence', () => {
+    const b = _mkBattle([_mon(1, 20, 8, 1), _mon(2, 20, 8, 1), _mon(3, 20, 8, 2)]);
+    const r = validateBattleOutcome(b, {
+      victor: 'party', expGained: 15, gilGained: 6, cpGained: 1, drop: null,
+    });
+    assertTrue(r.accepted, 'applied');
+    assertEqual(r.divergences.length, 0, 'a correct claim must not be flagged as a desync');
+  });
+
+  test('#desync server monster ids are returned for the diff log', () => {
+    const b = _mkBattle([_mon(7, 4, 4, 1), _mon(9, 4, 4, 1)]);
+    const r = validateBattleOutcome(b, { victor: 'party', expGained: 2, gilGained: 2, cpGained: 1 });
+    assertEqual(JSON.stringify(r.serverMonsterIds), JSON.stringify([7, 9]));
+  });
+
+  // The real anti-cheat boundaries must STAY hard rejects.
+  test('#desync rewards claimed on a wipe are still REJECTED', () => {
+    const b = _mkBattle([_mon(1, 40, 40, 1)]);
+    const r = validateBattleOutcome(b, { victor: 'wipe', expGained: 10, gilGained: 0, cpGained: 0 });
+    assertTrue(!r.accepted, 'reward-on-loss must not be applied');
+    assertEqual(r.reason, 'reward-on-loss-exp');
+  });
+
+  test('#desync a drop outside the monster pool is still REJECTED', () => {
+    const b = _mkBattle([_mon(1, 4, 4, 1)]);
+    const r = validateBattleOutcome(b, {
+      victor: 'party', expGained: 1, gilGained: 1, cpGained: 1, drop: 0xEE,
+    });
+    assertTrue(!r.accepted, 'a forged drop must not be granted');
+    assertTrue(String(r.reason).startsWith('drop-not-in-pool'), 'reason: ' + r.reason);
+  });
+
+  test('#desync an invalid victor is still REJECTED', () => {
+    const r = validateBattleOutcome(_mkBattle([_mon(1, 4, 4, 1)]), { victor: 'lol' });
+    assertTrue(!r.accepted, 'invalid victor must reject');
+    assertEqual(r.reason, 'invalid-victor');
   });
 
   // ── v1.7.928 — log-spam throttle ────────────────────────────────────────
@@ -2949,7 +3020,13 @@ async function suiteWire() {
     _testHooks.setPveArbiter(false);
   });
 
-  await asyncTest('PvE battle-end rejects forged exp', async () => {
+  // v1.7.933 — the CONTRACT CHANGED here, deliberately. A forged exp claim is
+  // no longer rejected; it is applied with the server's canonical numbers. The
+  // guarantee this test exists to protect — "a cheater must not profit" — is
+  // unchanged and is what it now asserts. Rejecting was actively harming
+  // legitimate players, whose clients grant exp/gil locally before submitting:
+  // a reject rolled back rewards for a fight they really won.
+  await asyncTest('PvE battle-end neutralizes forged exp (applies canonical)', async () => {
     _testHooks.setPveArbiter(true);
     _testEnsureUser(3002);
     _testSeedSave(3002, 0, { stats: { level: 5, hp: 100, maxHP: 100 } });
@@ -2967,9 +3044,12 @@ async function suiteWire() {
       intents: [], claimedOutcome: { victor: 'party',
         expGained: 99999, gilGained: 1, cpGained: 1, drop: null } }));
     const result = await once(ws, m => m.type === 'pve-battle-result', 1000);
-    assertEqual(result.status, 'rejected', 'forged exp accepted');
-    assertTrue(result.reason && result.reason.startsWith('exp-mismatch'),
-      'wrong reject reason: ' + result.reason);
+    assertEqual(result.status, 'applied', 'battle should apply with server numbers');
+    // The whole point: the forged number must NOT be what lands.
+    const applied = (result.canonical && result.canonical.expGained) | 0;
+    assertTrue(applied !== 99999, 'forged exp was applied verbatim — cheater profited');
+    assertTrue(applied > 0 && applied < 1000,
+      'applied exp should be a sane server-computed value, got ' + applied);
     ws.close();
     _testHooks.setPveArbiter(false);
   });
