@@ -148,6 +148,7 @@ const { MapRenderer } = await import('../src/map-renderer.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
 const { updateBattleAlly } = await import('../src/battle-ally.js');
+const { resolveLivingTarget } = await import('../src/battle-math.js');
 const { pickOffensiveSpell, offensiveSpellPool } = await import('../src/combatant-ai.js');
 const { getLastImpactSFX } = await import('../src/combatant-cast.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
@@ -2349,6 +2350,91 @@ const tests = [
       battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
       pvpSt.isPVPBattle = saved.isPvp; pvpSt.pvpMagicSpellId = saved.sid;
       battleSt.battleAllies = saved.allies;
+    }
+  },
+  // Regression — a single-target spell aimed at a CORPSE redirects to a living
+  // enemy instead of resolving against the dead one.
+  //
+  // `resolveLivingTarget` exists for exactly this: the picked monster can die
+  // during cast windup, and both call sites (spell-cast.js#_applyEnemyEffect and
+  // battle-turn.js' item-heal path) use it to move the effect to the next living
+  // enemy on the same side. Stub it to return null and the redirect silently
+  // stops — the spell lands on the corpse and the living enemy beside it is
+  // untouched.
+  //
+  // Found by mutation while checking whether the new battle-sim deploy gate
+  // added coverage: nulling this function left encounter-sim at 46 passed AND
+  // battle-sim at exit 0. Nothing in the project noticed. v1.7.899.
+  //
+  // Asserts the WIRING, not just the helper. A helper-only check would have
+  // stayed green through the same stub if a call site stopped calling it —
+  // which is the mistake this suite has now made four separate times.
+  () => {
+    const name = 'regression — a spell aimed at a dead enemy redirects to a living one';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    mons: battleSt.encounterMonsters, rnd: battleSt.isRandomEncounter };
+    try {
+      // 1. The helper's own contract.
+      const dead = { hp: 0 }, live = { hp: 50 };
+      if (resolveLivingTarget(live, [live, dead]) !== live) {
+        return { pass: false, name, reason: 'a LIVING picked target was redirected away' };
+      }
+      if (resolveLivingTarget(dead, [dead, live]) !== live) {
+        return { pass: false, name, reason: 'a dead picked target did not redirect to the living one' };
+      }
+      if (resolveLivingTarget(dead, [dead, { hp: 0 }]) !== null) {
+        return { pass: false, name, reason: 'redirect invented a target when every enemy was dead' };
+      }
+
+      // 2. The WIRING: cast at slot 0 while slot 0 is a corpse and slot 1 lives.
+      setupEncounter({ monster: { ...goblin, hp: 300, maxHP: 300 }, seed: 13 });
+      battleSt.isRandomEncounter = true;
+      battleSt.encounterMonsters = [
+        { ...goblin, hp: 0,   maxHP: 300, status: createStatusState() },   // corpse
+        { ...goblin, hp: 300, maxHP: 300, status: createStatusState() },   // the living one
+      ];
+      ps.hp = 200; ps.maxHP = 200; ps.mp = 99;
+      const before = battleSt.encounterMonsters.map((m) => m.hp);
+      startSpellCast(0x31, { enemyIndex: 0, targetMode: 'single' }, {});
+      for (let t = 0; t < 6000 && battleSt.battleState !== 'none'; t++) {
+        battleSt.battleTimer += 1;
+        updateSpellCast(1);
+        if (battleSt.encounterMonsters[1].hp !== before[1]) break;
+      }
+      const after = battleSt.encounterMonsters.map((m) => m.hp);
+      const hitLiving = before[1] - after[1];
+      if (hitLiving <= 0) {
+        return { pass: false, name,
+          reason: `Fire aimed at the corpse in slot 0 left the LIVING enemy in slot 1 untouched `
+                + `(hp ${before[1]} -> ${after[1]}) — the apply-time redirect did not fire` };
+      }
+      // 3. The SECOND call site. `battle-turn.js`' item path has its own copy of
+      // the redirect, and part 2 does not touch it — disabling it left this
+      // suite at 47 passed. Two call sites, two assertions.
+      setupEncounter({ monster: { ...goblin, hp: 300, maxHP: 300 }, seed: 17 });
+      battleSt.isRandomEncounter = true;
+      battleSt.encounterMonsters = [
+        { ...goblin, hp: 0,   maxHP: 300, status: createStatusState() },   // corpse
+        { ...goblin, hp: 100, maxHP: 300, status: createStatusState() },   // hurt, alive
+      ];
+      addItem(0xa6, 1);                                                    // Potion
+      battleSt.turnQueue = [{ type: 'player' }];
+      inputSt.playerActionPending = { command: 'item', itemId: 0xa6, target: 0, targetMode: 'single' };
+      battleSt.battleState = 'menu-open';
+      processNextTurn();
+      const healed = battleSt.encounterMonsters[1].hp - 100;
+      if (healed <= 0) {
+        return { pass: false, name,
+          reason: `a Potion aimed at the corpse in slot 0 left the LIVING enemy in slot 1 at `
+                + `${battleSt.encounterMonsters[1].hp} — battle-turn.js' copy of the redirect did not fire` };
+      }
+      return { pass: true, name,
+        info: `spell redirected ${hitLiving} dmg and item redirected ${healed} heal off the corpse` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
     }
   },
 ];
