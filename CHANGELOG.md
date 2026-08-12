@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.892 — 2026-08-11
+
+**Ally summon SFX swept: all 8 fire their captured sound, at scene start. And a live landmine found next to them.**
+
+Both halves measured through the REAL ally path, not re-derived:
+
+- **Which sound** — all 8 summons resolve to their captured value (Bahamut 125, Leviathan 115, Odin 118, Titan 131, Ifrit 130, Ramuh 132, Shiva 67, Chocobo 75).
+- **When** — the summon's SFX fires at scene start (16 ms), while an ordinary ally Fire still fires on its throw window (256 ms). The contrast is asserted both ways, so "SFX at anim start" cannot leak into every spell.
+
+**The landmine.** The SFX selector resolves a spell OBJECT by identity, and a summon's tiered rewrite is *deliberately* absent from that map — the comment says so — so it falls through to the neutral fallback. All three cast paths therefore pass `SPELLS.get(id)`, the base entry. Hand the selector the tiered object instead and **all 8 summons collapse to 93**, one shared sound. That is exactly v1.7.847, where 23 spells silently shared Fire's impact.
+
+I have just added tier resolution to the ally and PVP paths, so a future tidy-up that reuses the tiered variable for the SFX call is a plausible next edit. It is now gated.
+
+**A test seam, added because the gate was hollow without it.** The first version of this gate checked `getSpellImpactSFX(SPELLS.get(id))` — it re-derived the answer instead of observing what the engine passed, and passed cleanly when the ally path was reverted to hand over the tiered object. `getLastImpactSFX()` records what `playSpellImpactSFX` actually resolved, and the gate reads that after driving a real cast. The revert now fails with all 8 mismatches named.
+
+That is the third hollow gate caught this session by reverting rather than trusting a green result — the other two being the summon borrow table re-stated as `id === TITAN`, and the tier wiring tested only through its helpers.
+
+Gates: lint 0, encounter-sim 45, pvp-wire-sim 140, wire-stats lossless, battle-sim clean.
+
 ## 1.7.891 — 2026-08-11
 
 **Allies (and PVP opponents) can now pick summons. The pool is derived, and the tier is resolved from the caster's job.**

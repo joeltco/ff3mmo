@@ -274,8 +274,20 @@ export function getSpellImpactSFX(spell) {
 
 // Plays the impact SFX for a spell. One call site for all three role engines.
 // No-op for non-thrown spells (returns null from selector).
+// Last impact SFX actually resolved and played, for tests.
+//
+// A TEST SEAM, and it earned its keep immediately: a gate that re-derived the
+// sound with `getSpellImpactSFX(SPELLS.get(id))` passed happily when a caller
+// was changed to hand this function a summon's TIERED rewrite instead of the
+// base entry — which resolves to a different sound for 6 of the 8 summons,
+// because the rewrite is deliberately absent from the identity map and falls
+// through to the neutral fallback. Re-deriving an answer is not observing one.
+let _lastImpactSFX = null;
+export function getLastImpactSFX() { return _lastImpactSFX; }
+
 export function playSpellImpactSFX(spell) {
   const sfx = getSpellImpactSFX(spell);
+  _lastImpactSFX = sfx;
   if (sfx != null) playSFX(sfx);
 }
 

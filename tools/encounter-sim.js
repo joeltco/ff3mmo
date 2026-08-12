@@ -149,6 +149,7 @@ const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
 const { updateBattleAlly } = await import('../src/battle-ally.js');
 const { pickOffensiveSpell, offensiveSpellPool } = await import('../src/combatant-ai.js');
+const { getLastImpactSFX } = await import('../src/combatant-cast.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { resolveSummonEffect, summonEffectAsSpell } = await import('../src/summon-tier.js');
 const { pvpSt, updatePVPBattle } = await import('../src/pvp.js');
@@ -2155,6 +2156,84 @@ const tests = [
     return { pass: true, name,
       info: `pool covers ${SUMMON_TIERS.size} summons; non-knower never rolls one; `
           + `tiered power ${tiered.power} vs base ${base.power}; ${resolved}/${casts} real casts carried a tier` };
+  },
+  // Regression — an ally summon's SFX: the CAPTURED sound, at scene START.
+  //
+  // Two independent ways this can go wrong, and both have precedent here:
+  //
+  // 1. WHICH sound. The SFX selector resolves a spell OBJECT by identity, and a
+  //    summon's tiered rewrite is deliberately absent from that map, so it falls
+  //    through to the element/fallback rules. Measured: passing the tiered
+  //    object yields a DIFFERENT sound for 6 of the 8 — Bahamut/Shiva/Odin/
+  //    Chocobo all collapse to 93, the neutral fallback. All three cast paths
+  //    therefore pass `SPELLS.get(id)`, the base entry, and this asserts that
+  //    base entry still resolves to the captured value for every summon. v1.7.847
+  //    is the precedent: 23 spells silently sharing one sound.
+  // 2. WHEN. A summon's SFX belongs at scene start, not at the heal window's
+  //    483 ms or the throw window's 250 ms — the standing rule is SFX at
+  //    spell-anim start.
+  () => {
+    const name = 'regression — ally summon SFX is the captured sound, fired at scene start';
+    const bad = [];
+    for (const id of SUMMON_TIERS.keys()) {
+      const base = SPELLS.get(id);
+      const want = CAPTURED_SPELL_SFX.get(id);
+      const got = getSpellImpactSFX(base);
+      if (got !== want) bad.push(`summon 0x${id.toString(16)} resolves ${got}, captured ${want}`);
+    }
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    mons: battleSt.encounterMonsters, rnd: battleSt.isRandomEncounter,
+                    sid: battleSt.allyMagicSpellId };
+    try {
+      // WHEN: drive a real ally summon hit phase and record the tick the SFX flag flips.
+      const fireAt = (spellId) => {
+        setupEncounter({ monster: { ...goblin, hp: 900, maxHP: 900 }, seed: 3 });
+        battleSt.isRandomEncounter = true;
+        battleSt.battleState = 'ally-magic-hit';
+        battleSt.battleTimer = 0;
+        battleSt.allyMagicSpellId = spellId;
+        battleSt.allyMagicCasterIdx = 0;
+        battleSt.allyMagicTargetType = 'enemy';
+        battleSt.allyMagicTargetIdx = 0;
+        battleSt.allyMagicDamageRoll = 10;
+        battleSt.allyMagicEffectApplied = false;
+        battleSt.allyMagicSfxPlayed = false;
+        let g = 0;
+        while (!battleSt.allyMagicSfxPlayed && g < 5000) {
+          battleSt.battleTimer += 16; g += 16; updateBattleAlly(16);
+        }
+        return { at: battleSt.allyMagicSfxPlayed ? g : -1, sfx: getLastImpactSFX() };
+      };
+      // Every summon, driven through the REAL ally path, observing what the
+      // engine actually resolved — not re-deriving it here.
+      for (const id of SUMMON_TIERS.keys()) {
+        const r = fireAt(id);
+        const want = CAPTURED_SPELL_SFX.get(id);
+        if (r.sfx !== want) {
+          bad.push(`ally cast of 0x${id.toString(16)} played ${r.sfx}, captured ${want}`);
+        }
+      }
+      const summonAt = fireAt(0x30).at;       // Shiva
+      const fireSpellAt = fireAt(0x31).at;    // ordinary Fire, throw timing
+      if (summonAt < 0) bad.push('ally summon never fired its SFX');
+      else if (summonAt > 64) {
+        bad.push(`ally summon SFX fired at ${summonAt}ms — a summon's sound belongs at scene start`);
+      }
+      // Contrast: an ordinary spell must NOT have been dragged to t=0.
+      if (fireSpellAt >= 0 && fireSpellAt <= 64) {
+        bad.push(`ordinary ally Fire SFX fired at ${fireSpellAt}ms — the summon timing leaked into every spell`);
+      }
+      if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+      return { pass: true, name,
+        info: `${SUMMON_TIERS.size}/${SUMMON_TIERS.size} summons resolve their captured sound; `
+            + `summon SFX at ${summonAt}ms vs ordinary Fire at ${fireSpellAt}ms` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
+      battleSt.allyMagicSpellId = saved.sid;
+    }
   },
 ];
 
