@@ -40,8 +40,13 @@ const PLAY = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25,26,
               44,45,46,47,50,52,53,54,101,102,111,112,113,114,115,122,123,147,148,160,163,164,
               165,166,168,170,174,175,176,177,178,179,182,183,186,187,188,189,190,191];
 
+// `--all` sweeps every map id, not just the ones reachable on foot. Unused
+// slots get skipped naturally (they fail to load or have no clip).
+const ALL = process.argv.includes('--all');
+const IDS = ALL ? Array.from({ length: 256 }, (_, i) => i) : PLAY;
+
 let failed = 0, checked = 0, worst = null;
-for (const id of PLAY) {
+for (const id of IDS) {
   let md;
   try { md = loadMap(rom, id); } catch { continue; }
   if (!md || !md.tilemap || md.entranceX >= W || md.entranceY >= W) continue;

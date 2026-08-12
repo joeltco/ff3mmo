@@ -182,7 +182,8 @@ const SHOW_ALL = args.includes('--all');
 // Seeds from the overworld entrances reachable on foot from Ur, then follows
 // door destinations transitively. Everything else in the 256-id space is an
 // unused slot and its "defects" are noise.
-if (args.includes('--play')) {
+if (args.includes('--play') || args.includes('--every')) {
+  const EVERY = args.includes('--every');
   globalThis.document = globalThis.document || { createElement: () => ({ getContext: () => ({}) }) };
   const { loadWorldMap } = await import('../src/world-map-loader.js');
   const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
@@ -210,6 +211,17 @@ if (args.includes('--play')) {
     if (t && t.destMap) seeds.add(t.destMap);
   }
 
+  // `--every`: audit ALL real maps, not just those reachable on foot. Unused
+  // slots (60 of them share tilemapId $00) are collapsed to the first.
+  if (EVERY) {
+    const TB = 0x000A10;
+    let sawZero = false;
+    for (let id = 0; id < 256; id++) {
+      const t = rom[TB + id];
+      if (t === 0x00) { if (sawZero) continue; sawZero = true; }
+      seeds.add(id);
+    }
+  }
   const reachable = new Set(seeds);
   const queue = [...seeds];
   const report = [];

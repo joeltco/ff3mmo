@@ -410,7 +410,13 @@ export function findWorldExitIndex(mapId, worldMapData) {
 //   180 spawn (19,11)  98 tiles, 1 exit,  none reachable
 // Only 180 is reachable on foot today; the rest are listed so opening a sea or
 // air route later cannot quietly re-introduce the same trap.
-const STRANDING_MAPS = new Set([24, 178, 180]);
+// v1.7.952 — full sweep. `node tools/map-audit.mjs --every` audits all 195 real
+// maps (the 60 unused slots sharing tilemapId $00 collapse to one) using the
+// game's own spawn rule and `MapRenderer.isPassable`, and finds TWELVE where
+// the player lands with no reachable exit. Only 178 is reachable today, but
+// every one is listed: the cost of a wrong entry here is a player stuck with no
+// way out, and the cost of a spare entry is nothing.
+const STRANDING_MAPS = new Set([0, 24, 34, 94, 140, 152, 159, 169, 178, 180, 193, 255]);
 
 function _checkWorldMapTrigger(tileX, tileY) {
   const trigger = mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
