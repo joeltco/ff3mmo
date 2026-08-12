@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.898 — 2026-08-11
+
+**`battle-sim --assert` added to the deploy gates — and trying to justify it found a hole nothing covers.**
+
+The gate runs after pvp-wire-sim: `run_gate 60 node tools/battle-sim.js --runs=5 --assert`. Five runs is enough to tell dead from live without adding meaningful time, and the assertion is narrow by design — zero damage across all runs, or every run stalemating. A badly balanced sim still passes, because balance is a judgement call and does not belong in something that blocks a deploy.
+
+⚠ **`deploy.sh` is gitignored**, so this gate lives only in the local working copy. It is written down here because the file itself carries no history — anyone cloning this repo gets a deploy script without it.
+
+**Then the useful part.** Rather than assume the new gate earns its place, I looked for a break it catches that the others miss. Four mutations of `battle-math.js`:
+
+| mutation | encounter-sim | battle-sim --assert |
+|---|---|---|
+| `calcDamage` → 0 | 7 gates FAIL | DEGENERATE |
+| `rollHits` → `[]` | 1 gate FAIL | DEGENERATE |
+| `calcPotentialHits` → 0 | 1 gate FAIL | DEGENERATE |
+| `resolveLivingTarget` → `null` | **46 passed** | **exit 0** |
+
+So the new gate does NOT add unique coverage on anything I could construct — it is cheap insurance that fires louder, not wider. Said plainly rather than dressed up.
+
+**The last row is a real coverage hole, and I checked it is not an inert mutation.** `resolveLivingTarget` has two live callers — `battle-turn.js:938` and `spell-cast.js:419` — and both use it for the same thing: redirecting when the PICKED target is already dead. Return null and the redirect silently stops happening, so an item or a single-target spell resolves against a corpse instead of the living enemy beside it. Neither harness constructs a dead-picked-target scenario for those paths, so nothing notices.
+
+Not gated in this version — it is a distinct piece of work from adding the deploy hook, and worth doing deliberately rather than bolted onto a one-line change.
+
+Gates: lint 0, encounter-sim 46, pvp-wire-sim 140, wire-stats lossless (18 fields, all live), battle-sim --assert ok.
+
 ## 1.7.897 — 2026-08-11
 
 **battle-sim had no verdict at all — and I have been citing it as a gate.**
