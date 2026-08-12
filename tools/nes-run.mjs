@@ -271,6 +271,18 @@ if (has('pal')) {
   console.log('PAL_JSON ' + JSON.stringify(bg));
 }
 
+// `--poke addr=val,addr=val` writes RAM after the warp and before the capture,
+// so a candidate address can be tested by seeing whether the screen actually
+// moves. Addresses are hex; values decimal or 0x-prefixed.
+const pokeSpec = flag('poke', null);
+if (pokeSpec) {
+  for (const s of pokeSpec.split(',')) {
+    const [a, v] = s.split('=');
+    poke(parseInt(a, 16), v.startsWith('0x') ? parseInt(v, 16) : parseInt(v, 10));
+  }
+  run(parseInt(flag('pokesettle', '60'), 10));
+}
+
 // `--findpos` locates the player's tile-coordinate RAM addresses by MEASURING
 // them: snapshot RAM, walk a known number of steps in one axis, and report the
 // bytes that moved by exactly that amount. Guessing FF3's RAM map is how you

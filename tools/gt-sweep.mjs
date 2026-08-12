@@ -79,10 +79,27 @@ for (const id of ids) {
 
 console.log('\n================ SUMMARY ================');
 const bad = rows.filter(r => r.oursOnly > 0);
-const weak = rows.filter(r => r.pct !== undefined && r.pct < 70 && !r.note);
 const failed = rows.filter(r => r.note);
 console.log(`${rows.length} maps compared against the real ROM`);
 console.log(`trailing-tile maps (OURS-ONLY > 0): ${bad.length}${bad.length ? ' -> ' + bad.map(r => r.id).join(' ') : ''}`);
-console.log(`low agreement (<70%):               ${weak.length}${weak.length ? ' -> ' + weak.map(r => `${r.id}(${r.pct}%)`).join(' ') : ''}`);
+
+// READ THIS BEFORE TREATING `agreement %` OR `differ` AS A DEFECT COUNT.
+//
+// A warp does NOT reset the party's position — it carries over from wherever
+// they were, while our capture renders the map's spawn. So the two captures
+// often frame DIFFERENT REGIONS of the same map. gt-diff searches for the
+// best whole-tile alignment, but when the two windows barely overlap (ours is
+// 9x9 tiles, the NES draws 16x14) there is no alignment that can match, and
+// both `agreement %` and `differ` become meaningless for that map. Map 21 is
+// the clearest example: an island shrine in the real capture, a stone interior
+// in ours — the same map, photographed in two different places.
+//
+// I tried three ways to control the emulator's position (walk-and-diff RAM,
+// cross-map intersection, direct poking) and none held: the engine rewrites
+// those bytes every frame. Until that is solved, ONLY `OURS-ONLY` is a defect
+// signal — it counts cells where we paint and the real game paints nothing,
+// which survives a bad alignment because it does not depend on matching tiles.
+const lowOverlap = rows.filter(r => !r.note && r.pct < 70).length;
+console.log(`low overlap (<70% agreement):       ${lowOverlap}  <-- NOT a defect count; see the note in this file`);
 if (failed.length) console.log(`could not compare: ${failed.map(r => `${r.id}[${r.note}]`).join(' ')}`);
 if (!keep) console.log(`\n(PNGs in ${dir})`);
