@@ -149,6 +149,7 @@ const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
 const { updateBattleAlly } = await import('../src/battle-ally.js');
+const { pvpSt, updatePVPBattle } = await import('../src/pvp.js');
 const { DMG_SHOW_MS, getEnemyDmgNum } = await import('../src/damage-numbers.js');
 const { BACK_SWING_MS, FWD_SWING_MS, HIT_PAUSE_MS, SWING_HOLD_MS } = await import('../src/slash-effects.js');
 
@@ -1869,6 +1870,10 @@ const tests = [
         battleSt.battleTimer += 16; t += 16; updateBattleAlly(16);
       }
       const castMs = t;
+      if (battleSt.battleState === 'pvp-enemy-magic-cast') {
+        return { pass: false, name,
+          reason: `cast phase never advanced: after ${t}ms of updatePVPBattle, battleTimer=${Math.round(battleSt.battleTimer)} (need >= ${wantCast})` };
+      }
       if (castMs < wantCast) {
         return { pass: false, name,
           reason: `ally windup ended at ${castMs}ms, clipping a ${wantCast}ms cast burst` };
@@ -1893,6 +1898,64 @@ const tests = [
     } finally {
       battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
       battleSt.allyMagicSpellId = saved.sid;
+    }
+  },
+  // Regression — a PVP opponent casting a summon gets the whole scene too.
+  //
+  // Same shape as the ally gate: the PVP pipeline ran the heal-style timeline,
+  // so hooking the renderer alone would have clipped a multi-second creature
+  // into a ~500 ms window. Shiva again, because 5306 ms vs 483 ms is a gap you
+  // cannot mistake for drift.
+  () => {
+    const name = 'regression — a PVP summon cast runs the full scene, not the heal window';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    isPvp: pvpSt.isPVPBattle, sid: pvpSt.pvpMagicSpellId };
+    try {
+      const SHIVA = 0x30;
+      const wantCast = summonCastMs(SHIVA);
+      const wantScene = summonTotalMs(SHIVA);
+      pvpSt.isPVPBattle = true;
+      pvpSt.pvpMagicSpellId = SHIVA;
+      pvpSt.pvpMagicEffectApplied = false;
+      pvpSt.pvpMagicSfxPlayed = false;
+      battleSt.battleState = 'pvp-enemy-magic-cast';
+      battleSt.battleTimer = 0;
+
+      let t = 0;
+      // Advance the clock explicitly, as the ally gate does. updatePVPBattle's
+      // own timer step does not run in this harness (battleTimer stayed 0 for
+      // 20 s), and a test that silently never advances would "pass" any timeline.
+      while (battleSt.battleState === 'pvp-enemy-magic-cast' && t < 20000) {
+        battleSt.battleTimer += 16; t += 16; updatePVPBattle(16);
+      }
+      const castMs = t;
+      if (battleSt.battleState === 'pvp-enemy-magic-cast') {
+        return { pass: false, name,
+          reason: `cast phase never advanced: after ${t}ms of updatePVPBattle, battleTimer=${Math.round(battleSt.battleTimer)} (need >= ${wantCast})` };
+      }
+      if (castMs < wantCast) {
+        return { pass: false, name,
+          reason: `PVP windup ended at ${castMs}ms, clipping a ${wantCast}ms cast burst` };
+      }
+      let effectAt = null, guard = 0;
+      while (battleSt.battleState === 'pvp-enemy-magic-hit' && guard < 30000) {
+        battleSt.battleTimer += 16; guard += 16; updatePVPBattle(16);
+        if (effectAt === null && pvpSt.pvpMagicEffectApplied) effectAt = battleSt.battleTimer;
+      }
+      if (effectAt === null) {
+        return { pass: false, name, reason: 'PVP summon never applied its effect' };
+      }
+      if (effectAt < wantScene) {
+        return { pass: false, name,
+          reason: `PVP summon effect applied at ${effectAt}ms, before the ${wantScene}ms scene ended` };
+      }
+      return { pass: true, name,
+        info: `Shiva: windup ${castMs}ms >= burst ${wantCast}ms, effect at ${effectAt}ms >= scene ${wantScene}ms` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      pvpSt.isPVPBattle = saved.isPvp; pvpSt.pvpMagicSpellId = saved.sid;
     }
   },
 ];

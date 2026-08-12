@@ -176,18 +176,21 @@ function drawBattle() {
 // timeline, so hooking it would have started a 2-3 s creature inside a ~500 ms
 // window and cut it off mid-entrance.
 //
-// PVP-cast summons are STILL not handled: pvp.js has had no equivalent timeline
-// work, so it would fail the same way. A half-wired path looks broken rather
-// than absent.
+// PVP-cast summons are hooked too as of v1.7.889, once pvp.js got the same
+// timeline treatment. All three roles now run a summon as one scene.
 //
-// Roles share this one function rather than forking a second copy — the ally
-// spell id lives in `battleSt.allyMagicSpellId`, never in getCurrentSpellId().
+// Roles share this one function rather than forking three copies — each keeps
+// its spell id somewhere different: getCurrentSpellId() for the player,
+// `battleSt.allyMagicSpellId` for an ally, `pvpSt.pvpMagicSpellId` for a PVP
+// opponent. The state pair is what selects which to read.
 function _drawSummonPresentation() {
   let spellId = null, castState = null, hitState = null;
   if (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit') {
     spellId = getCurrentSpellId(); castState = 'magic-cast'; hitState = 'magic-hit';
   } else if (battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit') {
     spellId = battleSt.allyMagicSpellId; castState = 'ally-magic-cast'; hitState = 'ally-magic-hit';
+  } else if (battleSt.battleState === 'pvp-enemy-magic-cast' || battleSt.battleState === 'pvp-enemy-magic-hit') {
+    spellId = pvpSt.pvpMagicSpellId; castState = 'pvp-enemy-magic-cast'; hitState = 'pvp-enemy-magic-hit';
   } else {
     return;
   }

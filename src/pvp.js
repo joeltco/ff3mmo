@@ -46,6 +46,7 @@ import { hasBuff, BUFF_REFLECT } from './buffs.js';
 import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
+import { isSummonSpell, summonCastMs, summonTotalMs } from './summon-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
@@ -1315,7 +1316,14 @@ function _applyPVPEnemyMagicEffect() {
 
 function _processPVPEnemyMagic(dt) {
   if (battleSt.battleState === 'pvp-enemy-magic-cast') {
-    if (battleSt.battleTimer >= PVP_MAGIC_CAST_MS) {
+    // Summon windup is sized to its own cast burst (1026-1274 ms), exactly as
+    // spell-cast.js does for the player and battle-ally.js for an ally. At the
+    // fixed 800 the burst is clipped a fifth from the end.
+    const _psid = pvpSt.pvpMagicSpellId;
+    const castMs = isSummonSpell(_psid)
+      ? Math.max(PVP_MAGIC_CAST_MS, summonCastMs(_psid))
+      : PVP_MAGIC_CAST_MS;
+    if (battleSt.battleTimer >= castMs) {
       battleSt.battleState = 'pvp-enemy-magic-hit';
       battleSt.battleTimer = 0;
       pvpSt.pvpMagicEffectApplied = false;
@@ -1331,10 +1339,22 @@ function _processPVPEnemyMagic(dt) {
     // SFX timing rule: every spell fires SFX at SPELL-ANIM START. Throw =
     // impact-burst start; Heal = sparkle-burst start. Engine-driven via
     // `playSpellImpactSFX`; helpers never carry SFX.
-    const isHeal = _isPVPMagicHealSpell(pvpSt.pvpMagicSpellId);
-    const sfxMs    = isHeal ? CAST_PHASE_MS_HEAL.preImpactGap : PVP_THROW_SFX_MS;
-    const effectMs = isHeal ? PVP_HEAL_EFFECT_MS : PVP_THROW_EFFECT_MS;
-    const hitMs    = isHeal ? PVP_HEAL_HIT_MS    : PVP_THROW_HIT_MS;
+    // Summon: ONE scene, not a per-target walk — same shape as the player and
+    // ally paths. Running it on the heal timeline would start a 2-5 s creature
+    // inside a ~500 ms window and cut it off mid-entrance, which is precisely
+    // why battle-drawing.js refused to hook this path until now.
+    //
+    // SCOPE: presentation + timeline. `_applyPVPEnemyMagicEffect` still resolves
+    // ONE target, while a player summon applies to every target — same
+    // deliberate limit as the ally path. Widening it is a MECHANICS change.
+    const _psid2 = pvpSt.pvpMagicSpellId;
+    const isSummon = isSummonSpell(_psid2);
+    const isHeal = !isSummon && _isPVPMagicHealSpell(_psid2);
+    const sceneMs = isSummon ? summonTotalMs(_psid2) : 0;
+    const sfxMs    = isSummon ? 0 : (isHeal ? CAST_PHASE_MS_HEAL.preImpactGap : PVP_THROW_SFX_MS);
+    const effectMs = isSummon ? sceneMs : (isHeal ? PVP_HEAL_EFFECT_MS : PVP_THROW_EFFECT_MS);
+    const hitMs    = isSummon ? sceneMs + DMG_SHOW_MS
+                              : (isHeal ? PVP_HEAL_HIT_MS : PVP_THROW_HIT_MS);
 
     if (!pvpSt.pvpMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
       const spell = SPELLS.get(pvpSt.pvpMagicSpellId);
