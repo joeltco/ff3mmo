@@ -260,44 +260,46 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
 
 
 /**
- * MONSTER SPECIALS, swept. v1.7.885 — CORRECTS v1.7.884.
+ * MONSTER SPECIALS — COMPLETE. 101/101. v1.7.886.
  *
- * 101 monsters carry a special-attack script. Each is swept by patching every
- * encounter to it, giving it 0x7FFF HP so the fight cannot end, and zeroing its
+ * Every monster carrying a special-attack script, swept by patching all
+ * encounters to it, giving it 0x7FFF HP so the fight cannot end, and zeroing its
  * attack POWER but not its script, so it keeps acting while the party survives.
  *
- * ⚠ v1.7.884 reported "zero new sounds" across the first 60. THAT WAS WRONG.
- * I printed the sounds heard next to the known set and declared them matching by
- * EYE. $80 and $87 were sitting in that list and are not in the known set —
- * between `$86` and `$88` is exactly where a missing `$87` hides. Comparing the
- * two sets in code, which takes one line, finds three:
+ * THREE sounds no constant accounted for:
  *
  *   $80 -> nsf 65   the Balloon's EXPLOSION (self-destruct). Monster and attack
- *                   name both legible in the capture. 2 monsters: 0x3D, 0x37.
- *   $87 -> nsf 72   a monster attack cue shared by a contiguous family —
- *                   0x89, 0x8A, 0x8F, 0x91-0x94, 0xA9, 0xB6. Captured as three
- *                   Gaap attack; strip reads "1xHit" and their sprites garble
- *                   mid-animation. The attack is NOT named in the strip.
+ *                   name both legible in the capture. Monsters 0x3D, 0x37.
+ *   $87 -> nsf 72   a shared attack cue across a near-contiguous family —
+ *                   0x89, 0x8A, 0x8F, 0x91-0x94, 0xA9, 0xB6. Caught as three
+ *                   Gaap attacked; the strip reads "1xHit" and their sprites
+ *                   garble mid-animation. The attack is NOT named in the strip
+ *                   and is not named here.
  *   $9e -> nsf 95   one monster only, 0xD2. Not investigated further.
  *
- * 83 of 101 swept. The 18 below are unswept — all high ids, i.e. late-game.
- * That is a coverage statement, not a result.
+ * ⚠ v1.7.884 reported "zero new sounds" over the first 60. That was wrong, and
+ * the way it was wrong is the point: I printed the sounds heard beside the known
+ * set and declared them matching BY EYE. $80 and $87 were in the list I printed
+ * — between `$86` and `$88` is exactly where a missing `$87` hides. The derived
+ * filter had flagged it correctly; I overrode the tool with my own reading.
  *
- * The sweep is RESUMABLE (tools/monster-special-batch.mjs keeps per-monster
- * results on disk and picks up only ids not already done) because long runs in
- * this environment get restarted; a non-resumable driver lost everything each
- * time and three instances ended up racing one log file.
+ * Two harness bugs, both mine, worth not repeating:
+ *   - The results file was read-modify-written per invocation, so two batches
+ *     running at once clobbered each other and the swept count went DOWN
+ *     (97 -> 93). It merges on write now, which makes concurrent runs additive.
+ *   - `pgrep`-based wait loops matched their OWN shell, so every "block until
+ *     finished" waited on itself forever.
  */
 export const MONSTER_SPECIAL_SWEEP = Object.freeze({
   withScripts: 101,
-  swept: 83,
+  swept: 101,
   newSounds: [
     { wrote: 0x80, nsf: 65, what: "the Balloon's Explosion", monsters: ['0x3D','0x37'] },
-    { wrote: 0x87, nsf: 72, what: 'a shared monster attack cue (Gaap family), attack unnamed',
+    { wrote: 0x87, nsf: 72, what: 'shared attack cue, Gaap family; attack unnamed',
       monsters: ['0x89','0x8A','0x8F','0x91','0x92','0x93','0x94','0xA9','0xB6'] },
     { wrote: 0x9e, nsf: 95, what: 'one monster only, not investigated', monsters: ['0xD2'] },
   ],
-  unswept: ["0xCB", "0xD3", "0xD4", "0xD5", "0xD6", "0xD7", "0xD8", "0xD9", "0xDA", "0xDB", "0xDD", "0xDE", "0xE0", "0xE1", "0xE3", "0xE4", "0xE5", "0xE6"],
+  unswept: [],
 });
 
 /**

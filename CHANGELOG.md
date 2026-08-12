@@ -18,6 +18,26 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.886 — 2026-08-11
+
+**Monster specials: 101/101 complete. Three sounds nothing accounted for.**
+
+| wrote | nsf | what | monsters |
+|---|---|---|---|
+| `$80` | 65 | **the Balloon's EXPLOSION** (self-destruct) | 0x3D, 0x37 |
+| `$87` | 72 | shared attack cue across a near-contiguous family; attack unnamed | 0x89, 0x8A, 0x8F, 0x91-0x94, 0xA9, 0xB6 |
+| `$9e` | 95 | one monster only, not investigated | 0xD2 |
+
+`$80` is named outright — **Balloon** and **Explosion** are both legible in the message strip. `$87` was caught as three **Gaap** attacked, "1×Hit" in the strip and their sprites garbling mid-animation; nine monsters share it, so it reads as a family cue, but the strip never names the attack and neither do I.
+
+**Three of my own bugs surfaced getting here, and they are the durable part:**
+
+1. **v1.7.884 claimed "zero new sounds" over the first 60.** I printed the sounds heard beside the derived known set and declared them matching *by eye*. `$80` and `$87` were in the list I printed — between `$86` and `$88` is exactly where a missing `$87` hides. The filter had flagged it correctly; I overrode the tool with my own reading. Corrected in v1.7.885 and again here.
+2. **The results file was read-modify-written per invocation**, so two batches at once clobbered each other and the swept count went *down* (97 → 93). It merges on write now, making concurrent runs additive instead of destructive. That is what let the sweep actually reach 101.
+3. **`pgrep`-based wait loops matched their own shell**, so every "block until finished" waited on itself forever — which is why so many runs looked hung when they had long since finished or died.
+
+Cumulatively across this arc that is now 12/12 world SFX, 56/56 spells, 16/16 weapon classes, 22/22 jobs, and 101/101 monster specials — with every remaining unknown named rather than rounded off.
+
 ## 1.7.885 — 2026-08-11
 
 **CORRECTION to v1.7.884: monster specials produced THREE new sounds, not zero. I compared two lists by eye instead of in code.**

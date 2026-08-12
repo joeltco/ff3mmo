@@ -27,7 +27,14 @@ function one(){
       const fresh=vals.filter(v=>!KNOWN.has(v));
       fresh.forEach(v=>KNOWN.add(v));
       if(fresh.length) console.log(`${id}  NEW ${fresh.map(v=>'$'+v.toString(16)+'=nsf'+((v-0x3f)&0xff)).join(',')}   ${line}`);
-      fs.writeFileSync(RES, JSON.stringify(done));
+      // MERGE on write. Each invocation used to persist its own in-memory copy,
+      // so two batches running at once clobbered each other's results and the
+      // swept count went DOWN (97 -> 93). Re-read and merge instead, which makes
+      // concurrent invocations additive rather than destructive.
+      let cur={}; try { cur=JSON.parse(fs.readFileSync(RES,'utf8')); } catch {}
+      Object.assign(cur, done);
+      Object.assign(done, cur);
+      fs.writeFileSync(RES, JSON.stringify(cur));
       res(one()); });
   });
 }
