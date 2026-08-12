@@ -169,24 +169,38 @@ function drawBattle() {
 // to be threaded through every `is*` / combat-state predicate in the engine,
 // and the presentation needs none of that — the cast timeline already runs for
 // exactly as long (spell-cast.js gives summons a scene-length impact window).
-// COVERAGE: player-cast only. Ally-cast and PVP-cast summons are NOT handled,
-// and deliberately so — those paths run the heal-style timeline
-// (CAST_PHASE_MS_HEAL), which was never extended to a summon's scene length, so
-// hooking them here would start a 2-3 s creature inside a ~500 ms window and cut
-// it off mid-entrance. Extending those timelines is the work required to cover
-// them; a half-wired path would look broken rather than absent.
+// COVERAGE: player-cast AND ally-cast. The ally path was hooked once its
+// timeline actually fitted a summon (v1.7.888) — battle-ally.js now sizes the
+// windup to the cast burst and gives the hit phase the full scene length, the
+// same shape spell-cast.js gives the player. Before that it ran the heal-style
+// timeline, so hooking it would have started a 2-3 s creature inside a ~500 ms
+// window and cut it off mid-entrance.
+//
+// PVP-cast summons are STILL not handled: pvp.js has had no equivalent timeline
+// work, so it would fail the same way. A half-wired path looks broken rather
+// than absent.
+//
+// Roles share this one function rather than forking a second copy — the ally
+// spell id lives in `battleSt.allyMagicSpellId`, never in getCurrentSpellId().
 function _drawSummonPresentation() {
-  const spellId = getCurrentSpellId();
+  let spellId = null, castState = null, hitState = null;
+  if (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit') {
+    spellId = getCurrentSpellId(); castState = 'magic-cast'; hitState = 'magic-hit';
+  } else if (battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit') {
+    spellId = battleSt.allyMagicSpellId; castState = 'ally-magic-cast'; hitState = 'ally-magic-hit';
+  } else {
+    return;
+  }
   if (!isSummonSpell(spellId)) return;
   // Cast burst first, during the buildup, with the party panel still up — the
   // same slot a black or white cast animation occupies. Without it the scene
   // opened on a creature appearing out of nothing.
-  if (battleSt.battleState === 'magic-cast') {
+  if (battleSt.battleState === castState) {
     const cf = summonCastFrameAt(spellId, battleSt.battleTimer);
     if (cf) ui.ctx.drawImage(cf, HUD_VIEW_X, HUD_VIEW_Y);
     return;
   }
-  if (battleSt.battleState !== 'magic-hit') return;
+  if (battleSt.battleState !== hitState) return;
   const ph = summonPhaseAt(spellId, battleSt.battleTimer);
   if (!ph || ph.phase === 'done') return;
   if (ph.panelFade > 0) {

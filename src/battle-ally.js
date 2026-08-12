@@ -20,6 +20,7 @@ import { STATUS, STATUS_NAME_TO_FLAG } from './status-effects.js';
 import { SPELLS, spellStatusMask } from './data/spells.js';
 import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
+import { isSummonSpell, summonCastMs, summonTotalMs } from './summon-anim.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicErase,
          applySpell, playSpellImpactSFX } from './combatant-cast.js';
@@ -346,7 +347,15 @@ function _applyAllyMagicEffect() {
 
 function _updateAllyMagicCast(dt) {
   if (battleSt.battleState === 'ally-magic-cast') {
-    if (battleSt.battleTimer >= ALLY_MAGIC_CAST_MS) {
+    // A summon's cast burst runs 1026-1274 ms, longer than the 800 ms windup
+    // every other school uses, so it gets a windup sized to its own burst —
+    // exactly what spell-cast.js does for the player. Leaving it at 800 clips
+    // the burst a fifth from the end.
+    const _sid = battleSt.allyMagicSpellId;
+    const castMs = isSummonSpell(_sid)
+      ? Math.max(ALLY_MAGIC_CAST_MS, summonCastMs(_sid))
+      : ALLY_MAGIC_CAST_MS;
+    if (battleSt.battleTimer >= castMs) {
       battleSt.battleState = 'ally-magic-hit';
       battleSt.battleTimer = 0;
       battleSt.allyMagicEffectApplied = false;
@@ -365,10 +374,29 @@ function _updateAllyMagicCast(dt) {
     // Heal = sparkle-burst start (= preImpactGap into magic-hit). The engine
     // drives both via `playSpellImpactSFX(spell)` which uses the shared
     // selector — helpers never carry SFX.
-    const isHeal = _isAllyMagicHealSpell(battleSt.allyMagicSpellId);
-    const sfxMs    = isHeal ? CAST_PHASE_MS_HEAL.preImpactGap : ALLY_THROW_SFX_MS;
-    const effectMs = isHeal ? ALLY_HEAL_EFFECT_MS : ALLY_THROW_EFFECT_MS;
-    const hitMs    = isHeal ? ALLY_HEAL_HIT_MS    : ALLY_THROW_HIT_MS;
+    // Summon: ONE scene, not a per-target walk. The creature takes over the
+    // party panel for its measured duration (Shiva ~5.3 s) and the effect lands
+    // once, at the end — the same shape spell-cast.js gives the player. Running
+    // it on the heal timeline would start a multi-second creature inside a
+    // ~500 ms window and cut it off mid-entrance, which is exactly why
+    // battle-drawing.js refused to hook this path until the timeline existed.
+    // SFX fires at scene start, per the standing spell-anim-start rule.
+    //
+    // SCOPE, stated so it is not mistaken for finished: this wires the ally
+    // summon's PRESENTATION and TIMELINE. Effect application still goes through
+    // `_applyAllyMagicEffect`, which resolves ONE target (allyMagicTargetIdx) —
+    // whereas a player summon applies to every target. So an ally summon looks
+    // right and lands on a single enemy. Making it hit the whole encounter is a
+    // MECHANICS change, not a presentation one, and was deliberately not made
+    // here.
+    const _sid2 = battleSt.allyMagicSpellId;
+    const isSummon = isSummonSpell(_sid2);
+    const isHeal = !isSummon && _isAllyMagicHealSpell(_sid2);
+    const sceneMs = isSummon ? summonTotalMs(_sid2) : 0;
+    const sfxMs    = isSummon ? 0 : (isHeal ? CAST_PHASE_MS_HEAL.preImpactGap : ALLY_THROW_SFX_MS);
+    const effectMs = isSummon ? sceneMs : (isHeal ? ALLY_HEAL_EFFECT_MS : ALLY_THROW_EFFECT_MS);
+    const hitMs    = isSummon ? sceneMs + DMG_SHOW_MS
+                              : (isHeal ? ALLY_HEAL_HIT_MS : ALLY_THROW_HIT_MS);
 
     if (!battleSt.allyMagicSfxPlayed && battleSt.battleTimer >= sfxMs) {
       const spell = SPELLS.get(battleSt.allyMagicSpellId);

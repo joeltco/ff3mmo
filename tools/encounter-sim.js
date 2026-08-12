@@ -1832,6 +1832,69 @@ const tests = [
     return { pass: true, name,
       info: `${CAPTURED_SUMMONS.size} summons, borrowed holds frame-count independent, only Odin effect-less` };
   },
+  // Regression — an ALLY casting a summon gets the whole scene, not a clipped one.
+  //
+  // battle-drawing.js refused to hook the ally path for a long time, with a
+  // comment saying why: that path ran the heal-style timeline, so a 2-5 s
+  // creature would start inside a ~500 ms window and be cut off mid-entrance.
+  // The fix is the timeline, not the render hook — the windup is sized to the
+  // cast burst and the hit phase to the full scene, mirroring spell-cast.js.
+  //
+  // Shiva is the probe because she is the longest (5306 ms); a heal-timeline
+  // regression applies her effect at 483 ms, which this catches by an order of
+  // magnitude rather than a rounding error.
+  () => {
+    const name = 'regression — an ally summon cast runs the full scene, not the heal window';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    sid: battleSt.allyMagicSpellId };
+    try {
+      const SHIVA = 0x30;
+      const wantCast = summonCastMs(SHIVA);
+      const wantScene = summonTotalMs(SHIVA);
+      if (!(wantCast > 0 && wantScene > 0)) {
+        return { pass: false, name, reason: 'summon timing helpers returned 0 — data not loaded' };
+      }
+      setupEncounter({ monster: { ...goblin, hp: 9999, maxHP: 9999 }, seed: 5 });
+      battleSt.battleState = 'ally-magic-cast';
+      battleSt.battleTimer = 0;
+      battleSt.allyMagicSpellId = SHIVA;
+      battleSt.allyMagicCasterIdx = 0;
+      battleSt.allyMagicTargetType = 'enemy';
+      battleSt.allyMagicTargetIdx = 0;
+      battleSt.allyMagicEffectApplied = false;
+      battleSt.allyMagicSfxPlayed = false;
+
+      let t = 0;
+      while (battleSt.battleState === 'ally-magic-cast' && t < 20000) {
+        battleSt.battleTimer += 16; t += 16; updateBattleAlly(16);
+      }
+      const castMs = t;
+      if (castMs < wantCast) {
+        return { pass: false, name,
+          reason: `ally windup ended at ${castMs}ms, clipping a ${wantCast}ms cast burst` };
+      }
+      let effectAt = null, guard = 0;
+      while (battleSt.battleState === 'ally-magic-hit' && guard < 30000) {
+        battleSt.battleTimer += 16; guard += 16; updateBattleAlly(16);
+        if (effectAt === null && battleSt.allyMagicEffectApplied) effectAt = battleSt.battleTimer;
+      }
+      if (effectAt === null) {
+        return { pass: false, name, reason: 'ally summon never applied its effect' };
+      }
+      if (effectAt < wantScene) {
+        return { pass: false, name,
+          reason: `ally summon effect applied at ${effectAt}ms, before the ${wantScene}ms scene ended `
+                + '(heal-timeline regression: the creature would be cut off mid-entrance)' };
+      }
+      return { pass: true, name,
+        info: `Shiva: windup ${castMs}ms >= burst ${wantCast}ms, effect at ${effectAt}ms >= scene ${wantScene}ms` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.allyMagicSpellId = saved.sid;
+    }
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────

@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.888 — 2026-08-11
+
+**Summon presentation wired into the ally path. The work was the timeline, not the render hook.**
+
+`battle-drawing.js` had refused this path for a long time, and its comment said exactly why: the ally pipeline ran the heal-style timeline, so hooking the renderer would have started a 2-5 s creature inside a ~500 ms window and cut it off mid-entrance. That comment was right, and it named the actual job — extend the timeline first.
+
+**Two changes in `battle-ally.js`, both mirroring what `spell-cast.js` already does for the player:**
+
+- The windup is sized to the summon's own cast burst (`max(800, summonCastMs)`). A summon's burst runs 1026-1274 ms; at a fixed 800 it was clipped a fifth from the end.
+- The hit phase becomes ONE scene rather than a per-target walk: the effect lands once at `summonTotalMs`, and the phase ends a damage-number later. SFX fires at scene start, per the standing spell-anim-start rule.
+
+**One change in `battle-drawing.js`:** `_drawSummonPresentation` now resolves its role — player states read `getCurrentSpellId()`, ally states read `battleSt.allyMagicSpellId` — instead of forking a second copy. PVP-cast summons remain unhooked and are still called out in the comment, because `pvp.js` has had no equivalent timeline work and would fail the same way.
+
+**Gate #40** drives a real ally Shiva cast through the state machine — she is the probe because at 5306 ms a heal-timeline regression shows up by an order of magnitude, not a rounding error. Both reverts fail: restoring the heal effect window applies her effect at **912 ms instead of 5306**, and pinning the windup back to 800 ms clips the burst.
+
+**SCOPE, stated so it is not mistaken for finished:** this wires PRESENTATION and TIMELINE. Effect application still runs through `_applyAllyMagicEffect`, which resolves ONE target, while a player summon applies to every target. So an ally summon now looks correct and lands on a single enemy. Making it hit the whole encounter is a mechanics change, and I did not make it silently.
+
+Also still true, and unchanged: allies cannot actually pick a summon — `OFFENSIVE_SPELLS` is `[0x31, 0x32, 0x33]`. This path is correct when reached rather than currently reachable; adding a summon to that list is a design call, not plumbing.
+
 ## 1.7.887 — 2026-08-11
 
 **Summon animation sweep. The system is sound; two comments were lying and one number was fragile.**
