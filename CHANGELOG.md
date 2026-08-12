@@ -18,6 +18,23 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.947 — 2026-08-12
+
+### Fixed — player bug report #4, "person in tree"
+- `ur_villager_red` stood at Ur (27,25), which is **solid forest canopy**. Moved to **(24,23)**, open grass north-east of the INN with 4 grass neighbours — still the east side, verified by rendering the map and looking at it.
+- The original placement had passed an "openArea (walkable + ≥3 walkable neighbours)" review. That review *cannot* catch this: tree tiles ARE walkable in tileset 4, and walkability says nothing about what a tile depicts. The other four Ur NPCs and all three shop keepers were checked and are fine.
+
+### Added
+- `tools/map-png.mjs` — renders any map to PNG through the same tileset/CHR/palette path `MapRenderer` uses, with optional grid, scale and a highlight box. ASCII shows a map's *shape*; it cannot show what a tile *is*. This bug was only settleable by looking at pixels.
+- `tools/check-npc-placement.mjs` — asserts no town NPC stands in canopy and none is sealed in. Wired into `deploy.sh`. **Proven in both directions:** passes now; restoring (27,25) fails with "stands in tree canopy at (27,25) — tile $21".
+- `CANOPY_TILES` is visually derived per tileset (read off a render) and documented as such, because metatile ids mean different things in different tilesets.
+
+### Fixed in the gate itself
+- First version required ≥2 open neighbours and flagged `weapon_keeper` on map 5. That is a correct placement — shop keepers stand BEHIND counters, enclosed on three sides by design. Bar lowered to ≥1 so it only catches genuinely sealed-in NPCs.
+
+### Added — ops
+- `./prod.sh bugs [N]` — player `/bug` reports from **prod**. `tools/bug-reports.cjs` reads the LOCAL db and reports "No bug reports" on a dev box even when players have filed some; that cost real time tonight.
+
 ## 1.7.946 — 2026-08-12
 
 ### Added

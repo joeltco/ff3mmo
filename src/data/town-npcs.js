@@ -204,6 +204,12 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_quest_npc',       x: 10, y: 28, spec: UR_QUEST_NPC },
     { key: 'ur_villager_maiden', x:  7, y: 19, spec: UR_VILLAGER_MAIDEN },
     { key: 'ur_hooded_sage',     x: 20, y: 18, spec: UR_HOODED_SAGE },
-    { key: 'ur_villager_red',    x: 27, y: 25, spec: UR_VILLAGER_RED },
+    // v1.7.947 — was (27,25), which is solid forest canopy. Reported by a
+    // player as "person in tree" (bug #4). The original placement passed the
+    // "openArea (walkable + >=3 walkable neighbours)" check because tree tiles
+    // ARE walkable in tileset 4 — walkability says nothing about what a tile
+    // depicts. (24,23) is open grass north-east of the INN with 4 grass
+    // neighbours, verified by rendering the map (tools/map-png.mjs).
+    { key: 'ur_villager_red',    x: 24, y: 23, spec: UR_VILLAGER_RED },
   ]],
 ]);

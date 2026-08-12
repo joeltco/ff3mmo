@@ -8,6 +8,7 @@
 #   ./prod.sh status          # explicit version of the default
 #   ./prod.sh who             # who's connected (recent presence shadows)
 #   ./prod.sh diag            # tail STATUS-DIAG lines live (Ctrl-C to stop)
+#   ./prod.sh bugs [N]        # player /bug reports from PROD (default 20)
 #   ./prod.sh errors          # last 20 CLIENT ERROR lines
 #   ./prod.sh logs [N]        # last N pm2 lines (default 50)
 #   ./prod.sh tail            # live pm2 tail (Ctrl-C to stop)
@@ -121,6 +122,29 @@ case "$CMD" in
         const spanStr = spanMin < 60 ? spanMin + 'm' : Math.round(spanMin / 60) + 'h';
         const itemHex = '0x' + r.item_id.toString(16).toUpperCase().padStart(2, '0');
         console.log('  sender=' + r.sender_user_id + ' (' + (r.sender_name||'?') + ')  item=' + itemHex + '  trades=' + r.n + '  span=' + spanStr + '  targets=[' + r.targets + ']');
+      }
+    "
+    ;;
+
+  bugs)
+    # Player /bug reports from PROD. `tools/bug-reports.cjs` reads the LOCAL
+    # ff3mmo.db, which is empty on a dev box — it reports "No bug reports" even
+    # when players have filed some. That cost real debugging time on 2026-08-12,
+    # so the prod-aware view lives here next to the other prod queries.
+    LIMIT="${2:-20}"
+    _sql "
+      const rows = db.prepare(
+        'SELECT id, created_at, player_name, version, map_id, tile_x, tile_y, on_world_map, dungeon_floor, battle_state, text' +
+        ' FROM bug_reports ORDER BY id DESC LIMIT ?').all(${LIMIT});
+      if (!rows.length) { console.log('No bug reports.'); }
+      for (const r of rows) {
+        const when = new Date(r.created_at * 1000).toISOString().replace('T',' ').slice(0,19);
+        const where = r.on_world_map ? 'world (' + r.tile_x + ',' + r.tile_y + ')'
+          : 'map ' + r.map_id + (r.dungeon_floor >= 0 ? ' f' + r.dungeon_floor : '') + ' (' + r.tile_x + ',' + r.tile_y + ')';
+        const battle = (r.battle_state && r.battle_state !== 'none') ? ' | battle:' + r.battle_state : '';
+        console.log('#' + r.id + '  ' + when + '  ' + (r.player_name || '?') + '  [' + (r.version || '?') + ']  ' + where + battle);
+        console.log('    ' + r.text);
+        console.log('');
       }
     "
     ;;
