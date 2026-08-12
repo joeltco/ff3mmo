@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.887 — 2026-08-11
+
+**Summon animation sweep. The system is sound; two comments were lying and one number was fragile.**
+
+Note up front: CLAUDE.md hard-prohibits authoring animation tile data or frame timings from OAM dumps, so this audited the summon presentation SYSTEM — coverage, wiring, timing, render paths — rather than touching art.
+
+**Coverage is complete.** All 8 summons carry creature frames, a cast burst, a box, a tier entry, a captured SFX and a SPELLS entry; `SUMMON_TIERS` and `CAPTURED_SUMMONS` agree exactly, with no orphans either way.
+
+| summon | cast | creature | effect | total | effect source |
+|---|---|---|---|---|---|
+| Bahamut | 1026 | 1533 | 776 | 2909 | own |
+| Leviathan | 1026 | 1420 | 884 | 2904 | own |
+| Odin | 1026 | 810 | **0** | 1410 | **none** |
+| Titan | 1026 | 1733 | 1350 | 3683 | **borrowed Quake** |
+| Ifrit | 1274 | 1351 | 248 | 2199 | own |
+| Ramuh | 1026 | 1566 | 401 | 2567 | own |
+| Shiva | 1026 | 2581 | 2125 | 5306 | own |
+| Chocobo | 1026 | 984 | 1306 | 2890 | own |
+
+**Two comments contradicted the code.** Both said Odin *and Titan* "load nothing beyond the shared call burst" and "skip straight to the fade". Titan has not done that since the borrow landed — he plays Quake's 1350 ms crack. Only Odin skips. In a codebase whose own rules warn that comments encode old bugs, a comment asserting a summon plays nothing when it plays 1350 ms is worth fixing.
+
+**One number was fragile.** A borrowed effect's `ms` is a measured TOTAL (Quake's crack = 81 frames = 1350 ms) but was applied *per frame*. That is right today only because Quake's capture is a single layout; the day it gains one, Titan's effect silently doubles and nothing points at the line. Now split across frames via `borrowedHolds`, so the total is frame-count independent. **Behaviour is identical today** — Titan is still 3683 ms.
+
+**Gate #39**, and it caught itself being hollow. The first version computed "which summons have no effect" by re-stating the rule as `id === TITAN` — so when I reverted by giving Odin a borrow, it passed. It now reads the real `BORROWED_EFFECT` table, and both reverts fail: per-frame holds, and any change to which summons are effect-less.
+
+**Two latent gaps, reported not fixed:**
+- `box` (the creature's captured bounding rect) is copied into every bundle and **read nowhere** — verified across `src/` and `tools/`. Left in place with a comment saying so, since dropping it would mean re-capturing to get it back.
+- Summon presentation is referenced only in `spell-cast.js` and `battle-drawing.js`, never in `battle-ally.js` or `pvp.js`. That is currently unreachable rather than broken: `OFFENSIVE_SPELLS` is `[0x31, 0x32, 0x33]`, so allies and PvP opponents cannot cast a summon. Add one to that list and there is no presentation waiting for it.
+
 ## 1.7.886 — 2026-08-11
 
 **Monster specials: 101/101 complete. Three sounds nothing accounted for.**

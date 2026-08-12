@@ -103,7 +103,6 @@ const { executeBattleCommand } = await import('../src/battle-update.js');
 const { JOBS, jobHasMagic } = await import('../src/data/jobs.js');
 const { jobToCastKey, hasCapturedSpellAnim, capturedOneShotMs, healImpactWindowMs,
         CAST_PHASE_MS_HEAL } = await import('../src/cast-anim.js');
-const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
 const { SCREEN_PLACEMENT } = await import('../src/spell-anim.js');
 const { isScreenAnchoredSpell, CAST_PHASE_MS, CAST_T_HEAL_APPLY,
         CAST_T_HEAL_ANIM_START, CAST_T_HEAL_ANIM_END } = await import('../src/cast-anim.js');
@@ -114,6 +113,10 @@ const { getSpellImpactSFX, healStyleRenderWindow, SPELL_SFX_RULES,
 const { CAPTURED_SPELL_SFX } = await import('../src/data/spell-sfx-captured.js');
 const { CAPTURED_WORLD_SFX, CAPTURED_WORLD_SONGS, OBSERVED_UNATTRIBUTED, NOT_CAPTURED } =
   await import('../src/data/world-sfx-captured.js');
+const { summonTotalMs, summonCastMs, borrowedHolds, SUMMON_FADE_MS, BORROWED_EFFECT } =
+  await import('../src/summon-anim.js');
+const { CAPTURED_SUMMONS } = await import('../src/data/summon-anim-captured.js');
+const { CAPTURED_SPELL_ANIMS } = await import('../src/data/spell-anim-captured.js');
 const { SFX: _SFXMAP } = await import('../src/music.js');
 const SFX_FIRE_BOOM = _SFXMAP.FIRE_BOOM, SFX_THUNDER = _SFXMAP.CRYSTAL_THUNDER;
 const { SPELLS, isMultiTargetSpell, MULTI_TARGET_SPELLS, spellStatusMask, getSpellBuyPrice } = await import('../src/data/spells.js');
@@ -1775,6 +1778,59 @@ const tests = [
       info: `${CAPTURED_WORLD_SFX.size} world SFX + ${CAPTURED_WORLD_SONGS.size} song attributed, `
         + `${OBSERVED_UNATTRIBUTED.size} observed-only, `
         + `${NOT_CAPTURED.length} still unmeasured (${NOT_CAPTURED.join('/')})` };
+  },
+  // Regression — the summon presentation stays whole.
+  //
+  // Two things this pins, both found by auditing rather than by a bug report:
+  //
+  // 1. A BORROWED effect's `ms` is a TOTAL, not a per-frame hold. Titan loads no
+  //    effect art and borrows Quake's ground crack, whose measured hold is 81
+  //    frames = 1350 ms. Written per-frame it happens to be right only because
+  //    Quake's capture is a single layout; the day it gains one, Titan's effect
+  //    silently doubles. `borrowedHolds` divides, and this asserts the sum is
+  //    frame-count independent — which a per-frame revert fails outright.
+  //
+  // 2. ODIN ALONE has no effect. Two comments in summon-anim.js claimed Titan
+  //    skipped his effect too, which the code has not done since the borrow
+  //    landed. Pinning the count stops the claim drifting back.
+  () => {
+    const name = 'regression — summon presentation: borrowed holds are a total, only Odin is effect-less';
+    const bad = [];
+    // 1. frame-count independence
+    for (const n of [1, 2, 3, 9]) {
+      const sum = borrowedHolds(1350, n).reduce((a, c) => a + c, 0);
+      if (Math.abs(sum - 1350) > 0.001) bad.push(`borrowedHolds(1350,${n}) sums to ${sum}, want 1350`);
+    }
+    if (borrowedHolds(1350, 0).length !== 0) bad.push('borrowedHolds with 0 frames should be empty');
+    // 2. exactly one summon plays no effect, and it is Odin (0x14)
+    const ODIN = 0x14, TITAN = 0x1b;
+    const noEffect = [];
+    for (const [id, e] of CAPTURED_SUMMONS) {
+      const own = e.effect ? e.effect.holds.reduce((a, c) => a + c, 0) : 0;
+      // Read the REAL borrow table. The first version of this line hardcoded
+      // `id === TITAN`, i.e. it re-stated the rule instead of testing it — and
+      // duly passed when a borrow entry was added for Odin, which is precisely
+      // the claim it exists to protect.
+      const bor = !e.effect ? BORROWED_EFFECT[id] : null;
+      const borrowed = (bor && CAPTURED_SPELL_ANIMS.has(bor.spellId)) ? bor.ms : 0;
+      if (own + borrowed === 0) noEffect.push(id);
+    }
+    if (noEffect.length !== 1 || noEffect[0] !== ODIN) {
+      bad.push(`effect-less summons are [${noEffect.map(v => '0x' + v.toString(16))}], want exactly [0x14]`);
+    }
+    // 3. Titan's total must include the borrowed crack, not skip it
+    const titanCreature = CAPTURED_SUMMONS.get(TITAN).holds.reduce((a, c) => a + c, 0);
+    const wantTitan = SUMMON_FADE_MS + titanCreature + 1350 + SUMMON_FADE_MS;
+    if (summonTotalMs(TITAN) !== wantTitan) {
+      bad.push(`Titan total is ${summonTotalMs(TITAN)}, want ${wantTitan} (fade+creature+borrowed 1350+fade)`);
+    }
+    // 4. every summon must have a cast burst the buildup can be sized to
+    for (const [id] of CAPTURED_SUMMONS) {
+      if (!(summonCastMs(id) > 0)) bad.push(`summon 0x${id.toString(16)} has no cast burst`);
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+    return { pass: true, name,
+      info: `${CAPTURED_SUMMONS.size} summons, borrowed holds frame-count independent, only Odin effect-less` };
   },
 ];
 

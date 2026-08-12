@@ -41,9 +41,24 @@ export const SUMMON_FADE_STEPS = 4;
 //
 // `ms` is the crack's measured hold from the Quake capture — 81 frames — not a
 // number picked to feel right.
-const BORROWED_EFFECT = {
+export const BORROWED_EFFECT = {
   0x1b: { spellId: 0x07, ms: 1350 },
 };
+
+/**
+ * Per-frame holds for a borrowed effect, from its TOTAL measured duration.
+ *
+ * `ms` is a total (Quake's crack is 81 frames = 1350 ms), so it must be split
+ * across the borrowed frames, not applied to each one. It happens not to matter
+ * today because Quake's capture is a single layout — but written per-frame, the
+ * day that capture gains a frame Titan's effect silently doubles, and nothing
+ * would point at this line. Divided, the total holds whatever the frame count.
+ */
+export function borrowedHolds(totalMs, frameCount) {
+  if (!frameCount) return [];
+  const per = totalMs / frameCount;
+  return new Array(frameCount).fill(per);
+}
 
 let _bySpellId = null;
 
@@ -76,8 +91,9 @@ export function initSummonAnim() {
     };
     const frames = buildFrames(e);
     const creatureMs = e.holds.reduce((a, c) => a + c, 0);
-    // The magic the creature performs. Six of eight have one; Odin and Titan
-    // load nothing beyond the shared call burst, so they stand and that is it.
+    // The magic the creature performs. Six of eight capture their own; Titan
+    // captures none and BORROWS Quake's crack (see BORROWED_EFFECT), so he does
+    // play one. ODIN ALONE has no effect of any kind and simply stands.
     const fx = e.effect ? { frames: buildFrames(e.effect), holds: e.effect.holds } : null;
     // The cast burst, played during the buildup like any other school's cast.
     const cast = e.cast ? { frames: buildFrames(e.cast), holds: e.cast.holds } : null;
@@ -87,7 +103,7 @@ export function initSummonAnim() {
     let borrowed = null;
     if (!e.effect && BORROWED_EFFECT[id]) {
       const src = CAPTURED_SPELL_ANIMS.get(BORROWED_EFFECT[id].spellId);
-      if (src) borrowed = { frames: buildFrames(src), holds: src.layouts.map(() => BORROWED_EFFECT[id].ms) };
+      if (src) borrowed = { frames: buildFrames(src), holds: borrowedHolds(BORROWED_EFFECT[id].ms, src.layouts.length) };
     }
     const effectMs = fx ? fx.holds.reduce((a, c) => a + c, 0) : 0;
     const fxFinal = fx || borrowed;
@@ -95,7 +111,12 @@ export function initSummonAnim() {
       frames, holds: e.holds, creatureMs,
       fx: fxFinal,
       effectMs: fxFinal ? fxFinal.holds.reduce((a, c) => a + c, 0) : 0,
-      cast, box: e.box,
+      cast,
+      // Captured bounding rect of the creature. Carried through because the
+      // capture emits it, but NOTHING reads it — verified across src/ and
+      // tools/. Left in place rather than dropped so a future renderer that
+      // wants to clip or centre on the creature does not have to re-capture.
+      box: e.box,
     });
   }
 }
@@ -124,7 +145,7 @@ export function summonTotalMs(spellId) {
   let effect = e.effect ? e.effect.holds.reduce((a, c) => a + c, 0) : 0;
   if (!e.effect && BORROWED_EFFECT[spellId]) {
     const src = CAPTURED_SPELL_ANIMS.get(BORROWED_EFFECT[spellId].spellId);
-    if (src) effect = src.layouts.length * BORROWED_EFFECT[spellId].ms;
+    if (src) effect = borrowedHolds(BORROWED_EFFECT[spellId].ms, src.layouts.length).reduce((a, c) => a + c, 0);
   }
   return SUMMON_FADE_MS + creature + effect + SUMMON_FADE_MS;
 }
@@ -179,8 +200,9 @@ export function summonPhaseAt(spellId, t) {
     }
     return { phase: 'creature', panelFade: SUMMON_FADE_STEPS, frame: s.frames[idx] };
   }
-  // The creature casts. Six of eight have an effect; Odin and Titan skip
-  // straight to the fade because they load no art beyond the shared burst.
+  // The creature casts. Seven of eight play an effect here — six from their own
+  // capture and Titan from the borrowed Quake crack. ONLY ODIN skips straight to
+  // the fade, because he loads no effect art and borrows none.
   const et = ct - s.creatureMs;
   if (s.fx && et < s.effectMs) {
     let acc = 0, idx = 0;
