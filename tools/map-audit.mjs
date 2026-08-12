@@ -121,6 +121,15 @@ function audit(mapId, opts) {
   const ex = md.entranceX, ey = md.entranceY;
   if (ex >= W || ey >= W) return { mapId, error: `entrance out of range (${ex},${ey})` };
 
+  // Mirror src/map-loading.js#_loadRegularMap (v1.7.950): a closed passage
+  // ($5B/$5C) opens at load unless the map carries the torch opener at (8,16),
+  // because nothing else in this build can ever open it.
+  if (md.tilemap[16 * 32 + 8] !== 0x32) {
+    for (let i = 0; i < md.tilemap.length; i++) {
+      if (md.tilemap[i] === 0x5B) md.tilemap[i] = 0x5D;
+      if (md.tilemap[i] === 0x5C) md.tilemap[i] = 0x5E;
+    }
+  }
   const sy = calcSpawnY(md, ex, ey, opts);
   const r = new MapRenderer(md, ex, sy);
   const spawnRegion = regionFrom(r, ex, sy);

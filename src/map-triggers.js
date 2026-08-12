@@ -402,13 +402,15 @@ export function findWorldExitIndex(mapId, worldMapData) {
 // v1.7.923 — maps whose ROM entrance leaves the player with no reachable exit.
 // Verified per map with `node tools/map-connectivity.mjs <id>`, which floods
 // using the real `MapRenderer.isPassable`:
-//   22  spawn (9,22)   67 tiles, 1 exit,  none reachable
-//   24  spawn (1,27)   24 tiles, 4 exits, none reachable
+//   22  FIXED in v1.7.950 — its exit was behind a closed passage ($5C at
+//       (7,2)) that nothing in this build could open. Now 87 tiles, 1/1 exits.
+//   24  spawn (1,27)   24 tiles, 2 exits, none reachable (not in the play area)
+
 //   178 spawn (27,29)   7 tiles, 9 exits, none reachable
 //   180 spawn (19,11)  98 tiles, 1 exit,  none reachable
 // Only 180 is reachable on foot today; the rest are listed so opening a sea or
 // air route later cannot quietly re-introduce the same trap.
-const STRANDING_MAPS = new Set([22, 24, 178, 180]);
+const STRANDING_MAPS = new Set([24, 178, 180]);
 
 function _checkWorldMapTrigger(tileX, tileY) {
   const trigger = mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);

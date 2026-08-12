@@ -242,7 +242,20 @@ function _loadRegularMap(mapId, returnX, returnY) {
   expireResettableChests(mapId);   // Ur chests respawn 24h after looting
   _replayConsumedTiles(mapId, mapData);
   if (AREA_NAMES.has(mapId)) ps.lastTown = mapId;
-  if (returnX !== undefined) applyPassage(mapData.tilemap);
+  // v1.7.950 — a closed passage nothing can open is just a wall.
+  //
+  // Tiles $5B/$5C are FF3's closed passage ($5B -> $5D doorframe, $5C -> $5E
+  // walkable). The only opener in this build is the torch handler in
+  // movement.js, and it is hardcoded to tile $32 at (8,16) — which exists on
+  // exactly TWO maps (1 and 2). On every other map the passage can never open,
+  // so it is a permanent wall that the ROM never intended.
+  //
+  // Measured over all 256 maps: 106 carry a closed passage, opening it adds
+  // reachable area on 18, and it takes SEVEN from "no reachable exit" to
+  // escapable — map 22 goes 75 tiles / 0-of-1 exits to 87 / 1-of-1. Maps 1 and
+  // 2 keep their puzzle; everything else starts open.
+  const _hasTorchOpener = mapData.tilemap[16 * 32 + 8] === 0x32;
+  if (returnX !== undefined || !_hasTorchOpener) applyPassage(mapData.tilemap);
   const ex = mapData.entranceX;
   const ey = mapData.entranceY;
   const playerX = returnX !== undefined ? returnX : ex;

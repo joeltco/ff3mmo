@@ -33,6 +33,15 @@ const SCALE = Math.max(1, parseInt(flag('scale', '2'), 10));
 const BOX = flag('box', null);
 
 const md = loadMap(rom, mapId);
+// `--passage` mirrors src/map-loading.js#_loadRegularMap (v1.7.950): closed
+// passages open at load unless the map carries the torch opener at (8,16).
+// Use it to see what the GAME draws, not just what the raw tilemap holds.
+if (has('passage') && md.tilemap[16 * 32 + 8] !== 0x32) {
+  for (let i = 0; i < md.tilemap.length; i++) {
+    if (md.tilemap[i] === 0x5B) md.tilemap[i] = 0x5D;
+    if (md.tilemap[i] === 0x5C) md.tilemap[i] = 0x5E;
+  }
+}
 const W = 32, TILE = 16;
 const pxW = W * TILE, pxH = W * TILE;
 
