@@ -568,6 +568,40 @@ function _checkExitPrev() {
   return true;
 }
 
+/**
+ * Fire the trigger on the tile the player is TRYING to enter, without moving
+ * them onto it. `startMove` calls this before its passability check when
+ * TRIGGER_FIRE_ON_APPROACH is on.
+ *
+ * Deliberately a SUBSET of `checkTrigger`. Only the transitions belong here:
+ *
+ *   dyn type 1 / type 4   doors, entrances, dungeon passages
+ *   collision trigType 0  exit_prev — how you leave a town interior
+ *
+ * Left on the arrival path on purpose:
+ *   beds          not ROM triggers at all, ours, and walking onto one IS the
+ *                 interaction (`isPassable` passes them before any trigger check)
+ *   hidden traps  dungeon pits; the point is stepping IN
+ *   treasure ($78-$7C) and events ($60-$63)
+ *                 inert to movement in both models — chests open from the
+ *                 A-press handler, which is what FF3 does. Firing a chest by
+ *                 walking into it would be a behaviour change nobody asked for,
+ *                 and the ROM doesn't do it either.
+ */
+export function fireTriggerAt(tileX, tileY) {
+  if (mapSt.disabledTrigger && tileX === mapSt.disabledTrigger.x && tileY === mapSt.disabledTrigger.y) return false;
+  if (mapSt.onWorldMap) return false;              // world map keeps the arrival model
+  if (!mapSt.mapRenderer || !mapSt.mapData) return false;
+  const trigger = mapSt.mapRenderer.getTriggerAt(tileX, tileY);
+  if (!trigger) return false;
+  if (_checkDynType1(trigger, tileX, tileY)) return true;
+  if (_checkDynType4(trigger, tileX, tileY)) return true;
+  if ((trigger.source === 'collision' || trigger.source === 'entrance') && trigger.trigType === 0) {
+    return _checkExitPrev();
+  }
+  return false;
+}
+
 export function checkTrigger() {
   const tileX = mapSt.worldX / TILE_SIZE;
   const tileY = mapSt.worldY / TILE_SIZE;

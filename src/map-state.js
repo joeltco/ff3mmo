@@ -3,6 +3,38 @@
 //
 // Single `mapSt` object so consumers read/write live values through object properties.
 
+/**
+ * v1.7.907 — fire triggers on APPROACH instead of on arrival.
+ *
+ * The ROM never lets the player stand on a trigger tile. All 17 trigger tiles
+ * ($60-$63 events, $70-$77 doors, $78-$7C treasure) carry collision bit 7 in
+ * all 7 tilesets — 119/119 — and both collision routines (3B/90EB, 3B/B0C5)
+ * open `LDA $0400,Y / BMI blocked`, rejecting the tile without ever inspecting
+ * the trigger type. The trigger fires from the attempt to enter.
+ *
+ * This engine grew up doing the opposite: walk ONTO the tile, then fire from
+ * there, which forced `isPassable` to call trigger types 1/4 and collision
+ * types 0/4/5 walkable. The cost is that type 1 is solid with nothing to fire
+ * it, which is why maps 43, 96, 124 and 167 have no exit from their spawn.
+ *
+ * Flag lives here because `map-state.js` imports nothing — `map-renderer.js`
+ * needs it and is imported BY `map-triggers.js`, so putting it there would
+ * make a cycle.
+ *
+ * Scope is deliberately interior-only. The world map has its own tile-prop
+ * system (`world-map-renderer.js#isPassable`, `props.byte1 & 0x80` → passable)
+ * and entering a town by stepping onto it already works; nothing about the
+ * type-1 problem lives out there, so it keeps the arrival model.
+ *
+ * Default OFF, following this codebase's own convention for risky core changes
+ * (COOP_HOST_ARB, PVE_ARBITER and SERVER_ECONOMY all shipped dark and were
+ * flipped in a later version after a smoke test). Every map that works today —
+ * Ur, the shops, the elder house, the Altar Cave — traverses through this path,
+ * and it cannot be verified headlessly. Flip it, walk Ur and the cave, then
+ * ship the flip.
+ */
+export const TRIGGER_FIRE_ON_APPROACH = false;
+
 export const mapSt = {
   // ── Position ──────────────────────────────────────────────────────
   worldX: 0,              // player world pixel X

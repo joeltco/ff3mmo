@@ -1,7 +1,7 @@
 // movement.js — player movement, input dispatch, tile collision, action handling
 
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { mapSt } from './map-state.js';
+import { mapSt, TRIGGER_FIRE_ON_APPROACH } from './map-state.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
@@ -19,7 +19,7 @@ import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canCha
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
-import { checkTrigger, openPassage, handleChest, handleSecretWall,
+import { checkTrigger, fireTriggerAt, openPassage, handleChest, handleSecretWall,
          handleRockPuzzle, handlePondHeal, triggerWipe,
          isHiddenTreasureTile, handleHiddenTreasure } from './map-triggers.js';
 import { shopSt, openShop, handleShopInput } from './shop.js';
@@ -85,6 +85,18 @@ export function startMove(dir, isNewPress = false) {
   // fires from the A-press handler so it doesn't spam during movement.
   // v1.7.680.
   if (mapSt.lockedDoors && mapSt.lockedDoors.has(`${tileX},${tileY}`)) {
+    sprite.setDirection(dir);
+    sprite.resetFrame();
+    return;
+  }
+
+  // v1.7.907 — fire-on-approach. Must run BEFORE the passability check: with
+  // the flag on every trigger tile is solid, so without this a door would just
+  // block silently. Returns false when the target carries no transition
+  // trigger, in which case movement continues normally — so the sprite is only
+  // re-framed when something actually fired (re-framing every step would break
+  // the walk animation).
+  if (TRIGGER_FIRE_ON_APPROACH && !mapSt.onWorldMap && fireTriggerAt(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
     return;
