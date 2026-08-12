@@ -422,11 +422,11 @@ function _checkWorldMapTrigger(tileX, tileY) {
   // tiles of floor), so the only way out is dying. Confirmed with the game's own
   // `MapRenderer.isPassable` — see `tools/map-connectivity.mjs`.
   //
-  // Refused HERE rather than with terrain: the only real chokepoint between Ur
-  // and map 180's entrance is (95,44), and blocking it re-closes 399 tiles plus
-  // the entrances to maps 10, 18, 31, 95 and 151. Blocking one broken map is not
-  // worth sealing five working ones, and a boulder alone in open desert reads as
-  // scenery nobody placed on purpose.
+  // Refused HERE rather than with terrain: nothing on the world map guards the
+  // map-180 entrance at (90,59). It hangs off a twelve-tile-wide corridor, so
+  // there is no chokepoint to put a boulder on — `tools/world-choke.mjs` finds
+  // no single-tile cut that isolates it. The choke boulder at (81,54) blocks the
+  // way to the OCEAN, which is a different job (world-map-renderer.js).
   //
   // This comes out when the real entry coordinates are decoded (see the v1.7.921
   // changelog note) — the maps are fine, our entry point is wrong.

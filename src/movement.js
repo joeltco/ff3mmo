@@ -94,9 +94,10 @@ export function startMove(dir, isNewPress = false) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    // (79,56), the neck of the coastal peninsula, is physically blocked by a
+    // (81,54), the neck of the coastal peninsula, is physically blocked by a
     // boulder overlay (world-map-renderer.js) — no "Coming Soon!" popup
-    // needed. v1.7.505 pattern, relocated off Ur's valley in v1.7.925.
+    // needed. v1.7.505 pattern, relocated off Ur's valley in v1.7.925 and
+    // nudged to the north-east end of the pass in v1.7.926.
     return;
   }
 

@@ -12,16 +12,33 @@ const TILE_SIZE = 16;
 // v1.7.925 — measured, not guessed. `tools/world-choke.mjs --ocean` classifies
 // every world metatile that the renderer animates (CHR $22-$27) as water,
 // collects the reachable land tiles that touch it, then blocks each candidate
-// tile in turn and re-floods with this very `isPassable`. (79,56) is the best
-// cut in the world: it takes the reachable coastline from 52 tiles to ZERO
-// while leaving 271 of 429 tiles and 6 of the 8 entrances open — 111, 114 (Ur),
-// 18, 95, 180 and 10. Only maps 31 and 151 go behind it.
+// tile in turn and re-floods with this very `isPassable`. The pass to the coast
+// is a 5-tile dogleg — (79,56) → (79,55) → (79,54) → (80,54) → (81,54) — and
+// blocking ANY ONE of them takes the reachable coastline from 52 tiles to ZERO.
+// They differ only in how much of the pass itself stays walkable.
 //
-// Do NOT move this back to (95,44). That tile is the neck of Ur's own valley:
+// v1.7.926 — moved to the north-east end of that dogleg, per Joel. (81,54) sits
+// one tile west of the (82,54) warp, so the boulder reads as the thing closing
+// the gap rather than as scenery sitting in the middle of a corridor.
+//
+// Do NOT move this to (95,44). That tile is the neck of Ur's OWN valley:
 // blocking it also zeroes the coast, but it costs 399 tiles and every entrance
 // except Ur's, which is the v1.7.505 gate that v1.7.903 was right to lift.
-const CHOKE_TILE_X = 79;
-const CHOKE_TILE_Y = 56;
+const CHOKE_TILE_X = 81;
+const CHOKE_TILE_Y = 54;
+
+// World-map entrances that are switched off. `getTriggerAt` returns null for
+// these, so the tile is ordinary ground — the player walks over it and nothing
+// happens. That is deliberately NOT the "The way is barred." refusal in
+// map-triggers.js: a refusal tells the player there is a door here and they may
+// not use it, and these are doors that should not appear to exist at all.
+//
+// Keyed by DESTINATION map, not by coordinate, so an entrance that the ROM
+// places at more than one tile goes away everywhere at once.
+//
+//   95 — the Invincible. Reported by Joel as a warp straight to the airship,
+//        sitting at (82,54), one tile east of the choke boulder. v1.7.926.
+const REMOVED_ENTRANCES = new Set([95]);
 export class WorldMapRenderer {
   constructor(worldMapData) {
     this.data = worldMapData;
@@ -240,6 +257,7 @@ export class WorldMapRenderer {
     const trigId = props.byte2 & 0x3F;
     const destMap = this.data.entranceTable[trigId];
     if (destMap === 0) return null;
+    if (REMOVED_ENTRANCES.has(destMap)) return null;
 
     return { type: 'entrance', trigId, destMap };
   }

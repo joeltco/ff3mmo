@@ -38,10 +38,13 @@ for (const [trigId, pos] of world.triggerPositions) {
 if (!seed) { console.error('could not locate Ur on the world map'); process.exit(1); }
 
 // Every overworld entrance, so we can say what each side of a cut costs.
+// Read through the REAL `getTriggerAt` rather than off `entranceTable`, for the
+// same reason the flood uses the real `isPassable`: entrances the game switches
+// off (`REMOVED_ENTRANCES`) must not show up here as things a cut can cost.
 const entrances = new Map();               // key -> destination map id
-for (const [trigId, pos] of world.triggerPositions) {
-  const dest = world.entranceTable[trigId];
-  if (dest) entrances.set(key(pos.x, pos.y), dest);
+for (const [, pos] of world.triggerPositions) {
+  const t = WorldMapRenderer.prototype.getTriggerAt.call(stub, pos.x, pos.y);
+  if (t && t.destMap) entrances.set(key(pos.x, pos.y), t.destMap);
 }
 
 function flood(blocked) {
