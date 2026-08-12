@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.906 — 2026-08-12
+
+- **Event tiles pulled from the ROM: our handling is already correct.** `$60-$63`
+  carry collision bit 7 in all 7 tilesets, so the ROM blocks them and fires the
+  trigger on the attempt to enter. `isPassable` blocking them matches exactly —
+  the "blocked for now" comment was right and is not provisional.
+- **Decoded the whole trigger-instance scheme.** Each table ($0400 collision,
+  $0500/$0580/$0600/$0680 CHR, $0700) is 256 bytes split in half: low $x00-$x7F
+  = the 128 normal metatiles, high $x80-$xFF = 128 trigger instances. The loop at
+  3A/92D9 clones each instance slot from a source metatile listed at 3A/93C1, and
+  that table maps every slot back to its OWN original tile — slots $70-$7F clone
+  `$60`-`$63`, $00-$4F clone `$70`-`$77`, $50-$6F clone `$78`-`$7C` — in exact
+  correspondence with the base table at 3A/923F. So the rewrite gives each
+  instance private graphics and state; it does NOT change collision. Reading
+  `collision[originalId]` as we do yields the identical byte.
+- **All 17 trigger tiles are blocked in all 7 tilesets — 119/119.** The ROM never
+  lets the player stand on a trigger. Our engine deliberately makes doors and
+  exit_prev passable because we fire triggers from ON the tile rather than on
+  approach; that divergence is now documented at both sites with the commands to
+  re-derive it.
+- Net: of the two things flagged in v1.7.904, the event-tile half is closed with
+  no code change needed. The type-1 half stands — it is a consequence of the
+  fire-from-on-tile model, not a missing byte.
+
 ## 1.7.905 — 2026-08-12
 
 - **New: `tools/dis6502.mjs`** — a 6502 disassembler that speaks the `BB/AAAA`

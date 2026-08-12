@@ -492,7 +492,17 @@ export class MapRenderer {
     const trig = this._triggerMap.get(key);
     if (trig) {
       if (trig.type === 1 || trig.type === 4) return true; // entrance/door/passage — passable
-      return false; // events/treasures — blocked for now
+      // v1.7.906 — "blocked for now" was right, and it is not provisional.
+      // Events ($60-$63) and treasure ($78-$7C) carry collision bit 7 in ALL 7
+      // tilesets (119/119 trigger tiles do), so the ROM blocks every one of them
+      // and fires the trigger on the ATTEMPT to enter. Blocking here matches the
+      // ROM exactly. Re-derive with:
+      //   node tools/dis6502.mjs --bytes 3A 93C1 128
+      // The rewrite the ROM does (tile -> instance slot, base table 3A/923F,
+      // source table 3A/93C1) clones each instance from its OWN original
+      // metatile, so instance collision === collision[original id]. That is why
+      // reading `collision[$60]` directly, as we do, gives the same answer.
+      return false;
     }
 
     const metatileId = this.mapData.tilemap[tileY * MAP_SIZE + tileX];
