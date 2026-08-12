@@ -1028,6 +1028,11 @@
 
     function showROMPicker() {
       document.getElementById('rom-picker-wrap').style.display = 'block';
+      // Fires on ARRIVAL, with no interaction required. This is the signal
+      // that separates "she is on a stale cached build" (nothing arrives at
+      // all) from "she is on this screen and the button is dead" (this
+      // arrives, no `tap` follows). Without it, both look identical: silence.
+      _pickerBeacon('shown');
       // iOS Safari (non-PWA) denies persistent storage — see telemetry in
       // storage_beacons + design-notes#tap-to-enter-splash. Reveal the
       // Add-to-Home-Screen hint only when we detect iOS AND we're not
@@ -1158,8 +1163,10 @@
     // chooser never returned a file — either it didn't open (the Android
     // `display:none` class of bug) or she backed out of it.
     document.getElementById('rom-picker')?.addEventListener('pointerdown', (e) => {
-      const label = e.target.closest('label[for]');
-      if (label) _pickerBeacon('tap', { which: label.getAttribute('for') });
+      const label = e.target.closest('label');
+      // `label[for]` alone would miss the cached-ROMs "Start" button, which is
+      // a label with no `for` and a click handler instead.
+      if (label) _pickerBeacon('tap', { which: label.getAttribute('for') || label.textContent.trim().slice(0, 20) });
     });
 
     function _romStatusText() {
@@ -1212,13 +1219,18 @@
         if (cached3) ff3Buffer = cached3;
         if (cached1) ff1Buffer = cached1;
         if (cached2) ff2Buffer = cached2;
+        _pickerBeacon('cache-read', {
+          ff3: cached3 ? cached3.byteLength : 0,
+          ff1: cached1 ? cached1.byteLength : 0,
+          ff2: cached2 ? cached2.byteLength : 0,
+        });
         if (ff3Buffer && ff1Buffer && ff2Buffer) {
           const picker = document.getElementById('rom-picker');
           picker.innerHTML = '';
           const btn = document.createElement('label');
           btn.textContent = 'Start';
           btn.style.cursor = 'pointer';
-          btn.addEventListener('click', () => tryLaunch());
+          btn.addEventListener('click', () => { _pickerBeacon('tap', { which: 'START' }); tryLaunch(); });
           picker.appendChild(btn);
           document.getElementById('rom-info').textContent = 'ROMs loaded from cache';
         } else {
@@ -1227,6 +1239,7 @@
       } catch (e) {
         // IndexedDB unavailable — surface the error so we can see if this is
         // why the cache appears empty (private mode, quota, partition reset).
+        _pickerBeacon('cache-failed', { err: String((e && e.name) || e).slice(0, 80) });
         console.warn('[rom-cache] loadCachedROMs FAILED:', e && e.name, e && e.message, e);
       }
     }
