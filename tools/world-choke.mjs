@@ -7,7 +7,14 @@
 // as open after someone restores a boulder.
 //
 //   node tools/world-choke.mjs             # list every articulation point
+//   node tools/world-choke.mjs --ocean     # rank cuts by how much COAST they kill
 //   node tools/world-choke.mjs --map 88 32 112 64   # ASCII a region
+//
+// `--ocean` is the one that matters for placing the choke boulder: a cut is
+// only worth making if it seals the ocean while leaving the inland towns open.
+// Ranking by tiles-removed (the default mode) does NOT answer that — the two
+// biggest cuts on the map both zero the coast, but one costs 2 entrances and
+// the other costs 6.
 
 import fs from 'node:fs';
 
@@ -56,7 +63,49 @@ function flood(blocked) {
 const base = flood(-1);
 const baseEntrances = [...entrances].filter(([k]) => base.has(k)).map(([, d]) => d);
 
+// A metatile is water if it uses one of the CHR tiles the renderer animates —
+// the same $22-$27 set `_initWaterAnimation` keys off, so this can't drift from
+// what the player actually sees moving.
+const ANIM_CHR = new Set([0x22, 0x23, 0x24, 0x25, 0x26, 0x27]);
+const waterMetas = new Set();
+for (let m = 0; m < 128; m++) {
+  const mt = world.metatiles[m];
+  if (ANIM_CHR.has(mt.tl) || ANIM_CHR.has(mt.tr) || ANIM_CHR.has(mt.bl) || ANIM_CHR.has(mt.br)) waterMetas.add(m);
+}
+const isWater = (x, y) => waterMetas.has(world.tilemap[key(x, y)] & 0x7F);
+// Coast = a reachable LAND tile orthogonally touching water, i.e. somewhere the
+// player can stand and see the ocean.
+const coast = [...base].filter(k => {
+  const x = k % W, y = (k - k % W) / W;
+  return [[0, 1], [0, -1], [1, 0], [-1, 0]]
+    .some(([dx, dy]) => isWater(((x + dx) % W + W) % W, ((y + dy) % W + W) % W));
+});
+
 const args = process.argv.slice(2);
+if (args[0] === '--ocean') {
+  console.log(`world open from Ur: ${base.size} tiles, ${baseEntrances.length} entrances`);
+  console.log(`reachable coastline: ${coast.length} tiles\n`);
+  console.log('cuts that reduce the coast, best first:');
+  console.log('  tile        coastLeft  tilesLeft  entrances kept');
+  const rows = [];
+  for (const k of base) {
+    if (entrances.has(k)) continue;
+    const after = flood(k);
+    const coastLeft = coast.filter(c => after.has(c)).length;
+    if (coastLeft === coast.length) continue;
+    const kept = baseEntrances.filter(d => {
+      const ek = [...entrances].find(([, dd]) => dd === d)?.[0];
+      return ek != null && after.has(ek);
+    });
+    rows.push({ x: k % W, y: (k - k % W) / W, coastLeft, tiles: after.size, kept });
+  }
+  rows.sort((a, b) => a.coastLeft - b.coastLeft || b.tiles - a.tiles);
+  for (const r of rows.slice(0, 15)) {
+    console.log(`  (${String(r.x).padStart(3)},${String(r.y).padStart(3)})   ${String(r.coastLeft).padStart(6)}     ${String(r.tiles).padStart(6)}     ${r.kept.join(', ')}`);
+  }
+  if (!rows.length) console.log('  (none — no single tile touches the coast\'s connectivity)');
+  process.exit(0);
+}
 if (args[0] === '--map') {
   const [x0, y0, x1, y1] = args.slice(1, 5).map(Number);
   console.log(`region (${x0},${y0})-(${x1},${y1})   # = wall  . = reachable  , = walkable-but-cut-off  E = entrance`);

@@ -5,21 +5,23 @@ import { BOULDER_TILES, BOULDER_PAL } from './data/boulder-sprite.js';
 
 const TILE_SIZE = 16;
 
-// The choke south of Ur — a boulder blocks the one-tile pass out of Ur's valley
-// until the world-map content beyond it ships. Both the collision (isPassable)
-// and the overlay sprite (drawOverlay) key off these.
+// The boulder blocks the ONE tile that leads to the ocean — the neck of the
+// southern coastal peninsula. Both the collision (isPassable) and the overlay
+// sprite (drawOverlay) key off these.
 //
-// v1.7.924 — restored after the v1.7.903 lift and the v1.7.922 misplacement.
-// `tools/world-choke.mjs` enumerates every articulation point on the world map
-// by re-flooding with this very `isPassable` once per candidate tile; the pass
-// at (95,43)/(95,44)/(95,45) is the ONLY cut that separates Ur's valley from
-// the rest of the continent, and (95,44) is the middle of it. The other cuts it
-// finds are (76-78,51) → map 18 only, (79-81,54-56) → maps 31/151 only, and
-// (95,35) → map 111 only; none of them guards the coast or the map-180
-// entrance at (90,59), which is why parking the boulder near that entrance in
-// v1.7.922 put it in open desert instead of on a choke.
-const CHOKE_TILE_X = 95;
-const CHOKE_TILE_Y = 44;
+// v1.7.925 — measured, not guessed. `tools/world-choke.mjs --ocean` classifies
+// every world metatile that the renderer animates (CHR $22-$27) as water,
+// collects the reachable land tiles that touch it, then blocks each candidate
+// tile in turn and re-floods with this very `isPassable`. (79,56) is the best
+// cut in the world: it takes the reachable coastline from 52 tiles to ZERO
+// while leaving 271 of 429 tiles and 6 of the 8 entrances open — 111, 114 (Ur),
+// 18, 95, 180 and 10. Only maps 31 and 151 go behind it.
+//
+// Do NOT move this back to (95,44). That tile is the neck of Ur's own valley:
+// blocking it also zeroes the coast, but it costs 399 tiles and every entrance
+// except Ur's, which is the v1.7.505 gate that v1.7.903 was right to lift.
+const CHOKE_TILE_X = 79;
+const CHOKE_TILE_Y = 56;
 export class WorldMapRenderer {
   constructor(worldMapData) {
     this.data = worldMapData;

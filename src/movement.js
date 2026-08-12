@@ -94,9 +94,9 @@ export function startMove(dir, isNewPress = false) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    // (95,44) south of Ur is physically blocked by a boulder overlay
-    // (world-map-renderer.js) — no "Coming Soon!" popup needed. v1.7.505,
-    // restored v1.7.924.
+    // (79,56), the neck of the coastal peninsula, is physically blocked by a
+    // boulder overlay (world-map-renderer.js) — no "Coming Soon!" popup
+    // needed. v1.7.505 pattern, relocated off Ur's valley in v1.7.925.
     return;
   }
 

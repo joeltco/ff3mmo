@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.925 — 2026-08-12
+
+### Fixed
+- **The choke boulder moved off Ur's valley to (79,56), the neck of the coastal peninsula.** v1.7.924 put it back at (95,44) and re-sealed the entire overworld to Ur-only — 30 tiles, 2 entrances. That was wrong. The valley stays open.
+- (79,56) is the measured best cut in the world: reachable coastline **52 tiles → 0**, while leaving **271 of 429 tiles and 6 of 8 entrances** open (111, 114 Ur, 18, 95, 180, 10). Only maps 31 and 151 go behind it.
+
+### Added
+- `tools/world-choke.mjs --ocean` — classifies every world metatile the renderer animates (CHR `$22-$27`) as water, using the same set as `_initWaterAnimation` so it can't drift from what the player sees moving; collects reachable land tiles touching water as "coast"; then blocks each candidate tile and re-floods with the real `WorldMapRenderer.prototype.isPassable`, ranking cuts by coast killed rather than tiles removed.
+- That ranking is the whole point: the default tiles-removed ordering puts (95,43-45) and (79,54-56) side by side as "the two big cuts", and both zero the coast — but one costs 2 entrances and the other costs 6. Sorting by size picks the wrong one.
+
+### Verified
+- With the boulder in at (79,56): **271 tiles, 6 entrances, 0 coast** reachable from Ur. Same tool reported 429/8/52 with it out, and 30/2/0 at the v1.7.924 position.
+
 ## 1.7.924 — 2026-08-12
 
 ### Fixed
