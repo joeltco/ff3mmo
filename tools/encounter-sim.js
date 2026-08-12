@@ -2628,6 +2628,93 @@ const tests = [
       inputSt.playerActionPending = saved.pending;
     }
   },
+
+  // The PVP opponent's target pick is a copy of battle-enemy.js' pick, and it
+  // used Math.random() where the original uses the seeded rand(). Fixed in
+  // v1.7.901; this pins it.
+  //
+  // Gated by REPRODUCIBILITY rather than by reading the source: same seed must
+  // give the same sequence of victims. Math.random() cannot satisfy that, so
+  // the revert fails here no matter how the roll is spelled.
+  //
+  // Three guards, because a naive same-seed comparison is vacuous in two
+  // separate ways. If the pick never varies, two constant sequences match and
+  // the gate passes on a broken roll — so the sequence must contain at least
+  // two distinct victims. And if the pick ignored the RNG entirely it would
+  // also be perfectly reproducible — so a DIFFERENT seed must produce a
+  // different sequence. This is the vacuous-comparison trap from v1.7.897.
+  () => {
+    const name = 'regression — the PVP opponent picks its target with the seeded RNG';
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    allies: battleSt.battleAllies, isPvp: pvpSt.isPVPBattle,
+                    wire: pvpSt.isWirePVP, opp: pvpSt.pvpOpponentStats,
+                    curIdx: pvpSt.pvpCurrentEnemyAllyIdx, tgt: battleSt.enemyTargetAllyIdx };
+    try {
+      // Rebuilds the battle WITHOUT reseeding — setupEncounter() calls
+      // rngMod.seed(), which would restart the stream every iteration and make
+      // all three sequences trivially identical.
+      const stage = () => {
+        ps.hp = 300; ps.maxHP = 300; ps.def = 10; ps.evade = 0; ps.mdef = 0;
+        ps.elemResist = []; ps.buffs = {}; ps.statusResist = 0;
+        ps.status = createStatusState();
+        battleSt.battleAllies = [0, 1, 2].map(() => ({
+          userId: 0, def: 10, evade: 0, shieldEvade: 0, mdef: 0, statusResist: 0,
+          elemResist: [], buffs: {}, hp: 300, maxHP: 300, isDefending: false,
+          status: createStatusState(),
+        }));
+        pvpSt.isPVPBattle = true; pvpSt.isWirePVP = false;
+        pvpSt.pvpPreflashDecided = true;
+        pvpSt.pvpCurrentEnemyAllyIdx = -1;
+        pvpSt.pvpEnemyAllies = [];
+        pvpSt.pvpOpponentStats = { name: 'OPP', hp: 300, maxHP: 300, atk: 20, def: 10,
+                                   agi: 5, level: 5, hitRate: 80, evade: 0, shieldEvade: 0,
+                                   jobIdx: 0, weaponId: 0xFF, weaponL: 0xFF, elemResist: [],
+                                   buffs: {}, status: createStatusState() };
+        battleSt.forcedEnemyTarget = null;
+        battleSt.enemyTargetAllyIdx = -99;              // sentinel: did the flash resolve?
+        battleSt.battleState = 'enemy-flash';
+        battleSt.battleTimer = 10000;                   // well past BOSS_PREFLASH_MS
+        updatePVPBattle(16);
+        return battleSt.enemyTargetAllyIdx;
+      };
+      const seq = (sv, n) => {
+        rngMod.seed(sv);
+        const out = [];
+        for (let i = 0; i < n; i++) out.push(stage());
+        return out;
+      };
+
+      const a = seq(4242, 14);
+      if (a.includes(-99)) {
+        return { pass: false, name, reason: 'the enemy-flash never resolved — fixture did not reach the target pick' };
+      }
+      if (new Set(a).size < 2) {
+        return { pass: false, name,
+          reason: `every pick was the same victim (${a[0]}) — the comparison below would be vacuous` };
+      }
+      const b = seq(4242, 14);
+      if (a.join(',') !== b.join(',')) {
+        return { pass: false, name,
+          reason: `same seed produced different victims — the PVP target pick is not on the seeded RNG. `
+                + `[${a.join(',')}] vs [${b.join(',')}]` };
+      }
+      const c = seq(9191, 14);
+      if (c.join(',') === a.join(',')) {
+        return { pass: false, name,
+          reason: `a different seed produced the identical sequence [${a.join(',')}] — the pick is not `
+                + `consuming the RNG at all, so reproducibility here proves nothing` };
+      }
+      return { pass: true, name,
+        info: `reproducible across ${a.length} picks, ${new Set(a).size} distinct victims, seed-sensitive` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      battleSt.battleAllies = saved.allies; pvpSt.isPVPBattle = saved.isPvp;
+      pvpSt.isWirePVP = saved.wire; pvpSt.pvpOpponentStats = saved.opp;
+      pvpSt.pvpCurrentEnemyAllyIdx = saved.curIdx; battleSt.enemyTargetAllyIdx = saved.tgt;
+    }
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────

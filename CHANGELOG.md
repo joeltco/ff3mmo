@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.901 — 2026-08-12
+
+- **Fixed the PVP opponent's target pick to use the seeded RNG.** `pvp.js`'s
+  `_processEnemyFlash` is a copy of `battle-enemy.js#_processEnemyFlash`'s pick,
+  identical down to the `1 / (1 + livingAllies.length)` player weighting — but
+  its three rolls called `Math.random()` where the original calls `rand()`.
+  `rand` was already imported in the file; they were simply the wrong function.
+  The rule is stated at `battle-math.js:4` ("Every gameplay roll goes through
+  `rand()`") and restated at `battle-turn.js:1018` as prophylactic even where
+  lockstep isn't required today. Who gets hit is a gameplay roll.
+- **Gated by reproducibility, not by reading the source** (encounter-sim, 51):
+  the same seed must produce the same sequence of victims. `Math.random()` can't
+  satisfy that, so the revert fails regardless of how the roll is spelled —
+  confirmed by reverting to the v1.7.900 text.
+- Two extra guards, because a same-seed comparison is vacuous in two directions.
+  A pick that never varies makes two constant sequences match, so the run must
+  contain **at least two distinct victims** (currently 4). A pick that ignored
+  the RNG entirely would also be perfectly reproducible, so a **different seed
+  must produce a different sequence**. The non-vacuity guard was itself verified
+  by mutating the pick to a constant and watching it fire — same discipline as
+  the v1.7.897 fixture that disarmed its own hazard.
+- **Left alone deliberately:** `pvp.js:417-418`'s `Math.random()` (the mid-battle
+  fake-roster join). Its own comment scopes it to local-only and returns early
+  for wire PvP — "fake-roster joins from the local PLAYER_POOL would diverge
+  per-client" — so that one is a considered choice, not drift. Not flipped
+  without a call.
+
 ## 1.7.900 — 2026-08-11
 
 - **Gated the other four dead-target redirects.** v1.7.899 covered the two

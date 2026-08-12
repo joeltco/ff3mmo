@@ -711,14 +711,25 @@ function _processEnemyFlash() {
     }
     _wirePendingAttackTargetAlly = -1;
   } else {
+    // v1.7.901 — seeded `rand()`, not `Math.random()`. This block is a copy of
+    // `battle-enemy.js#_processEnemyFlash`'s target pick, down to the
+    // `1 / (1 + livingAllies.length)` player weighting, and that copy has always
+    // used the seeded RNG. `rand` was already imported here; the three calls
+    // below were simply the wrong function.
+    //
+    // The rule is stated in battle-math.js:4 — "Every gameplay roll goes through
+    // rand()" — and restated at battle-turn.js:1018 as prophylactic even where
+    // lockstep isn't required today. An in-battle target pick is a gameplay
+    // roll. Math.random() is for cosmetics (slash scatter) and pre-battle
+    // rolls, not for who gets hit.
     const livingAllies = battleSt.battleAllies.filter(a => a.hp > 0);
     if (livingAllies.length > 0) {
       const allyOptions = battleSt.battleAllies.map((a, i) => a.hp > 0 ? i : -1).filter(i => i >= 0);
       if (ps.hp <= 0) {
         // Player dead — must target a living ally
-        targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
-      } else if (Math.random() >= 1 / (1 + livingAllies.length)) {
-        targetAlly = allyOptions[Math.floor(Math.random() * allyOptions.length)];
+        targetAlly = allyOptions[Math.floor(rand() * allyOptions.length)];
+      } else if (rand() >= 1 / (1 + livingAllies.length)) {
+        targetAlly = allyOptions[Math.floor(rand() * allyOptions.length)];
       }
     }
   }
