@@ -51,6 +51,63 @@ function passable(r, x, y) {
   return (c & 0x07) !== 3;
 }
 
+/**
+ * Verbatim copy of `map-loading.js#_calcSpawnY`, with `mapData` passed in
+ * instead of read off `mapSt`. Kept structurally identical, branch for branch,
+ * so the two can be diffed by eye.
+ *
+ * This is THE spawn rule and it is not `(entranceX, entranceY)`:
+ * `_loadRegularMap` line 249 spawns the player at `(ex, _calcSpawnY(ex, ey))`
+ * whenever `returnY` is undefined, which covers overworld entry AND every
+ * forward door transition (`_triggerMapTransition` calls `loadMapById(dest)`
+ * with no return coords — only `goBack` pops supply them).
+ *
+ * Assuming the raw entrance is what produced 12 false "no live exit" reports,
+ * map 5 among them: its entrance tile (3,26) is 0x18, collision 0x03, so z === 3
+ * and the FIRST branch fires — the real spawn is a $44 tile somewhere above,
+ * in a different room of the shared tilemap entirely.
+ */
+function calcSpawnY(mapData, ex, ey) {
+  const eMid = mapData.tilemap[ey * 32 + ex];
+  const eM = eMid < 128 ? eMid : eMid & 0x7F;
+  const eColl = mapData.collision[eM];
+  if ((eColl & 0x07) === 3) {
+    for (let dy = 1; dy < 32; dy++) {
+      const ny = (ey - dy + 32) % 32;
+      if (mapData.tilemap[ny * 32 + ex] === 0x44) return ny;
+    }
+    for (let dy = 1; dy <= 16; dy++) {
+      const ny = ey + dy;
+      if (ny >= 32) break;
+      const mid = mapData.tilemap[ny * 32 + ex];
+      if (mid === mapData.fillTile) break;
+      const m = mid < 128 ? mid : mid & 0x7F;
+      if ((mapData.collision[m] & 0x07) !== 3 && !(mapData.collision[m] & 0x80)) return ny;
+    }
+    for (let dy = 1; dy <= 16; dy++) {
+      const ny = ey - dy;
+      if (ny < 0) break;
+      const mid = mapData.tilemap[ny * 32 + ex];
+      if (mid === mapData.fillTile) break;
+      const m = mid < 128 ? mid : mid & 0x7F;
+      if ((mapData.collision[m] & 0x07) !== 3 && !(mapData.collision[m] & 0x80)) return ny;
+    }
+    return ey;
+  }
+  const entMid = mapData.tilemap[ey * 32 + ex];
+  const entM = entMid < 128 ? entMid : entMid & 0x7F;
+  const entColl = mapData.collision[entM];
+  if (entMid === 0x44) return ey;
+  if ((entColl & 0x80) && ((mapData.collisionByte2[entM] >> 4) & 0x0F) === 0) {
+    for (let dy = 1; dy <= 8; dy++) {
+      const ny = ey - dy;
+      if (ny < 0) break;
+      if (mapData.tilemap[ny * 32 + ex] === 0x44) return ny;
+    }
+  }
+  return ey;
+}
+
 /** Tiles reachable on foot from (sx,sy). */
 function flood(r, sx, sy) {
   const seen = new Set();
@@ -105,8 +162,10 @@ function inspect(mapId) {
     // rather than 0 (dead).
     doors.push({ x: x0, y: y0, kind: t === 0 ? 'exit_prev' : 'door', trigId: null, dest: -1 });
   }
-  const spawnOk = passable(r, r.entranceX, r.entranceY);
-  const reach = flood(r, r.entranceX, r.entranceY);
+  const spawnX = r.entranceX;
+  const spawnY = calcSpawnY(r, r.entranceX, r.entranceY);
+  const spawnOk = passable(r, spawnX, spawnY);
+  const reach = flood(r, spawnX, spawnY);
   const reachableDoors = doors.filter(d => {
     // A door is usable if the player can stand on it or beside it.
     if (reach.has(d.y * W + d.x)) return true;
@@ -115,7 +174,7 @@ function inspect(mapId) {
   });
   const liveDoors = reachableDoors.filter(d => d.dest !== 0);   // -1 (exit_prev) counts as live
   return {
-    mapId, spawnOk,
+    mapId, spawnOk, spawn: [spawnX, spawnY], entrance: [r.entranceX, r.entranceY],
     walkable: reach.size,
     doors: doors.length,
     reachableDoors: reachableDoors.length,

@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.904 — 2026-08-12
+
+- **Fixed the spawn model in `tools/map-explorable.mjs`; 4 of its 12 flagged
+  maps were its own bug.** It flood-filled from `(entranceX, entranceY)`, but
+  `_loadRegularMap:249` spawns the player at `(ex, _calcSpawnY(ex, ey))` — and
+  that path covers overworld entry AND every forward door transition, since
+  `_triggerMapTransition` calls `loadMapById(dest)` with no return coords (only
+  `goBack` pops supply them). `_calcSpawnY` is now copied in branch-for-branch.
+- Maps 2, 5, 39 and 61 were false positives, all of the same kind: maps 3/4/5/8
+  are separate ROOMS inside one shared 32×32 tilemap, picked by entrance
+  coordinate. Map 5's raw entrance (3,26) sits on a z-3 tile, so the first
+  `_calcSpawnY` branch fires and the real spawn is (3,18) — three tiles below
+  the weapon counter at (3,15). Validated against all four known-playable
+  rooms; each lands directly below its own counter.
+- **Of the 8 that survive, only map 180 is reachable on foot.** The other seven
+  (22, 24, 43, 96, 124, 167, 178) sit behind the water and mountains that still
+  need vehicles, so they cannot strand anyone today. Map 180 can: it spawns at
+  (19,11) in a 98-tile region whose only door (2,27) is outside that region.
+- The remaining flags trace to tiles the engine treats as solid that the ROM
+  may not: `map-renderer.js#isPassable` admits collision-trigger types 0, 4 and
+  5, so type **1** is impassable — and type-1 tiles sit at the entrances of maps
+  96, 124, 167 and 43. Event tiles `$60-$63` are blocked outright by the same
+  function. Whether either should be walkable needs the disassembly, not a
+  guess, so nothing was changed here.
+
 ## 1.7.903 — 2026-08-12
 
 - **Lifted the choke south of Ur.** A boulder hard-blocked world tile (95,44) in
