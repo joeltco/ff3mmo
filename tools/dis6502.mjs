@@ -18,9 +18,52 @@ import fs from 'node:fs';
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
 
+// ── MMC3 window model ──────────────────────────────────────────────────────
+// FF3 is MMC3: FOUR 8KB windows, only two of them switchable.
+//
+//   $8000-$9FFF  R6, switchable
+//   $A000-$BFFF  R7, switchable
+//   $C000-$DFFF  FIXED to the second-to-last bank
+//   $E000-$FFFF  FIXED to the last bank
+//
+// v1.7.914 — this used to be `base = addr >= 0xA000 ? 0xA000 : 0x8000`, i.e.
+// two windows, which silently mis-offsets everything at $C000+. It cost three
+// wrong reads in one session: $C72C decoded as a PPU blit instead of the event
+// executor, and $A180 was read from bank $2C when `$FF03` maps $2C at $8000 and
+// $2D at $A000 (`JSR $FF0C` sets R6 = A, then `ADC #$01` sets R7 = A+1). Each
+// time the output was visibly wrong rather than plausibly wrong, which is the
+// only reason it got caught — an opcode table decoded at a bad offset would
+// look perfectly reasonable.
+const BANKS = Math.floor((rom.length - 16) / 0x2000);
+export const LAST_BANK = BANKS - 1;          // $E000-$FFFF
+export const PENULT_BANK = BANKS - 2;        // $C000-$DFFF
+
+/** Which bank a fixed window must be, or null when the window is switchable. */
+export function requiredBank(addr) {
+  if (addr >= 0xE000) return LAST_BANK;
+  if (addr >= 0xC000) return PENULT_BANK;
+  return null;
+}
+
 export function fileOff(bank, addr) {
-  const base = addr >= 0xA000 ? 0xA000 : 0x8000;
+  if (addr < 0x8000) throw new Error(`$${addr.toString(16)} is not in the cartridge window ($8000-$FFFF)`);
+  const base = addr >= 0xE000 ? 0xE000 : addr >= 0xC000 ? 0xC000 : addr >= 0xA000 ? 0xA000 : 0x8000;
   return bank * 0x2000 + 0x10 + (addr - base);
+}
+
+/**
+ * Resolve (bank, addr) with the fixed windows enforced. Pass REAL addresses:
+ * the event executor is `3E D21D`, not `3E 921D`. Earlier changelog entries
+ * used the old two-window labels, so a `3F/8xxx` citation there is really $Exxx.
+ */
+export function resolve(bank, addr) {
+  const need = requiredBank(addr);
+  if (need != null && bank !== need) {
+    console.error(`  ! $${addr.toString(16).toUpperCase()} is in a FIXED window — that is bank `
+      + `$${need.toString(16).toUpperCase()}, not $${bank.toString(16).toUpperCase()}. Using $${need.toString(16).toUpperCase()}.`);
+    bank = need;
+  }
+  return { bank, off: fileOff(bank, addr) };
 }
 
 // addressing modes: imp, acc, imm, zp, zpx, zpy, izx, izy, abs, abx, aby, ind, rel
@@ -69,6 +112,7 @@ const hex4 = v => v.toString(16).toUpperCase().padStart(4, '0');
 
 export function disasm(bank, addr, count = 40) {
   const out = [];
+  bank = resolve(bank, addr).bank;   // fixed windows win over whatever was passed
   let pc = addr;
   for (let i = 0; i < count; i++) {
     const off = fileOff(bank, pc);
@@ -102,6 +146,7 @@ export function disasm(bank, addr, count = 40) {
 }
 
 function print(bank, addr, count) {
+  bank = resolve(bank, addr).bank;   // label with the bank actually read, not the one asked for
   for (const l of disasm(bank, addr, count)) {
     const bytes = l.raw.map(hex2).join(' ').padEnd(9);
     console.log(`${hex2(bank)}/${hex4(l.pc)}  ${bytes}  ${l.text}`);
@@ -112,12 +157,14 @@ function print(bank, addr, count) {
 function find(bank, addr) {
   const lo = addr & 0xFF, hi = (addr >> 8) & 0xFF;
   const start = bank * 0x2000 + 0x10;
+  // Report hits at the address the bank is actually mapped to, not always $8000.
+  const winBase = bank === LAST_BANK ? 0xE000 : bank === PENULT_BANK ? 0xC000 : 0x8000;
   const hits = [];
   for (let i = start; i < start + 0x2000 - 2; i++) {
     if (rom[i + 1] === lo && rom[i + 2] === hi) {
       const op = OPS[rom[i]];
       if (!op || M[op.mode] !== 3) continue;
-      const base = 0x8000 + (i - start);
+      const base = winBase + (i - start);
       hits.push({ addr: base, op: op.name, mode: op.mode });
     }
   }

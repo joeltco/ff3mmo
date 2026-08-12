@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.914 — 2026-08-12
+
+- **Fixed `tools/dis6502.mjs`'s bank mapping — it modelled 2 MMC3 windows, not
+  4.** `base = addr >= 0xA000 ? 0xA000 : 0x8000` silently mis-offsets everything
+  at $C000+. Now: $8000-$9FFF = R6, $A000-$BFFF = R7 (both switchable),
+  $C000-$DFFF = FIXED second-to-last bank, $E000-$FFFF = FIXED last bank.
+  Passing a wrong bank for a fixed window prints a warning and self-corrects,
+  and the output is labelled with the bank actually read rather than the one
+  asked for.
+- Pass REAL addresses now: the interpreter is `3E D21D` (was mislabelled
+  `3E 921D`), the type-1 handler is `3F E68F`. Branch targets print real
+  addresses too ($D226, $D26D). **Earlier changelog entries used the old
+  two-window labels — a `3F/8xxx` citation there means $Exxx, `3E/9xxx` means
+  $Dxxx.** Re-verified against three known sites; the switchable-window reads
+  (3A/921F etc.) are unchanged, as they should be.
+- **Opcode dispatch located and partitioned.** The interpreter calls bank $3B
+  `$A000` → `$A067` → `$A12B`, which splits the opcode space three ways on `$70`:
+  - `< $C0`      → `JMP $ACD1`
+  - `$C0-$CF`    → inline sub-dispatch; low nibble selects, values come from a
+    small table at `$A1CA` and land in zero-page ($20, $33, …)
+  - `>= $D0`     → `JMP $B53F`
+  With the encoding from v1.7.913 ($FE = WAIT; `< $E4` 1 byte, `$E4-$FC` 2 bytes,
+  `>= $FD` 1 byte), that is the shape of the instruction set.
+- **Not done: the opcode table itself.** Three sub-dispatchers, each with their
+  own tables, none of them enumerated. No opcode semantics are claimed and no
+  interpreter is implemented. What changed is that it is now three known
+  addresses instead of an open hunt — and the tool that reads them no longer
+  lies about which bank it is in.
+
 ## 1.7.913 — 2026-08-12
 
 - **Event opcode interpreter located and its instruction format decoded**
