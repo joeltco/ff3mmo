@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.948 — 2026-08-12
+
+### Added
+- `tools/event-resolve.mjs` — walks the COMPLETE event chain from the ROM and reports what each event tile would actually do: tile → trigId → `$0720` event id → condition script (bank $2C `$8880`, data in $2D) → fresh-save result → opcode script (bank $2C `$8600`) → decoded opcodes, flagging `$F9` EXIT TO WORLD / `$FA` GO TO MAP.
+- Fixed the pointer-window assumption while building it: the per-map `$0720` block pointers land in the **`$8000`** window (observed `$89xx`), not `$A000`. `$FF03` maps bank A at `$8000` and A+1 at `$A000`, so a pointer from that table can be in either window.
+
+### Finding — an event interpreter will NOT open maps 22 / 178 / 180
+Measured across all 256 maps: **127 have event tiles; exactly 2** (maps 148 and 149) have events that move the player, both `EXIT TO WORLD`, and both already have reachable exits. **None of 22, 178, 180 is among them.** Resolving their scripts individually:
+- **Map 22** — event at (3,6) resolves to `$F0 $00 / $FF`. `$F0`'s handler (3B/`$B6BF`) loads `$0740,X` and sets up a text pointer in `$94`/`$95`: it is a **dialogue** opcode, not a passage opener.
+- **Map 180** — both events (7,11) and (18,11) decode to full scripts with **no map transition**.
+- **Map 178** — no event reaches its exits.
+
+### What these maps actually are (rendered with `tools/map-png.mjs` and looked at)
+- **180 is a SHIP** — a wooden vessel on open water with a four-icon shop counter, barrels, a bed and a below-decks section. A **vehicle interior**, in the same class as the Invincible airship (map 95) whose warp was removed in v1.7.926. It is exited by disembarking, which needs the vehicle system — not the event interpreter.
+- **178 is castle upper floors** — four tower rooms (throne room with carpet, bedrooms, chests) sharing one tilemap, each reached by a different staircase. Our single ROM entrance lands in a 7-tile nook.
+- **22 is a cave** whose stair exit at (13,1) sits in a region genuinely disconnected from the spawn.
+
+No interpreter was built. It would have been substantial work that did not achieve the stated goal, and the three maps stay refused at the door.
+
 ## 1.7.947 — 2026-08-12
 
 ### Fixed — player bug report #4, "person in tree"
