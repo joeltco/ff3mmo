@@ -141,7 +141,11 @@ function audit(mapId, opts) {
   const counted = new Set();
   if (md.triggerMap) {
     for (const [key, t] of md.triggerMap) {
-      if (!(t.type === 1 || t.type === 4 || t.type === 0 || t.type === 5)) continue;
+      // Type 0 is an EVENT tile ($60-$63), NOT a way out. It is passable as of
+      // v1.7.944 and has no handler, so counting it as an exit made map 180
+      // read "2/3 exits ok" when its only real door (2,27) is walled off from
+      // the spawn — the exact map that stranded a live player.
+      if (!(t.type === 1 || t.type === 4)) continue;
       const [x, y] = key.split(',').map(Number);
       counted.add(y * W + x);
       exits++;
@@ -164,6 +168,70 @@ function audit(mapId, opts) {
 const args = process.argv.slice(2);
 const one = args.find(a => /^\d+$/.test(a));
 const SHOW_ALL = args.includes('--all');
+
+// ── --play: only the maps a player can actually get to ────────────────────
+// Seeds from the overworld entrances reachable on foot from Ur, then follows
+// door destinations transitively. Everything else in the 256-id space is an
+// unused slot and its "defects" are noise.
+if (args.includes('--play')) {
+  globalThis.document = globalThis.document || { createElement: () => ({ getContext: () => ({}) }) };
+  const { loadWorldMap } = await import('../src/world-map-loader.js');
+  const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
+  const world = loadWorldMap(rom, 0);
+  const stub = { data: world };
+  const wpass = (x, y) => WorldMapRenderer.prototype.isPassable.call(stub, x, y);
+  const WS = world.mapWidth;
+
+  let seed = null;
+  for (const [t, p] of world.triggerPositions) if (world.entranceTable[t] === 114) { seed = p; break; }
+  const wseen = new Set([seed.y * WS + seed.x]);
+  const wq = [[seed.x, seed.y]];
+  while (wq.length) {
+    const [x, y] = wq.pop();
+    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      const nx = ((x + dx) % WS + WS) % WS, ny = ((y + dy) % WS + WS) % WS, k = ny * WS + nx;
+      if (wseen.has(k) || !wpass(nx, ny)) continue;
+      wseen.add(k); wq.push([nx, ny]);
+    }
+  }
+  const seeds = new Set();
+  for (const [, p] of world.triggerPositions) {
+    if (!wseen.has(p.y * WS + p.x)) continue;
+    const t = WorldMapRenderer.prototype.getTriggerAt.call(stub, p.x, p.y);
+    if (t && t.destMap) seeds.add(t.destMap);
+  }
+
+  const reachable = new Set(seeds);
+  const queue = [...seeds];
+  const report = [];
+  while (queue.length) {
+    const id = queue.shift();
+    const a = audit(id, {});
+    report.push(a);
+    if (a.error) continue;
+    const md = loadMap(rom, id);
+    for (const [, t] of (md.triggerMap || [])) {
+      if (t.type !== 1 && t.type !== 4) continue;
+      const dest = md.entranceData[t.trigId] | 0;
+      if (!dest || reachable.has(dest)) continue;
+      reachable.add(dest); queue.push(dest);
+    }
+  }
+  report.sort((a, b) => a.mapId - b.mapId);
+  const broken = report.filter(r => !r.error && r.exits > 0 && r.reachableExits === 0);
+  console.log(`play area: ${report.length} maps reachable from Ur on foot\n`);
+  console.log('  map   spawn      tiles  exits  status');
+  for (const r of report) {
+    if (r.error) { console.log(`  ${String(r.mapId).padStart(3)}   (error: ${r.error})`); continue; }
+    const status = (r.exits === 0) ? 'no exits at all'
+      : (r.reachableExits === 0) ? '*** WALLED IN ***'
+      : 'ok';
+    console.log(`  ${String(r.mapId).padStart(3)}   (${String(r.ex).padStart(2)},${String(r.sy).padStart(2)})  ` +
+      `${String(r.tiles).padStart(5)}  ${String(r.reachableExits)}/${String(r.exits).padEnd(3)}  ${status}`);
+  }
+  console.log(`\nWALLED IN: ${broken.length} map(s)${broken.length ? ' -> ' + broken.map(b => b.mapId).join(', ') : ''}`);
+  process.exit(0);
+}
 
 if (one != null) {
   const id = parseInt(one, 10);

@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.946 — 2026-08-12
+
+### Added
+- `tools/map-audit.mjs --play` — audits ONLY the maps a player can actually reach: seeds from the overworld entrances reachable on foot from Ur, then follows door destinations transitively. The other ~200 ids in the 256-space are unused slots whose "defects" are noise.
+
+### Play-area audit result
+- **60 maps reachable on foot. 57 are healthy** — spawn lands somewhere with a reachable way out. Map 114 (Ur) 291 tiles 11/11 exits, map 186 240 tiles 6/6, map 52 155 tiles 3/3.
+- **3 walled in: 22, 178, 180.** All three are already refused at the door by `STRANDING_MAPS`, so the guard is correct and stays. Map 180's only real exit is a door at (2,27) that is not reachable from its spawn at (19,11), despite 102 reachable tiles.
+
+### Fixed in the tooling
+- The audit counted dynamic trigger **type 0 as an exit**. Type 0 is an EVENT tile ($60-$63) — passable since v1.7.944, but with no handler, so it is not a way out. That over-count made map 180 read `2/3 exits ok` when it is walled in — the exact map that stranded a live player. Had I trusted it I would have removed 180 from `STRANDING_MAPS` and re-stranded someone.
+
 ## 1.7.945 — 2026-08-12
 
 ### Fixed
