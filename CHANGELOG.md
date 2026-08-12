@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.920 — 2026-08-12
+
+- **Partly un-retracts v1.7.919: events DO transition maps.** I had checked only
+  trigId 0 per map. Following every slot finds `$FA GO-TO-MAP` in map 22 trig 4
+  (`$64`) and map 180 trigs 3 (`$49`) and 4 (`$53`). "Events are not exits" was
+  too strong a claim built on a one-slot sample.
+- **It still does not rescue these four maps.** trigId comes from the per-TYPE
+  counter of `$60-$63` tiles, so only as many table slots are live as the map has
+  event TILES:
+  - map 22 has ONE event tile (3,6) → trig 0 → `F1 F2 FF`, no transition.
+  - map 180 has TWO (7,11) and (18,11) → trig 0 → no transition; trig 1 →
+    **result 0**, i.e. the event evaluates to "do nothing".
+  The `$FA` slots belong to entries those maps' tiles never index.
+- Net: the four maps' exits remain unexplained, but the search space is now
+  properly bounded — every trigger mechanism and every live event slot on them
+  has been enumerated and none transitions. That points at connectivity (the
+  flood-fill / spawn model) rather than at a missing ROM mechanism.
+- Method note: this is the second time in two versions that a conclusion rested
+  on sampling one item instead of the set (trigId 0 only; before that, the first
+  `$FF` as terminator). Enumerate the set.
+
 ## 1.7.919 — 2026-08-12
 
 - **Found the event-side writers of `$AB` — two map-transition opcodes:**
