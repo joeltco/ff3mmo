@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.895 — 2026-08-11
+
+**Audited the gates my parser had missed. Nine of them were vacuous under a whole class of regression — fixed.**
+
+First a correction: I said 11. It is **13** — 46 gates, 35 declaring `const name`, and 13 naming themselves inline through a shared helper. Enumerated by index with the new `--only`, so the list is measured rather than parsed.
+
+They are the original determinism / sanity / symmetry block plus two regressions.
+
+**The find: symmetry and determinism both pass for free when nothing happens.**
+
+`psDamage === allyDamage` is trivially true when both are ZERO, and two runs are identical for free when neither did anything. Measured, not theorised — forcing the monster's attack to deal 0 damage left **all 8 symmetry gates and both determinism gates green**. Only 3 gates in the whole suite noticed.
+
+The file's own comment already knew: *"If this fails, the symmetry test is meaningless: it'd be 'both targets buggy in the same way.'"* That is why the sanity gates exist, and they did fire. But they cover elemResist and Protect specifically — a dead path outside those two would have gone unreported by every gate that looked like it was watching.
+
+**Both helpers now assert LIVENESS before comparing.** A symmetry case must have changed HP or status; a determinism case is compared against a PRE-run snapshot rather than a hardcoded starting HP, which would rot the moment `setupEncounter`'s defaults changed. Every case deals real damage today (2-8), so this costs nothing and stops a comparison certifying a corpse.
+
+Detection of the zero-damage regression went from **3 gates to 6**.
+
+**The other two were already sound.** `damage-show states hold for the number's full lifetime` asserts BOTH sides of the boundary — still running at `DMG_SHOW_MS - 1`, finished at `DMG_SHOW_MS` — so neither a dead state nor an endless one slips through. `mini/toad cuts a monster's attack` caught the mutation live.
+
+**The pattern across four versions of this:** a gate can be hollow by re-stating the rule (the `id === TITAN` borrow table), by testing helpers instead of wiring (the tier resolution), by disarming the hazard in its own fixture (the SFX gates), or — this one — by comparing two things that are equal when nothing happened. Only the last is invisible to reverting the feature itself; it needs reverting the *substrate* the comparison rests on.
+
+Gates: lint 0, encounter-sim 46, pvp-wire-sim 140, wire-stats lossless.
+
 ## 1.7.894 — 2026-08-11
 
 **Audited the other 46 gates for the fixture problem. One real find — in the runner itself.**

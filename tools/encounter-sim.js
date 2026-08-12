@@ -269,15 +269,25 @@ function snapshot() {
 // Same setup × same seed × twice → identical post-flash snapshot.
 function determinismTest({ name, psStats, allyStats, monster, seed, target }) {
   setupEncounter({ psStats, allyStats, monster, seed });
+  const pre = snapshot();
   runFlashWithTarget(target);
   const a = snapshot();
   setupEncounter({ psStats, allyStats, monster, seed });
   runFlashWithTarget(target);
   const b = snapshot();
+  // Same vacuity as symmetryTest: two runs are identical for free if neither
+  // DID anything, so a turn that stopped happening would keep this green.
+  // Compared against a PRE-run snapshot rather than a hardcoded starting HP,
+  // which would rot the moment setupEncounter's defaults changed.
+  if (a.psHp === pre.psHp && a.allyHp === pre.allyHp
+      && a.psMask === pre.psMask && a.allyMask === pre.allyMask) {
+    return { pass: false, name,
+      reason: 'the turn changed neither HP nor status — determinism here is vacuous, not evidence' };
+  }
   if (JSON.stringify(a) !== JSON.stringify(b)) {
     return { pass: false, name, reason: `A=${JSON.stringify(a)} B=${JSON.stringify(b)}` };
   }
-  return { pass: true, name };
+  return { pass: true, name, info: `psHp=${a.psHp} allyHp=${a.allyHp}` };
 }
 
 // Identical stats on both sides → monster does identical damage and
@@ -305,6 +315,23 @@ function symmetryTest({ name, psStats, allyStats, monster, seed, defending }) {
   const allyDamage = aStart.hp - battleSt.battleAllies[0].hp;
   const allyStatusDelta = ((battleSt.battleAllies[0].status && battleSt.battleAllies[0].status.mask) | 0) ^ aStart.mask;
 
+  // LIVENESS FIRST. `psDamage === allyDamage` is trivially true when BOTH are
+  // zero, so a regression that makes the monster's turn do nothing at all keeps
+  // every symmetry case green. Measured, not theorised: forcing the enemy
+  // damage to 0 left all 8 symmetry gates passing and was caught only by the
+  // two sanity gates next door — which cover elemResist and Protect, so a dead
+  // path outside those would have gone unreported.
+  //
+  // Every case here deals real damage today (2-8), so requiring the run to have
+  // DONE something costs nothing and stops symmetry from certifying a corpse.
+  if (psDamage === 0 && psStatusDelta === 0) {
+    return {
+      pass: false,
+      name,
+      reason: 'nothing happened on either side (dmg 0, no status change) — '
+            + 'symmetry here is vacuous, not evidence',
+    };
+  }
   if (psDamage !== allyDamage || psStatusDelta !== allyStatusDelta) {
     return {
       pass: false,
