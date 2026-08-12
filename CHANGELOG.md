@@ -18,6 +18,35 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.910 — 2026-08-12
+
+- **Event system: dispatch chain decoded end to end; script data format NOT yet
+  cracked. The event system is not implemented.**
+- Decoded and verified by disassembly (`tools/dis6502.mjs`):
+  - tile `$60-$63` → collision byte2 `$F0` in every tileset → handler type 15.
+  - `$E6BE` (type 15): `LDA $45 / AND #$0F` → trigId; `LDA $0720,X` → the
+    EVENT ID for that instance; `JSR $EB23` (= `LDA #$2C / JMP $FF03`) switches
+    to bank **$2C**; `LDA $8880,X / $8881,X` → 16-bit script pointer;
+    `JSR $EA1B` copies **64 bytes** to `$7B00`; `JSR $EB28` restores bank $3C.
+  - `$3C/931B` walks `$7B00`: `$FF` terminates a run, bit 7 of each byte picks
+    which branch is taken, low 3 bits index a mask table at `$3C/935A` (which
+    is just `01 02 04 08 10 20 40 80`), and a result byte lands in `$6C`.
+- **Where it stops being solid.** That control flow is disassembled and sound,
+  but the DATA does not read as conditions. Event 12's block is
+  `FA 98 FF 98 0C 99 2D 99 32 99 43 99 43 99 43 99 ...` — the repeating `43 99`
+  looks like little-endian `$99xx` POINTERS, i.e. the 64-byte block is probably
+  another indirection level rather than the script itself. Parsing it as
+  conditions yields garbage like "54 conditions", which is how I know it's
+  wrong rather than merely unverified.
+- **New: `tools/event-dump.mjs`** — dumps the pointer table and each event's 64
+  bytes, with the record split clearly marked PROVISIONAL in the header. It
+  exists so the next pass starts from data instead of repeating the
+  archaeology; it is not a decoder to build on yet.
+- Next concrete step: follow one `$99xx` pointer from a real event block and
+  disassemble/dump what is there. That decides whether the block is a jump
+  table, a text-pointer list, or something else — and everything downstream
+  depends on that answer.
+
 ## 1.7.909 — 2026-08-12
 
 - **The last 4 maps (22, 24, 178, 180) need the EVENT SYSTEM, not another
