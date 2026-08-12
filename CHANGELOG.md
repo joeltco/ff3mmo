@@ -18,6 +18,33 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.917 — 2026-08-12
+
+- **Followed all 11 opcodes the four blocked maps use.** They are thin SETTERS
+  into zero-page slots; the behaviour lives one layer further on, in shared
+  routines. What each one does immediately:
+  - `$C0-$C3` → `$20` = one of `$01/$02/$04/$08` (table `$A1CA`) — DIRECTION bits
+  - `$C4-$C7` → `$33` = the same four values — a second direction slot
+  - `$C8` → clear bit 7 of `$7E`;  `$C9` → set bit 7 of `$7E`
+  - `$D2` → `CLC / JMP $C003`;  `$D3` → `SEC / JMP $C003` — one routine, called
+    with the carry as an on/off argument
+  - `$D4` → `JMP $B881`
+  - `$F1` → `$76` = operand, `$7D` = `$80`, then `$B6CE`
+  - `$F2` → `LDY $71 / JMP $B983` — operand passed in Y
+  - `$F8` → operand-range dispatch, with `$7D`, `$7E` and `>= $80` special-cased
+  - `$FC` → `$74` = operand, `$75` = `$80`
+- The `$A1CA` "table" is 4 entries (`01 02 04 08`); the bytes after it are code,
+  not data — reading it as 8 would have invented two directions.
+- **Shape that emerges:** direction setters, flag toggles, operand stashes and
+  waits, with opcodes `< $C0` already known to be per-ACTOR commands (high
+  nibble = actor). These are actor/scene control scripts, which is consistent
+  across three independently-derived facts now.
+- **Still not named: the effects.** `$C003` (bank $3E, a FIXED window),
+  `$B881`, `$B983`, `$B6CE` and the `$F8` sub-branches are each another hop.
+  No opcode is claimed to "open a door" or "change map" — the zero-page slots
+  they write ($74/$75/$76/$7D/$7E/$20/$33) are consumed elsewhere, exactly like
+  `$AB` and `$7F49` were in the trigger path.
+
 ## 1.7.916 — 2026-08-12
 
 - **Found the real index into `$A200`, and with it the full tile→opcode chain
