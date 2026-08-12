@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.919 — 2026-08-12
+
+- **Found the event-side writers of `$AB` — two map-transition opcodes:**
+  - **`$F9` = EXIT TO WORLD MAP.** `LDA $71 / STA $0730` then `LDA #$C0 /
+    STA $AB` — the operand is the world-exit index, `$0730` is the exact
+    variable `$E2CE` reads (`AND #$3F`) before pulling EXIT_X/EXIT_Y, and `$C0`
+    is the same action code as collision-trigger type 1. Same machinery
+    `_checkExitToWorld` already implements (v1.7.908).
+  - **`$FA` = GO TO MAP.** operand → `$0700`, `$AB = $80` — the door/entrance
+    action code.
+- **But none of maps 22, 24, 178 or 180 use them, so their events are NOT their
+  exits.** This retracts the v1.7.909 framing that three of the four were
+  "gated behind scripted events".
+  - map 22 → `F1 F2 FF` (three opcodes)
+  - maps 24 and 180 → `F8 CD C5 D2 FC F8 FC FC D3 D4 D5 E8 CC F8 C2 FC F1 FF`
+  - map 178 → `F1 C7 F8 D2 C4 FC C5 FC ...`
+  All direction setters, flag toggles and operand stashes — actor/scene control,
+  consistent with what following the 11 opcodes showed.
+- **`$FF` is confirmed as the script terminator** — three of the four scripts end
+  on it cleanly, which closes the "terminator unknown" gap from v1.7.913 and
+  makes the earlier opcode-frequency walk (v1.7.916 note) safely re-runnable.
+- So the four maps' exits are still unexplained: not trigType 0, not trigType 1,
+  not their events. Either another mechanism reaches them, or the spawn/flood
+  model still has a gap. Reopening rather than closing.
+
 ## 1.7.918 — 2026-08-12
 
 - **`$7F49` is the SOUND ENGINE, not a "pending action" slot — correcting
