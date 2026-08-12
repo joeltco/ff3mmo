@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.959 — 2026-08-12
+
+### Room rendering — fourth attempt, and the first with the right definition
+- The mask is now the room's floor plus its **wall band, up to 2 tiles thick** — not a 1-tile dilation of the floor.
+- **Why the previous three failed, each for a different structural reason:**
+  - v1.7.953 clamped the clip to the walkable room → cut a town's scenery.
+  - v1.7.954 masked with a 1-tile dilation everywhere → tore Kazus apart.
+  - v1.7.957 restricted that mask to enclosed rooms → stopped harming towns, but a 1-tile dilation **shaves the outer wall** off rooms whose wall bands are two tiles thick, so the inn looked worse than the trailing tiles it replaced.
+  - An UNBOUNDED wall flood is also wrong: walls are contiguous between rooms in a building, so it wraps around the neighbour — map 17 reached row 0, map 2 grew from 70 tiles to 144. Measured, not guessed.
+- Bounded expansion through wall only, stopping at void and at another room's floor, is what actually traces one room. Verified at `MAXD` 1/2/3 before implementing; 2 is the wall thickness these rooms use.
+
+### Scope is unchanged and still conservative
+- Applies only to small enclosed interiors: non-walkable fill, room ≤ 60 tiles, room < 50% of the map's walkable area. **165 masked, 91 unmasked** — every town, castle, cave and the ship draws whole.
+
+### Verified by rendering, not by reasoning
+- 16 interiors rendered as a contact sheet through the live mask: each is a single enclosed room with a complete wall border.
+- Map 17 at full size: left and right walls at full 2-tile thickness, the band above the counter present, bottom wall and exit corridor intact.
+- All gates green: room-clip on 256 maps, event-tiles, tree-occlusion, encounter-zones, npc-placement, wire-sim, smoke.
+
+### Revert
+- One line: `this._visibleMask = isEnclosedRoom ? mask : null;` → `= null` in `src/map-renderer.js`.
+
 ## 1.7.958 — 2026-08-12
 
 ### Reverted — the visibility mask, everywhere. Third attempt, third regression.

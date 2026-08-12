@@ -300,14 +300,35 @@ export class MapRenderer {
     // bottom row". Dilating the room by one tile gives the wall ring and
     // nothing else, so no row is missing at the top and none is spare at the
     // bottom. `prerenderFullMap` skips every tile the mask clears.
+    // Room + its WALL BAND, up to 2 tiles thick.
+    //
+    // A 1-tile dilation (v1.7.954/957) shaved the outer wall off these rooms —
+    // their wall bands are two tiles thick — which looked worse than the
+    // trailing tiles it replaced. An UNBOUNDED wall flood is no good either:
+    // walls are contiguous between rooms in a building, so it wraps around the
+    // neighbour (map 17 reached row 0; map 2 grew from 70 tiles to 144).
+    // Bounded expansion through wall only, stopping at void and at another
+    // room's floor, is what actually traces one room.
+    const WALL_BAND = 2;
     const mask = new Uint8Array(MAP_SIZE * MAP_SIZE);
-    for (const k of roomSet) {
-      const x = k % MAP_SIZE, y = (k - x) / MAP_SIZE;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx, ny = y + dy;
-          if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) continue;
-          mask[ny * MAP_SIZE + nx] = 1;
+    {
+      const anyPass = (x, y) => this.isPassable(x, y, 0) || this.isPassable(x, y, 1) || this.isPassable(x, y, 2);
+      const wq = [];
+      for (const k of roomSet) { mask[k] = 1; wq.push([k % MAP_SIZE, (k - (k % MAP_SIZE)) / MAP_SIZE, 0]); }
+      let head = 0;
+      while (head < wq.length) {
+        const [x, y, d] = wq[head++];
+        if (d >= WALL_BAND) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) continue;
+            const k = ny * MAP_SIZE + nx;
+            if (mask[k]) continue;
+            if (tilemap[k] === fillTile) continue;   // void — stop
+            if (anyPass(nx, ny)) continue;           // another room's floor — stop
+            mask[k] = 1; wq.push([nx, ny, d + 1]);
+          }
         }
       }
     }
@@ -354,8 +375,7 @@ export class MapRenderer {
     // Every mask attempt has produced a WORSE, more visible one. Not shipping a
     // fourth guess at this: it needs a definition of the room's true extent
     // (its full wall band, not a 1-tile dilation), which I do not have yet.
-    void isEnclosedRoom; void mask;
-    this._visibleMask = null;
+    this._visibleMask = isEnclosedRoom ? mask : null;
 
     this._roomClip = {
       x: l * TILE_SIZE,
