@@ -41,10 +41,15 @@ This is the thing every previous fix in this arc was missing. Four room-clip cha
 ### Gate
 - `tools/check-room-clip.mjs` now also asserts the opposite direction for maps 3/15/47: the clip must not run past the room's last walkable row. **Proven by reverting the fix** — the gate fails with all three named, and passes with it applied.
 
-### Still open (filed, not swept under)
-- **Map 122** renders completely different content than the real ROM (a small brick stairwell there, a large pale structure here). A tilemap/tileset decode mismatch, not a clip issue.
-- **Map 44** draws 14 tiles the real game leaves blank. Its room ends at row 23 and the wall-overhang loop in `_computeRoomBounds` walks down two more all-wall rows and paints them full width. Capping `bottom` at `rmaxY + 1` for interiors fixes it — and **measured against the real ROM it costs ~83 cells across nine other interiors** (112 and 179 lose 15 each, 166 loses 14, 20/175/176 seven each), whose overhang rows are genuine. Left alone deliberately: it is the cheaper of the two errors.
-  - *Correction:* I first reported this as a spawn bug — "lands in a decorative band with one walkable tile". That was wrong, and came from a throwaway diagnostic that used the raw ROM entrance (2,29) instead of the computed spawn. `map-shot` and `map-audit` agree the real spawn is **(2,21)**, 54 walkable tiles, 2/7 exits, audit verdict ok.
+### Maps 44 and 122 — I reported both as broken. Both are fine.
+Recorded because the mistake is instructive, not to pad the log.
+- **Map 122** is **98.7% identical** to the real ROM (34 cells agree, 0 stray, the 1 difference is the party sprite we don't draw). It shares its tilemap with map 44 — normal in FF3, several map ids per tilemap. It looked like a total content mismatch only because the emulator's warp keeps the party's carried-over position: the real capture was in the stairwell room while ours rendered the spawn.
+- **Map 44** is **81.5%** at the matching tile with **0 stray cells**. Its "14 trailing tiles" was the same artifact. I had also mis-diagnosed it as a spawn bug ("lands in a decorative band, one walkable tile") — that came from a throwaway diagnostic using the raw ROM entrance (2,29); the real spawn is **(2,21)**, 54 walkable tiles, audit ok.
+- I built a fix for map 44's phantom (capping `bottom` for interiors), measured it, and **threw it away**: it cost ~83 cells across nine real interiors. Measuring before shipping is the only reason that didn't become regression number five.
+
+### Two traps this arc, both now closed in the tools
+- **`OURS-ONLY` is only meaningful when the two captures framed the same place.** `gt-sweep` now computes an alignment-confidence bar (≥60% agreement AND ≥20 agreeing cells) and reports anything below it as *inconclusive* rather than as a defect. Under the old reporting, maps 44 and 122 read as defects; under the new one, 0 maps do.
+- **The room clip is computed ONCE at the spawn and never changes as the player walks** — so the seed tile and the camera tile are different things. `map-shot.mjs` used one parameter for both, which silently rebuilt the clip around wherever you pointed the camera and made a broken renderer and a fixed one look identical. It now takes `--seed` separately from `--at`. With them separated, the revert test is unambiguous: **baseline 7 stray cells on maps 3/15/47, fixed 0, every other count byte-identical.**
 
 ## 1.7.960 — 2026-08-12
 

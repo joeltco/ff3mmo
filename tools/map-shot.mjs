@@ -85,11 +85,21 @@ function calcSpawnY(m, ex, ey) {
   }
   return ey;
 }
+// The room clip is computed ONCE, from the tile the player spawns on, and does
+// not change as they walk. So the seed and the camera are two different things:
+// `--at` moves the CAMERA, `--seed` sets the tile the clip was built from.
+// Passing only `--at` moves both, which hides every clip bug — the clip just
+// gets rebuilt around wherever you looked, and baseline and fixed renderers
+// come out identical.
 let px = md.entranceX, py = calcSpawnY(md, md.entranceX, md.entranceY);
+let seedX = px, seedY = py;
 const at = flag('at', null);
 if (at) { const [a, b] = at.split(',').map(Number); px = a; py = b; }
+const seed = flag('seed', null);
+if (seed) { const [a, b] = seed.split(',').map(Number); seedX = a; seedY = b; }
+else if (at) { seedX = px; seedY = py; }
 
-const r = new MapRenderer(md, px, py);
+const r = new MapRenderer(md, seedX, seedY);
 
 const canvas = createCanvas(CANVAS_W, CANVAS_H);
 const ctx = canvas.getContext('2d');
@@ -124,4 +134,4 @@ zx.imageSmoothingEnabled = false;
 zx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw * ZOOM, sh * ZOOM);
 
 fs.writeFileSync(out, zc.toBuffer('image/png'));
-console.log(`map ${mapId} at tile (${px},${py}) -> ${out}  (${sw}x${sh} view, ${ZOOM}x)`);
+console.log(`map ${mapId} cam (${px},${py}) seed (${seedX},${seedY}) -> ${out}  (${sw}x${sh} view, ${ZOOM}x)`);

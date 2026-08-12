@@ -72,16 +72,30 @@ for (const id of ids) {
     at: (shot.match(/at tile \((\d+),(\d+)\)/) || ['', '?', '?']).slice(1).join(','),
   });
   const r = rows[rows.length - 1];
+  // A trailing-tile count is only meaningful if the two captures actually
+  // landed on the same part of the map. When they do not, "we draw here and
+  // the real game does not" just means the two windows are somewhere else
+  // entirely. Map 122 read as 24 stray cells and 4 agreeing at its spawn;
+  // reframed onto the same tile it is 98.7% identical with ZERO stray cells.
+  // Anything below this bar gets reported as inconclusive, never as a defect.
+  r.confident = r.pct >= 60 && r.agree >= 20;
   console.log(`map ${String(id).padStart(3)}  ${String(r.pct).padStart(5)}%  ` +
               `agree ${String(r.agree).padStart(3)}  differ ${String(r.differ).padStart(3)}  ` +
-              `OURS-ONLY ${String(r.oursOnly).padStart(3)}${r.oursOnly ? '  <-- trailing tiles' : ''}`);
+              `OURS-ONLY ${String(r.oursOnly).padStart(3)}` +
+              (!r.confident ? '   (framing differs — inconclusive)'
+                : r.oursOnly ? '  <-- trailing tiles' : ''));
 }
 
 console.log('\n================ SUMMARY ================');
-const bad = rows.filter(r => r.oursOnly > 0);
+const bad = rows.filter(r => r.oursOnly > 0 && r.confident);
+const unsure = rows.filter(r => !r.note && !r.confident);
 const failed = rows.filter(r => r.note);
 console.log(`${rows.length} maps compared against the real ROM`);
 console.log(`trailing-tile maps (OURS-ONLY > 0): ${bad.length}${bad.length ? ' -> ' + bad.map(r => r.id).join(' ') : ''}`);
+console.log(`inconclusive (captures framed differently): ${unsure.length}` +
+            `${unsure.length ? ' -> ' + unsure.map(r => r.id).join(' ') : ''}`);
+console.log('  re-check one of those with an explicit --at:  ' +
+            'node tools/map-shot.mjs <id> ours.png --full --zoom 1 --nomark --at X,Y');
 
 // READ THIS BEFORE TREATING `agreement %` OR `differ` AS A DEFECT COUNT.
 //
