@@ -18,6 +18,29 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.922 — 2026-08-12
+
+- **Boulder relocated to (90,59) — the map-180 entrance.** That tile is the
+  "weird warp": stepping on it drops the player into a map that walls them in
+  (spawn (19,11), 98-tile pocket, only door at (2,27) in a disconnected region).
+  A live player walked in and got stuck.
+- The original choke at (95,44) stays LIFTED. World map on foot from Ur:
+  **428 tiles, 7 entrances** (10, 18, 31, 95, 111, 114, 151) — one tile and one
+  entrance removed versus v1.7.903's 429/8, nothing else touched. The
+  world-reachability gate in `map-explorable.mjs` still passes.
+- Boulder rendering restored verbatim from the pre-v1.7.903 source via
+  `git show`, rather than retyped — same `_getBoulderCanvas` / `drawOverlay` /
+  `isPassable` block, only the coordinates differ.
+- **This is a stopgap for a bug on OUR side, not a content decision.** We spawn
+  at `entranceX/Y` and the ROM evidently enters these maps elsewhere (v1.7.921).
+  When the real entry coordinates are decoded, the boulder comes back out and
+  map 180 opens properly. Maps 22, 24 and 178 have the same defect but are not
+  reachable on foot, so they need no blocker yet.
+- Root cause of the incident is mine: v1.7.903 opened the world without gating
+  the entrance to a map that `map-explorable.mjs` had flagged as exit-less in
+  that same version. The flag was noted as "worth a warp test" instead of acted
+  on.
+
 ## 1.7.921 — 2026-08-12
 
 - **New: `tools/map-connectivity.mjs`** — floods a map with the REAL
