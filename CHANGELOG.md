@@ -33,6 +33,28 @@ All notable changes to this project are documented here.
 - Prints a map's clip rectangle beside the numbers that produced it (room bbox, `rmaxY`, phase-1 vs final bottom, the three `isEnclosedRoom` inputs) plus an ASCII grid of the clipped area. `MapRenderer` now records those in `_clipDiag`.
 - Every trailing-tile investigation needs exactly this, and rebuilding it ad hoc is how a wrong diagnosis got filed last time — a throwaway script seeded from the raw ROM entrance instead of the computed spawn and reported a room with one walkable tile. It seeds from the spawn the game actually uses.
 
+### Audited — every Kazus building against the real ROM
+Kazus is **map 10**; its doors lead to **11, 12, 14, 15, 16, 17, 101**, and 13 is upstairs from 12. Traced from the door tables, not assumed from the id range — the code comment claiming map 17 was "Kazus's inn" was wrong; the inn is 13.
+
+| map | agreement | verdict |
+|---|---|---|
+| 10 (town) | 79 of our 81 visible cells agree | clean, 0 stray |
+| 11 | 92.4% | clean |
+| 12 | 87.6% | clean |
+| **13 (inn)** | 71.7% → **79.3%** | **fixed this release** |
+| 14 | 85.0% | clean |
+| 15 | 94.0% | clean |
+| 16 | 94.5% | clean |
+| 17 | 94.3% | clean |
+| 101 (Mythril Mines) | inconclusive | renders correctly — verified by eye |
+
+- Every "differ" count on those maps is the same two things: the **top row of our window** (our camera sits at `SCREEN_CENTER_Y + 3`, so the boundary row is 3px out of phase with the tile grid) and the **party sprite** the real game draws and we don't. Rows 1-8 agree cell for cell everywhere.
+- Map 101 is a cave, not a building, and the real capture's camera sits outside our clip so no position aligns — the tool says *inconclusive* instead of inventing a defect. Rendered and looked at it: the fill tile is the crystal rock, so the area beyond the clip is painted, not black.
+
+### Added — `tools/gt-locate.mjs`, the correct way to check one map
+- The emulator's position can't be set, so it holds the real frame fixed and searches **ours**: every walkable camera tile, with the clip seed pinned at the spawn, keeping the position that agrees most. `OURS-ONLY` there is the honest count. Reports LOW CONFIDENCE rather than a defect when nothing aligns.
+- **Verified by reverting on map 13: 8 stray cells reverted, 0 restored**, with `agree`/`differ`/`real-only` identical.
+
 ### Note on finding it
 The v1.7.961 sweep reported map 13 as clean. It wasn't — the stray row only enters the 9-tile window when the camera is near the spawn, and the sweep compared at a camera the real capture never sat at. Locating the real game's camera by grid-searching ours (seed pinned at the spawn) is what exposed it. `--seed` existing separately from `--at` is what made that possible.
 
