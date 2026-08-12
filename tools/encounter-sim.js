@@ -2192,6 +2192,11 @@ const tests = [
         battleSt.battleState = 'ally-magic-hit';
         battleSt.battleTimer = 0;
         battleSt.allyMagicSpellId = spellId;
+        // Same reasoning as the PVP gate: set the tier the pick path would set,
+        // rather than leaving it to whatever a previous test happened to leave
+        // on battleSt.
+        battleSt.allySummonEffect = SUMMON_TIERS.has(spellId)
+          ? resolveSummonEffect(spellId, 17) : null;
         battleSt.allyMagicCasterIdx = 0;
         battleSt.allyMagicTargetType = 'enemy';
         battleSt.allyMagicTargetIdx = 0;
@@ -2233,6 +2238,72 @@ const tests = [
       battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
       battleSt.encounterMonsters = saved.mons; battleSt.isRandomEncounter = saved.rnd;
       battleSt.allyMagicSpellId = saved.sid;
+    }
+  },
+  // Regression — a PVP summon's SFX: the CAPTURED sound, at scene START.
+  //
+  // Mirror of the ally gate, and it matters independently: pvp.js has its own
+  // SFX call site with its own spell lookup, so "the ally path is right" says
+  // nothing about this one. Observed through `getLastImpactSFX()` after driving
+  // the real hit phase — re-deriving the answer here would pass even if the call
+  // site handed over a summon's tiered rewrite, which collapses all eight onto
+  // the neutral fallback (93).
+  () => {
+    const name = 'regression — PVP summon SFX is the captured sound, fired at scene start';
+    const bad = [];
+    const saved = { state: battleSt.battleState, timer: battleSt.battleTimer,
+                    isPvp: pvpSt.isPVPBattle, sid: pvpSt.pvpMagicSpellId,
+                    allies: battleSt.battleAllies };
+    try {
+      const fireAt = (spellId) => {
+        setupEncounter({ monster: { ...goblin, hp: 900, maxHP: 900 }, seed: 4 });
+        ps.hp = 900; ps.maxHP = 900; ps.buffs = {};
+        pvpSt.isPVPBattle = true;
+        pvpSt.pvpMagicSpellId = spellId;
+        // Set the tier exactly as the real pick path does. Nulling it here made
+        // the revert-check vacuous: a call site switched to the tiered object
+        // would find nothing to switch to, and the gate passed the very
+        // regression it exists to catch.
+        pvpSt.pvpSummonEffect = SUMMON_TIERS.has(spellId)
+          ? resolveSummonEffect(spellId, 17) : null;
+        pvpSt.pvpMagicPartyTargetIdx = -1;
+        pvpSt.pvpMagicDamageRoll = 10;
+        pvpSt.pvpMagicEffectApplied = false;
+        pvpSt.pvpMagicSfxPlayed = false;
+        battleSt.battleState = 'pvp-enemy-magic-hit';
+        battleSt.battleTimer = 0;
+        let g = 0;
+        while (!pvpSt.pvpMagicSfxPlayed && g < 5000) {
+          battleSt.battleTimer += 16; g += 16; updatePVPBattle(16);
+        }
+        return { at: pvpSt.pvpMagicSfxPlayed ? g : -1, sfx: getLastImpactSFX() };
+      };
+      for (const id of SUMMON_TIERS.keys()) {
+        const r = fireAt(id);
+        const want = CAPTURED_SPELL_SFX.get(id);
+        if (r.sfx !== want) {
+          bad.push(`PVP cast of 0x${id.toString(16)} played ${r.sfx}, captured ${want}`);
+        }
+      }
+      const summonAt = fireAt(0x30).at;      // Shiva
+      const fireSpellAt = fireAt(0x31).at;   // ordinary Fire, throw timing
+      if (summonAt < 0) bad.push('PVP summon never fired its SFX');
+      else if (summonAt > 64) {
+        bad.push(`PVP summon SFX fired at ${summonAt}ms — a summon's sound belongs at scene start`);
+      }
+      if (fireSpellAt >= 0 && fireSpellAt <= 64) {
+        bad.push(`ordinary PVP Fire SFX fired at ${fireSpellAt}ms — summon timing leaked into every spell`);
+      }
+      if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+      return { pass: true, name,
+        info: `${SUMMON_TIERS.size}/${SUMMON_TIERS.size} summons play their captured sound; `
+            + `summon SFX at ${summonAt}ms vs ordinary Fire at ${fireSpellAt}ms` };
+    } catch (e) {
+      return { pass: false, name, reason: `threw: ${e && e.message ? e.message : String(e)}` };
+    } finally {
+      battleSt.battleState = saved.state; battleSt.battleTimer = saved.timer;
+      pvpSt.isPVPBattle = saved.isPvp; pvpSt.pvpMagicSpellId = saved.sid;
+      battleSt.battleAllies = saved.allies;
     }
   },
 ];
