@@ -94,9 +94,9 @@ export function startMove(dir, isNewPress = false) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
-    // v1.7.903 — nothing artificial blocks the world map any more. The boulder
-    // that sealed (95,44) south of Ur is gone (world-map-renderer.js), so this
-    // is the ordinary "terrain says no" path and nothing else.
+    // (95,44) south of Ur is physically blocked by a boulder overlay
+    // (world-map-renderer.js) — no "Coming Soon!" popup needed. v1.7.505,
+    // restored v1.7.924.
     return;
   }
 

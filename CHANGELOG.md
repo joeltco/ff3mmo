@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.924 — 2026-08-12
+
+### Fixed
+- **The choke boulder is back at (95,44), south of Ur.** v1.7.903 lifted it, v1.7.922 moved it to (90,59) — open desert, not a choke — and v1.7.923 deleted it outright. All three were wrong: the pass out of Ur's valley is the only thing standing between a new player and the unfinished half of the world map.
+- Restored `CHOKE_TILE_X/Y`, `_getBoulderCanvas()`, the real `drawOverlay()` and the `isPassable` hard-block in `src/world-map-renderer.js`, plus the `movement.js` comment that explains why the block has no popup. This is the v1.7.506 code verbatim.
+
+### Added
+- `tools/world-choke.mjs` — enumerates every articulation point on the world map by re-flooding with the REAL `WorldMapRenderer.prototype.isPassable` once per candidate tile. This is what should have been run before v1.7.922 guessed at a location. Results: the ONLY cut separating Ur's valley from the continent is the pass at (95,43)/(95,44)/(95,45); the other cuts are (76-78,51) → map 18 only, (79-81,54-56) → maps 31/151 only, and (95,35) → map 111 only. Nothing guards the map-180 entrance at (90,59), which is why a boulder parked next to it blocked nothing.
+- `--map x0 y0 x1 y1` mode renders the region as ASCII with walls / reachable / cut-off / entrances marked.
+
+### Verified
+- Gate proven in both directions with the same tool: boulder out → **429 tiles, 8 entrances** reachable from Ur; boulder in → **30 tiles, 2 entrances**.
+- `STRANDING_MAPS` in `src/map-triggers.js` (maps 22/24/178/180) is kept as belt-and-braces — those entrances are behind the boulder now, but the refusal costs nothing and survives the next time the choke moves.
+
 ## 1.7.923 — 2026-08-12
 
 - **Boulder removed — it was in open desert, which is not a choke.** Correcting
