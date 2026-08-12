@@ -46,6 +46,70 @@ export class WorldMapRenderer {
     this._initWaterAnimation();
   }
 
+  /**
+   * Atlas of ONLY the metatiles the ROM marks with a priority bit, rendered
+   * with color index 0 transparent so the terrain and the player show through.
+   *
+   * The interior renderer (map-renderer.js) prerenders two FULL-MAP overlay
+   * canvases for this. That is fine at 32x32 tiles (512x512px); on the 128x128
+   * world map it would be two 2048x2048 buffers — ~33MB, which is exactly the
+   * class of boot allocation that was OOM-killing low-memory Android devices.
+   * Only ~30 of the 128 metatiles carry a priority bit, so a strip of just
+   * those is a few KB, and `drawOverlay` redraws the handful that actually
+   * overlap the player each frame.
+   *
+   * Built lazily on first use: a world with no priority tiles never pays.
+   */
+  _getPriorityAtlas() {
+    if (this._prioAtlas !== undefined) return this._prioAtlas;
+    const { metatiles, chrTiles, palettes, tileAttrs, tileProps } = this.data;
+
+    const ids = [];
+    for (let m = 0; m < 128; m++) {
+      const pr = tileProps[m];
+      if (pr && (pr.byte1 & 0x30)) ids.push(m);
+    }
+    if (!ids.length) { this._prioAtlas = null; return null; }
+
+    const slot = new Map();
+    ids.forEach((m, i) => slot.set(m, i));
+    const c = document.createElement('canvas');
+    c.width = ids.length * TILE_SIZE;
+    c.height = TILE_SIZE;
+    const cx = c.getContext('2d');
+    const img = cx.createImageData(8, 8);
+    const data = img.data;
+    const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
+
+    for (const m of ids) {
+      const meta = metatiles[m];
+      const rgbPal = palettes[tileAttrs[m] & 0x03]
+        .map(nesIdx => NES_SYSTEM_PALETTE[nesIdx & 0x3F] || [0, 0, 0]);
+      const chrIndices = [meta.tl, meta.tr, meta.bl, meta.br];
+      for (let q = 0; q < 4; q++) {
+        const tile = chrTiles[chrIndices[q]];
+        if (!tile) continue;
+        for (let py = 0; py < 8; py++) {
+          for (let px = 0; px < 8; px++) {
+            const ci = tile[py * 8 + px];
+            const di = (py * 8 + px) * 4;
+            if (ci === 0) {
+              // Transparent — this is what makes it an OVERLAY rather than a
+              // solid block painted over the player.
+              data[di] = 0; data[di + 1] = 0; data[di + 2] = 0; data[di + 3] = 0;
+            } else {
+              const rgb = rgbPal[ci];
+              data[di] = rgb[0]; data[di + 1] = rgb[1]; data[di + 2] = rgb[2]; data[di + 3] = 255;
+            }
+          }
+        }
+        cx.putImageData(img, slot.get(m) * TILE_SIZE + offsets[q][0], offsets[q][1]);
+      }
+    }
+    this._prioAtlas = { canvas: c, slot };
+    return this._prioAtlas;
+  }
+
   _buildMetatileAtlas() {
     const { metatiles, chrTiles, palettes, tileAttrs } = this.data;
 
@@ -201,7 +265,56 @@ export class WorldMapRenderer {
     return c;
   }
 
-  drawOverlay(ctx, cameraX, cameraY, originX, originY) {
+  /**
+   * Priority (foreground) terrain — the ROM's own occlusion bits, ported from
+   * the interior renderer which has had this since forever. Trees are metatile
+   * $64 (byte1 $2F, U bit set, 520 tiles on the overworld); the player walks
+   * BEHIND the canopy instead of on top of it.
+   *
+   *   0x20 "U" -> the tile redraws over the sprite's BOTTOM 8px
+   *   0x10 "L" -> the tile redraws over the sprite's TOP 8px
+   *
+   * Only tiles overlapping the sprite's own 16x16 box can occlude it, so this
+   * walks at most 4 tiles per frame rather than the visible viewport.
+   */
+  _drawPriorityTerrain(ctx, worldLeft, worldTop, spriteX, spriteY) {
+    const prio = this._getPriorityAtlas();
+    if (!prio) return;
+    const size = this.data.mapWidth;
+    const { tilemap, tileProps } = this.data;
+
+    const x0 = Math.floor((worldLeft + spriteX) / TILE_SIZE);
+    const x1 = Math.floor((worldLeft + spriteX + TILE_SIZE - 1) / TILE_SIZE);
+    const y0 = Math.floor((worldTop + spriteY) / TILE_SIZE);
+    const y1 = Math.floor((worldTop + spriteY + TILE_SIZE - 1) / TILE_SIZE);
+
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const wx = ((tx % size) + size) % size;
+        const wy = ((ty % size) + size) % size;
+        const m = tilemap[wy * size + wx] & 0x7F;
+        const pr = tileProps[m];
+        if (!pr || !(pr.byte1 & 0x30)) continue;
+        const sx = prio.slot.get(m);
+        if (sx === undefined) continue;
+        // U clips to the sprite's lower half, L to its upper half.
+        const clipY = (pr.byte1 & 0x20) ? spriteY + 8 : spriteY;
+        ctx.save();
+        try {
+          ctx.beginPath();
+          ctx.rect(spriteX, clipY, TILE_SIZE, 8);
+          ctx.clip();
+          ctx.drawImage(prio.canvas,
+            sx * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE,
+            tx * TILE_SIZE - worldLeft, ty * TILE_SIZE - worldTop, TILE_SIZE, TILE_SIZE);
+        } finally {
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  drawOverlay(ctx, cameraX, cameraY, originX, originY, spriteX, spriteY) {
     // Draw the choke boulder when it's in view. Mirrors the draw() tile-range
     // walk so map wrapping is handled identically; runs after the player
     // sprite, so the boulder reads as a solid foreground.
@@ -218,6 +331,12 @@ export class WorldMapRenderer {
         if ((((tx % size) + size) % size) !== CHOKE_TILE_X) continue;
         ctx.drawImage(this._getBoulderCanvas(), tx * TILE_SIZE - worldLeft, ty * TILE_SIZE - worldTop);
       }
+    }
+
+    // Terrain that draws in FRONT of the player. `render.js#_drawOverlay`
+    // passes the sprite box; older callers may not, so skip rather than throw.
+    if (spriteX != null && spriteY != null) {
+      this._drawPriorityTerrain(ctx, worldLeft, worldTop, spriteX, spriteY);
     }
   }
 

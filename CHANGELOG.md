@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.942 — 2026-08-12
+
+### Fixed
+- **Overworld trees now hide the player's lower half.** The player used to walk on TOP of forest canopy. The ROM has always encoded this — collision `byte1` bit `0x20` ("U") means the tile redraws over the sprite's bottom 8px, `0x10` ("L") over its top 8px — and `map-renderer.js` has honoured it for interiors since forever. `WorldMapRenderer` simply never implemented the pass. Trees are metatile **$64** (`byte1 $2F`, U bit set), **520 tiles** on the overworld; 52 metatiles carry a priority bit in total.
+- Driven entirely by the ROM's own bits, so no tile list was hand-picked and structures/decorations that should occlude do so for free.
+
+### How — deliberately NOT the interior approach
+- `map-renderer.js` prerenders two FULL-MAP overlay canvases. At 32×32 tiles that's 512×512px and fine; on the 128×128 world map it would be two **2048×2048** buffers (~33 MB) — precisely the class of boot allocation that was OOM-killing low-memory Android devices earlier tonight (v1.7.937/938).
+- Instead: a compact atlas of only the ~52 priority metatiles with color index 0 transparent (**832×16px**, built lazily), and `drawOverlay` redraws just the tiles overlapping the sprite's own 16×16 box — at most 4 per frame, not the viewport.
+
+### Added
+- `tools/check-tree-occlusion.mjs` — drives the real `WorldMapRenderer.drawOverlay` with a recording 2D context and asserts what was drawn and how it was clipped: the ROM marks priority metatiles, $64 has the U bit, hundreds of tree tiles exist, standing on one issues a clipped foreground redraw, the clip is the sprite's BOTTOM half (`y=8,h=8`), plain terrain draws nothing, and the atlas is not a full-map buffer. Wired into `deploy.sh`.
+- **Proven in both directions:** all 7 checks pass with the fix; removing the `_drawPriorityTerrain` call fails exactly the two that matter ("drew NOTHING in front of the player", "no bottom-half clip rect") while the negative checks stay green.
+
 ## 1.7.941 — 2026-08-12
 
 ### Added — update announcements
