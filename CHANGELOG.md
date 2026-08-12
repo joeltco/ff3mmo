@@ -18,6 +18,31 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.937 — 2026-08-12
+
+### Fixed
+- **Fake-player sprites are built lazily, one job at a time.** Boot called `initFakePlayerSprites(rom, [0..21])`, building all 22 jobs synchronously before the title screen. Measured with a canvas-counting stub against the real module:
+
+| boot path | canvases allocated | RGBA backing |
+|---|---|---|
+| old — all 22 jobs | **17,776** | ~20.9 MB |
+| new — local job only | **808** | ~0.9 MB |
+
+  17,776 canvas *elements* in one synchronous burst, each costing far more than its pixel buffer in browser object + GPU texture overhead. That is what killed an Android 10 / Chrome 151 renderer: the boot stage recorder reported `DIED-AT stage=initSpriteAssets` with no throw and no `launch-failed` beacon, the signature of an OOM kill rather than an exception.
+- These canvases draw OTHER players — roster rows, PvP opponents, AI allies. None is needed to reach the title screen, and `PLAYER_POOL` ships empty by default, so most of the work was for jobs nobody would ever see.
+
+### How
+- Each exported dict in `fake-player-sprites.js` is now a `Proxy` that builds its job on first numeric access, so **no call site changed** — consumers keep writing `fakePlayerPortraits[jobIdx]` and cannot forget to warm a job. The alternative (an explicit `ensureJob()` at every site that introduces a player) risks missing one, and a miss is a silently missing sprite.
+- `_ensureJob` marks a job built BEFORE building it, so a throwing job can't retry on every read and turn one bad job into a per-frame stall. Writes go to the backing objects, never the proxies, so populating can't re-enter the get trap.
+- `boot.js` warms only `ps.jobIdx`, so the first frame that draws the local player doesn't pay for it mid-render.
+
+### Verified
+- Against the real module behind a canvas stub: nothing builds at import; reads before the ROM is registered are safe and build nothing; `init(rom, [0])` builds exactly 1 job and produces portraits; **reading job 7 builds it on demand**; 50 repeat reads rebuild nothing; non-numeric props pass through without triggering a build.
+- Full `pvp-wire-sim`: 153 passed, 0 failed. Smoke OK.
+
+### Notes
+- Entering the module graph at `fake-player-sprites.js` directly throws a TDZ error in `combatant-pose.js` (import cycle). **Pre-existing** — verified identical on the previous version — and not introduced here; the app enters via `main.js`, which resolves the cycle. Left alone rather than fixed blind.
+
 ## 1.7.936 — 2026-08-12
 
 ### Diagnosis — the crash is located

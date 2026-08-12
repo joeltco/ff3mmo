@@ -73,9 +73,17 @@ export function initSpriteAssets(rom) {
   setStage('sa:battleSpriteCache');
   initBattleSpriteCache();
 
-  // Fake player portraits & full bodies — keyed by jobIdx
-  setStage('sa:fakePlayerSprites-22jobs');
-  initFakePlayerSprites(rom, Array.from({ length: 22 }, (_, i) => i));
+  // Fake player portraits & full bodies — keyed by jobIdx.
+  //
+  // v1.7.937 — was `Array.from({ length: 22 }, (_, i) => i)`, i.e. every job
+  // built here, synchronously, before the title screen. That is thousands of
+  // canvases for OTHER players' roster/PvP sprites, and it OOM-killed the
+  // renderer on an Android 10 device (`DIED-AT stage=initSpriteAssets`).
+  // Everything else builds on first access — see fake-player-sprites.js. Only
+  // the local player's job is warmed here, so the first frame that draws the
+  // player doesn't pay for it mid-render.
+  setStage('sa:fakePlayerSprites');
+  initFakePlayerSprites(rom, [ps.jobIdx | 0]);
 
   setStage('sa:roster');
   initRoster();
