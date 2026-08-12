@@ -18,6 +18,37 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.903 — 2026-08-12
+
+- **Lifted the choke south of Ur.** A boulder hard-blocked world tile (95,44) in
+  `WorldMapRenderer#isPassable` and drew a foreground sprite over it, sealing the
+  valley off from the rest of the world "until that world-map content ships"
+  (v1.7.503). It was the ONLY artificial barrier on the world map — every other
+  entrance already resolves its destination from ROM tile props — so removing
+  one tile takes the overworld from 2 reachable entrances to 8.
+- Removed the now-orphaned `boulder-sprite` import plus `decodeTile`/`drawTile`,
+  each of which had exactly one occurrence left (the import line). `drawOverlay`
+  stays as a no-op: `render.js#_drawOverlay` calls it unconditionally on
+  whichever renderer is active, so deleting it would throw on the world map.
+  `src/data/boulder-sprite.js` is left in place — captured ROM art doesn't get
+  deleted because its one caller went away.
+- **New: `tools/map-explorable.mjs`.** Flood-fills every reachable map from its
+  entrance and reports maps that spawn in a wall, have nowhere to walk, or have
+  no live exit from the spawn region. The world-map leg calls the REAL
+  `WorldMapRenderer.prototype.isPassable` through a headless stub rather than a
+  reimplementation, specifically so restoring the choke fails it — a copy would
+  keep reporting the world as open. Threshold set from measurement: 429 tiles /
+  8 entrances open, 30 tiles / 2 entrances choked, gate at 6.
+- **New: `tools/map-coverage.mjs`.** Per-map content coverage (name/shop/npc/
+  loot). It crashes on a missing export instead of printing a confident "0 /
+  171" — two of its own columns were wrong on the first run, because a table
+  that doesn't exist and a table that's empty look identical.
+- **Not fixed, and it's the bigger half:** only 8 of 27 overworld entrances are
+  reachable on foot. The other 19 sit behind water and mountains — FF3 gates its
+  world with a canoe, ship and airship, none of which exist here. Lifting the
+  choke opened everything walkable; the rest needs vehicles, not another
+  barrier removal.
+
 ## 1.7.902 — 2026-08-12
 
 - **Fixed the pvp-wire-sim flake that had been aborting deploys.** It presented
