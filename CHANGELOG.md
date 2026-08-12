@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.960 — 2026-08-12
+
+### Reverted the room mask again — and found why my verification was worthless
+- **The game draws a 144x144 window — NINE tiles by nine — centred on the player** (`HUD_VIEW_W/H` in `render.js`). Every "verified by rendering" claim I made in this arc was a picture of the **32x32 tilemap**, which the player never sees. That is how four bad room-clip changes shipped with confidence attached.
+- Mask off. Back to the rectangular clip that has shipped for months.
+
+### Added — `tools/map-shot.mjs`, the first tool here that shows the real thing
+- Drives `MapRenderer.draw()` against a REAL canvas (`@napi-rs/canvas`) using `render.js`'s own camera math (`camX/camY` = player pixels, `originX = SCREEN_CENTER_X`, `originY = SCREEN_CENTER_Y + 3`), clipped to the HUD view, and writes the 144x144 frame.
+- It also spawns where the GAME spawns (mirrors `_calcSpawnY`) rather than at the raw ROM entrance. My first version shot the raw entrance — a tile the player never stands on — which is the same class of error as everything else in this arc.
+
+### Standing assessment
+- The rectangular clip's known flaw is a strip of a neighbouring room on shared tilemaps. Every replacement I tried was worse: v1.7.953 cut town scenery, v1.7.954 tore Kazus apart, v1.7.957 shaved room walls, v1.7.959 left the houses wrong.
+- **I am not attempting a fifth fix from inference.** The next step is a ground-truth diff against the real ROM in an emulator (jsnes is already vendored in `lib/`), so "what should this room look like" stops being my opinion.
+
 ## 1.7.959 — 2026-08-12
 
 ### Room rendering — fourth attempt, and the first with the right definition

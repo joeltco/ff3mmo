@@ -375,7 +375,13 @@ export class MapRenderer {
     // Every mask attempt has produced a WORSE, more visible one. Not shipping a
     // fourth guess at this: it needs a definition of the room's true extent
     // (its full wall band, not a 1-tile dilation), which I do not have yet.
-    this._visibleMask = isEnclosedRoom ? mask : null;
+    // v1.7.960 — OFF again. Four attempts, four regressions. I have been
+    // judging these by rendering the 32x32 tilemap, but the game draws a
+    // 144x144 (9x9 tile) window — I was reviewing an image the player never
+    // sees. Until I can diff against the REAL game (jsnes + the ROM), I am not
+    // shipping another guess at what a room should look like.
+    void isEnclosedRoom; void mask;
+    this._visibleMask = null;
 
     this._roomClip = {
       x: l * TILE_SIZE,
