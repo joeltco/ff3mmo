@@ -18,6 +18,30 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.911 — 2026-08-12
+
+- **The `$99xx` pointers were never real — I was reading the wrong bank.**
+  `$FF03` → `$FF17` sets BOTH MMC3 slots: `JSR $FF0C` puts bank A in R6
+  ($8000-$9FFF), then `ADC #$01` and R7 puts bank **A+1** in $A000-$BFFF. So
+  `LDA #$2C / JSR $FF03` maps $2C at $8000 **and $2D at $A000**. The pointer
+  table ($8880) is in $2C; the scripts it points at ($A1xx) are in **$2D**.
+  Reading both from $2C produced the "list of $99xx pointers" and the nonsense
+  "54 conditions" — the block was never an indirection level.
+- **Read from $2D, the scripts parse cleanly** and match the `$3C/931B`
+  evaluator exactly: each event is a conditional record (condition bytes, `$FF`,
+  result byte) followed by a terminator record. Event 0 is
+  `D0 3F FF 10 FF 00` — two conditions, result `$10`.
+- Result codes run **sequentially with event id** — event 0 → `$10`, 1 → `$11`,
+  2 → `$12`, … 8 → `$19` — so `$6C` receives an index for what the event does,
+  not an opaque status.
+- Events **share suffixes**: event 1's pointer is event 0's + 6, and event 1's
+  bytes are event 0's tail. A failing record falls through into the next event's
+  chain, which is why the table is packed this way.
+- `tools/event-dump.mjs` corrected to the two-bank layout; its PROVISIONAL
+  warning is replaced by the verified format.
+- Still unmapped, and the honest remaining gap: what the `$6C` result code
+  actually DOES. That is the last hop before events can be implemented.
+
 ## 1.7.910 — 2026-08-12
 
 - **Event system: dispatch chain decoded end to end; script data format NOT yet

@@ -23,14 +23,11 @@
 //   result byte stored to $6C and the evaluator returns. $FF followed by the
 //   result is also the terminator of the whole script.
 //
-// CONTROL FLOW above is disassembled and solid. The DATA interpretation is
-// NOT yet confirmed: dumping event 12 gives
-//   FA 98 FF 98 0C 99 2D 99 32 99 43 99 43 99 43 99 ...
-// and that repeating `43 99` reads much more like a list of little-endian
-// $99xx POINTERS than like condition bytes, which would mean the 64-byte block
-// is another indirection level rather than the script itself. The record split
-// below is therefore PROVISIONAL — it is what $3C/931B does to the bytes, not a
-// claim about what the bytes mean. Confirm before building on it.
+// v1.7.911 — reading the scripts from bank $2D (see below) makes them parse as
+// records with $FF terminators and small result codes, matching the evaluator.
+// Events also SHARE SUFFIXES: event 1's pointer is event 0's + 6, and event 1's
+// bytes are event 0's tail, so a failing record falls through into the next
+// event's chain. The result-code semantics ($6C) are still unmapped.
 //
 //   node tools/event-dump.mjs            # pointer table + record structure
 //   node tools/event-dump.mjs 12         # one event, raw bytes + parse
@@ -41,7 +38,14 @@ import fs from 'node:fs';
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
 
-const EVENT_BANK = 0x2C;
+// $FF03 -> $FF17 sets BOTH MMC3 slots: R6 = bank A at $8000-$9FFF and
+// R7 = bank A+1 at $A000-$BFFF. So `LDA #$2C / JSR $FF03` maps $2C at $8000
+// AND $2D at $A000. The pointer table ($8880) is in $2C; the scripts it points
+// at ($A1xx) are in $2D. Reading both from $2C is what made the script bytes
+// look like a list of $99xx pointers and produced nonsense like "54
+// conditions" — the block was never a pointer list, it was the wrong bank.
+const PTR_BANK   = 0x2C;
+const DATA_BANK  = 0x2D;
 const PTR_TABLE  = 0x8880;                 // in the $8000 window of bank $2C
 const bankOff = (bank, addr) => bank * 0x2000 + 0x10 + (addr >= 0xA000 ? addr - 0xA000 : addr - 0x8000);
 const MASKS = () => {                       // $3C/935A, low-3-bits mask table
@@ -52,14 +56,14 @@ const MASKS = () => {                       // $3C/935A, low-3-bits mask table
 const hex2 = v => v.toString(16).toUpperCase().padStart(2, '0');
 
 export function eventPointer(id) {
-  const off = bankOff(EVENT_BANK, PTR_TABLE) + id * 2;
+  const off = bankOff(PTR_BANK, PTR_TABLE) + id * 2;
   return rom[off] | (rom[off + 1] << 8);
 }
 
 /** The 64 bytes the ROM copies to $7B00 for this event. */
 export function eventBytes(id) {
   const ptr = eventPointer(id);
-  const off = bankOff(EVENT_BANK, ptr);
+  const off = bankOff(DATA_BANK, ptr);
   return Array.from(rom.slice(off, off + 64));
 }
 
@@ -99,7 +103,7 @@ const one = args.find(a => /^\d+$/.test(a));
 if (one != null) {
   const id = parseInt(one, 10);
   const p = parseEvent(id);
-  console.log(`event ${id}  script at bank $2C:$${p.ptr.toString(16).toUpperCase()}  (ROM 0x${bankOff(EVENT_BANK, p.ptr).toString(16)})`);
+  console.log(`event ${id}  script at bank $2C:$${p.ptr.toString(16).toUpperCase()}  (ROM 0x${bankOff(DATA_BANK, p.ptr).toString(16)})`);
   if (RAW) console.log('raw 64B: ' + eventBytes(id).map(hex2).join(' '));
   p.records.forEach((r, i) => {
     console.log(`  record ${i}: result $${hex2(r.result)}`);
