@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.894 — 2026-08-11
+
+**Audited the other 46 gates for the fixture problem. One real find — in the runner itself.**
+
+**`--filter` was fake isolation.** encounter-sim called `t()` for EVERY test and applied the filter only to the *reporting*, because a test's name is known only from its result. So `--filter=summon` ran all 46 gates and printed one. Anyone using it to ask "does this gate pass on its own?" got a confident, misleading yes — every earlier gate had still executed and still left its state behind. That is the same shape as the v1.7.893 fixture bug one level up: a tool that appears to isolate and does not.
+
+Added `--only=N`, which skips by INDEX — known before execution, so it genuinely does not run the others.
+
+**With real isolation available, the residue question is answerable: all 46 gates pass alone.** None depends on leftover state to pass. (Note what this does and does not prove: it rules out gates that *need* residue to go green, not gates whose revert-catching depends on it — which is what v1.7.893's ally gate did, and why it took a revert to find.)
+
+**Fixture-disarms-hazard, the class being audited for:** the only genuine cases were the two SFX gates already fixed in v1.7.893. Everything else that nulls state is a required reset — `*EffectApplied = false` must start false or the state machine never runs — or is the assertion itself, as in the pick gate that nulls `allySummonEffect` precisely to prove the pick sets it.
+
+**A signature that turned out to be worthless.** I flagged 8 gates for "hardcoded ids alongside a lookup" as possible rule re-statement. Reading the strongest candidate — quest items — it is the exact opposite: those ids are a deliberate anti-vacuity pin, carrying the comment *"Looping the type set alone passes vacuously if someone empties QUEST_ITEM_TYPES — which is exactly what the first version of this gate did."* Hardcoding can be the fix as easily as the symptom, so the pattern distinguishes nothing on its own.
+
+**`pvp-wire-sim`'s filter is correct** — `test(name, fn)` takes the name as a parameter and returns before running the body. The structural difference is why encounter-sim's was broken and this one is not.
+
+**Mutation sample.** Three production reverts, each caught: breaking `normalizeGrip` (2 gates), making a key item sellable (1), loosening the dungeon passability set (1).
+
+**Not audited, stated rather than implied:** the body parser matched 35 of 46 gates (the other 11 name themselves inline), so the pattern scan covered about three quarters. Revert-sensitivity was SAMPLED at three mutations, not proven for all 46 — the honest claim is "no further instances of this class found", not "no further instances exist".
+
+Gates: lint 0, encounter-sim 46, pvp-wire-sim 140, wire-stats lossless.
+
 ## 1.7.893 — 2026-08-11
 
 **PVP summon SFX swept clean — and the ally gate shipped one version ago turns out to have caught its revert by luck.**

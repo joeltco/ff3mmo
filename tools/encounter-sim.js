@@ -2314,10 +2314,23 @@ const args = new Set(process.argv.slice(2));
 const filter = [...args].find(a => a.startsWith('--filter='));
 const pat = filter ? filter.slice('--filter='.length).toLowerCase() : null;
 
+// `--only=N` runs ONLY test N (0-based) and skips executing the rest.
+//
+// `--filter=` cannot do this: a test's name is only known from its RESULT, so
+// the filter is applied AFTER `t()` has already run. That is fine for reading
+// output but useless for isolation — every earlier test still executes and
+// still leaves its state behind. Anyone using --filter to ask "does this gate
+// pass on its own?" gets a misleading yes. Index is known up front, so --only
+// can genuinely skip.
+const onlyArg = [...args].find(a => a.startsWith('--only='));
+const only = onlyArg ? parseInt(onlyArg.slice('--only='.length), 10) : null;
+
 let passed = 0, failed = 0;
 const failures = [];
 
-for (const t of tests) {
+for (let ti = 0; ti < tests.length; ti++) {
+  const t = tests[ti];
+  if (only !== null && ti !== only) continue;
   let result;
   try {
     result = t();
