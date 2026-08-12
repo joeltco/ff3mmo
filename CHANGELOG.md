@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.956 — 2026-08-12
+
+### Fixed — Kazus rendered as fragments. My regression, from v1.7.953/954.
+- **The per-tile visibility mask (v1.7.954) is DISABLED, and the room-bbox clamp (v1.7.953) is reverted.** Both narrowed what gets drawn to the walkable area plus a ring. That is right for a small interior room and **wrong for a town**: a town's buildings, trees and scenery sit OUTSIDE the walkable tiles and are most of the picture. Kazus came apart.
+- The clip rect is now the **union** of Phase 1's box (what towns have looked right under for months) and the z-aware room's box — it can only ever grow. Drawing a little extra is cosmetic; drawing too little deletes the town.
+
+### Removed — an invariant that was simply wrong
+- `check-room-clip.mjs`'s second assertion ("the clip must not extend past the room", added v1.7.953) is gone. Enforcing it is what clamped the clip down in the first place. Towns legitimately need to draw beyond the walkable area. The remaining invariant is the one that protects the player: **every tile you can walk to must be painted** — still green on all 256 maps.
+
+### Kept — `isPassable` is now PURE (v1.7.955)
+- It no longer mutates `_playerZ` as a side effect of being asked whether a tile is walkable, so the answer no longer depends on the order of the questions. `zAfterEntering(x, y, z)` returns the resulting level and `commitZ(x, y)` is the only writer; `movement.js` commits after a move is accepted.
+- Reachability floods now carry z per node — the search state is (x, y, z), because the same tile can be enterable from one level and blocked from another. This removed the map-146 exemption the gate previously needed.
+
+### Cost of this arc, recorded
+- v1.7.953 fixed the inn's trailing tiles by clamping the clip, and in doing so started cutting town scenery. v1.7.954 made it far worse with a hard mask. Both shipped because the gate I had only checked "is anything missing that you can walk on" — scenery you CANNOT walk on was invisible to it, and that is exactly what a town is made of. The inn's trailing tiles remain unfixed; a correct fix has to distinguish an interior room from a town overworld, which neither attempt did.
+
 ## 1.7.954 — 2026-08-12
 
 ### Fixed — the off-by-one row in the inn

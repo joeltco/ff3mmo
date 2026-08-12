@@ -101,6 +101,12 @@ export function startMove(dir, isNewPress = false) {
     return;
   }
 
+  // v1.7.955 — `isPassable` is PURE now; it no longer updates the player's
+  // z-level as a side effect of being asked. The move is accepted at this
+  // point, so commit the level change here. Indoor maps only — the world map
+  // has no z-levels and its renderer has no commitZ.
+  if (renderer && typeof renderer.commitZ === 'function') renderer.commitZ(tileX, tileY);
+
   sprite.setDirection(dir);
   mapSt.moving = true;
   moveStartX = mapSt.worldX;

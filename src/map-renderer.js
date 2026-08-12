@@ -221,16 +221,28 @@ export class MapRenderer {
     // matched neither: the trim silently did nothing on the maps that needed it
     // and ate real room on the maps that didn't. Flood once, here, with the
     // real `isPassable` — every field it reads is assigned before this runs.
+    // Flood carrying the z-level per node. Reachability genuinely depends on
+    // which level you arrive at — the same tile can be enterable from z=1 and
+    // blocked from z=2 — so the search state is (x, y, z), not (x, y). With the
+    // old mutating `isPassable` this was impossible to express, which is why
+    // two floods in different orders disagreed.
+    const startZ = this._playerZ;
     const roomSet = new Set([startY * MAP_SIZE + startX]);
     {
-      const fq = [[startX, startY]];
+      const seenState = new Set([(startY * MAP_SIZE + startX) * 4 + startZ]);
+      const fq = [[startX, startY, startZ]];
       while (fq.length) {
-        const [cx, cy] = fq.pop();
+        const [cx, cy, cz] = fq.pop();
         for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-          const nx = cx + dx, ny = cy + dy, k = ny * MAP_SIZE + nx;
-          if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE || roomSet.has(k)) continue;
-          if (!this.isPassable(nx, ny)) continue;
-          roomSet.add(k); fq.push([nx, ny]);
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) continue;
+          if (!this.isPassable(nx, ny, cz)) continue;
+          const nz = this.zAfterEntering(nx, ny, cz);
+          const st = (ny * MAP_SIZE + nx) * 4 + nz;
+          if (seenState.has(st)) continue;
+          seenState.add(st);
+          roomSet.add(ny * MAP_SIZE + nx);
+          fq.push([nx, ny, nz]);
         }
       }
     }
@@ -257,11 +269,27 @@ export class MapRenderer {
       if (y < rminY) rminY = y;
       if (y > rmaxY) rmaxY = y;
     }
+    // v1.7.955 — the rect is now simply the MASK's bounding box. It used to be
+    // derived from Phase 1's walk and merely clamped toward the room, which can
+    // only ever shrink: once the z-aware flood found map 146's real 200-tile
+    // room, the old rect was too SMALL and 80 walkable tiles fell outside the
+    // drawn area. The mask decides what is painted; the rect only has to
+    // contain it.
+    // v1.7.956 — UNION, never intersection.
+    //
+    // Clamping the rect down to the walkable room cut a town's scenery: a
+    // town's buildings, trees and decoration sit OUTSIDE the walkable tiles and
+    // are most of the picture. Kazus rendered as scattered fragments. So the
+    // rect is now the union of Phase 1's box (which towns have looked right
+    // under for months) and the z-aware room's box — it can only ever grow.
+    //
+    // Drawing a little extra is a cosmetic flaw. Drawing too little deletes the
+    // town. When the two disagree, err toward drawing more.
     if (rmaxX >= 0) {
-      top    = Math.max(top,    Math.max(0, rminY - 1));
-      bottom = Math.min(bottom, Math.min(MAP_SIZE, rmaxY + 2));
-      left   = Math.max(left,   Math.max(0, rminX - 1));
-      right  = Math.min(right,  Math.min(MAP_SIZE, rmaxX + 2));
+      top    = Math.min(top,    Math.max(0, rminY - 1));
+      bottom = Math.max(bottom, Math.min(MAP_SIZE, rmaxY + 2));
+      left   = Math.min(left,   Math.max(0, rminX - 1));
+      right  = Math.max(right,  Math.min(MAP_SIZE, rmaxX + 2));
     }
     let l = left, r = right;
 
@@ -283,7 +311,13 @@ export class MapRenderer {
         }
       }
     }
-    this._visibleMask = mask;
+    // v1.7.956 — MASK DISABLED. It clipped away everything outside the
+    // walkable area plus one ring, which is right for a small interior room and
+    // WRONG for a town: a town's buildings, trees and scenery sit outside the
+    // walkable tiles and are most of the picture. Kazus (map 10) rendered as
+    // scattered fragments. Kept the computation for reference; nothing reads it.
+    this._visibleMask = null;
+    void mask;
 
     this._roomClip = {
       x: l * TILE_SIZE,
@@ -577,7 +611,12 @@ export class MapRenderer {
     return isBedTileId(this.mapData.tileset, id);
   }
 
-  isPassable(tileX, tileY) {
+  /**
+   * Can the player stand on (tileX, tileY) while on z-level `z`?
+   * PURE — no state is written. Pass an explicit `z` to reason about a
+   * hypothetical position (map tools do); omit it for the live player.
+   */
+  isPassable(tileX, tileY, z = this._playerZ) {
     if (tileX < 0 || tileX >= MAP_SIZE || tileY < 0 || tileY >= MAP_SIZE) {
       return false;
     }
@@ -660,34 +699,45 @@ export class MapRenderer {
       return false;
     }
 
-    // Z-level passability (matches NPC check at 3B/B0C5)
+    // Z-level passability (matches NPC check at 3B/B0C5).
+    //
+    // v1.7.955 — PURE. This used to MUTATE `this._playerZ` as a side effect of
+    // asking "can I stand here", which made the answer depend on the order the
+    // question was asked. Two floods over the same map in different orders
+    // walked different z-levels and disagreed — that is what left 13 maps
+    // measuring as drawing another room's floor, and it forced an exemption in
+    // `check-room-clip.mjs`. The z now comes in as an argument and the new z
+    // goes out through `zAfterEntering`; only `commitZ` writes state.
     const lower3 = collByte & 0x07;
+    if (lower3 === 0) return true;        // flat ground — always fine
+    if (lower3 >= 4) return true;         // bridge — passable, z unchanged
+    if (lower3 === 3) return false;       // both z-bits — solid
+    return (lower3 | z) !== 3;            // z conflict blocks
+  }
 
-    // All zero: passable, reset z-level
-    if (lower3 === 0) {
-      this._playerZ = 0;
-      return true;
-    }
+  /**
+   * The z-level the player would be on after entering (tileX, tileY) from `z`.
+   * Mirrors `isPassable`'s rules exactly; returns `z` unchanged when the tile
+   * doesn't move the player between levels.
+   */
+  zAfterEntering(tileX, tileY, z = this._playerZ) {
+    if (tileX < 0 || tileX >= MAP_SIZE || tileY < 0 || tileY >= MAP_SIZE) return z;
+    const metatileId = this.mapData.tilemap[tileY * MAP_SIZE + tileX];
+    const m = metatileId < 128 ? metatileId : metatileId & 0x7F;
+    const collByte = this.mapData.collision[m];
+    if (collByte & 0x80) return z;        // trigger tiles don't change level
+    const lower3 = collByte & 0x07;
+    if (lower3 === 0) return 0;           // flat ground resets to level 0
+    if (lower3 >= 4) return z;            // bridge keeps the current level
+    if (lower3 === 3) return z;           // solid — never entered
+    const combined = lower3 | z;
+    return combined === 3 ? z : combined;
+  }
 
-    // Bridge bit set (>= 4): passable, no z-level change
-    if (lower3 >= 4) {
-      return true;
-    }
-
-    // Both z-bits set: always impassable
-    if (lower3 === 3) {
-      return false;
-    }
-
-    // Check z-level conflict: tile_zz OR player_z == 3 means blocked
-    const combined = lower3 | this._playerZ;
-    if (combined === 3) {
-      return false;
-    }
-
-    // Passable — update z-level
-    this._playerZ = combined;
-    return true;
+  /** Commit the player's z after an accepted move. The ONLY writer of state. */
+  commitZ(tileX, tileY) {
+    this._playerZ = this.zAfterEntering(tileX, tileY);
+    return this._playerZ;
   }
 
   _initWaterAnimation() {
