@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.945 — 2026-08-12
+
+### Fixed
+- **New players were being fed to tier-2 monsters on their first steps out of Ur.** The safe encounter zone was a hard-coded box (x 93-96, y 34-44) sized for the world as it existed BEFORE v1.7.903 lifted the choke. Nothing failed when the world grew — the box just silently stopped covering it. Measured: **236 of the 267 tiles reachable from Ur fell outside it** and rolled `grasslands_wild` — Killer Bees and Werewolves at rate `'high'` (2x). `encounters.js` itself records that an L1 party survives werewolf x4 only **6.5%** of the time.
+- Replaced with a radius around Ur's overworld entrance (95,41), so the safe region follows the town instead of going stale the next time the world opens up. Radius 8 covers the **Ur ↔ Altar Cave** corridor — the cave entrance is 7 tiles away — which is the loop a new character actually runs.
+- Coverage now: **83 of 267 reachable tiles** safe (was 31), both starter entrances (Ur 114, Altar Cave 111) inside it, everything beyond still tier-2.
+
+### On the ROM
+- Checked whether the ROM carries encounter regions before hand-authoring. World `tileProps.byte2` is a small enumeration (0-5) on non-trigger metatiles and does look like a terrain class — but it does not encode difficulty: class $0 appears both adjacent to Ur and 20 tiles south. So terrain alone can't drive tiering, and the safe-zone shape is a design call, not a ROM fact. Recorded here rather than dressed up as ROM-derived.
+
+### Added
+- `tools/check-encounter-zones.mjs` — asserts both zones exist, Ur's own tile is safe, every starter-loop entrance (Ur, Altar Cave) is safe, the safe zone covers a real fraction of the reachable world, and it spawns Goblins only. Wired into `deploy.sh`.
+- **Proven in both directions:** passes now; restoring the old box fails on coverage (31/267, 12%) — which is exactly the silent staleness that had no gate before.
+
 ## 1.7.944 — 2026-08-12
 
 ### Fixed

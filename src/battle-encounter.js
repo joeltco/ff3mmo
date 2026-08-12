@@ -37,12 +37,33 @@ export function initBattleEncounter({ resetBattleVars, tryJoinPlayerAlly }) {
 // patch); otherwise the current Altar Cave floor. Exported for
 // map-triggers.js so the chest-mimic claim can ship the same zoneKey
 // the server's `_LOC_ZONE_ALLOWLIST` gate expects (v1.7.804).
+// Ur's overworld entrance, and how far its safe encounter zone reaches.
+// Kept next to the lookup that uses them so the two can't drift.
+const UR_WORLD_X = 95;
+const UR_WORLD_Y = 41;
+const SAFE_RADIUS = 8;
+
 export function currentEncounterZoneKey() {
   if (mapSt.onWorldMap) {
     const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
     const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
-    const inValley = tileX >= 93 && tileX <= 96 && tileY >= 34 && tileY <= 44;
-    return inValley ? 'grasslands_valley' : 'grasslands_wild';
+    // Safe starter region around Ur — goblins only.
+    //
+    // v1.7.945 — was a hard-coded box (x 93-96, y 34-44) sized for the world as
+    // it existed before v1.7.903 lifted the choke. Measured after: 236 of the
+    // 267 tiles reachable from Ur fell OUTSIDE that box and therefore rolled
+    // `grasslands_wild` — Killer Bees and Werewolves at rate 'high' (2x). The
+    // encounters table itself records that an L1 party survives werewolf x4
+    // only 6.5% of the time, so a new player leaving town was being fed to
+    // tier-2 monsters on their first few steps.
+    //
+    // A radius around Ur rather than a box: it follows the town wherever the
+    // reachable area grows, instead of silently going stale the next time the
+    // world opens up. 8 covers the Ur <-> Altar Cave corridor (the cave
+    // entrance is 7 tiles away), which is the loop a new character actually
+    // runs before they have the levels for anything else.
+    const d = Math.max(Math.abs(tileX - UR_WORLD_X), Math.abs(tileY - UR_WORLD_Y));
+    return d <= SAFE_RADIUS ? 'grasslands_valley' : 'grasslands_wild';
   }
   if (mapSt.encounterPatch && mapSt.encounterPatchZone) return mapSt.encounterPatchZone;
   return ['altar_cave_f1', 'altar_cave_f2', 'altar_cave_f3', 'altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1';
