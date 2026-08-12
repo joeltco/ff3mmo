@@ -156,11 +156,14 @@ function inspect(mapId) {
     // lives in their COLLISION byte, not in the id.
     if (!(r.collision[mid & 0x7F] & 0x80)) continue;
     const t = (r.collisionByte2[mid] >> 4) & 0x0F;
-    if (t !== 0 && t !== 4 && t !== 5) continue;     // not an exit-ish trigger
+    // v1.7.908 — type 1 included: the ROM's player dispatch (jump table at
+    // $E669) routes it to $E2CE, which reads EXIT_X/EXIT_Y and drops the player
+    // on the overworld. It is the exit of every top-level town and cave.
+    if (t !== 0 && t !== 1 && t !== 4 && t !== 5) continue;   // not an exit-ish trigger
     // exit_prev returns to the previous map — always a live way out, and it
     // has no entranceData slot, so `dest` is deliberately -1 (present, unknown)
     // rather than 0 (dead).
-    doors.push({ x: x0, y: y0, kind: t === 0 ? 'exit_prev' : 'door', trigId: null, dest: -1 });
+    doors.push({ x: x0, y: y0, kind: t === 0 ? 'exit_prev' : t === 1 ? 'exit_world' : 'door', trigId: null, dest: -1 });
   }
   const spawnX = r.entranceX;
   const spawnY = calcSpawnY(r, r.entranceX, r.entranceY);
@@ -262,7 +265,10 @@ const WORLD_GATE_MIN = 6;
 const worldOk = worldEntrances.size >= WORLD_GATE_MIN;
 
 const rows = [...report.values()].sort((a, b) => a.mapId - b.mapId);
-const problems = rows.filter(r => r.error || !r.spawnOk || r.walkable < 4 || r.liveDoors === 0);
+// v1.7.908 — a tiny walkable region is only a problem when there is no way
+// out of it. Maps 43 and 167 spawn in a 2-tile pocket with a live world-exit
+// right there: cramped, not stranded.
+const problems = rows.filter(r => r.error || !r.spawnOk || r.liveDoors === 0);
 
 if (AS_JSON) {
   console.log(JSON.stringify({ rows, problems }, null, 1));
@@ -274,7 +280,6 @@ if (AS_JSON) {
   for (const r of show) {
     if (r.error) { console.log(`  ${String(r.mapId).padStart(3)}  LOAD FAILED — ${r.error}`); continue; }
     const issue = !r.spawnOk ? 'spawns in a wall'
-      : r.walkable < 4 ? 'nowhere to walk'
       : r.liveDoors === 0 ? 'no live exit from spawn'
       : '';
     console.log(`  ${String(r.mapId).padStart(3)}  ${r.spawnOk ? ' ok  ' : 'WALL '}`

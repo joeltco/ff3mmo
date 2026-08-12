@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.908 — 2026-08-12
+
+- **Collision trigType 1 = EXIT TO THE WORLD MAP.** Pulled from the ROM, not
+  guessed. The player's tile dispatch is a jump table at $E669 indexed by the
+  byte2 high nibble (`3F/83D0`: `LDA $45 / LSR x4 / ASL / TAX / JMP ($0080)`).
+  Type 1's handler ($E68F) stashes $C0 in $AB; the deferred executor at $E2CE
+  does `LDA $0730 / AND #$3F / TAX`, then reads `$8880,X` and `$88C0,X` — ROM
+  0x000890 / 0x0008D0, already named `EXIT_X_TABLE` / `EXIT_Y_TABLE` in
+  `world-map-loader.js`. Type 0 is exit-to-previous-map; type 1 is
+  exit-to-overworld, unconditionally.
+- That is why byte2 is uniformly `$10` on all 80 of these tiles game-wide: the
+  destination is not in the tile, it is the map's own world-exit index. These
+  are the exits of top-level towns and caves that sit directly on the overworld.
+- Wired as `_checkExitToWorld`, reusing the `loadWorldMapAt(findWorldExitIndex(
+  ...))` call `_checkExitPrev` already uses for its empty-stack case. Maps 96 and
+  124 now have exits; 43 and 167 gained live world-exits too.
+  `tools/map-explorable.mjs`: 8 problem maps → 4 (22, 24, 178, 180 remain).
+- **REVERTED v1.7.907's fire-on-approach model — it was wrong, and so was the
+  v1.7.906 note it rested on.** I read `3B/90EB`/`3B/B0C5` (`LDA $0400,Y / BMI
+  blocked`) and concluded the ROM never lets the player stand on a trigger tile.
+  Those are the NPC/entity collision routines. The PLAYER goes through the $E669
+  dispatch, and types 0, 1, 4 and 5 all end `CLC; RTS` — move ALLOWED, with the
+  action deferred via $AB and executed after the step lands. So the arrival-based
+  model this engine already had is the ROM's model. `TRIGGER_FIRE_ON_APPROACH`,
+  its `isPassable` branches and the `fireTriggerAt` call are all removed rather
+  than left as a flag someone could flip into incorrect behaviour.
+- Also decoded on the way: `3A/929E` de-interleaves the tileset collision block
+  from $B500+tileset*256 into byte1 at `$0400,X` and byte2 at `$0500,X`, both
+  indexed by raw tile id — which is what made the dispatch findable at all.
+- `tools/map-explorable.mjs` no longer flags a cramped spawn as a problem when a
+  live exit is adjacent (maps 43 and 167 sit in a 2-tile pocket with their world
+  exit right there — cramped, not stranded).
+
 ## 1.7.907 — 2026-08-12
 
 - **Fire-on-approach trigger model, behind `TRIGGER_FIRE_ON_APPROACH`

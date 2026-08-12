@@ -2,7 +2,6 @@
 
 import { NES_SYSTEM_PALETTE, buildWaterFrames } from './tile-decoder.js';
 import { isBedTileId } from './data/beds.js';
-import { TRIGGER_FIRE_ON_APPROACH } from './map-state.js';
 
 const TILE_SIZE = 16;
 const MAP_SIZE = 32; // 32×32 metatiles
@@ -492,11 +491,6 @@ export class MapRenderer {
     const key = `${tileX},${tileY}`;
     const trig = this._triggerMap.get(key);
     if (trig) {
-      // Fire-on-approach: the ROM's answer for every trigger tile is "solid".
-      // `startMove` fires the trigger before reaching this check, so making
-      // doors solid here costs nothing and stops the player standing in a
-      // doorway. See TRIGGER_FIRE_ON_APPROACH.
-      if (TRIGGER_FIRE_ON_APPROACH) return false;
       if (trig.type === 1 || trig.type === 4) return true; // entrance/door/passage — passable
       // v1.7.906 — "blocked for now" was right, and it is not provisional.
       // Events ($60-$63) and treasure ($78-$7C) carry collision bit 7 in ALL 7
@@ -534,11 +528,6 @@ export class MapRenderer {
     // the ROM's fire-on-attempt model is the actual fix; widening this list is
     // not, because then the player stands inside doorways.
     if (collByte & 0x80) {
-      // Same as above: under fire-on-approach every collision trigger is solid,
-      // exactly as `BMI blocked` has it. This is the branch that makes type 1
-      // (maps 43/96/124/167) reachable — not by becoming walkable, but by
-      // firing from the attempt like every other trigger.
-      if (TRIGGER_FIRE_ON_APPROACH) return false;
       const b2 = this._collisionByte2[metatileId];
       const trigType = (b2 >> 4) & 0x0F;
       // exit_prev (0) and entrance/door (4,5) are passable

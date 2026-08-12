@@ -569,37 +569,42 @@ function _checkExitPrev() {
 }
 
 /**
- * Fire the trigger on the tile the player is TRYING to enter, without moving
- * them onto it. `startMove` calls this before its passability check when
- * TRIGGER_FIRE_ON_APPROACH is on.
+ * Collision trigger type 1 — EXIT TO THE WORLD MAP.
  *
- * Deliberately a SUBSET of `checkTrigger`. Only the transitions belong here:
+ * Pulled from the ROM (v1.7.908). The player's tile dispatch is a jump table at
+ * $E669 indexed by the byte2 high nibble; type 1's handler ($E68F) stashes $C0
+ * in $AB, and the deferred executor at $E2CE does:
  *
- *   dyn type 1 / type 4   doors, entrances, dungeon passages
- *   collision trigType 0  exit_prev — how you leave a town interior
+ *   LDA $0730 / AND #$3F / TAX     ; this map's world-exit index
+ *   LDA $8880,X / SBC #$07 / STA $27   ; EXIT_X_TABLE (ROM 0x000890)
+ *   LDA $88C0,X / SBC #$07 / STA $28   ; EXIT_Y_TABLE (ROM 0x0008D0)
  *
- * Left on the arrival path on purpose:
- *   beds          not ROM triggers at all, ours, and walking onto one IS the
- *                 interaction (`isPassable` passes them before any trigger check)
- *   hidden traps  dungeon pits; the point is stepping IN
- *   treasure ($78-$7C) and events ($60-$63)
- *                 inert to movement in both models — chests open from the
- *                 A-press handler, which is what FF3 does. Firing a chest by
- *                 walking into it would be a behaviour change nobody asked for,
- *                 and the ROM doesn't do it either.
+ * Both tables are already named in `world-map-loader.js`. Type 0 is
+ * exit-to-PREVIOUS-map; type 1 is exit-to-OVERWORLD unconditionally, which is
+ * why byte2 is uniformly $10 on all 80 of these tiles game-wide — trigId is
+ * always 0 because the destination isn't in the tile, it is the map's own
+ * world-exit index.
+ *
+ * These are the exits of top-level towns and caves that sit directly on the
+ * overworld — maps 43, 96, 124 and 167 among them, all previously flagged by
+ * `tools/map-explorable.mjs` as having no way out.
+ *
+ * Position comes from `loadWorldMapAt`, the same call `_checkExitPrev` already
+ * uses for its empty-stack case, rather than from EXIT_X/EXIT_Y. That path is
+ * proven by every Ur and Altar Cave exit in the game today; wiring the ROM's
+ * own coordinate tables is a fidelity improvement to make separately, not
+ * inside the change that first makes these maps exitable.
  */
-export function fireTriggerAt(tileX, tileY) {
-  if (mapSt.disabledTrigger && tileX === mapSt.disabledTrigger.x && tileY === mapSt.disabledTrigger.y) return false;
-  if (mapSt.onWorldMap) return false;              // world map keeps the arrival model
-  if (!mapSt.mapRenderer || !mapSt.mapData) return false;
-  const trigger = mapSt.mapRenderer.getTriggerAt(tileX, tileY);
-  if (!trigger) return false;
-  if (_checkDynType1(trigger, tileX, tileY)) return true;
-  if (_checkDynType4(trigger, tileX, tileY)) return true;
-  if ((trigger.source === 'collision' || trigger.source === 'entrance') && trigger.trigType === 0) {
-    return _checkExitPrev();
+function _checkExitToWorld() {
+  if (topBoxSt.isTown && topBoxSt.nameBytes) {
+    topBoxSt.state = 'fade-out'; topBoxSt.timer = 0; topBoxSt.fadeStep = 0;
   }
-  return false;
+  triggerWipe(() => {
+    // Unconditional — the ROM does not consult a return stack for this type.
+    mapSt.mapStack.length = 0;
+    loadWorldMapAt(findWorldExitIndex(mapSt.currentMapId, mapSt.worldMapData));
+  }, 'world');
+  return true;
 }
 
 export function checkTrigger() {
@@ -616,8 +621,9 @@ export function checkTrigger() {
   if (_checkHiddenTrap(trigger, tileX, tileY)) return true;
   if (_checkDynType1(trigger, tileX, tileY)) return true;
   if (_checkDynType4(trigger, tileX, tileY)) return true;
-  if ((trigger.source === 'collision' || trigger.source === 'entrance') && trigger.trigType === 0) {
-    return _checkExitPrev();
+  if (trigger.source === 'collision' || trigger.source === 'entrance') {
+    if (trigger.trigType === 0) return _checkExitPrev();
+    if (trigger.trigType === 1) return _checkExitToWorld();
   }
   return false;
 }
