@@ -260,37 +260,44 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
 
 
 /**
- * MONSTER SPECIALS, partially swept. v1.7.884.
+ * MONSTER SPECIALS, swept. v1.7.885 — CORRECTS v1.7.884.
  *
  * 101 monsters carry a special-attack script. Each is swept by patching every
- * encounter to that monster, giving it 0x7FFF HP so the fight cannot end, and
- * zeroing its attack POWER (but not its script) so it keeps acting while the
- * party survives — then letting it take many turns.
+ * encounter to it, giving it 0x7FFF HP so the fight cannot end, and zeroing its
+ * attack POWER but not its script, so it keeps acting while the party survives.
  *
- * 60 of 101 swept, 0 produced no data, and NOT ONE produced a sound outside the
- * known set. Everything heard was already accounted for: spell impacts the
- * monsters cast ($c1/$c2/$c3/$9a/$9b/$9c/$87), the ordinary hit and death cues
- * ($b0/$b1/$b6), menu and engine values, and $c8 — the monster-special cue
- * already identified from a Flyer's "Glare".
+ * ⚠ v1.7.884 reported "zero new sounds" across the first 60. THAT WAS WRONG.
+ * I printed the sounds heard next to the known set and declared them matching by
+ * EYE. $80 and $87 were sitting in that list and are not in the known set —
+ * between `$86` and `$88` is exactly where a missing `$87` hides. Comparing the
+ * two sets in code, which takes one line, finds three:
  *
- * The remaining 41 are listed below and are ALL high ids (0x9C-0xE6), i.e.
- * late-game monsters. They are not swept, and that is a coverage statement, not
- * a result.
+ *   $80 -> nsf 65   the Balloon's EXPLOSION (self-destruct). Monster and attack
+ *                   name both legible in the capture. 2 monsters: 0x3D, 0x37.
+ *   $87 -> nsf 72   a monster attack cue shared by a contiguous family —
+ *                   0x89, 0x8A, 0x8F, 0x91-0x94, 0xA9, 0xB6. Captured as three
+ *                   Gaap attack; strip reads "1xHit" and their sprites garble
+ *                   mid-animation. The attack is NOT named in the strip.
+ *   $9e -> nsf 95   one monster only, 0xD2. Not investigated further.
  *
- * The sweep is RESUMABLE by design (tools/monster-special-batch.mjs keeps
- * per-monster results on disk and only picks up ids not already done), because
- * long runs in this environment get restarted and a non-resumable driver simply
- * lost everything each time. Re-run it to continue from 60.
+ * 83 of 101 swept. The 18 below are unswept — all high ids, i.e. late-game.
+ * That is a coverage statement, not a result.
  *
- * Known-sound set is DERIVED from spell-sfx-captured.js + music.js + the
- * identified extras rather than hand-listed — a hand-maintained list is what
- * made four magic jobs "discover" RUN_AWAY at once in v1.7.883.
+ * The sweep is RESUMABLE (tools/monster-special-batch.mjs keeps per-monster
+ * results on disk and picks up only ids not already done) because long runs in
+ * this environment get restarted; a non-resumable driver lost everything each
+ * time and three instances ended up racing one log file.
  */
 export const MONSTER_SPECIAL_SWEEP = Object.freeze({
   withScripts: 101,
-  swept: 60,
-  newSoundsFound: 0,
-  unswept: ["0x9C", "0xA7", "0xA9", "0xAA", "0xAD", "0xB0", "0xB1", "0xB5", "0xB6", "0xB8", "0xB9", "0xBB", "0xBC", "0xC1", "0xC2", "0xC4", "0xC6", "0xCA", "0xCB", "0xCD", "0xCE", "0xCF", "0xD0", "0xD2", "0xD3", "0xD4", "0xD5", "0xD6", "0xD7", "0xD8", "0xD9", "0xDA", "0xDB", "0xDD", "0xDE", "0xE0", "0xE1", "0xE3", "0xE4", "0xE5", "0xE6"],
+  swept: 83,
+  newSounds: [
+    { wrote: 0x80, nsf: 65, what: "the Balloon's Explosion", monsters: ['0x3D','0x37'] },
+    { wrote: 0x87, nsf: 72, what: 'a shared monster attack cue (Gaap family), attack unnamed',
+      monsters: ['0x89','0x8A','0x8F','0x91','0x92','0x93','0x94','0xA9','0xB6'] },
+    { wrote: 0x9e, nsf: 95, what: 'one monster only, not investigated', monsters: ['0xD2'] },
+  ],
+  unswept: ["0xCB", "0xD3", "0xD4", "0xD5", "0xD6", "0xD7", "0xD8", "0xD9", "0xDA", "0xDB", "0xDD", "0xDE", "0xE0", "0xE1", "0xE3", "0xE4", "0xE5", "0xE6"],
 });
 
 /**
