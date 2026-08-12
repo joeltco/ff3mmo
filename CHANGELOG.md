@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.943 — 2026-08-12
+
+### Changed
+- **Level cap raised from 5 to 10.** Single constant `MAX_LEVEL` in `src/data/limits.js`, which both the client and the server's save clamp read — no drift possible. Verified the ROM's own EXP table carries real requirements the whole way: L5→363, L6→602, L7→945, L8→1418, L9→2049, and level 10 correctly terminates progression.
+
+### Added
+- `tools/map-audit.mjs` — sweeps all 256 maps with the REAL `MapRenderer.isPassable` and reports, per map, the ROM entrance, the computed spawn, region size, and **how many exits are reachable from where the player actually lands**.
+
+### Investigated and deliberately NOT changed — `_calcSpawnY`
+- Chasing "the maps are fucked", the `$44` doorway search in `_calcSpawnY` looked like an obvious bug: it scans the whole 32-tile column with wraparound and no room check, and measurement showed it NEVER succeeds at short range — all 11 hits across 256 maps travel 8-10 tiles, exactly the maps an "is the spawn in the same region as the ROM entrance?" check flags as wrong.
+- **That check is not a correctness test for this engine, and acting on it would have shipped a player-trapping regression.** The ROM's `entranceX/Y` points at the door on the OUTSIDE of a building; the `$44` search then walks to the INTERIOR doorway, a different connected region *by design*. Map 2: ROM entrance (8,31), spawn (8,21), exit_prev at (8,23) — the player stands two tiles inside a corridor, way out behind them, chest room ahead. Correct FF3 behaviour.
+- Both candidate "fixes" (bounding the `$44` search; stopping the floor scans at walls) take wrong-room from 11 to 0 **and reachable exits to ZERO on every one of those maps** — 12/44/139 collapse to a single tile. The metric is satisfied by spawning ON the entrance, which is trivially its own region and usually a sealed tile.
+- Source reverted to the known-good behaviour. The trap is documented at the top of `tools/map-audit.mjs`: treat WRONG ROOM as a prompt to look, never as a defect count; the column that matters is exits-reachable.
+
 ## 1.7.942 — 2026-08-12
 
 ### Fixed

@@ -24,14 +24,18 @@ const r = loadMap(rom, mapId);
 function calcSpawnY(m, ex, ey) {
   const eMid = m.tilemap[ey * 32 + ex];
   const eColl = m.collision[eMid < 128 ? eMid : eMid & 0x7F];
+  // Mirrors src/map-loading.js#_calcSpawnY (v1.7.943): doorway search bounded
+  // to 3 tiles, floor scans stop at the first impassable tile.
   if ((eColl & 0x07) === 3) {
-    for (let dy = 1; dy < 32; dy++) { const ny = (ey - dy + 32) % 32; if (m.tilemap[ny * 32 + ex] === 0x44) return ny; }
+    for (let dy = 1; dy <= 3; dy++) { const ny = ey - dy; if (ny < 0) break;
+      if (m.tilemap[ny * 32 + ex] === m.fillTile) break;
+      if (m.tilemap[ny * 32 + ex] === 0x44) return ny; }
     for (let dy = 1; dy <= 16; dy++) { const ny = ey + dy; if (ny >= 32) break; const mid = m.tilemap[ny * 32 + ex];
       if (mid === m.fillTile) break; const mm = mid < 128 ? mid : mid & 0x7F;
-      if ((m.collision[mm] & 0x07) !== 3 && !(m.collision[mm] & 0x80)) return ny; }
+      if ((m.collision[mm] & 0x07) !== 3 && !(m.collision[mm] & 0x80)) return ny; break; }
     for (let dy = 1; dy <= 16; dy++) { const ny = ey - dy; if (ny < 0) break; const mid = m.tilemap[ny * 32 + ex];
       if (mid === m.fillTile) break; const mm = mid < 128 ? mid : mid & 0x7F;
-      if ((m.collision[mm] & 0x07) !== 3 && !(m.collision[mm] & 0x80)) return ny; }
+      if ((m.collision[mm] & 0x07) !== 3 && !(m.collision[mm] & 0x80)) return ny; break; }
     return ey;
   }
   const entMid = m.tilemap[ey * 32 + ex];

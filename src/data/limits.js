@@ -10,8 +10,8 @@
 // This module is a leaf on purpose: no imports, so the server can read it
 // without pulling in the client's stat system. v1.7.863.
 
-/** Character level cap. */
-export const MAX_LEVEL = 5;
+/** Character level cap. v1.7.943 — raised from 5 to 10. */
+export const MAX_LEVEL = 10;
 
 /** Max distinct inventory slots (v1.7.689 — was 8 from v1.7.599). */
 export const INV_CAP = 16;
