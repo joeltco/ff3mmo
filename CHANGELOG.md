@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.913 — 2026-08-12
+
+- **Event opcode interpreter located and its instruction format decoded**
+  (`3E/921D`, i.e. real address $D21D). Not implemented — see the gap below.
+- **`$17` is a WAIT COUNTER, not a program counter.** `LDA $17 / BEQ / DEC $17 /
+  JMP $D26D` — while non-zero the interpreter just decrements and exits. The
+  program counter is `$72/$73`, which the interpreter advances itself. The
+  v1.7.912 note calling `$17` a PC was wrong.
+- **Instruction encoding:**
+  - opcode `$FE` = WAIT: second byte → `$17`, PC += 2.
+  - otherwise opcode → `$70`, next byte → `$71`, and length comes from the
+    opcode's RANGE: `< $E4` → 1 byte, `$E4-$FC` → 2 bytes, `>= $FD` → 1 byte.
+  - PC advances by that length, then bank **$3B** is mapped into $A000-$BFFF
+    (`LDA #$3B / JSR $FF09`, which sets MMC3 R7 only) and **`JSR $A000`** runs
+    the opcode with `$70`/`$71` as opcode/operand.
+- The script is read with bank $2C/$2D mapped (`LDA #$2C / JSR $FF03`) and bank
+  $3C restored after each step, so scripts live in $2C/$2D and handlers in $3B.
+- **The gap:** what each opcode DOES. The handler entry (bank $3B `$A000`) is a
+  single known address now, but the opcode table has not been enumerated and no
+  opcode semantics are claimed. Implementation remains not started.
+- Also worth recording: three separate mis-bank reads during this trace
+  ($2C vs $2D, $3F vs $3E twice). Each produced visibly wrong output rather than
+  plausibly wrong output, which is the only reason they were caught.
+  `tools/dis6502.mjs` assumes an $8000/$A000 split and does not model MMC3's
+  windows — worth fixing before the next pull leans on it harder.
+
 ## 1.7.912 — 2026-08-12
 
 - **`$6C` traced; the event chain is now complete from tile to script pointer.**
