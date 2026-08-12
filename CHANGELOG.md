@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.884 — 2026-08-11
+
+**Monster specials: 60 of 101 swept, zero new sounds. The other 41 are named, not glossed.**
+
+101 monsters carry a special-attack script. Each is swept by patching every encounter to that monster, giving it `0x7FFF` HP so the fight cannot end, and zeroing its attack POWER but not its script — so it keeps acting while the party survives — then letting it take many turns.
+
+**60 swept, 0 produced no data, and not one produced a sound outside the known set.** Everything heard was already accounted for: spell impacts the monsters themselves cast (`$c1`/`$c2`/`$c3`/`$9a`/`$9b`/`$9c`/`$87`), the ordinary hit and death cues (`$b0`/`$b1`/`$b6`), engine values, and `$c8` — the monster-special cue already identified from a Flyer's "Glare" in v1.7.880.
+
+**The remaining 41 are unswept**, all high ids (`0x9C`-`0xE6`, late-game monsters). That is a coverage statement, not a result, and they are listed in `MONSTER_SPECIAL_SWEEP.unswept`.
+
+**Two harness lessons, both mine rather than the game's:**
+
+- **Long runs here get restarted.** A non-resumable driver lost everything each time and looked like it was hanging — three driver instances ended up running concurrently against one log, which is why it appeared to make no progress for an hour. The sweep is now resumable: per-monster results live on disk and each invocation picks up only ids not already done. Re-run `tools/monster-special-batch.mjs` to continue from 60.
+- **My `pgrep`-based waiters were matching their own shells**, so every "block until finished" loop waited forever on itself. Worth remembering before trusting a wait that never returns.
+
+The known-sound filter is now DERIVED from `spell-sfx-captured.js` + `music.js` + the identified extras rather than hand-listed — a hand-maintained list is exactly what made four magic jobs "discover" RUN_AWAY simultaneously last version.
+
+New tools: `tools/monscan/monster-special-sweep.cjs`, `tools/monster-special-batch.mjs`.
+
 ## 1.7.883 — 2026-08-11
 
 **The 10 magic jobs are swept. All 22 now produce data, and the Bard is still the only job that fires $8f.**

@@ -258,6 +258,41 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
  */
 
 
+
+/**
+ * MONSTER SPECIALS, partially swept. v1.7.884.
+ *
+ * 101 monsters carry a special-attack script. Each is swept by patching every
+ * encounter to that monster, giving it 0x7FFF HP so the fight cannot end, and
+ * zeroing its attack POWER (but not its script) so it keeps acting while the
+ * party survives — then letting it take many turns.
+ *
+ * 60 of 101 swept, 0 produced no data, and NOT ONE produced a sound outside the
+ * known set. Everything heard was already accounted for: spell impacts the
+ * monsters cast ($c1/$c2/$c3/$9a/$9b/$9c/$87), the ordinary hit and death cues
+ * ($b0/$b1/$b6), menu and engine values, and $c8 — the monster-special cue
+ * already identified from a Flyer's "Glare".
+ *
+ * The remaining 41 are listed below and are ALL high ids (0x9C-0xE6), i.e.
+ * late-game monsters. They are not swept, and that is a coverage statement, not
+ * a result.
+ *
+ * The sweep is RESUMABLE by design (tools/monster-special-batch.mjs keeps
+ * per-monster results on disk and only picks up ids not already done), because
+ * long runs in this environment get restarted and a non-resumable driver simply
+ * lost everything each time. Re-run it to continue from 60.
+ *
+ * Known-sound set is DERIVED from spell-sfx-captured.js + music.js + the
+ * identified extras rather than hand-listed — a hand-maintained list is what
+ * made four magic jobs "discover" RUN_AWAY at once in v1.7.883.
+ */
+export const MONSTER_SPECIAL_SWEEP = Object.freeze({
+  withScripts: 101,
+  swept: 60,
+  newSoundsFound: 0,
+  unswept: ["0x9C", "0xA7", "0xA9", "0xAA", "0xAD", "0xB0", "0xB1", "0xB5", "0xB6", "0xB8", "0xB9", "0xBB", "0xBC", "0xC1", "0xC2", "0xC4", "0xC6", "0xCA", "0xCB", "0xCD", "0xCE", "0xCF", "0xD0", "0xD2", "0xD3", "0xD4", "0xD5", "0xD6", "0xD7", "0xD8", "0xD9", "0xDA", "0xDB", "0xDD", "0xDE", "0xE0", "0xE1", "0xE3", "0xE4", "0xE5", "0xE6"],
+});
+
 /**
  * Battle attack sound BY WEAPON CLASS. v1.7.881.
  *
