@@ -42,6 +42,22 @@ if (has('passage') && md.tilemap[16 * 32 + 8] !== 0x32) {
     if (md.tilemap[i] === 0x5C) md.tilemap[i] = 0x5E;
   }
 }
+// `--mask` renders exactly what the game DRAWS: the visibility mask from the
+// real MapRenderer, everything else left as void. Without it this tool shows
+// the raw tilemap, which is NOT what the player sees.
+let VISMASK = null;
+if (has('mask')) {
+  const _c = {
+    createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w) * Math.max(1, h) * 4), width: w, height: h }),
+    putImageData() {}, drawImage() {}, fillRect() {}, clearRect() {}, save() {}, restore() {},
+    translate() {}, scale() {}, beginPath() {}, rect() {}, clip() {}, createPattern: () => ({}),
+  };
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => _c }) };
+  const { MapRenderer } = await import('../src/map-renderer.js');
+  VISMASK = new MapRenderer(md, md.entranceX, md.entranceY)._visibleMask;
+}
+
 const W = 32, TILE = 16;
 const pxW = W * TILE, pxH = W * TILE;
 
@@ -58,6 +74,7 @@ const { metatiles, chrTiles, palettes, tileAttrs, tilemap } = md;
 const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
 for (let ty = 0; ty < W; ty++) {
   for (let tx = 0; tx < W; tx++) {
+    if (VISMASK && !VISMASK[ty * W + tx]) continue;   // outside the room
     const raw = tilemap[ty * W + tx];
     const m = raw < 128 ? raw : raw & 0x7F;
     const meta = metatiles[m];

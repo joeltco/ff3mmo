@@ -32,6 +32,7 @@ export class MapRenderer {
   _computeRoomBounds(mapData, startX, startY) {
     if (mapData.skipRoomClip) {
       this._roomClip = null;
+      this._visibleMask = null;
       return;
     }
     const { entranceX, entranceY, tilemap, collision, fillTile } = mapData;
@@ -196,6 +197,7 @@ export class MapRenderer {
     // Full-map (outdoor) maps: no clip needed
     if ((right - left) >= MAP_SIZE || (bottom - top) >= MAP_SIZE) {
       this._roomClip = null;
+      this._visibleMask = null;   // outdoor / full-map: draw everything
       return;
     }
 
@@ -263,6 +265,26 @@ export class MapRenderer {
     }
     let l = left, r = right;
 
+    // Per-tile visibility mask: the room's own tiles plus exactly one ring of
+    // neighbours (its walls). A RECTANGLE cannot express this. Map 17's room is
+    // rows 6-10, but rows 9-10 are a ONE-TILE-WIDE exit column at x=3 — the
+    // rectangle painted a full-width wall band across both, which is the "extra
+    // bottom row". Dilating the room by one tile gives the wall ring and
+    // nothing else, so no row is missing at the top and none is spare at the
+    // bottom. `prerenderFullMap` skips every tile the mask clears.
+    const mask = new Uint8Array(MAP_SIZE * MAP_SIZE);
+    for (const k of roomSet) {
+      const x = k % MAP_SIZE, y = (k - x) / MAP_SIZE;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE) continue;
+          mask[ny * MAP_SIZE + nx] = 1;
+        }
+      }
+    }
+    this._visibleMask = mask;
+
     this._roomClip = {
       x: l * TILE_SIZE,
       y: top * TILE_SIZE,
@@ -292,6 +314,10 @@ export class MapRenderer {
 
     for (let ty = 0; ty < MAP_SIZE; ty++) {
       for (let tx = 0; tx < MAP_SIZE; tx++) {
+        // v1.7.954 — skip tiles outside the room's own wall ring. Leaving them
+        // transparent lets draw()'s fill-tile background show through, which is
+        // what the player should see beyond their room.
+        if (this._visibleMask && !this._visibleMask[ty * MAP_SIZE + tx]) continue;
         const mid = tilemap[ty * MAP_SIZE + tx];
         const m = mid < 128 ? mid : mid & 0x7F;
         const meta = metatiles[m];
