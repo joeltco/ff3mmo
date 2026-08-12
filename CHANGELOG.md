@@ -18,6 +18,20 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.932 — 2026-08-12
+
+### Fixed
+- **`loadROM` could hang forever on boot, and the v1.7.930 telemetry caught it.** The stuck Android player's trace was unambiguous and repeated identically on every attempt: `shown` → `cache-read` (all three ROMs present and correct sizes — FF3 524304B, FF1/FF2 262160B) → `tap Start` → **nothing**. No `launched`, no `launch-failed`, no `waiting`. `tryLaunch()` awaits `loadROM`, so a `loadROM` that never settles produces no throw for the catch to report and no state change — just a screen that sits there.
+- `loadROM` had **two unbounded awaits** on the boot path: the `fetch` for `patches/ff3-awj.ips`, and `loadSlotsFromDB()` (IndexedDB — already suspect on her device, which had emitted `cache-failed: ReferenceError`). Either stalling hangs boot permanently. Both are now bounded by `_withTimeout(p, 10000, label)`.
+  - **IPS fetch timeout → boot unpatched.** Identical to what the existing catch already did for a missing patch file or any network failure; it now beacons `ips-skipped` with the reason.
+  - **Save-load timeout → throw, deliberately NOT a silent fallback.** Continuing with empty save slots would show a player who has real saves an empty slot list, and inviting them to start a new game over it risks their data. Throwing routes it into `tryLaunch`'s catch, which beacons `launch-failed` and puts the message in `#rom-info`.
+
+### Added
+- `_bootBeacon(stage)` — reports `start` → `ips-skipped` → `saves-load` → `saves-failed` / `title`, so a boot hang is now locatable to a specific stage instead of being silent. Wrapped so telemetry can never break boot.
+
+### Notes
+- An unbounded await on the boot path is a defect independent of this player; this would hang for anyone whose network or IndexedDB stalls at the wrong moment.
+
 ## 1.7.931 — 2026-08-12
 
 ### Added

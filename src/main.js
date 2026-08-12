@@ -288,16 +288,59 @@ function _startTitleScreen() {
   playTrack(TRACKS.TITLE_SCREEN);
   startGameLoop();
 }
+// ── Boot watchdog (v1.7.932) ───────────────────────────────────────────────
+// A player on Android 10 / Chrome 151 sat on the ROM picker forever. Her
+// telemetry showed `cache-read` with all three ROMs present, then `tap Start`,
+// then NOTHING — no `launched`, no `launch-failed`. `tryLaunch()` awaits
+// `loadROM`, and `loadROM` had two UNBOUNDED awaits on the boot path: the IPS
+// patch `fetch` and `loadSlotsFromDB()` (IndexedDB, which was already
+// misbehaving on her device — see the `cache-failed: ReferenceError` beacon).
+// Either one stalling means this function never settles: no throw, no reject,
+// nothing for the catch in `tryLaunch` to report, and a screen that just sits
+// there. An unbounded await on the boot path is a defect on its own.
+function _withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('boot timeout: ' + label + ' (' + ms + 'ms)')), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/** Report a boot stage so a hang is locatable instead of silent. */
+function _bootBeacon(stage, extra) {
+  try {
+    fetch('/api/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        msg: '[boot] ' + stage,
+        ctx: Object.assign({ ua: navigator.userAgent.slice(0, 120) }, extra || {}),
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) { /* telemetry must never break boot */ }
+}
+
 export async function loadROM(arrayBuffer) {
   const _bootStart = performance.now();
   const romBytes = new Uint8Array(arrayBuffer);
+  _bootBeacon('start', { bytes: romBytes.length });
   try {
-    const ipsResp = await fetch('patches/ff3-awj.ips');
+    // Bounded: a stalled network here used to hang boot forever. On timeout we
+    // fall through to the existing "no patch file" path and boot unpatched,
+    // which is what this catch already did for every other fetch failure.
+    const ipsResp = await _withTimeout(fetch('patches/ff3-awj.ips'), 10000, 'ips-fetch');
     if (ipsResp.ok) {
       const ipsData = new Uint8Array(await ipsResp.arrayBuffer());
       applyIPS(romBytes, ipsData);
     }
-  } catch (_) { /* no patch file — continue with unpatched ROM */ }
+  } catch (e) {
+    // No patch file, a network failure, or the 10s timeout — all three mean
+    // the same thing here: boot unpatched rather than not at all.
+    _bootBeacon('ips-skipped', { err: String((e && e.message) || e).slice(0, 80) });
+  }
 
   const rom = parseROM(romBytes.buffer);
   document.getElementById('rom-info').textContent =
@@ -321,7 +364,20 @@ export async function loadROM(arrayBuffer) {
   initPVPSearch({ startPVPBattle });
   initPauseMenuInput({ returnToTitle });
 
-  await loadSlotsFromDB();
+  // Bounded for the same reason as the fetch above. On timeout we do NOT
+  // silently continue with empty save slots — that would show a player with
+  // real saves an empty slot list, and inviting them to start a new game over
+  // it risks their data. Throwing surfaces it: `tryLaunch`'s catch fires,
+  // `launch-failed` beacons, and the message lands in `#rom-info` where both
+  // they and we can see it.
+  _bootBeacon('saves-load');
+  try {
+    await _withTimeout(loadSlotsFromDB(), 10000, 'load-saves');
+  } catch (e) {
+    _bootBeacon('saves-failed', { err: String((e && e.message) || e).slice(0, 100) });
+    throw e;
+  }
+  _bootBeacon('title');
 
   if (window.DEBUG_BOSS) { _startDebugMode(); return; }
   _startTitleScreen();
