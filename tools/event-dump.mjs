@@ -96,8 +96,50 @@ function describe(c) {
   return `$${hex2(c)} (${polarity}, flag byte ${flagIdx}, mask idx ${maskIdx})`;
 }
 
+// ── Event opcode table (v1.7.915) ──────────────────────────────────────────
+// Interpreter: 3E/D21D. Opcode in $70, operand in $71, PC in $72/$73, wait
+// counter in $17. Length by RANGE: $FE = WAIT (2 bytes), < $E4 = 1 byte,
+// $E4-$FC = 2 bytes, >= $FD = 1 byte.
+//
+// Dispatch (bank $3B $A000 -> $A067 -> $A12B) splits three ways on $70:
+//   < $C0     -> $ACD1, indexed by HIGH nibble into the entity slots at
+//                $700C,X / $7002,X / $7106,X — these are per-ACTOR commands
+//                (high nibble = actor, low nibble = command).
+//   $C0-$CF   -> inline; low nibble selects, values from a table at $A1CA
+//                into zero page ($20, $33, ...).
+//   >= $D0    -> $B53F, which splits again into the two jump tables below.
+//
+// $E2-$E6 all point at $B672, a bare RTS — unused opcodes wired to a no-op,
+// which is what a correctly-read jump table looks like.
+const OPCODE_TABLES = [
+  { name: '$D0-$E3 (1 byte)',  table: 0xB567, first: 0xD0, last: 0xE3 },
+  { name: '$E4-$FC (2 byte)',  table: 0xB617, first: 0xE4, last: 0xFC },
+];
+const OPCODE_BANK = 0x3B;
+function opcodeRows() {
+  const rows = [];
+  for (const t of OPCODE_TABLES) {
+    const base = bankOff(OPCODE_BANK, t.table);
+    for (let op = t.first; op <= t.last; op++) {
+      const i = (op - t.first) * 2;
+      rows.push({ op, handler: rom[base + i] | (rom[base + i + 1] << 8), group: t.name });
+    }
+  }
+  return rows;
+}
+
 const args = process.argv.slice(2);
 const RAW = args.includes('--raw');
+if (args.includes('--opcodes')) {
+  let group = null;
+  for (const r of opcodeRows()) {
+    if (r.group !== group) { group = r.group; console.log(`\n=== ${group} ===`); }
+    const note = r.handler === 0xB672 ? '   (RTS — unused)' : '';
+    console.log(`  $${hex2(r.op)} -> $${r.handler.toString(16).toUpperCase().padStart(4, '0')}${note}`);
+  }
+  console.log('\nDisassemble one: node tools/dis6502.mjs 3B <handler>');
+  process.exit(0);
+}
 const one = args.find(a => /^\d+$/.test(a));
 
 if (one != null) {
