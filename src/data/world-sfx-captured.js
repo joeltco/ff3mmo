@@ -275,20 +275,33 @@ export const BATTLE_MENU_CURSOR = Object.freeze({
  * attack — a throw and a return/impact, presumably.
  */
 /**
- * COVERAGE GAP in the job sweep, stated rather than glossed. v1.7.882.
+ * The 10 magic jobs, swept. v1.7.883. All 22 jobs now produce data.
  *
- * 12 of 22 jobs produced data; the other 10 timed out with NO rows at all, and
- * they are EXACTLY the 10 magic-capable jobs in data/jobs.js — White Mage, Black
- * Mage, Red Mage, Ranger, Magic Knight, Conjurer, Summoner, Devout, Magus, Sage.
- * (Checked, not assumed: the two id sets are identical.) Their Magic row opens a
- * spell list the driver cannot finish or back out of, so the run wedges.
+ * v1.7.882 left these wedging. The cause was in the driver, not the game: a
+ * submenu parks the cursor at a DIFFERENT x (spell list x=16, item list x=0)
+ * where the command-row reader returns -1, and the wait loop responded by
+ * mashing A — confirming deeper into menus forever. Distinguishing "cursor
+ * exists but is not at the command column" from "no cursor at all", and backing
+ * out with B, fixes every one of them.
  *
- * "No data" is NOT "this job does not play $8f". The Bard attribution stands on
- * its own row-level isolation and does not depend on these; but if the question
- * is ever "which OTHER commands make sounds", these ten are unswept.
+ * RESULT: no magic job produces $8f, and none produces any unattributed value.
+ * The Bard remains the only job that fires it.
+ *
+ * HONEST LIMIT on what this proves. The Magic row does open its spell list, but
+ * the sweep never completes a CAST: the list opens on level-8 spells (Flare,
+ * Death, Arise are legible in the capture) which a level-1 character cannot use,
+ * so the selection errors out. What is covered is every job's non-magic rows
+ * plus reaching the spell list. Casting itself is covered from another
+ * direction entirely and does not need redoing here — all 56 spell impacts are
+ * captured in spell-sfx-captured.js, and the pre-cast cue is the already
+ * measured MAGIC_CAST ($a1 -> 0x62).
+ *
+ * One false alarm worth recording: the sweep flagged `$b3` as NEW for Conjurer,
+ * Summoner and Devout. It is RUN_AWAY — their Flee row escaping — and was
+ * missing from the driver's known-set. A bookkeeping bug in the harness, not a
+ * discovery.
  */
-export const JOB_SWEEP_UNCOVERED = Object.freeze(
-  ['White Mage','Black Mage','Red Mage','Ranger','Magic Knight','Conjurer','Summoner','Devout','Magus','Sage']);
+export const JOB_SWEEP_UNCOVERED = Object.freeze([]);
 
 export const WEAPON_ATTACK_SFX = Object.freeze({
   b6: { nsf: 119, classes: ['rod','nunchaku','staff','hammer','spear','knife','axe','sword','katana','book','bell'] },

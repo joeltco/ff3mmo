@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.883 — 2026-08-11
+
+**The 10 magic jobs are swept. All 22 now produce data, and the Bard is still the only job that fires $8f.**
+
+The wedge was in my driver, not the game. A submenu parks the cursor at a **different x** — spell list at 16, item list at 0 — where the command-row reader returns -1, and the wait loop answered that by mashing A, confirming deeper into menus forever until the run timed out. Distinguishing "cursor exists but is not at the command column" from "no cursor at all", and backing out with **B**, fixes all ten.
+
+| swept | result |
+|---|---|
+| White Mage, Black Mage, Red Mage, Ranger, Magic Knight | no `$8f`, nothing unattributed |
+| Conjurer, Summoner, Devout, Magus, Sage | no `$8f`, nothing unattributed |
+
+**What this does and does not prove.** Covered: every job's non-magic rows, plus reaching the spell list. NOT covered: an actual cast. The list opens on level-8 spells — Flare, Death and Arise are legible in the capture — which a level-1 character cannot use, so the selection errors out. I am not going to dress that up as "magic commands are silent".
+
+It also does not need redoing, and that is worth being precise about rather than hand-waving: casting is covered from a completely different direction. All **56 spell impacts** are captured in `spell-sfx-captured.js`, and the pre-cast cue is the already-measured `MAGIC_CAST` (`$a1` -> 0x62). The only thing a completed cast could add here is a job-specific command cue, and no magic job showed one on any row it did reach.
+
+**One false alarm, recorded because it looks exactly like a finding.** The sweep flagged `$b3` as NEW for Conjurer, Summoner, Devout and Sage. `$b3` is RUN_AWAY — their Flee row escaping — and it was simply missing from the driver's known-set. A bookkeeping bug in the harness, not a discovery. Four jobs "finding" the same value at once is the shape of a broken filter, not four coincidences.
+
+`JOB_SWEEP_UNCOVERED` is now empty.
+
 ## 1.7.882 — 2026-08-11
 
 **$8f is the Bard's SCARE. It was a job command, and the party can never use it.**

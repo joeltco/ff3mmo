@@ -31,8 +31,18 @@ const hits=[]; let nes=null, PH='boot';
 nes=new Nes(P,{onBatteryRamWrite:(a,v)=>{ if(a===0x7F49&&nes) hits.push({v,ph:PH}); }});
 const n=nes;
 const _run=n.run.bind(n);
+// Give the magic jobs something to cast. MP is 8 levels x (cur,max) at char-A
+// +0x30; the spell list is one id per level at char-B +0x07. Without these the
+// Magic row opens an empty list, which measures the character sheet rather than
+// the command.
+const CHARS_B=0x200, MP_OFF=0x30, SPELL_LIST_OFF=0x07;
+const SPELLS=[0x31,0x34,0x32,0x33,0x31,0x34,0x32,0x33];   // Fire/Cure/Bzzard/Sleep...
 n.run=(k)=>{ for(let i=0;i<k;i++){ _run(1);
-  for(let c=0;c<4;c++) n.ram[SRAM+CHARS_A+c*0x40]=JOB; } return n; };
+  for(let c=0;c<4;c++){
+    const a=SRAM+CHARS_A+c*0x40, b=SRAM+CHARS_B+c*0x40;
+    n.ram[a]=JOB;
+    for(let l=0;l<8;l++){ n.ram[a+MP_OFF+l*2]=9; n.ram[a+MP_OFF+l*2+1]=9; n.ram[b+SPELL_LIST_OFF+l]=SPELLS[l]; }
+  } } return n; };
 n.run(300);
 for(let i=0;i<25;i++) n.press('start',6,45);
 for(let b=0;b<10;b++){for(let k=0;k<6;k++) n.press('a',8,25); n.press('down',8,40);}
@@ -42,9 +52,17 @@ PH='walk'; if(!reach()){console.log(`job ${JOB}: no battle`);process.exit(0);}
 n.run(150);
 const cur=()=>{const p=n.nes.ppu;for(let i=0;i<64;i++) if(p.sprTile[i]===0x59&&p.sprY[i]<0xEF) return {x:p.sprX[i],y:p.sprY[i]};return null;};
 const row=()=>{const c=cur(); if(!c) return -1; return (c.x<70&&c.y>=160&&c.y<=224)?Math.round((c.y-168)/16):-1;};
+// The magic jobs wedged because a spell list parks the cursor at x=0, row()
+// returns -1 there, and this loop just mashed A forever. Distinguish "in a
+// submenu" (cursor exists but is not at the command column) from "no cursor at
+// all" and back OUT with B instead of confirming deeper.
 const waitCmd=(t)=>{for(let i=0;i<t;i++){ if(row()>=0) return true;
   if(sc()<=12){PH='rewalk'; if(!reach()) return false; n.run(150);}
-  if(i%3===2) n.run(50); else n.press('a',6,22);} return row()>=0;};
+  const c=cur();
+  if(c) n.press('b',6,22);                 // submenu or target select -> escape
+  else if(i%3===2) n.run(50);
+  else n.press('a',6,22);
+} return row()>=0;};
 const goRow=(w,t)=>{for(let i=0;i<t;i++){const r=row(); if(r<0)return false; if(r===w)return true; n.press('down',8,24);} return row()===w;};
 const ROWS=(process.env.ROWS||'0,1,2,3').split(',').map(Number);
 const REPS=parseInt(process.env.REPS||'4',10);
@@ -54,8 +72,13 @@ for(const r of ROWS){
     if(!goRow(r,8)) continue;
     PH='row'+r;
     if(process.env.SHOTS && shots<3){ n.screenshot(`/tmp/bard-row${r}-${shots}.png`); shots++; }
+    // FIVE presses. Three opens the spell list and stops there — the previous
+    // pass reported a clean "no new sounds" for all ten magic jobs while never
+    // actually casting, which is worth nothing. Items needed four (open / pick /
+    // enter target / confirm); magic gets one more for slack.
     n.press('a',8,40); n.press('a',8,40); n.press('a',8,44);
-    n.run(200);
+    n.press('a',8,44); n.press('a',8,44);
+    n.run(320);
     // Back out of anything still open. The magic jobs all TIMED OUT because
     // their Magic row opens a spell list that three A presses cannot finish, so
     // the run wedged and produced NO rows at all — which is "no data", not "this
