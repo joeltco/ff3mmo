@@ -1054,8 +1054,14 @@ function readBody(req) {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      try { resolve(JSON.parse(body)); }
-      catch { resolve({}); }
+      // Resolve an OBJECT or nothing. `JSON.parse` happily returns null, a
+      // number or an array for a well-formed body, and every caller here
+      // destructures the result — `const { email } = null` throws before any
+      // handler validation can run.
+      try {
+        const parsed = JSON.parse(body);
+        resolve(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
+      } catch { resolve({}); }
     });
     req.on('error', reject);
   });
@@ -1205,7 +1211,14 @@ export async function handleAPI(req, res) {
       return send(res, 429, { error: 'Too many requests — slow down' }), true;
     }
     const { email, password } = await readBody(req);
-    if (!email || !password) return send(res, 400, { error: 'Email and password required' }), true;
+    // Same typeof guard /api/register has. Without it a truthy non-string
+    // email (`{"email": 123}`, `{"email": ["a"]}` — bots post both) sails past
+    // the falsy check and blows up on `.toLowerCase()` one line down, which
+    // the wrapper turns into a 500 "Internal error" instead of a 400. Logged
+    // as `handler threw for /api/login: email.toLowerCase is not a function`.
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+      return send(res, 400, { error: 'Email and password required' }), true;
+    }
     const user = db.prepare('SELECT id, email, password_hash FROM users WHERE email = ?').get(email.toLowerCase());
     // Always run a bcrypt.compare — sham one against _DUMMY_HASH when the
     // email doesn't exist — so response timing doesn't leak which emails

@@ -94,7 +94,19 @@ const httpServer = createServer(async (req, res) => {
   }
 
   // Static files
-  let path = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+  // `decodeURIComponent` throws URIError on a stray `%` or a truncated escape
+  // (`/%`, `/%zz`) — which scanners send constantly. It sat OUTSIDE the try
+  // below, so the throw escaped this handler entirely: the client got a hung
+  // socket instead of a 404, and pm2's log filled with `URIError: URI
+  // malformed` stacks deep enough to bury real errors.
+  let path;
+  try {
+    path = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad request');
+    return;
+  }
   try {
     let data = await readFile(join('.', path));
     const ext = extname(path);
