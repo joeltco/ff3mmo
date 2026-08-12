@@ -155,8 +155,8 @@ export class MapRenderer {
       if (y > maxY) maxY = y;
     }
 
-    const left = minX;
-    const right = maxX + 1;
+    let left = minX;
+    let right = maxX + 1;
     let bottom = maxY + 1;
 
     // Extend top by 1 row if it contains only wall tiles (z=3) or fill.
@@ -199,10 +199,74 @@ export class MapRenderer {
       return;
     }
 
+    // v1.7.953 — trim edges that show ANOTHER room's floor.
+    //
+    // The bounding box of the player's room, plus the wall/overhang
+    // extensions above, can enclose part of a neighbouring room on a shared
+    // tilemap. The player then sees a strip of somewhere else hanging off
+    // their room — reported as "the inn had trailing tiles outside the rooms".
+    // Kazus's inn (map 17) is the clearest case: the room is rows 0-6 and the
+    // clip reached row 10, dragging in three rows of a different room's floor
+    // and its door.
+    //
+    // `visited` is Phase 1's flood of the player's own room, so any WALKABLE
+    // tile inside the clip that isn't in it belongs to someone else. Peel whole
+    // rows/columns off each edge while they contain such a tile. Walls and fill
+    // are left alone — those are the room's own border and must keep drawing.
+    // BOTH sides of this test must come from the SAME walkability rule, and it
+    // must be the one the player obeys. Phase 1's `visited` uses its own rules
+    // (it stops at doors), so mixing it with `isPassable` gave a set that
+    // matched neither: the trim silently did nothing on the maps that needed it
+    // and ate real room on the maps that didn't. Flood once, here, with the
+    // real `isPassable` — every field it reads is assigned before this runs.
+    const roomSet = new Set([startY * MAP_SIZE + startX]);
+    {
+      const fq = [[startX, startY]];
+      while (fq.length) {
+        const [cx, cy] = fq.pop();
+        for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+          const nx = cx + dx, ny = cy + dy, k = ny * MAP_SIZE + nx;
+          if (nx < 0 || nx >= MAP_SIZE || ny < 0 || ny >= MAP_SIZE || roomSet.has(k)) continue;
+          if (!this.isPassable(nx, ny)) continue;
+          roomSet.add(k); fq.push([nx, ny]);
+        }
+      }
+    }
+    const foreignAt = (x, y) => !roomSet.has(y * MAP_SIZE + x) && this.isPassable(x, y);
+    // Only peel an edge that is ENTIRELY outside the player's room and shows
+    // another room's floor. An edge still containing the room's own tiles must
+    // stay — trimming on "contains any foreign tile" ate real room on 10 maps
+    // (map 171 lost 116 of its 122 walkable tiles) and put the player back in
+    // un-drawn space, which is the bug this whole area exists to prevent.
+    // Clamp to the player's OWN room, plus one tile for its walls.
+    //
+    // Peeling edges "while the edge looks foreign" does not work: it stops at
+    // the first pure-wall row, so on map 17 (Kazus's inn) it never reached the
+    // inn's floor at all. The player's room there is the small area at the
+    // BOTTOM — entrance (3,8) — and the inn above it belongs to another map id
+    // on the same tilemap. Clamping to the room's bounding box removes it in
+    // one step and cannot cut into the room, so the "draw everywhere you can
+    // walk" invariant still holds.
+    let rminX = MAP_SIZE, rmaxX = -1, rminY = MAP_SIZE, rmaxY = -1;
+    for (const k of roomSet) {
+      const x = k % MAP_SIZE, y = (k - x) / MAP_SIZE;
+      if (x < rminX) rminX = x;
+      if (x > rmaxX) rmaxX = x;
+      if (y < rminY) rminY = y;
+      if (y > rmaxY) rmaxY = y;
+    }
+    if (rmaxX >= 0) {
+      top    = Math.max(top,    Math.max(0, rminY - 1));
+      bottom = Math.min(bottom, Math.min(MAP_SIZE, rmaxY + 2));
+      left   = Math.max(left,   Math.max(0, rminX - 1));
+      right  = Math.min(right,  Math.min(MAP_SIZE, rmaxX + 2));
+    }
+    let l = left, r = right;
+
     this._roomClip = {
-      x: left * TILE_SIZE,
+      x: l * TILE_SIZE,
       y: top * TILE_SIZE,
-      w: (right - left) * TILE_SIZE,
+      w: (r - l) * TILE_SIZE,
       h: (bottom - top) * TILE_SIZE,
     };
   }

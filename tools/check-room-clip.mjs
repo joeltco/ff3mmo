@@ -82,6 +82,32 @@ for (const id of IDS) {
     const x = k % W, y = (k - (k % W)) / W;
     if (x < x0 || x >= x1 || y < y0 || y >= y1) outside++;
   }
+  // Second invariant (v1.7.953): the clip must not extend past the player's own
+  // room. It used to, dragging a strip of a NEIGHBOURING room's floor into view
+  // — Kazus's inn (map 17) drew the bedroom above it, reported as "trailing
+  // tiles outside of the rooms".
+  let rminX = W, rmaxX = -1, rminY = W, rmaxY = -1;
+  for (const k of seen) {
+    const x = k % W, y = (k - (k % W)) / W;
+    if (x < rminX) rminX = x;
+    if (x > rmaxX) rmaxX = x;
+    if (y < rminY) rminY = y;
+    if (y > rmaxY) rmaxY = y;
+  }
+  // Map 146 is excluded, with a reason. `isPassable` is STATEFUL (`_playerZ`),
+  // so a flood run inside the constructor and a flood run afterwards can walk
+  // different z-levels and disagree: the renderer's own room flood finds 75
+  // tiles there, this one finds 1. The clip is correct for the renderer's view;
+  // the gate simply cannot see the same room. Same hazard `map-connectivity.mjs`
+  // documents. Not a licence to add more entries — anything else here is a bug.
+  const STATEFUL_Z_DIVERGENCE = new Set([146]);
+  if (!STATEFUL_Z_DIVERGENCE.has(id) &&
+      rmaxX >= 0 && (x0 < rminX - 1 || y0 < rminY - 1 || x1 > rmaxX + 2 || y1 > rmaxY + 2)) {
+    console.error(`  ✗ map ${id}: clip (x${x0} y${y0} -> x${x1} y${y1}) extends past the room ` +
+      `(x${rminX}-${rmaxX} y${rminY}-${rmaxY}) — another room's tiles are drawn`);
+    failed++;
+    continue;
+  }
   if (outside > 0) {
     console.error(`  ✗ map ${id}: ${outside} of ${seen.size} walkable tiles fall OUTSIDE the drawn area ` +
       `(clip x${x0} y${y0} w${c.w / TILE} h${c.h / TILE})`);

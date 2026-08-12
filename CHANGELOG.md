@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.953 — 2026-08-12
+
+### Fixed — "the inn in Kazus had trailing tiles outside of the rooms"
+- **The room clip could extend past the player's room and draw a strip of a NEIGHBOURING room.** Kazus's inn (map 17) is the clearest case: the player's room is the small counter area at the BOTTOM (entrance (3,8)), and the clip reached up to row 0, drawing the bedroom above it — which belongs to a different map id on the same shared tilemap.
+- The clip is now clamped to the player's own room's bounding box plus one tile for its walls. Map 17: clip **7×11 → 7×6**, foreign tiles inside it **7 → 0**. Verified by rendering it and looking.
+- Confirmed no map lost drawn area: `check-room-clip --all` still passes on all 256.
+
+### Two failed attempts, recorded because each was instructive
+- **Peeling edges "while the edge contains foreign tiles"** never fired on the map that needed it — it stops at the first pure-wall row, and map 17's inn sits behind one.
+- **Peeling with a hand-rolled walkability test** did nothing at all, because it disagreed with `isPassable`. That is the same two-implementations trap that caused the un-drawn-space bug in the first place; the trim now floods once with the real `isPassable`.
+- An intermediate version trimmed on "contains any foreign tile" and **ate real room on 10 maps** (map 171 lost 116 of its 122 walkable tiles), which the existing gate caught before it could ship.
+
+### Added
+- Second invariant in `tools/check-room-clip.mjs`: the clip must not extend past the player's room. **Proven in both directions** — passes now, and reverting the clamp fails **164 of 256 maps**.
+- Map 146 is excluded with a stated reason: `isPassable` is STATEFUL (`_playerZ`), so a flood run inside the constructor and one run afterwards walk different z-levels and disagree — the renderer's own flood finds 75 tiles there, the gate's finds 1. Same hazard `map-connectivity.mjs` documents. Not a licence to add entries.
+
+### Known limitation
+- Maps 171 and 186 still draw some foreign tiles (64 and 53). Their neighbouring rooms lie INSIDE the player's room's bounding box, so no rectangular clip can exclude them without cutting the room. Fixing those needs a non-rectangular mask.
+
 ## 1.7.952 — 2026-08-12
 
 ### Full map audit — all 195 real maps
