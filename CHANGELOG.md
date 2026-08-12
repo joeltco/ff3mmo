@@ -18,6 +18,18 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.941 — 2026-08-12
+
+### Added — update announcements
+- **The client now ships its build in `hello`, and the server tells it in chat when it is behind.** Players were asked to report bugs with `/bug`, which is only useful if they are on the build being fixed — and a cached client CANNOT self-heal, because the version gate compares the HTML's build token against localStorage and on a stale page both come from that same stale page.
+- Read from `localStorage.ff3_build`, deliberately NOT the `VERSION` constant: a cached page reports the CACHED build, which is exactly the case worth detecting. A current page reports the current build either way.
+- On first hello only (a re-hello after a save-slot swap must not re-nag), and only when the client actually reported a build — `'?'` means localStorage was unavailable (private mode), which is not evidence of being behind. Stale clients get two SYSTEM chat lines: which version they're on vs latest, and how to force it (`ff3mmo.com/?fresh=1`).
+- Logged server-side as `[stale-client] user=… build=… server=…`.
+- `announce(text)` exported from `ws-presence.js`, plus a **dev-only `/announce <text>`** chat command. Gated on the **JWT email**, never a client-supplied field, so a client cannot claim dev status by editing its profile. `entry.email` now carries the verified address for that check.
+
+### Notes
+- A deploy restarts pm2, so every client reconnects and re-hellos — which means the stale-build check fires automatically after each deploy for anyone whose page didn't refresh.
+
 ## 1.7.940 — 2026-08-12
 
 ### Fixed — instrumentation correctness

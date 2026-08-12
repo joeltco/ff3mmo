@@ -90,7 +90,14 @@ function _sendHello() {
   const profile = _profileFn();
   const loc = _locFn();
   if (!profile || !loc) return;
-  if (_send({ type: 'hello', profile, loc })) {
+  // v1.7.941 — ship the build with the hello so the server can tell a stale
+  // client to reload. Read from localStorage (`ff3_build`, stamped by the
+  // version gate in index.html) rather than the VERSION constant: a cached page
+  // reports the CACHED build, which is exactly the case we need to detect. A
+  // page running the current build reports the current build either way.
+  let build = '?';
+  try { build = localStorage.getItem('ff3_build') || '?'; } catch (_) { /* private mode */ }
+  if (_send({ type: 'hello', profile, loc, build })) {
     _helloed = true;
     _lastSentLoc = loc;
   }

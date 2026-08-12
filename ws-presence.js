@@ -38,6 +38,7 @@
 // is a Step 2/3 concern — for visible Step 1 it's not needed.
 
 import { WebSocketServer } from 'ws';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'module';
 import {
   verifyTokenWithRevocation,
@@ -69,6 +70,41 @@ import {
 } from './pve-arbiter.js';
 // v1.7.776 P-8/P-9 — server economy validator. Shops first; chests/vases/inn follow.
 import { validateShopTransaction, validateChestOpen, validateVaseSearch } from './economy-arbiter.js';
+
+// ── Build / update announcements (v1.7.941) ────────────────────────────────
+// Players were told to report bugs with /bug, which is only useful if they are
+// actually ON the build being fixed. A cached client CANNOT self-heal: the
+// version gate in index.html compares the HTML's build token against
+// localStorage, and on a stale page BOTH come from that stale page, so they
+// match and no reload ever fires. The client therefore ships its build in
+// `hello` and the server tells it, in chat, when it is behind.
+const SERVER_BUILD = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+  } catch (_) { return null; }
+})();
+const _norm = (v) => String(v || '').replace(/^v/, '').trim();
+// Mirrors DEV_EMAILS in src/chat.js. Kept as its own copy because ws-presence
+// must not import a browser module, and because the client-side list is a UI
+// affordance while this one is an authorization check.
+const DEV_EMAILS = new Set(['joeltaylor734@gmail.com']);
+
+/** Post a SYSTEM line into one client's chat. */
+function _sendSystemChat(ws, text) {
+  _send(ws, { type: 'chat', userId: 0, name: 'SYSTEM', channel: 'world', text: String(text).slice(0, 200) });
+}
+
+/** Post a SYSTEM line to every helloed client. */
+export function announce(text) {
+  let n = 0;
+  for (const e of _connected.values()) {
+    if (!e.helloed || e.ws.readyState !== 1) continue;
+    _sendSystemChat(e.ws, text);
+    n++;
+  }
+  console.log('[announce] to ' + n + ' client(s): ' + text);
+  return n;
+}
 
 // Item types blocked from roster trade. Key items aren't really inventory —
 // they're quest flags carried in the item table. Everything else
@@ -877,6 +913,19 @@ function _handleMessage(entry, msg) {
       // had the shadow in their initial snapshot, so no extra cleanup
       // message is needed. v1.7.596.
       _shadows.delete(entry.userId);
+      // Stale-build nudge. Only on the FIRST hello (a re-hello after a save-slot
+      // swap shouldn't re-nag), and only when the client actually reported a
+      // build — '?' means localStorage was unavailable (private mode), which is
+      // not evidence of being behind.
+      entry.build = String(parsed.build || '?').slice(0, 16);
+      if (!wasHelloed && SERVER_BUILD && entry.build !== '?' &&
+          _norm(entry.build) !== _norm(SERVER_BUILD)) {
+        console.log('[stale-client] user=' + entry.userId + ' build=' + entry.build + ' server=' + SERVER_BUILD);
+        _sendSystemChat(entry.ws,
+          'Update available: you are on v' + _norm(entry.build) + ', latest is v' + _norm(SERVER_BUILD) + '.');
+        _sendSystemChat(entry.ws,
+          'Reload the page to update. If it sticks, open ff3mmo.com/?fresh=1');
+      }
       // Send the current snapshot to the new client so they see everyone else.
       _send(entry.ws, _snapshotPayload(entry.userId));
       // Broadcast join to OTHER clients. If `hello` is resent (re-identify
@@ -2228,6 +2277,17 @@ function _handleMessage(entry, msg) {
       const text = cleanChatText(String(parsed.text || '').slice(0, 200));
       if (!text) return;
       const senderName = entry.profile?.name || 'Player';
+      // v1.7.941 — dev-only broadcast. Gated on the JWT email, never on a
+      // client-supplied field. Not rate-limit-exempt: the per-IP/per-kind chat
+      // caps above already ran.
+      if (text.startsWith('/announce ') && DEV_EMAILS.has(entry.email)) {
+        const body = text.slice(10).trim();
+        if (body) {
+          const n = announce(body);
+          _sendSystemChat(entry.ws, 'Announced to ' + n + ' player(s).');
+        }
+        return;
+      }
       if (channel === 'pm') {
         const toUserId = (parsed.toUserId | 0) || 0;
         const toName   = String(parsed.to || '').slice(0, 16);
@@ -2407,7 +2467,10 @@ export function attachWebSocketPresence(httpServer) {
       // of "kick my other devices NOW" wasn't fulfilled until each stale
       // session made its next HTTP call.
       const tokenIat = (decoded.iat | 0) || 0;
-      const entry = { ws, userId, profile: null, loc: null, helloed: false, ip, tokenIat };
+      // `email` comes from the verified JWT, so a client cannot claim dev
+      // status by editing a profile field. Used by the /announce command.
+      const entry = { ws, userId, profile: null, loc: null, helloed: false, ip, tokenIat,
+                      email: String(decoded.email || '').toLowerCase() };
       _connected.set(userId, entry);
       _connsByIp.set(ip, ipCount + 1);
 
