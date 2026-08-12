@@ -18,6 +18,21 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.939 — 2026-08-12
+
+### Fixed
+- **`[rom-picker] cache-failed err=ReferenceError` — a temporal-dead-zone bug that silently discarded the ROM cache.** `unlockGate()` runs SYNCHRONOUSLY from the `sessionStorage.ff3_auth === '1'` branch and calls `showROMPicker()` → `loadCachedROMs()` → `getCachedROM()` → `openDB()`. `openDB` reads `DB_NAME` / `DB_VERSION`, which were declared with `const` about 100 lines LOWER in the same inline script — still in the temporal dead zone at call time. The call threw `ReferenceError`, `Promise.all` rejected, and the entire cache read was lost.
+- Consequence for the player: her cached ROMs were never restored, so the picker asked her to supply all three ROM files she already had. That is the `have: "none"` in her beacons.
+- Moved the ROM buffers and the whole IndexedDB cache block (`DB_NAME` / `DB_VERSION` / `STORE` / `openDB` / `cacheROM` / `getCachedROM`) above the password-gate section, so everything the synchronous gate path reaches is initialized before it runs.
+
+### Why it looked intermittent
+- It only fires on the **returning-tab** path. A fresh login calls `showROMPicker` from `doAuth`, which is a user event long after the script finished — by then the consts are initialized and the cache read works. That is why the same device produced `cache-read` with all three ROMs on some loads and `cache-failed` on others.
+- It also explains why the catch could report at all: `getCachedROM` is `async`, so the synchronous throw became a rejected promise, and the `await` resumed in a microtask *after* the script finished — by which point `ff3Buffer` was initialized and the beacon could read it.
+
+### Added
+- `tools/check-boot-order.mjs` — static guard asserting every gate-path dependency is declared before the synchronous gate trigger. Wired into `deploy.sh` as a pre-flight gate.
+- **Proven in both directions:** passes on the fixed layout, and fails with all 7 declarations flagged when index.html is reverted to the pre-fix ordering. Neither `smoke.sh` nor a normal page load reproduces this bug — both take the fresh-login path — so a static check is the only thing that can catch a regression here.
+
 ## 1.7.938 — 2026-08-12
 
 ### Fixed

@@ -969,6 +969,56 @@
     // Expose to game.js via window
     window.ff3Auth = { serverSave, serverDeleteSave, serverLoadSaves };
 
+    // --- ROM buffers + IndexedDB ROM cache ---
+    // v1.7.939 — MOVED ABOVE THE PASSWORD GATE. `unlockGate()` runs
+    // SYNCHRONOUSLY from the `sessionStorage.ff3_auth === '1'` branch below and
+    // calls showROMPicker() -> loadCachedROMs() -> getCachedROM() -> openDB().
+    // `openDB` reads DB_NAME / DB_VERSION, which used to be `const`s declared
+    // ~100 lines further down — still in the temporal dead zone at that point,
+    // so the call threw `ReferenceError` and the whole cache read was lost.
+    //
+    // It only bit returning tabs: a fresh login goes through `doAuth` on a user
+    // event, long after this script finished, when the consts are initialized.
+    // That is why it looked intermittent, and why an affected player was asked
+    // to load all three ROMs she already had cached.
+    let ff3Buffer = null;
+    let ff1Buffer = null;
+    let ff2Buffer = null;
+
+    // --- IndexedDB ROM cache ---
+    const DB_NAME = 'ff3mmo-roms';
+    const DB_VERSION = 1;
+    const STORE = 'roms';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function cacheROM(key, buffer) {
+      const db = await openDB();
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(buffer, key);
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function getCachedROM(key) {
+      const db = await openDB();
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(key);
+      return new Promise((resolve) => {
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    }
+
     // --- Password gate ---
     // Server injects the gate password into the literal below; empty string =
     // gate disabled (open server). If it survives un-replaced (page opened as
@@ -1092,44 +1142,6 @@
     });
 
     init();
-
-    let ff3Buffer = null;
-    let ff1Buffer = null;
-    let ff2Buffer = null;
-
-    // --- IndexedDB ROM cache ---
-    const DB_NAME = 'ff3mmo-roms';
-    const DB_VERSION = 1;
-    const STORE = 'roms';
-
-    function openDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    async function cacheROM(key, buffer) {
-      const db = await openDB();
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(buffer, key);
-      return new Promise((resolve, reject) => {
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    }
-
-    async function getCachedROM(key) {
-      const db = await openDB();
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(key);
-      return new Promise((resolve) => {
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
-      });
-    }
 
     // --- Launch ---
     // ── ROM-picker telemetry (v1.7.930) ──────────────────────────────────
