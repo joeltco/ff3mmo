@@ -38,7 +38,14 @@ const CHOKE_TILE_Y = 54;
 //
 //   95 — the Invincible. Reported by Joel as a warp straight to the airship,
 //        sitting at (82,54), one tile east of the choke boulder. v1.7.926.
-const REMOVED_ENTRANCES = new Set([95]);
+//  180 — the ship, at (90,59). Same class as the Invincible: rendering map 180
+//        (tools/map-png.mjs) shows a wooden vessel on open water with a shop
+//        counter, barrels, a bed and a below-decks section — a VEHICLE
+//        interior, not a dungeon. It has no reachable exit because you are
+//        meant to leave it by disembarking, and there is no vehicle system yet.
+//        Confirmed not an event problem: every event script on the map decodes
+//        with no map transition (tools/event-resolve.mjs). v1.7.949.
+const REMOVED_ENTRANCES = new Set([95, 180]);
 export class WorldMapRenderer {
   constructor(worldMapData) {
     this.data = worldMapData;

@@ -500,6 +500,17 @@ function _checkHiddenTrap(trigger, tileX, tileY) {
 // keeps the player on the current map and snaps to (destX, destY) —
 // reuses the engine's existing door-open animation. v1.7.657.
 function _triggerMapTransition(tileX, tileY, dest) {
+  // v1.7.949 — the stranding guard has to live HERE too, not only on the world
+  // map. `_checkWorldMapTrigger` refuses these when entered from the overworld,
+  // but maps 22 and 178 are also reachable through INTERIOR doors, and that
+  // path had no guard at all: walk through the wrong door and you are stuck
+  // with no exit. Found by `tools/map-audit.mjs --play`, which follows door
+  // destinations transitively rather than only seeding from the overworld.
+  const _destId = (typeof dest === 'object') ? dest.mapId : dest;
+  if (!(typeof dest === 'object' && dest.sameMap) && STRANDING_MAPS.has(_destId)) {
+    showMsgBox(_nameToBytes('The way is barred.'));
+    return;
+  }
   const tileId = mapSt.mapData.tilemap[tileY * 32 + tileX];
   const tileM = tileId < 128 ? tileId : tileId & 0x7F;
   const savedX = mapSt.worldX, savedY = mapSt.worldY;
