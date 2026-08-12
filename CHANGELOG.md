@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.921 — 2026-08-12
+
+- **New: `tools/map-connectivity.mjs`** — floods a map with the REAL
+  `MapRenderer.isPassable` (constructed in Node behind a canvas stub), not a
+  reimplementation. When the question is "is my model of passability wrong?", a
+  copy of the rule is the one thing that cannot answer it.
+- **Verdict: all four maps genuinely wall the player in, per production code.**
+  The z-level state machine, bed check and entrance special-case are the real
+  ones. So `map-explorable.mjs`'s flood was NOT the bug — my v1.7.920 suspicion
+  was wrong.
+- **The bug is our ENTRY POINT.** The maps are full of exits we land nowhere
+  near:
+  - map 22 — spawn (9,22), 67 tiles, 1 exit, walled off
+  - map 24 — spawn (1,27), 24 tiles, **4 exits**, none reachable
+  - map 178 — spawn (27,29), **7 tiles, 9 exits**, none reachable
+  - map 180 — spawn (19,11), 98 tiles, 1 exit at (2,27), walled off
+  A map with nine exits where the player lands in a seven-tile pocket is not a
+  map defect; it is arriving at the wrong tile.
+- `_loadRegularMap:249` spawns at `(entranceX, _calcSpawnY(...))` for every
+  forward transition. That is evidently right for Ur and the Altar Cave and
+  wrong for these. The ROM has per-ENTRANCE destination coordinates for leaving
+  a map (EXIT_X/EXIT_Y at 0x000890/0x0008D0, used by trigger type 1); the
+  symmetric table for ENTERING is what we are not reading.
+- That reframes the whole arc: not a missing ROM trigger mechanism — a missing
+  entry-coordinate lookup, on our side, and fixable.
+
 ## 1.7.920 — 2026-08-12
 
 - **Partly un-retracts v1.7.919: events DO transition maps.** I had checked only
