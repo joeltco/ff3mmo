@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.899 — 2026-08-11
+
+- **Gated the dead-target redirect** — the coverage hole found in v1.7.898 is closed.
+  `resolveLivingTarget` moves an effect off a target that died during cast windup
+  onto the next living enemy on the same side. It had two live call sites and zero
+  gates: stubbing it to `return null` left encounter-sim at 46 passed and
+  battle-sim `--assert` at exit 0.
+- New encounter-sim gate asserts the **wiring**, not just the helper. Three parts,
+  each of which fails on its own revert:
+  - the helper's contract (alive picked → picked; dead picked → the living one;
+    all dead → null) — fails when the helper returns null;
+  - a **Fire cast at slot 0 while slot 0 is a corpse**, driven through
+    `startSpellCast`/`updateSpellCast`, asserting the damage lands on the living
+    enemy in slot 1 — fails when `spell-cast.js#_applyEnemyEffect` stops calling the
+    helper, *with the helper still correct*;
+  - a **Potion aimed at the same corpse**, driven through `processNextTurn`,
+    asserting the heal lands on slot 1 — fails when `battle-turn.js`' own copy of
+    the redirect is disabled.
+- The second call site was nearly missed: the spell half alone stayed green while
+  the item redirect was disabled. The redirect is written twice, so gating one site
+  gates one site. Found by mutation, not by reading.
+
 ## 1.7.898 — 2026-08-11
 
 **`battle-sim --assert` added to the deploy gates — and trying to justify it found a hole nothing covers.**
