@@ -28,6 +28,7 @@ import { initProjectile } from './projectile-anim.js';
 import { initCastAnim } from './cast-anim.js';
 import { initSpellAnim } from './spell-anim.js';
 import { initSummonAnim } from './summon-anim.js';
+import { setStage } from './boot-stage.js';
 
 const TITLE_FADE_MAX = 4;
 
@@ -47,12 +48,15 @@ export let romRaw = null; // Primary FF3 ROM — live binding: also consumed by 
 
 export function initSpriteAssets(rom) {
   romRaw = rom;
+  setStage('sa:initHUD');
   initHUD(rom);
 
+  setStage('sa:cursorTile');
   const ct = initCursorTile(rom);
   ui.cursorTileCanvas = ct.cursorTileCanvas;
   ui.cursorFadeCanvases = ct.cursorFadeCanvases;
 
+  setStage('sa:scrollArrows');
   const sa = initScrollArrows(rom);
   ui.scrollArrowDown = sa.scrollArrowDown;
   ui.scrollArrowUp = sa.scrollArrowUp;
@@ -64,30 +68,45 @@ export function initSpriteAssets(rom) {
   ui.scrollArrowRightFade = sa.scrollArrowRightFade;
 
   // Battle sprite cache — per-job poses + init-once slash/SW/status
+  setStage('sa:jobBattleSprites');
   loadJobBattleSprites(rom, ps.jobIdx);
+  setStage('sa:battleSpriteCache');
   initBattleSpriteCache();
 
   // Fake player portraits & full bodies — keyed by jobIdx
+  setStage('sa:fakePlayerSprites-22jobs');
   initFakePlayerSprites(rom, Array.from({ length: 22 }, (_, i) => i));
 
+  setStage('sa:roster');
   initRoster();
+  setStage('sa:bossSprite');
   loadBossSprite(0xCC); // Land Turtle — only boss in game
   setCrystalFrames(initCrystalSprite()); // Wind Crystal (Land Turtle defeat reveal)
 
+  setStage('sa:goblinSprite');
   const gs = initGoblinSprite(rom);
   battleSt.goblinBattleCanvas = gs.goblinBattleCanvas;
   battleSt.goblinWhiteCanvas = gs.goblinWhiteCanvas;
   battleSt.goblinDeathFrames = gs.goblinDeathFrames;
 
+  setStage('sa:monsterSprites');
   initMonsterSprites();
+  setStage('sa:missSprite');
   initMissSprite();
+  setStage('sa:projectile');
   initProjectile();
+  setStage('sa:castAnim');
   initCastAnim();
+  setStage('sa:spellAnim');
   initSpellAnim();
+  setStage('sa:summonAnim');
   initSummonAnim();
+  setStage('sa:playerStats');
   initPlayerStats(rom);
+  setStage('sa:expTable');
   initExpTable(rom);
 
+  setStage('sa:moogleSprite');
   const ms = initMoogleSprite(rom);
   hudSt.moogleFrames = ms.moogleFrames;
 

@@ -54,6 +54,7 @@ import { connectNet, setNetInvStateHandler } from './net.js';   // v1.7.742 Phas
 import { ps, getEffectiveStats, getShieldEvade, getJobLevel } from './player-stats.js';
 import { selectCursor } from './save-state.js';
 import { initSpriteAssets, initTitleAssets } from './boot.js';
+import { setStage, clearStage, readStage, BOOT_DONE } from './boot-stage.js';
 import { SPRITE_PAL_TOP, SPRITE_PAL_BTM } from './job-sprites.js';
 export { loadFF1ROM, loadFF2ROM } from './boot.js';
 
@@ -322,19 +323,12 @@ function _withTimeout(promise, ms, label) {
 // writes are synchronous and survive it, so we stamp the stage BEFORE each
 // step and report the last one on the NEXT load. `_BOOT_DONE` marks a clean
 // finish so a normal boot never reports itself as a crash.
-const _BOOT_STAGE_KEY = 'ff3_boot_stage';
-const _BOOT_DONE = 'done';
-function _stage(name) {
-  try { localStorage.setItem(_BOOT_STAGE_KEY, name); } catch (_) { /* private mode */ }
-}
-function _stageClear() {
-  try { localStorage.setItem(_BOOT_STAGE_KEY, _BOOT_DONE); } catch (_) { /* ignore */ }
-}
+const _stage = setStage;
+const _stageClear = clearStage;
 /** If the previous boot never reached `done`, report where it stopped. */
 function _reportPreviousBootCrash() {
-  let prev = null;
-  try { prev = localStorage.getItem(_BOOT_STAGE_KEY); } catch (_) { return; }
-  if (!prev || prev === _BOOT_DONE) return;
+  const prev = readStage();
+  if (!prev || prev === BOOT_DONE) return;
   _bootBeacon('DIED-AT', { stage: prev });
 }
 
