@@ -749,6 +749,97 @@ function suiteServer() {
       'vase row survives a chest reap');
     _testConsumedTilesClear(UID, SLOT);
   });
+
+  // ── v1.7.928 — log-spam throttle ────────────────────────────────────────
+  // `[update divergence]` fires per diverging field per `update` frame. Two
+  // stuck players emitted ~4000 identical lines and buried the only three
+  // `[BOOT ERROR]` reports in the log window, which is what a live "can't
+  // connect" report needed. These pin the collapse behaviour.
+  const { warnThrottled, warnThrottleForget, warnThrottleReset, setWarnClock,
+          warnReportMs } = _testHooks;
+
+  /** Run `fn` with console.warn captured; returns the lines it emitted. */
+  function captureWarn(fn) {
+    const lines = [];
+    const real = console.warn;
+    console.warn = (...a) => lines.push(a.join(' '));
+    try { fn(); } finally { console.warn = real; }
+    return lines;
+  }
+
+  test('#spam repeated identical warn logs exactly once', () => {
+    warnThrottleReset();
+    const lines = captureWarn(() => {
+      for (let i = 0; i < 500; i++) warnThrottled('7:divergence:0:weaponL', '0/31', () => 'diverge');
+    });
+    assertEqual(lines.length, 1, '500 identical firings should collapse to 1 line');
+  });
+
+  test('#spam a changed state re-logs immediately', () => {
+    warnThrottleReset();
+    const lines = captureWarn(() => {
+      for (let i = 0; i < 50; i++) warnThrottled('7:divergence:0:weaponL', '0/31', () => 'a');
+      for (let i = 0; i < 50; i++) warnThrottled('7:divergence:0:weaponL', '0/99', () => 'b');
+    });
+    assertEqual(lines.length, 2, 'each distinct state logs once');
+    assertEqual(lines[0], 'a');
+    assertEqual(lines[1], 'b');
+  });
+
+  test('#spam distinct keys do not suppress each other', () => {
+    warnThrottleReset();
+    const lines = captureWarn(() => {
+      for (let i = 0; i < 20; i++) {
+        warnThrottled('7:divergence:0:weaponL', 's', () => 'L');
+        warnThrottled('7:divergence:0:weaponR', 's', () => 'R');
+        warnThrottled('9:divergence:0:weaponL', 's', () => 'other-user');
+      }
+    });
+    assertEqual(lines.length, 3, 'three keys → three lines');
+  });
+
+  test('#spam periodic re-report carries the suppressed count', () => {
+    warnThrottleReset();
+    let clock = 1_000_000;
+    setWarnClock(() => clock);
+    const lines = captureWarn(() => {
+      warnThrottled('7:divergence:0:weaponL', 's', () => 'diverge');   // logs
+      for (let i = 0; i < 42; i++) warnThrottled('7:divergence:0:weaponL', 's', () => 'diverge');
+      clock += warnReportMs + 1;                                        // window elapses
+      warnThrottled('7:divergence:0:weaponL', 's', () => 'diverge');   // re-reports
+    });
+    setWarnClock(null);
+    assertEqual(lines.length, 2, 'one initial line + one periodic re-report');
+    assertTrue(/\[×43 more since last report\]$/.test(lines[1]),
+      're-report must carry the suppressed count, got: ' + lines[1]);
+  });
+
+  test('#spam forget clears one user only, so a reconnect reports fresh', () => {
+    warnThrottleReset();
+    const lines = captureWarn(() => {
+      warnThrottled('7:divergence:0:weaponL', 's', () => 'u7');
+      warnThrottled('9:divergence:0:weaponL', 's', () => 'u9');
+      warnThrottleForget(7);
+      warnThrottled('7:divergence:0:weaponL', 's', () => 'u7-again');   // fresh → logs
+      warnThrottled('9:divergence:0:weaponL', 's', () => 'u9-again');   // still suppressed
+    });
+    assertEqual(lines.length, 3, 'user 7 re-reports, user 9 stays suppressed');
+    assertEqual(lines[2], 'u7-again');
+  });
+
+  test('#spam key set stays bounded under a runaway', () => {
+    warnThrottleReset();
+    captureWarn(() => {
+      for (let i = 0; i < 5000; i++) warnThrottled('u' + i + ':k', 's', () => 'x');
+    });
+    const keys = _testHooks.state.warnKeys();
+    // Both halves matter. `<= 500` alone also passes when the throttle is
+    // gutted and nothing is ever stored, which would make this a gate that
+    // can't fail — so assert the map is actually doing its job as well.
+    assertTrue(keys > 0, 'throttle must retain state, got an empty map');
+    assertTrue(keys <= 500, 'throttle map must stay capped, got ' + keys);
+    warnThrottleReset();
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────

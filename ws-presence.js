@@ -246,6 +246,57 @@ const _partyMemberships = new Map();
 // so the map grew unbounded per ever-online user.)
 const _lastSeenProfiles = new Map();   // userId → profile (without userId/loc)
 
+// ── Throttled warnings ─────────────────────────────────────────────────────
+// Some warnings sit in per-frame handlers. `[update divergence]` is the worst:
+// it fires once per diverging field per `update` message, and a client whose
+// equipment disagrees with the mirror re-sends the same claim forever — two
+// stuck players produced ~4000 identical lines and buried the only three
+// `[BOOT ERROR]` reports in the window, which is what a real diagnosis needed.
+//
+// So: log a given (key, state) the FIRST time, then suppress until either the
+// state changes or REPORT_MS elapses — and when it does re-fire, carry the
+// count of everything suppressed in between. Volume becomes a number on one
+// line instead of thousands of lines, and nothing is silently dropped.
+const _WARN_REPORT_MS = 5 * 60 * 1000;
+const _WARN_MAX_KEYS = 500;            // hard cap; a runaway key set is a leak
+const _warnState = new Map();          // key → { state, suppressed, lastLogTs }
+// Injectable clock — the periodic re-report is the half of this that a test
+// can't reach otherwise, and a test that sleeps 5 real minutes is a test
+// nobody runs. Only `_testHooks.setWarnClock` replaces it.
+let _warnNow = () => Date.now();
+
+/**
+ * @param key    identity of the thing being warned about (stable across firings)
+ * @param state  the CONTENT — a change here re-logs immediately
+ * @param render () => string, only called when we actually log
+ */
+function _warnThrottled(key, state, render) {
+  const now = _warnNow();
+  const prev = _warnState.get(key);
+  if (prev && prev.state === state) {
+    prev.suppressed++;
+    if (now - prev.lastLogTs < _WARN_REPORT_MS) return;
+    console.warn(render() + ' [×' + prev.suppressed + ' more since last report]');
+    prev.suppressed = 0;
+    prev.lastLogTs = now;
+    return;
+  }
+  // Insertion-ordered eviction — oldest key created goes first. Not a true LRU
+  // (a suppressed hit mutates in place without reordering), which is fine: the
+  // cap exists to bound memory, not to be precise about which entry survives.
+  if (!prev && _warnState.size >= _WARN_MAX_KEYS) {
+    _warnState.delete(_warnState.keys().next().value);
+  }
+  _warnState.set(key, { state, suppressed: 0, lastLogTs: now });
+  console.warn(render());
+}
+
+/** Drop a disconnected user's throttle state so a reconnect reports fresh. */
+function _warnThrottleForget(userId) {
+  const pre = userId + ':';
+  for (const k of _warnState.keys()) if (k.startsWith(pre)) _warnState.delete(k);
+}
+
 // Pending roster-trade offers (v1.7.598). offererUserId → { targetUserId,
 // itemId, expiresAt }. Server doesn't track inventory — it relays + arbitrates
 // the offer/response. Same trust model as give-item: a malicious sender can
@@ -968,14 +1019,22 @@ function _handleMessage(entry, msg) {
             for (const k of ['weaponR', 'weaponL', 'helmId', 'armorId', 'shieldId']) {
               if (fields[k] == null) continue;
               if (fields[k] === mirror[k]) continue;
-              console.warn('[update divergence] user=' + entry.userId + ' slot=' + (entry.slot | 0) +
-                ' ' + k + ' claimed=' + fields[k] + ' mirror=' + mirror[k]);
+              // Throttled: a client that disagrees with the mirror re-sends
+              // the same claim on every update frame, forever.
+              _warnThrottled(
+                entry.userId + ':divergence:' + (entry.slot | 0) + ':' + k,
+                fields[k] + '/' + mirror[k],
+                () => '[update divergence] user=' + entry.userId + ' slot=' + (entry.slot | 0) +
+                  ' ' + k + ' claimed=' + fields[k] + ' mirror=' + mirror[k]);
               fields[k] = mirror[k];
               entry.profile[k] = mirror[k];
             }
           }
         } catch (e) {
-          console.warn('[update equip-check] failed user=' + entry.userId + ': ' + e.message);
+          // Same hot path as the divergence warn above — a mirror read that
+          // throws once throws on every frame.
+          _warnThrottled(entry.userId + ':equip-check', e.message,
+            () => '[update equip-check] failed user=' + entry.userId + ': ' + e.message);
         }
       }
       if (Object.keys(fields).length === 0) return;
@@ -2364,6 +2423,9 @@ export function attachWebSocketPresence(httpServer) {
           if (n > 0) _connsByIp.set(entry.ip, n);
           else _connsByIp.delete(entry.ip);
         }
+        // Forget throttled-warning state so a reconnect reports fresh rather
+        // than staying suppressed behind the previous session's window.
+        _warnThrottleForget(userId);
         // Cancel this user's outgoing PvP search if any.
         _clearSearch(userId);
         // Cancel any searches targeting this user — notify each challenger.
@@ -2508,6 +2570,14 @@ export const _testHooks = {
   // MUST restore it, or every later hook roll in the run is pinned too.
   setHookRand(fn) { _hookRand = fn || Math.random; },
   inSameParty: _inSameParty,
+  // v1.7.928 — log-spam throttle. `warnThrottleReset` clears BOTH the state map
+  // and any pinned clock so tests don't leak into each other.
+  warnThrottled: _warnThrottled,
+  warnThrottleForget: _warnThrottleForget,
+  warnThrottleReset() { _warnState.clear(); _warnNow = () => Date.now(); },
+  // Pass null to restore the real clock. A test that pins this MUST reset.
+  setWarnClock(fn) { _warnNow = fn || (() => Date.now()); },
+  warnReportMs: _WARN_REPORT_MS,
   rateAllow: _rateAllow,
   rateAllowKind: _rateAllowKind,
   perKindRates: PER_KIND_RATES,
@@ -2521,6 +2591,7 @@ export const _testHooks = {
     partyInviteCooldowns: _partyInviteCooldowns,
     lastSeenProfiles: _lastSeenProfiles,
     connsByIp: _connsByIp,
+    warnKeys: () => _warnState.size,
   },
   resetState() {
     _connected.clear();

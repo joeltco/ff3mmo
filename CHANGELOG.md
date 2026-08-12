@@ -18,6 +18,21 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.928 — 2026-08-12
+
+### Fixed
+- **`[update divergence]` no longer floods the log.** It fires once per diverging field per `update` frame, and a client whose equipment disagrees with the mirror re-sends the same claim forever — two stuck players produced ~4000 identical lines and buried the only three `[BOOT ERROR]` reports in the window, which is exactly what a live "can't connect" report needed. New `_warnThrottled(key, state, render)` in `ws-presence.js` logs a given (key, state) once, then suppresses until the state changes or 5 minutes elapse — and the periodic re-report carries the count of everything suppressed in between (`[×43 more since last report]`). Volume becomes a number on one line; nothing is silently dropped.
+- `[update equip-check] failed` gets the same treatment — same hot path, and a mirror read that throws once throws every frame.
+- Throttle state is dropped per user on disconnect (`_warnThrottleForget`), so a reconnect reports fresh instead of staying suppressed behind the previous session's window. Key set is hard-capped at 500 so a runaway can't leak.
+
+### Added
+- Six regression tests in `tools/pvp-wire-sim.js` suite 2 (`--filter=spam`): identical firings collapse to one line, a changed state re-logs immediately, distinct keys don't suppress each other, the periodic re-report carries the suppressed count, `forget` clears one user only, and the key set stays bounded.
+- `_warnNow` is injectable via `_testHooks.setWarnClock` — the periodic re-report is the half a test can't otherwise reach, and a test that sleeps five real minutes is a test nobody runs.
+
+### Verified
+- **All 6 pass with the fix and all 6 FAIL with the throttle gutted.** The bounded-key-set test initially passed under revert (a gutted throttle stores nothing, so `size <= 500` held trivially) — it now also asserts the map is non-empty, so it can actually fail.
+- Full `pvp-wire-sim`: **146 passed, 0 failed.**
+
 ## 1.7.927 — 2026-08-12
 
 ### Fixed
