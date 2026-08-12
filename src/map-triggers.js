@@ -399,11 +399,41 @@ export function findWorldExitIndex(mapId, worldMapData) {
   return 0; // fallback
 }
 
+// v1.7.923 — maps whose ROM entrance leaves the player with no reachable exit.
+// Verified per map with `node tools/map-connectivity.mjs <id>`, which floods
+// using the real `MapRenderer.isPassable`:
+//   22  spawn (9,22)   67 tiles, 1 exit,  none reachable
+//   24  spawn (1,27)   24 tiles, 4 exits, none reachable
+//   178 spawn (27,29)   7 tiles, 9 exits, none reachable
+//   180 spawn (19,11)  98 tiles, 1 exit,  none reachable
+// Only 180 is reachable on foot today; the rest are listed so opening a sea or
+// air route later cannot quietly re-introduce the same trap.
+const STRANDING_MAPS = new Set([22, 24, 178, 180]);
+
 function _checkWorldMapTrigger(tileX, tileY) {
   const trigger = mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
   if (!trigger || trigger.type !== 'entrance') return false;
   let destMap = trigger.destMap;
   if (destMap === 0) return false;
+  // v1.7.923 — maps that strand the player are refused at the door.
+  //
+  // We enter every map at its ROM `entranceX/Y`; for these four that lands in a
+  // pocket with no reachable exit (map 178 has NINE exits and drops you in seven
+  // tiles of floor), so the only way out is dying. Confirmed with the game's own
+  // `MapRenderer.isPassable` — see `tools/map-connectivity.mjs`.
+  //
+  // Refused HERE rather than with terrain: the only real chokepoint between Ur
+  // and map 180's entrance is (95,44), and blocking it re-closes 399 tiles plus
+  // the entrances to maps 10, 18, 31, 95 and 151. Blocking one broken map is not
+  // worth sealing five working ones, and a boulder alone in open desert reads as
+  // scenery nobody placed on purpose.
+  //
+  // This comes out when the real entry coordinates are decoded (see the v1.7.921
+  // changelog note) — the maps are fine, our entry point is wrong.
+  if (STRANDING_MAPS.has(destMap)) {
+    showMsgBox(_nameToBytes('The way is barred.'));
+    return true;
+  }
   const savedX = tileX, savedY = tileY;
   if (destMap === 111) {
     mapSt.dungeonSeed = Date.now();

@@ -1,27 +1,17 @@
 // World Map Renderer — viewport-based rendering for 128x128 world maps
 
-import { NES_SYSTEM_PALETTE, buildWaterFrames, decodeTile, drawTile } from './tile-decoder.js';
-import { BOULDER_TILES, BOULDER_PAL } from './data/boulder-sprite.js';
+import { NES_SYSTEM_PALETTE, buildWaterFrames } from './tile-decoder.js';
 
 const TILE_SIZE = 16;
 
-// v1.7.922 — the boulder is BACK, but at a different tile.
-//
-// v1.7.903 lifted the original choke at (95,44) and opened the overworld from 2
-// reachable entrances to 8. One of those 8 is (90,59) -> map 180, and map 180
-// walls the player in: you spawn at the ROM entrance (19,11) in a 98-tile
-// pocket whose only door (2,27) sits in a disconnected region. Confirmed with
-// the game's own `MapRenderer.isPassable` via `tools/map-connectivity.mjs`, and
-// confirmed the hard way by a live player walking in and getting stuck.
-//
-// So the blocker moves to the broken entrance instead of sealing the valley:
-// the other 7 entrances stay open, and the one warp that strands you does not.
-// This is a STOPGAP for a bug on our side — we spawn at `entranceX/Y` and the
-// ROM evidently enters these maps somewhere else (see the v1.7.921 note). When
-// the real entry coordinates are decoded, this comes back out.
-const CHOKE_TILE_X = 90;
-const CHOKE_TILE_Y = 59;
-
+// v1.7.923 — no boulder on this map. The original choke at (95,44) is the ONLY
+// real chokepoint between Ur and the broken map-180 entrance (2 walkable
+// neighbours; the other two candidates, (95,43) and (95,45), are the same pass).
+// Blocking it re-closes 399 tiles and costs the entrances to maps 10, 18, 31,
+// 95 and 151 — five working maps sealed to block one broken one. Not worth it,
+// so the world stays open and map 180 is refused at the door instead
+// (map-triggers.js#_checkWorldMapTrigger). A lone boulder in open desert was
+// the wrong shape for that job.
 export class WorldMapRenderer {
   constructor(worldMapData) {
     this.data = worldMapData;
@@ -169,48 +159,15 @@ export class WorldMapRenderer {
     }
   }
 
-  // Lazily decode the 4 captured boulder tiles into a 16×16 offscreen canvas
-  // (color 0 = transparent so terrain shows through). Built once.
-  _getBoulderCanvas() {
-    if (this._boulderCanvas) return this._boulderCanvas;
-    const c = document.createElement('canvas');
-    c.width = TILE_SIZE; c.height = TILE_SIZE;
-    const cx = c.getContext('2d');
-    const off = [[0, 0], [8, 0], [0, 8], [8, 8]]; // TL, TR, BL, BR
-    for (let i = 0; i < BOULDER_TILES.length; i++) {
-      drawTile(cx, decodeTile(BOULDER_TILES[i]), BOULDER_PAL, off[i][0], off[i][1]);
-    }
-    this._boulderCanvas = c;
-    return c;
-  }
-
-  drawOverlay(ctx, cameraX, cameraY, originX, originY) {
-    // Draw the choke boulder on tile (95,45) when it's in view. Mirrors the
-    // draw() tile-range walk so map wrapping is handled identically; runs
-    // after the player sprite, so the boulder reads as a solid foreground.
-    const size = this.data.mapWidth;
-    const worldLeft = cameraX - originX;
-    const worldTop = cameraY - originY;
-    const startTX = Math.floor(worldLeft / TILE_SIZE);
-    const startTY = Math.floor(worldTop / TILE_SIZE);
-    const endTX = startTX + Math.ceil(ctx.canvas.width / TILE_SIZE) + 1;
-    const endTY = startTY + Math.ceil(ctx.canvas.height / TILE_SIZE) + 1;
-    for (let ty = startTY; ty <= endTY; ty++) {
-      if ((((ty % size) + size) % size) !== CHOKE_TILE_Y) continue;
-      for (let tx = startTX; tx <= endTX; tx++) {
-        if ((((tx % size) + size) % size) !== CHOKE_TILE_X) continue;
-        ctx.drawImage(this._getBoulderCanvas(), tx * TILE_SIZE - worldLeft, ty * TILE_SIZE - worldTop);
-      }
-    }
-  }
+  // No foreground overlay on the world map. Kept as a no-op because
+  // `render.js#_drawOverlay` calls it unconditionally on whichever renderer is
+  // active, and the interior renderer has a real one.
+  drawOverlay() { /* world map has no foreground overlay */ }
 
   isPassable(tileX, tileY) {
     const size = this.data.mapWidth;
     const wx = ((tileX % size) + size) % size;
     const wy = ((tileY % size) + size) % size;
-
-    // Boulder over the map-180 entrance — hard-blocked regardless of terrain.
-    if (wx === CHOKE_TILE_X && wy === CHOKE_TILE_Y) return false;
 
     const metatileId = this.data.tilemap[wy * size + wx];
     const m = metatileId & 0x7F;

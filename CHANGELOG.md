@@ -18,6 +18,28 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.923 — 2026-08-12
+
+- **Boulder removed — it was in open desert, which is not a choke.** Correcting
+  v1.7.922. Computed the actual chokepoints between Ur and map 180's entrance:
+  there are exactly **three**, and they are all the same pass — (95,44) with 2
+  walkable neighbours, plus (95,43) and (95,45). (95,44) is where the boulder
+  ORIGINALLY was. There is no second choke to move it to.
+- Blocking that pass re-closes **399 tiles** and the entrances to maps 10, 18,
+  31, 95 and 151 — five working maps sealed to block one broken one. Not worth
+  it, so the world stays fully open: **429 tiles, 8 entrances**, same as
+  v1.7.903.
+- **Map 180 is refused at the door instead** — `_checkWorldMapTrigger` checks a
+  `STRANDING_MAPS` set (22, 24, 178, 180) and shows "The way is barred." rather
+  than warping. Terrain was the wrong tool for the job; a lone rock in a desert
+  reads as scenery nobody placed on purpose.
+- The set lists all four even though only 180 is reachable on foot, so opening a
+  sea or air route later cannot quietly re-introduce the same trap. Each entry
+  is backed by `node tools/map-connectivity.mjs <id>` output in the comment.
+- Still a stopgap for OUR bug: we enter at the ROM `entranceX/Y` and the ROM
+  evidently enters these maps elsewhere. When the entry coordinates are decoded
+  the set empties and the maps open properly.
+
 ## 1.7.922 — 2026-08-12
 
 - **Boulder relocated to (90,59) — the map-180 entrance.** That tile is the
