@@ -308,6 +308,36 @@ function _withTimeout(promise, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+// v1.7.934 — crash-surviving stage recorder.
+//
+// The Android player's trace now ends at `[boot] start` with NOTHING after it:
+// no `ips-skipped` (so the patch fetch resolved fine), no `saves-load`, and
+// crucially no `launch-failed` either. The code between those points is
+// SYNCHRONOUS, so it cannot hang — it either throws, which `tryLaunch`'s catch
+// would have beaconed, or the page dies before any beacon can leave. A renderer
+// OOM on a low-memory device does exactly that, and this ROM build allocates
+// several large canvases in a row right there.
+//
+// A network beacon cannot report a crash that kills the page. localStorage
+// writes are synchronous and survive it, so we stamp the stage BEFORE each
+// step and report the last one on the NEXT load. `_BOOT_DONE` marks a clean
+// finish so a normal boot never reports itself as a crash.
+const _BOOT_STAGE_KEY = 'ff3_boot_stage';
+const _BOOT_DONE = 'done';
+function _stage(name) {
+  try { localStorage.setItem(_BOOT_STAGE_KEY, name); } catch (_) { /* private mode */ }
+}
+function _stageClear() {
+  try { localStorage.setItem(_BOOT_STAGE_KEY, _BOOT_DONE); } catch (_) { /* ignore */ }
+}
+/** If the previous boot never reached `done`, report where it stopped. */
+function _reportPreviousBootCrash() {
+  let prev = null;
+  try { prev = localStorage.getItem(_BOOT_STAGE_KEY); } catch (_) { return; }
+  if (!prev || prev === _BOOT_DONE) return;
+  _bootBeacon('DIED-AT', { stage: prev });
+}
+
 /** Report a boot stage so a hang is locatable instead of silent. */
 function _bootBeacon(stage, extra) {
   try {
@@ -327,6 +357,9 @@ export async function loadROM(arrayBuffer) {
   const _bootStart = performance.now();
   const romBytes = new Uint8Array(arrayBuffer);
   _bootBeacon('start', { bytes: romBytes.length });
+  // Must run BEFORE this boot overwrites the key.
+  _reportPreviousBootCrash();
+  _stage('ips-fetch');
   try {
     // Bounded: a stalled network here used to hang boot forever. On timeout we
     // fall through to the existing "no patch file" path and boot unpatched,
@@ -342,24 +375,37 @@ export async function loadROM(arrayBuffer) {
     _bootBeacon('ips-skipped', { err: String((e && e.message) || e).slice(0, 80) });
   }
 
+  _stage('parseROM');
   const rom = parseROM(romBytes.buffer);
   document.getElementById('rom-info').textContent =
     `PRG: ${rom.prgBanks} banks (${rom.prgSize / 1024}KB), ` +
     `CHR: ${rom.chrBanks} banks, Mapper: ${rom.mapper}`;
   const rawBytes = rom.raw;
+  _stage('initTextDecoder');
   initTextDecoder(rawBytes);
+  _stage('initFont');
   initFont(rawBytes);
+  _stage('initSpriteAssets');
   initSpriteAssets(rawBytes);
+  _stage('playerSprite');
   setPlayerSprite(new Sprite(rawBytes, SPRITE_PAL_TOP, SPRITE_PAL_BTM));
+  _stage('loadWorldMap');
   mapSt.worldMapData = loadWorldMap(rawBytes, 0);
+  _stage('WorldMapRenderer');
   mapSt.worldMapRenderer = new WorldMapRenderer(mapSt.worldMapData);
+  _stage('waterCache');
   resetWorldWaterCache();
+  _stage('initTitleAssets');
   initTitleAssets(rawBytes);
+  _stage('initMapLoading');
   initMapLoading(rawBytes);
+  _stage('initSpellCast');
   initSpellCast({ processNextTurn });
+  _stage('initBattleEncounter');
   initBattleEncounter({ resetBattleVars, tryJoinPlayerAlly });
   initBattleAlly({ buildTurnOrder, processNextTurn, isTeamWiped });
   initBattleEnemy({ processNextTurn, isTeamWiped });
+  _stage('initInputHandler');
   initInputHandler({ executeBattleCommand, startPVPBattle });
   initPVPSearch({ startPVPBattle });
   initPauseMenuInput({ returnToTitle });
@@ -370,6 +416,7 @@ export async function loadROM(arrayBuffer) {
   // it risks their data. Throwing surfaces it: `tryLaunch`'s catch fires,
   // `launch-failed` beacons, and the message lands in `#rom-info` where both
   // they and we can see it.
+  _stage('loadSaves');
   _bootBeacon('saves-load');
   try {
     await _withTimeout(loadSlotsFromDB(), 10000, 'load-saves');
@@ -377,7 +424,9 @@ export async function loadROM(arrayBuffer) {
     _bootBeacon('saves-failed', { err: String((e && e.message) || e).slice(0, 100) });
     throw e;
   }
+  _stage('titleScreen');
   _bootBeacon('title');
+  _stageClear();
 
   if (window.DEBUG_BOSS) { _startDebugMode(); return; }
   _startTitleScreen();
