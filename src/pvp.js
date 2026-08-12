@@ -47,6 +47,7 @@ import { tickHealNums, clearHealNums, DMG_SHOW_MS } from './damage-numbers.js';
 import { SPELLS } from './data/spells.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { isSummonSpell, summonCastMs, summonTotalMs } from './summon-anim.js';
+import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
@@ -142,6 +143,8 @@ export const pvpSt = {
   pvpMagicCasterCellIdx:  -1,
   pvpMagicTargetCellIdx:  -1,    // for heal/cure-status (target on enemy team)
   pvpMagicSpellId:        0,
+  // Resolved summon effect for the CURRENT PVP cast (null for ordinary spells).
+  pvpSummonEffect:        null,
   pvpMagicHealAmount:     0,
   pvpMagicEffectApplied:  false,
   pvpMagicSfxPlayed:      false,  // gated SFX at impact start (separate from apply timing)
@@ -385,6 +388,7 @@ export function resetPVPState() {
   pvpSt.pvpMagicCasterCellIdx   = -1;
   pvpSt.pvpMagicTargetCellIdx   = -1;
   pvpSt.pvpMagicSpellId         = 0;
+  pvpSt.pvpSummonEffect         = null;
   pvpSt.pvpMagicHealAmount      = 0;
   pvpSt.pvpMagicEffectApplied   = false;
   pvpSt.pvpMagicPartyTargetIdx  = -100;
@@ -1166,10 +1170,17 @@ function _tryPVPEnemyOffensiveCast(caster, casterCellIdx) {
   const enemies = _buildPVPPlayerTeam();
   const target = pickRandomLivingTarget(enemies);
   if (!target) return false;
-  const spell = SPELLS.get(spellId);
+  // Resolve the summon's tier from the CASTER'S job once, at pick time — same
+  // as spell-cast.js for the player and battle-turn.js for an ally, so the roll
+  // cannot change between the damage pre-roll and the apply.
+  const summonEffect = isTieredSummon(spellId)
+    ? resolveSummonEffect(spellId, caster.jobIdx | 0)
+    : null;
+  const spell = summonEffect ? summonEffectAsSpell(spellId, summonEffect) : SPELLS.get(spellId);
   if (!spell) return false;
   const dmg = rollOffensiveDamage(caster, spell);
 
+  pvpSt.pvpSummonEffect        = summonEffect;
   pvpSt.pvpMagicCasterCellIdx  = casterCellIdx;
   pvpSt.pvpMagicTargetCellIdx  = -1;
   pvpSt.pvpMagicPartyTargetIdx = target.ref.partyIdx;
@@ -1264,7 +1275,11 @@ function _applyPVPEnemyMagicEffect() {
           onMiss: () => setDmgNum({ miss: true }),
         });
       } else {
-        const spell = SPELLS.get(sid);
+        // Tiered summon stands in its rewritten spell, exactly as the player and
+        // ally paths do; the damage helper needs no summon knowledge.
+        const spell = pvpSt.pvpSummonEffect
+          ? summonEffectAsSpell(sid, pvpSt.pvpSummonEffect)
+          : SPELLS.get(sid);
         applyMagicDamage(tgt, pvpSt.pvpMagicDamageRoll | 0, spell, {
           onDmgNum: (dmg) => setDmgNum({ value: dmg }),
           onShake: triggerShake,
@@ -1377,6 +1392,7 @@ function _processPVPEnemyMagic(dt) {
       pvpSt.pvpMagicTargetCellIdx = -1;
       pvpSt.pvpMagicPartyTargetIdx = -100;
       pvpSt.pvpMagicSpellId = 0;
+      pvpSt.pvpSummonEffect = null;
       pvpSt.pvpMagicDamageRoll = 0;
       clearActiveCast();  // v1.7.389 — was leaking the state bag between spell rounds. Audit #32.
       _advancePVPTurnOrEnd();  // v1.7.225 — was processNextTurn() (skipped teamwipe → spell-kill bug)

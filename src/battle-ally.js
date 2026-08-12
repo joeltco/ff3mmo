@@ -22,6 +22,7 @@ import { replaceBattleMsg } from './battle-msg.js';
 import { CAST_PHASE_MS_THROW, CAST_PHASE_MS_HEAL } from './cast-anim.js';
 import { isSummonSpell, summonCastMs, summonTotalMs } from './summon-anim.js';
 import { livingEnemyIndices, enemyAtIndex } from './combatant-cast.js';
+import { summonEffectAsSpell } from './summon-tier.js';
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, applyMagicErase,
          applySpell, playSpellImpactSFX } from './combatant-cast.js';
@@ -290,7 +291,12 @@ function _setAllyMagicEnemyDmgNum(num, idx = battleSt.allyMagicTargetIdx) {
 
 function _applyAllyMagicEffect() {
   const spellId = battleSt.allyMagicSpellId;
-  const spell = SPELLS.get(spellId);
+  // A tiered summon stands in a rewritten spell here — power, element and type
+  // replaced by the resolved effect — so the damage path needs no knowledge of
+  // summons, which is exactly how spell-cast.js treats the player's cast.
+  const spell = battleSt.allySummonEffect
+    ? summonEffectAsSpell(spellId, battleSt.allySummonEffect)
+    : SPELLS.get(spellId);
   if (!spell) return;
 
   // Sight has no target — peek the front-row enemy. Erase / dispel likewise.

@@ -145,10 +145,12 @@ try {
 const { sweepFloors, PASS } = await import('./dungeon-sweep.mjs');
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
-const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
 const { updateBattlePlayerAttack, updatePoisonTick } = await import('../src/battle-update.js');
 const { updateBattleAlly } = await import('../src/battle-ally.js');
+const { pickOffensiveSpell, offensiveSpellPool } = await import('../src/combatant-ai.js');
+const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
+const { resolveSummonEffect, summonEffectAsSpell } = await import('../src/summon-tier.js');
 const { pvpSt, updatePVPBattle } = await import('../src/pvp.js');
 const { DMG_SHOW_MS, getEnemyDmgNum } = await import('../src/damage-numbers.js');
 const { BACK_SWING_MS, FWD_SWING_MS, HIT_PAUSE_MS, SWING_HOLD_MS } = await import('../src/slash-effects.js');
@@ -2074,6 +2076,85 @@ const tests = [
       pvpSt.isPVPBattle = saved.isPvp; pvpSt.pvpMagicSpellId = saved.sid;
       battleSt.battleAllies = saved.allies;
     }
+  },
+  // Regression — allies can PICK summons, and only if they know one.
+  //
+  // Three claims, because widening an AI pool is easy to get wrong in three
+  // different directions: the summon must be reachable, it must NOT be handed to
+  // a caster who does not know it, and the pool must stay derived from
+  // SUMMON_TIERS rather than a second hardcoded list that can fall behind.
+  () => {
+    const name = 'regression — allies pick summons only when they know one, from a derived pool';
+    const bad = [];
+    // 1. the pool covers every summon in the catalogue, derived not listed
+    const pool = offensiveSpellPool();
+    for (const id of SUMMON_TIERS.keys()) {
+      if (!pool.includes(id)) bad.push(`summon 0x${id.toString(16)} missing from the AI pool`);
+    }
+    // 2. a caster that knows a summon can actually roll it
+    const SHIVA = 0x30;
+    const knower = { knownSpells: [SHIVA] };
+    let got = null;
+    for (let i = 0; i < 40 && got === null; i++) got = pickOffensiveSpell(knower);
+    if (got !== SHIVA) bad.push(`a caster knowing only Shiva picked ${got} instead`);
+    // 3. a caster that does NOT know it never gets it
+    const ignorant = { knownSpells: [0x31, 0x32] };
+    for (let i = 0; i < 200; i++) {
+      const p2 = pickOffensiveSpell(ignorant);
+      if (SUMMON_TIERS.has(p2)) { bad.push(`a caster without a summon was handed 0x${p2.toString(16)}`); break; }
+    }
+    // 4. the tier rewrite actually changes the spell, so "resolved" is not a no-op
+    const base = SPELLS.get(SHIVA);
+    const eff = resolveSummonEffect(SHIVA, 17);          // Summoner
+    const tiered = summonEffectAsSpell(SHIVA, eff);
+    if (!eff) bad.push('resolveSummonEffect returned nothing for a tiered summon');
+    else if (tiered.power === base.power) {
+      bad.push(`tiered Shiva has the same power as base (${base.power}) — the rewrite is a no-op`);
+    }
+    // 5. THE WIRING, not just the helpers. Reverting battle-turn.js to skip
+    //    tier resolution left checks 1-4 green, because they only exercised
+    //    resolveSummonEffect / summonEffectAsSpell in isolation. Drive a REAL
+    //    ally turn and require the resolved effect to be on battleSt.
+    const savedTurn = { state: battleSt.battleState, mons: battleSt.encounterMonsters,
+                        rnd: battleSt.isRandomEncounter, allies: battleSt.battleAllies,
+                        queue: battleSt.turnQueue };
+    let casts = 0, resolved = 0;
+    try {
+      for (let seed = 1; seed <= 120 && casts < 6; seed++) {
+        setupEncounter({ monster: { ...goblin, hp: 900, maxHP: 900 }, seed });
+        battleSt.isRandomEncounter = true;
+        const a = battleSt.battleAllies[0];
+        a.hp = 300; a.maxHP = 300; a.mp = 99;
+        a.knownSpells = [SHIVA];          // knows ONLY a summon
+        a.jobIdx = 17;                    // Summoner
+        ps.hp = 500;                      // healthy, so the cure AI does not pre-empt
+        // The turn must be QUEUED for the ally, exactly as the confused-turn
+        // test does; processNextTurn() alone does not invent one.
+        battleSt.turnQueue = [{ type: 'ally', index: 0 }];
+        battleSt.allySummonEffect = null;
+        battleSt.allyMagicSpellId = 0;
+        battleSt.battleState = 'menu-open';
+        processNextTurn();
+        if (battleSt.allyMagicSpellId === SHIVA) {
+          casts++;
+          if (battleSt.allySummonEffect) resolved++;
+        }
+      }
+    } finally {
+      battleSt.battleState = savedTurn.state; battleSt.encounterMonsters = savedTurn.mons;
+      battleSt.isRandomEncounter = savedTurn.rnd; battleSt.battleAllies = savedTurn.allies;
+      battleSt.turnQueue = savedTurn.queue;
+    }
+    if (casts === 0) {
+      bad.push('an ally that knows only Shiva never queued it in 120 seeded turns');
+    } else if (resolved !== casts) {
+      bad.push(`${casts - resolved}/${casts} ally summon casts carried NO resolved tier `
+             + '(battleSt.allySummonEffect null — the tier rewrite is not wired)');
+    }
+    if (bad.length) return { pass: false, name, reason: bad.join('; ') };
+    return { pass: true, name,
+      info: `pool covers ${SUMMON_TIERS.size} summons; non-knower never rolls one; `
+          + `tiered power ${tiered.power} vs base ${base.power}; ${resolved}/${casts} real casts carried a tier` };
   },
 ];
 

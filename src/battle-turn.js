@@ -26,6 +26,7 @@ import { SPELLS } from './data/spells.js';
 import { selectCursor, saveSlots, saveSlotsToDB } from './save-state.js';
 import { removeItem } from './inventory.js';
 import { startAllyRevive } from './battle-fenix-revive.js';
+import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summon-tier.js';
 import { canCastBasic, canCastAny, pickHealTarget, pickPoisonedTarget,
          pickRandomLivingTarget, pickOffensiveSpell, rollOffensiveDamage,
          rollCureAmount, rollActivation,
@@ -722,7 +723,16 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
 
   const target = pickRandomLivingTarget(enemies);
   if (!target) return false;
-  const spell = SPELLS.get(spellId);
+  // A summon's three effects are picked from the CASTER'S JOB — Conjurer rolls
+  // between the first two, Summoner and Sage always get the third. Resolved once
+  // here, at pick time, exactly as spell-cast.js does for the player, so the
+  // roll cannot change between the damage pre-roll and the apply. Without this
+  // an ally summon would quietly use the catalogue's base power while the
+  // player's used the tiered effect.
+  const summonEffect = isTieredSummon(spellId)
+    ? resolveSummonEffect(spellId, ally.jobIdx | 0)
+    : null;
+  const spell = summonEffect ? summonEffectAsSpell(spellId, summonEffect) : SPELLS.get(spellId);
   if (!spell) return false;
   const dmg = rollOffensiveDamage(ally, spell);
 
@@ -730,6 +740,7 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
   battleSt.allyMagicTargetType    = targetType;
   battleSt.allyMagicTargetIdx     = target.ref.index;
   battleSt.allyMagicSpellId       = spellId;
+  battleSt.allySummonEffect       = summonEffect;
   battleSt.allyMagicHealAmount    = 0;
   battleSt.allyMagicDamageRoll    = dmg;
   battleSt.allyMagicEffectApplied = false;

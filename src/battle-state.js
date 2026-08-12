@@ -95,6 +95,9 @@ export const battleSt = {
   allyMagicTargetType: 'player',      // 'player' | 'ally'
   allyMagicTargetIdx: -1,             // ally index when target type is 'ally'
   allyMagicSpellId: 0,
+  // Resolved summon effect for the CURRENT ally cast (null for ordinary spells).
+  // Held so the tier roll cannot change between the damage pre-roll and the apply.
+  allySummonEffect: null,
   allyMagicHealAmount: 0,             // pre-rolled heal value
   allyMagicDamageRoll: 0,             // pre-rolled damage value for offensive casts (Fire/Bzzard/etc.)
   allyMagicEffectApplied: false,

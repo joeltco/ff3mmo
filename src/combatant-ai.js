@@ -21,6 +21,7 @@
 
 import { rand } from './rng.js';
 import { hasStatus, STATUS, canCastMagic } from './status-effects.js';
+import { SUMMON_TIERS } from './data/summon-tiers.js';
 
 // Activation thresholds. Pulled out so the rate balance is in one place;
 // each was duplicated as a magic number in both _tryAlly* and _tryPVPEnemy*.
@@ -36,6 +37,23 @@ export const AI_PVP_SW_GATE        = 0.15;  // PvP-main only: chance to SouthWin
 export const SPELL_CURE          = 0x34;
 export const SPELL_POISONA       = 0x35;
 export const OFFENSIVE_SPELLS    = [0x31, 0x32, 0x33];  // Fire, Bzzard, Sleep
+
+/**
+ * Everything the AI may pick offensively: the plain spells above plus every
+ * SUMMON.
+ *
+ * Derived from `SUMMON_TIERS` rather than listing the eight ids again. This
+ * whole subsystem has been bitten repeatedly by a hardcoded list that stopped
+ * matching its data; adding a summon to the catalogue should not require
+ * remembering to add it here too.
+ *
+ * A caster still only reaches a summon it actually KNOWS — `pickOffensiveSpell`
+ * intersects this pool with `caster.knownSpells` — so widening the pool does not
+ * hand summons to a Black Mage.
+ */
+export function offensiveSpellPool() {
+  return [...OFFENSIVE_SPELLS, ...SUMMON_TIERS.keys()];
+}
 
 // `team` / `enemies` entries are opaque to this module. Callers pass entries
 // shaped { ref, hp, maxHP, status?, name? } where `ref` is whatever the caller
@@ -100,7 +118,8 @@ export function pickRandomLivingTarget(enemies, opts = {}) {
 export function pickOffensiveSpell(caster, opts = {}) {
   const rng = opts.rand || rand;
   if (!Array.isArray(caster?.knownSpells)) return null;
-  const pool = caster.knownSpells.filter(s => OFFENSIVE_SPELLS.includes(s));
+  const allowed = offensiveSpellPool();
+  const pool = caster.knownSpells.filter(s => allowed.includes(s));
   if (pool.length === 0) return null;
   return pool[Math.floor(rng() * pool.length)];
 }

@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.891 — 2026-08-11
+
+**Allies (and PVP opponents) can now pick summons. The pool is derived, and the tier is resolved from the caster's job.**
+
+`OFFENSIVE_SPELLS` was `[0x31, 0x32, 0x33]`, so the summon presentation and multi-target work of the last three versions was correct-when-reached but unreachable. It is reachable now.
+
+**The pool is derived, not listed again.** `offensiveSpellPool()` is `OFFENSIVE_SPELLS` plus `SUMMON_TIERS.keys()`. This subsystem has been bitten repeatedly by a hardcoded list that stopped matching its data — adding a summon to the catalogue should not also require remembering this file. A caster still only reaches a summon it actually KNOWS, since `pickOffensiveSpell` intersects the pool with `knownSpells`, so widening it does not hand Bahamut to a Black Mage.
+
+**The tier is resolved from the CASTER'S job**, not left at base power. A summon has three effects — Conjurer rolls between the first two, Summoner and Sage always get the third — and the player has always resolved this via `resolveSummonEffect(spellId, ps.jobIdx)`. Ally and PVP casts now do the same at PICK time, so the roll cannot change between the damage pre-roll and the apply, and the rewritten spell is what the damage path sees. Without it an ally Shiva would have hit for base power 50 where the player's hits for the tiered 32.
+
+**Gate #44 asserts four things, and the fourth is the one that mattered.** The pool covers every summon; a caster knowing only Shiva rolls it; a caster who does not know one NEVER gets handed one in 200 draws; and — added after the first version of this gate passed a revert — a REAL queued ally turn must carry a resolved tier on `battleSt.allySummonEffect`.
+
+That first version tested `resolveSummonEffect` and `summonEffectAsSpell` in isolation and stayed green when `battle-turn.js` was reverted to skip resolution entirely, because nothing checked the WIRING. It now drives `processNextTurn()` with a queued ally turn and reports **6/6 real casts carried a tier**. Both reverts fail: skipping resolution, and narrowing the pool.
+
+Gates: lint 0, encounter-sim 44, pvp-wire-sim 140, wire-stats lossless, battle-sim clean.
+
 ## 1.7.890 — 2026-08-11
 
 **Ally and PVP summons now hit every target, matching the player. The caveat I flagged twice is closed.**
