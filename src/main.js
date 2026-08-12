@@ -346,7 +346,17 @@ function _bootBeacon(stage, extra) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         msg: '[boot] ' + stage,
-        ctx: Object.assign({ ua: navigator.userAgent.slice(0, 120) }, extra || {}),
+        // `build` matters as much as the stage. Without it a `[boot] start`
+        // from an old cached page is indistinguishable from one on the current
+        // build — which cost a full diagnostic round: two `[boot] start`
+        // beacons with no `DIED-AT` read as "the recorder failed" when the real
+        // answer was "she is not running the recorder at all". Read from
+        // localStorage (set by the version gate in index.html) rather than
+        // threading the template token into a module.
+        ctx: Object.assign({
+          ua: navigator.userAgent.slice(0, 120),
+          build: (() => { try { return localStorage.getItem('ff3_build') || '?'; } catch (_) { return '?'; } })(),
+        }, extra || {}),
       }),
       keepalive: true,
     }).catch(() => {});
