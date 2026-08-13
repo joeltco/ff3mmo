@@ -393,11 +393,27 @@ export class MapRenderer {
       // else in the play area.
       if (fillIsVoid) {
         const attachedTop = attachedEdge(rminY, -1);
+        const rowHasForeignFloor = (y) => {
+          for (let x = left; x < right; x++) if (foreignAt(x, y)) return true;
+          return false;
+        };
         let foreignAbove = false;
-        for (let y = top; y < attachedTop && !foreignAbove; y++) {
-          for (let x = left; x < right && !foreignAbove; x++) if (foreignAt(x, y)) foreignAbove = true;
+        for (let y = top; y < attachedTop && !foreignAbove; y++) foreignAbove = rowHasForeignFloor(y);
+        if (foreignAbove) {
+          // Stop at the first row holding another room's FLOOR — not at the void
+          // gap. The gap row is this building's own ceiling and must keep
+          // drawing. On map 12 row 12 is `##~####...`: solid wall right across,
+          // fill only in the stairway column, no walkable tile anywhere. Cutting
+          // to the room's first walkable row (13) took that ceiling with it and
+          // the inn lost its top row of tiles. Rows 9-11 are the foreign
+          // corridor — walkable at x=3, and those are what must go.
+          let keepFrom = rminY;
+          for (let y = rminY - 1; y >= top; y--) {
+            if (rowHasForeignFloor(y)) break;
+            keepFrom = y;
+          }
+          top = Math.max(top, keepFrom);
         }
-        if (foreignAbove) top = Math.max(top, attachedTop);
       }
       left   = Math.min(left,   Math.max(0, rminX - 1));
       right  = Math.max(right,  Math.min(MAP_SIZE, rmaxX + 2));

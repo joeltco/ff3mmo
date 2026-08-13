@@ -18,6 +18,21 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.964 — 2026-08-12
+
+### Fixed — v1.7.963 cut the inn's ceiling along with the foreign corridor
+- "The first floor of the inn is missing top rows of tiles." My fault, one release old: the trim stopped at the **void gap**, and on map 12 that gap row *is* the inn's own ceiling. Row 12 is `##~####...` — solid wall right across, fill only in the stairway column, and **no walkable tile anywhere**. Cutting to the room's first walkable row (13) took the ceiling with it.
+- The trim now stops at the first row holding another room's **floor**, not at the void gap. On map 12 that keeps row 12 (ceiling) and drops rows 9-11 (the foreign corridor, walkable at x=3).
+- Clip on map 12, at both the town entrance and the stairs: **y 12..24**. v1.7.962 drew from row 9 (three foreign rows), v1.7.963 from row 13 (ceiling missing), this draws from row 12.
+- Rendered and looked at: full top wall band, stairway opening at the left, black above it — matching the real ROM capture of the same room.
+
+### Gate
+- The door-seed assertion allowed zero rows above the room, which is what let the over-trim through. **One row above is the ceiling and must draw; two or more is another room.** Proven in both directions: reverting to v1.7.962 fails with "3 foreign rows above the ceiling"; the v1.7.963 over-trim is caught by the clip comparison.
+
+### Unchanged
+- Maps 13, 17, 44, 101, 188, 3, 15, 47, 20, 4, 5, 16, 50 keep their exact clips.
+- **Maps 28 and 191 still carry the 8-cell cost** introduced in v1.7.963 — the new stop rule doesn't recover them; their first foreign row sits immediately above the room.
+
 ## 1.7.963 — 2026-08-12
 
 ### Fixed — the Kazus inn's FIRST FLOOR drew another room's staircase above it

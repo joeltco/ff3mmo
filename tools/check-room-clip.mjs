@@ -150,10 +150,13 @@ for (const id of IDS) {
       const dd = dr._clipDiag;
       if (!dr._roomClip || !dd || dd.rminY === undefined) continue;
       const dTop = dr._roomClip.y / TILE;
-      if (dTop < dd.rminY) {
+      // One row above the room is its CEILING and must draw — cutting it is
+      // what made the inn "missing top rows of tiles". Two or more is another
+      // room bleeding in.
+      if (dTop < dd.rminY - 1) {
         console.error(`  ✗ map ${id}: coming back through the door at (${dx},${dy}) starts the clip at ` +
           `row ${dTop} for a room beginning at row ${dd.rminY} — ` +
-          `${dd.rminY - dTop} foreign row(s) above the room`);
+          `${dd.rminY - 1 - dTop} foreign row(s) above the ceiling`);
         failed++;
         break;                                        // one report per map
       }
