@@ -13,13 +13,13 @@ export const QUEST_ACTIVE = 'active';   // accepted, objective unfinished
 export const QUEST_DONE   = 'done';     // handed in, finished for good
 
 export const QUESTS = {
-  // Ur's first quest. The giver stands directly under the elder's house door
-  // (map 114 door to map 6 is at (9,26); he is at ROM (8,27)) — the spot you
-  // walk past on the way in and out of the elder's, so the bubble is hard to
-  // miss.
+  // Ur's first quest. The giver is the ROM NPC below the elder's house — door
+  // to map 6 sits at (9,26), and he stands at ROM (10,28), a row further down
+  // and out in the open where you actually walk past him. (8,27) is closer to
+  // the door but tucked against the wall.
   ur_missing_brother: {
     id: 'ur_missing_brother',
-    giver: { mapId: 114, npcKey: 'ur_npc_07' },
+    giver: { mapId: 114, npcKey: 'ur_npc_05' },
 
     // Objective: clear encounters inside the Altar Cave. `zonePrefix` matches
     // against `currentEncounterZoneKey()`, which returns keys like
@@ -31,22 +31,22 @@ export const QUESTS = {
     // Message-box pages. The box wraps at 16 chars and fits 3 lines, so each
     // page must stay under ~48 characters — see data/town-npcs.js.
     offer: [
-      'My brother went down into the cave.',
-      'That was eight days ago.',
-      'Thin out whatever is nesting in there.',
-      "I'll make it worth your while.",
+      'My brother went below.',
+      'Eight days ago now.',
+      'Thin out what nests there.',
+      "I'll pay you well.",
     ],
     active: [
-      'Still down there, is it?',
-      'Clear three of them out. Please.',
+      'Still down there?',
+      'Clear three. Please.',
     ],
     complete: [
-      'You went down there. For him.',
-      'Take this. It was going to be his.',
+      'You went down. For him.',
+      'Take this. It was his.',
     ],
     done: [
       'The cave is quieter now.',
-      'It does not bring him back.',
+      'It will not bring him back.',
       'But it is quieter.',
     ],
   },

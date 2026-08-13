@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.973 — 2026-08-13
+
+### Fixed — dialogue was rendering OUTSIDE the message box
+- **21 of 61 pages overflowed.** Two wrapped to FOUR lines, and four lines start *above* the box interior — that is text drawn outside the frame.
+- Cause: I validated pages by counting characters (≤48). The box wraps on **words** at 16 chars a line, so a 37-character sentence becomes four lines easily. Counting characters cannot see that.
+- All 21 rewritten. `message-box.js` now exports `msgLineCount` (the real `_wrapMsgBytes`, not a copy), and **`tools/check-dialogue-fit.mjs`** runs every page in the game through it. In deploy.sh.
+
+### Fixed — the town was full of shopkeepers
+- v1.7.970 built Ur's ten townsfolk from a five-bundle pool that included the innkeeper (32), the item-shop keeper (34) and the weapon keeper (38). So three shop staff were out strolling the town while also standing behind their counters.
+- The pool is now **ten distinct non-keeper bundles** from the townsfolk range (24, 25, 26, 27, 31, 33, 35, 36, 37, 39) — one sprite per person, and the keepers stay in their shops.
+
+### Fixed — quest giver moved to where the ROM actually puts him
+- Was `ur_npc_07` at ROM (8,27), which is tucked against the wall beside the elder's house door at (9,26). Now **`ur_npc_05` at ROM (10,28)** — a row further down, out in the open on the path you actually walk.
+- Settled by printing the map's own tile/NPC/door grid rather than reasoning about it: the door is at (9,26), `$07` sits at (8,27) against the wall, `$05` at (10,28) in the open.
+- `ur_npc_07` goes back to wandering with the other eight.
+
+### Still unresolved: the marker's placement offset
+The +5px right shift is still **my inference from the sprite's own shape** (tail tip at local x 3-4), not ROM data. FF3 never draws this bubble in normal play — it has no NPC quest markers — so there is no in-game placement to copy; the offset would live in code for a feature the game does not have. I have not found a way to pull a real placement, and I am not going to claim I did. If it still looks wrong, tell me which direction and by how much and I will set it directly.
+
 ## 1.7.972 — 2026-08-13
 
 ### Fixed — Ur's townsfolk went still. That was never the ask.

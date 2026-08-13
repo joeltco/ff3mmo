@@ -97,8 +97,26 @@ export const INN_KEEPER = {
 const UR_SP2 = [0x1A, 0x0F, 0x12, 0x36];   // map 114 sprite palette 6 — blue body
 const UR_SP3 = [0x1A, 0x0F, 0x26, 0x36];   // map 114 sprite palette 7 — skin / hair
 
-// Verified townsfolk walk bundles (OAM-located, see tools/npc-sprite-tool.mjs).
-const NPC_BUNDLES = [0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E610];
+// Townsfolk walk bundles — TEN distinct people, one per Ur roster entry.
+//
+// These deliberately EXCLUDE bundles 32 (0x01E010), 34 (0x01E210) and 38
+// (0x01E610): those are the innkeeper, the item-shop keeper and the weapon
+// keeper. v1.7.970 built the town out of a five-bundle pool that included all
+// three, so Ur filled up with shopkeepers strolling around outside their own
+// shops. Bundle ids are 0x01C010 + id*256; ids 24..41 are the townsfolk range
+// (0..23 are the player job sprites — see the v1.7.968 note above).
+const NPC_BUNDLES = [
+  0x01D810,  // 24
+  0x01D910,  // 25
+  0x01DA10,  // 26
+  0x01DB10,  // 27
+  0x01DF10,  // 31
+  0x01E110,  // 33
+  0x01E310,  // 35
+  0x01E410,  // 36
+  0x01E510,  // 37
+  0x01E710,  // 39
+];
 
 /** One Ur townsperson. `slot` picks a verified bundle, NOT the ROM gfx byte. */
 // Townsfolk WANDER. v1.7.970 pinned them to their ROM tiles to spread them out
@@ -124,7 +142,13 @@ function urNpc(slot, extra = {}) {
 // on. The other five are SILENT on purpose: FF3's NPC text lives behind the
 // event system, which is not decoded, and inventing lines for them would be
 // making up content that is not in the game.
+// QUEST GIVER — ROM (10,28), below the elder's house door at (9,26) and out in
+// the open. He does NOT wander: a quest bubble that strolls off is one you have
+// to go hunting for. Idle-march keeps him alive on the spot. The idle lines
+// below only show if the quest is removed; while it exists quests.js supplies
+// his pages for every stage.
 export const UR_NPC_05 = urNpc(0, {
+  wander: false, animate: true, dir: DIR_DOWN,
   dialogue: [
     'I have a task for the brave...',
     "...but not yet. Return soon.",
@@ -133,33 +157,27 @@ export const UR_NPC_05 = urNpc(0, {
 });
 export const UR_NPC_06 = urNpc(1, {
   dialogue: [
-    'The old well ran dry the night the light dimmed.',
-    'Draw your water at the pond now.',
+    'The old well ran dry.',
+    'Use the pond now.',
   ],
 });
-// QUEST GIVER — ROM (8,27), directly under the elder's house door at (9,26),
-// the tile you walk past going in and out. He does NOT wander: a quest bubble
-// that strolls off is a bubble you have to go hunting for. Idle-march keeps him
-// alive on the spot. His idle lines below only show if the quest is ever
-// removed; while it exists, quests.js supplies his pages for every stage.
 export const UR_NPC_07 = urNpc(2, {
-  wander: false, animate: true, dir: DIR_DOWN,
   dialogue: [
-    "Sasune's knights rode past at dawn.",
+    'Knights rode past.',
     'None of them came back.',
   ],
 });
 export const UR_NPC_08 = urNpc(3, {
   dialogue: [
     'The shops are open by day.',
-    "We've not seen a Light Warrior in years.",
+    'No Light Warrior in years.',
     "Sleep at the inn — it's free.",
   ],
 });
 export const UR_NPC_09 = urNpc(4, {
   dialogue: [
-    'Mind the cave to the north.',
-    'Something down there took my brother.',
+    'Mind the cave north.',
+    'It took my brother.',
   ],
 });
 export const UR_NPC_0A = urNpc(5, {
@@ -179,7 +197,7 @@ export const UR_NPC_0D = urNpc(7, {
   dialogue: [
     'Ur is quiet most days.',
     'The cave drains the light.',
-    'Travelers like you give us hope.',
+    'You give us hope.',
   ],
 });
 export const UR_NPC_0E = urNpc(8, {
@@ -190,9 +208,9 @@ export const UR_NPC_0E = urNpc(8, {
 });
 export const UR_NPC_0F = urNpc(9, {
   dialogue: [
-    "I study the crystal's silence.",
+    'I study the crystal.',
     'The light wanes by the day.',
-    'Strange dreams come from the cave.',
+    'The cave sends dreams.',
   ],
 });
 
@@ -226,24 +244,24 @@ const TAVERN_SP2 = [0x1A, 0x0F, 0x12, 0x36];
 const TAVERN_SP3 = [0x1A, 0x0F, 0x15, 0x36];
 
 export const UR_TAVERN_KEEP = tavern(4, DIR_DOWN, [
-  'Ale? Sit anywhere you like.',
-  'Nobody is in a hurry to leave lately.',
+  'Ale? Sit anywhere.',
+  'No one hurries out.',
 ]);
 export const UR_TAVERN_DRINKER_A = tavern(0, DIR_RIGHT, [
   'Drink up, friend.',
-  'The dark keeps either way.',
+  'The dark keeps anyway.',
 ]);
 export const UR_TAVERN_DRINKER_B = tavern(2, DIR_LEFT, [
-  'I hauled ore from the mines for years.',
+  'I hauled ore here.',
   'Then the vein went black.',
 ]);
 export const UR_TAVERN_DRINKER_C = tavern(3, DIR_UP, [
-  'They say the crystal chooses four.',
-  'Four! And look at the state of us.',
+  'The crystal picks four.',
+  'Four! Look at us.',
 ]);
 export const UR_TAVERN_DRINKER_D = tavern(1, DIR_DOWN, [
   'Sit a while, warrior.',
-  'The road north is colder than this floor.',
+  "North road's cold.",
 ]);
 
 // ── Ur elder's house (maps 6 ground / 7 upper) ───────────────────────────
@@ -254,19 +272,19 @@ const elder = (slot, dir, dialogue) => ({
 });
 export const UR_ELDER_ATTENDANT = elder(1, DIR_DOWN, [
   'The elder is upstairs.',
-  'He has not slept since the tremor.',
+  'He has not slept.',
 ]);
 export const UR_ELDER_KIN_A = elder(2, DIR_RIGHT, [
   'Father watches the road',
-  'for riders that never come.',
+  'for riders long gone.',
 ]);
 export const UR_ELDER_KIN_B = elder(3, DIR_LEFT, [
   'We kept the lamps lit',
   'for you.',
 ]);
 export const UR_ELDER_KIN_C = elder(0, DIR_DOWN, [
-  'You came out of the cave?',
-  'Then the old stories are true.',
+  'You came from the cave?',
+  "Then it's all true.",
 ]);
 
 // ── Ur house (map 2) ─────────────────────────────────────────────────────
@@ -276,7 +294,7 @@ export const UR_HOUSEHOLDER = {
   dir: DIR_DOWN, animate: true,
   dialogue: [
     'Bar your door at night.',
-    'Things walk the grass that did not before.',
+    'Things walk the grass now.',
   ],
 };
 

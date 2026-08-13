@@ -239,6 +239,19 @@ function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff) {
 
 // ── Private helpers ────────────────────────────────────────────────────────
 
+// The box is 144px wide with an 8px border each side, so 16 glyphs per line;
+// it is 48px tall and text is vertically centred at 12px per line. Two lines
+// sit comfortably, three are flush against the border, and FOUR start ABOVE
+// the interior — i.e. the text renders outside the box. Any dialogue page must
+// therefore wrap to at most 2 lines.
+export const MSG_MAX_CHARS = 16;
+export const MSG_MAX_LINES = 2;
+
+/** Wrapped line count for a page, using the real wrapper. */
+export function msgLineCount(bytes, maxChars = MSG_MAX_CHARS) {
+  return _wrapMsgBytes(bytes, maxChars).length;
+}
+
 function _wrapMsgBytes(bytes, maxChars) {
   const lines = [];
   let lineStart = 0, lastSpace = -1, lineLen = 0;
