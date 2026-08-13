@@ -13,12 +13,13 @@ export const QUEST_ACTIVE = 'active';   // accepted, objective unfinished
 export const QUEST_DONE   = 'done';     // handed in, finished for good
 
 export const QUESTS = {
-  // Ur's first quest. The giver is the townsman who already says the cave took
-  // his brother (data/town-npcs.js UR_NPC_09) — the thread was written into his
-  // idle dialogue before the quest system existed, so the hook is already there.
+  // Ur's first quest. The giver stands directly under the elder's house door
+  // (map 114 door to map 6 is at (9,26); he is at ROM (8,27)) — the spot you
+  // walk past on the way in and out of the elder's, so the bubble is hard to
+  // miss.
   ur_missing_brother: {
     id: 'ur_missing_brother',
-    giver: { mapId: 114, npcKey: 'ur_npc_09' },
+    giver: { mapId: 114, npcKey: 'ur_npc_07' },
 
     // Objective: clear encounters inside the Altar Cave. `zonePrefix` matches
     // against `currentEncounterZoneKey()`, which returns keys like

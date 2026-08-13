@@ -101,18 +101,20 @@ const UR_SP3 = [0x1A, 0x0F, 0x26, 0x36];   // map 114 sprite palette 7 — skin 
 const NPC_BUNDLES = [0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E610];
 
 /** One Ur townsperson. `slot` picks a verified bundle, NOT the ROM gfx byte. */
-// Townsfolk STAND on their ROM tile rather than wander. `wander: true` hands
-// the spec to the random-spawn pool (v1.7.769), which throws the ROM's
-// coordinates away — so all ten drew from the same grass pool and bunched up
-// instead of spreading across the town the way the ROM spaces them. Idle-march
-// keeps them animated in place.
+// Townsfolk WANDER. v1.7.970 pinned them to their ROM tiles to spread them out
+// and that killed the walking, which was never the ask — they should be spread
+// AND moving. Back to `wander: true` (random spawn from the town's grass pool
+// + a 3-tile leash), which is how they behaved before.
+//
+// The quest giver is the exception: he stays put so you can find him again.
 function urNpc(slot, extra = {}) {
   return {
     romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
     palTop: UR_SP3,
     palBtm: UR_SP2,
     dir: DIR_DOWN,
-    animate: true,
+    wander: true,
+    leash: 3,
     ...extra,
   };
 }
@@ -123,9 +125,6 @@ function urNpc(slot, extra = {}) {
 // event system, which is not decoded, and inventing lines for them would be
 // making up content that is not in the game.
 export const UR_NPC_05 = urNpc(0, {
-  // ROM (10,28) — exactly where the old quest NPC stood. Keeps its
-  // idle-march-in-place behaviour rather than wandering.
-  dir: DIR_RIGHT, wander: false, animate: true,
   dialogue: [
     'I have a task for the brave...',
     "...but not yet. Return soon.",
@@ -138,7 +137,13 @@ export const UR_NPC_06 = urNpc(1, {
     'Draw your water at the pond now.',
   ],
 });
+// QUEST GIVER — ROM (8,27), directly under the elder's house door at (9,26),
+// the tile you walk past going in and out. He does NOT wander: a quest bubble
+// that strolls off is a bubble you have to go hunting for. Idle-march keeps him
+// alive on the spot. His idle lines below only show if the quest is ever
+// removed; while it exists, quests.js supplies his pages for every stage.
 export const UR_NPC_07 = urNpc(2, {
+  wander: false, animate: true, dir: DIR_DOWN,
   dialogue: [
     "Sasune's knights rode past at dawn.",
     'None of them came back.',

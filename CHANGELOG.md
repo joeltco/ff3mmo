@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.972 — 2026-08-13
+
+### Fixed — Ur's townsfolk went still. That was never the ask.
+- v1.7.970 pinned all ten to their ROM tiles to spread them out, and in doing so stopped them walking. "Spread out" and "standing frozen" are not the same thing. **Nine of the ten wander again** (random spawn from the town's grass pool, 3-tile leash) exactly as before.
+- The tenth is the quest giver, who stays put on purpose — a quest bubble that strolls off is a bubble you have to go hunting for. Idle-march keeps him alive on the spot.
+
+### Changed — the quest giver is the man under the elder's house
+- Was `ur_npc_09` at (21,15), off in the east plaza. Now **`ur_npc_07` at ROM (8,27)** — directly beneath the elder's house door at (9,26), the tile you walk past going in and out. Found by reading map 114's door table, not by eye.
+
+### Fixed — the quest bubble was drawn centred
+- The sprite is **not** a centred balloon. Its tail hangs off the bottom-LEFT (tip at sprite-local x 3-4, y 15), so the body is meant to float up and to the RIGHT of the speaker with the trail pointing back down at their head. Blitting it at the NPC's own x centred the balloon and left the tail pointing at nothing.
+- Offset right by 5px, which puts the tail tip over the NPC's centre column. Rendered against a stand-in sprite to confirm rather than eyeballing the maths.
+
 ## 1.7.971 — 2026-08-13
 
 ### Added — the quest system, and Ur's first quest end to end

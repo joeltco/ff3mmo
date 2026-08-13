@@ -627,6 +627,14 @@ function _grantQuestReward(reward) {
 // Frame dwell for the two-frame quest bubble.
 const QUEST_MARKER_MS = 350;
 
+// The bubble is NOT drawn centred. Its tail hangs off the bottom-LEFT — the
+// tip sits at sprite-local x 3-4, y 15 — so the balloon body is meant to float
+// up and to the RIGHT of whoever is speaking, with the trail pointing back down
+// at their head. Blitting it at the NPC's own x centres the balloon instead and
+// leaves the tail pointing at nothing. Shifting right by 5 puts the tail tip
+// over the NPC's centre column (local 3.5 -> sprite centre 8).
+const QUEST_MARKER_DX = 5;
+
 export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   if (_npcs.length === 0) return;
   // Map tiles use `originY` (3px below `spriteY`); sprites use `spriteY` so
@@ -658,7 +666,7 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
       const frames = getMarkerFrames(mark);
       if (frames) {
         const bob = Math.floor(performance.now() / QUEST_MARKER_MS) % frames.length;
-        ctx.drawImage(frames[bob], sx, sy - TILE_SIZE);
+        ctx.drawImage(frames[bob], sx + QUEST_MARKER_DX, sy - TILE_SIZE);
       }
     }
   }
