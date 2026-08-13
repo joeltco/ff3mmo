@@ -106,6 +106,14 @@ export function resetBattleVars() {
   inputSt.battleCursor = 0;
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.encounterDropItemRejected = false; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
+  // Rewards are per-battle and must NOT survive into the next one. Only the
+  // drop was being cleared here, so after a win these three kept the winning
+  // numbers; the next battle's end-of-battle claim read them and told the
+  // server "party victory, 15 exp, 10 gil" for a fight the player ran from.
+  // Live in prod as [pve-reward-desync] battles 3/4/5, user 9, v1.7.981 —
+  // the same 10 exp / 6 gil claimed for three different monster line-ups.
+  battleSt.encounterExpGained = 0; battleSt.encounterGilGained = 0; battleSt.encounterCpGained = 0;
+  battleSt.encounterJobLevelUp = false;
   battleSt.lastKilledMonsterId = null;   // v1.7.803 — fresh battle, no prior kill
   battleSt.projectileSubtype = null;     // fresh battle: no attack in flight
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;

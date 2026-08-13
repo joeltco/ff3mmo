@@ -18,6 +18,48 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.982 — 2026-08-13
+
+### Fix: fleeing a battle claimed the previous battle's victory
+
+Reported by prod itself — `[pve-reward-desync]` fired three times for user 9 on
+v1.7.981 (battles 3, 4, 5). The client sent **exp 10 / gil 6 every time**, once
+for a two-monster fight and twice for three-monster fights. A constant answer
+across different inputs is not an arithmetic disagreement; it is a leftover.
+
+The v1.7.933 log line was added on the theory that "the formulas are identical,
+so a mismatch means the two sides disagree about WHICH monsters were fought."
+The lists came back **identical** (`serverMons=[5,5,5] clientMons=[5,5,5]`),
+which refuted that theory and pointed at the real one.
+
+- `resetBattleVars()` cleared `encounterDropItem` but not `encounterExpGained` /
+  `GilGained` / `CpGained`. They carried into the next battle.
+- `buildPveClaim` inferred the victor from `encounterExpGained > 0`.
+
+Together: once the player had won anything, **every later flee claimed
+`victor: 'party'`** and shipped the old win's numbers. The server cannot see
+monster HP yet (per-action replay is deferred), so it trusted the victor field
+and paid full price — its own, correct price — for battles the player ran from.
+The desync log was the symptom of a free-rewards bug, not a rounding argument.
+
+- **`resetBattleVars` now clears all three reward fields** plus
+  `encounterJobLevelUp`. This is the fix.
+- **`buildPveClaim` derives the victor from monster HP** (`every(m => hp <= 0)`)
+  instead of reward presence — hardening, so the claim no longer depends on
+  reward bookkeeping at all.
+- `_buildStubClaim` is exported as `buildPveClaim` so a gate can call it.
+
+### Gate
+
+**`tools/check-pve-claim.mjs`** — reproduces the field report exactly (win, then
+flee, then assert the claim) and pins that `resetBattleVars` leaves no rewards
+on the books. It fails on the shipped v1.7.981 code with the reported signature.
+
+Note on proof: the gate isolates the RESET (4 failures when reverted). It cannot
+isolate the victor change, because with the reset in place a flee already has
+zero exp — that half is defence in depth and is labelled as such in the code
+rather than claimed as tested.
+
 ## 1.7.981 — 2026-08-13
 
 ### Key Terms are highlighted in the dialogue, and the menu uses FF2's OWN blips

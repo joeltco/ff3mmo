@@ -69,7 +69,7 @@ export function pveEncounterPending() { return _requestPending; }
 export function pveSubmitBattleEnd() {
   if (!PVE_ARBITER) return false;
   if (!_localBattle.battleId) return false;
-  const claim = _buildStubClaim();
+  const claim = buildPveClaim();
   const ok = sendNetPveBattleEnd({
     battleId: _localBattle.battleId,
     intents:  _localBattle.intents,
@@ -142,17 +142,32 @@ function _resetLocalBattle() {
   _localBattle.intents  = [];
 }
 
-function _buildStubClaim() {
+export function buildPveClaim() {
   // v1.7.781 — derive victor from observable encounter state instead of
   // battleSt.enemyDefeated, which is true in BOTH victory and player-KO
   // paths (battle-update.js lines 799 + 824) and therefore can't
   // distinguish the two. Reward-presence is the reliable signal:
-  //   - player dead          → wipe (no rewards)
-  //   - encounterExpGained>0 → party victory (rewards earned)
-  //   - otherwise (no rewards, player alive) → fled
+  //   - player dead            → wipe (no rewards)
+  //   - every monster at 0 HP   → party victory
+  //   - otherwise (alive, something still standing) → fled
+  //
+  // v1.7.982 — victory used to be inferred from `encounterExpGained > 0`.
+  // That reads a leftover: the reward fields were not cleared between battles,
+  // so once the player had won anything, every subsequent flee claimed victory
+  // and carried the old numbers. `resetBattleVars` now clears them, and this
+  // asks the monsters directly instead — a fact about THIS battle that cannot
+  // be inherited.
+  //
+  // Honest accounting of the two halves: the RESET is what the gate pins, and
+  // fixes the reported bug on its own. This check is hardening — with the reset
+  // in place a flee already has 0 exp, so tools/check-pve-claim.mjs cannot
+  // isolate it. It is here so the claim stops depending on reward bookkeeping
+  // at all: any future path that sets exp without a win can no longer forge a
+  // victory.
+  const mons = Array.isArray(battleSt.encounterMonsters) ? battleSt.encounterMonsters : null;
   const playerDead = ps.hp <= 0;
-  const earnedRewards = (battleSt.encounterExpGained | 0) > 0;
-  const victor = playerDead ? 'wipe' : (earnedRewards ? 'party' : 'fled');
+  const allDead = !!mons && mons.length > 0 && mons.every(m => (m.hp | 0) <= 0);
+  const victor = playerDead ? 'wipe' : (allDead ? 'party' : 'fled');
   const isVictory = victor === 'party';
   return {
     victor,
