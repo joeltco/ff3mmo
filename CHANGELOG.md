@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.975 — 2026-08-13
+
+### Fixed — the town crowd bunched at the entrance
+- Wanderers were spawned from a shuffled "grass tile" pool. On Ur that pool is badly lopsided: **164 candidate tiles, but rows 20-23 hold ~75 of them and rows 1-15 have almost none** — so nearly every wanderer landed in the south plaza, exactly where the player walks in.
+- The ROM spreads the same ten people from **row 10 to row 28**. Its spacing is simply better than the shuffle.
+- New `fixedSpawn` flag: keep the declared (ROM) coordinate and wander from there with the existing leash. Spread AND walking, which is what was asked for two versions ago. Ur's ten now start on rows 10, 15, 17, 21, 22, 25, 27, 28.
+
+### Fixed — the interiors had the same wrong-sprite bug as the town
+v1.7.974 fixed Ur's bundles by reading the PPU. It did not occur to me to check the buildings, which were still drawing from the **town's** set. Read each one the same way (`--warp <id> --chrmap --bundles`):
+
+| map | loads | was using |
+|---|---|---|
+| 9 tavern | `1DF10 1E010 1E110 1E610 1E710` | three bundles map 9 never loads |
+| 8 inn | `1E010 1E210` | one bundle map 8 never loads |
+| 6 elder, ground | `1EC10` | wrong — used the town's `1E010` |
+| 7 elder, upper | `1E010 1E210 1EC10` | two wrong |
+| 2 house | `1E210` | already right |
+| 4 / 5 shops | `1E610` | already right |
+| 3 magic shop | `1C410` | already right (black-mage walk bank) |
+
+- Every NPC on every Ur map now uses a bundle that map actually copies into sprite memory.
+- Inn guests share the two keeper bundles because **map 8 only loads those two** — the ROM's own economy, not a shortcut.
+
+### Gate
+- `check-npc-placement.mjs` now pins the verified bundle set for **all eight** Ur maps, not just the town. **Proven by putting the tavern back on `0x1E310`:** fails with "uses bundle 0x1E310, which map 9 never loads into sprite memory".
+
 ## 1.7.974 — 2026-08-13
 
 ### Fixed — Ur's townsfolk were sprites from other towns

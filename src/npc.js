@@ -321,7 +321,14 @@ export function placeTownNpcs(mapId) {
   let pi = 0;
   for (const n of list) {
     let x = n.x, y = n.y;
-    if (pool && n.spec.wander && pi < pool.length) {
+    // `fixedSpawn` keeps the declared (ROM) coordinates and still wanders from
+    // there. The random pool is drawn from a map's "grass" tiles, and on Ur
+    // those are lopsided — 164 candidates, but rows 20-23 alone hold ~75 of
+    // them and rows 1-15 have almost none. Shuffling and taking the first N
+    // therefore dropped nearly every wanderer into the south plaza, right where
+    // the player walks in, while the ROM spreads the same ten people from row
+    // 10 to row 28. The ROM's spacing is simply better than the shuffle.
+    if (pool && n.spec.wander && !n.spec.fixedSpawn && pi < pool.length) {
       [x, y] = pool[pi++];
     }
     addSceneNpc(n.key, x, y, n.spec);

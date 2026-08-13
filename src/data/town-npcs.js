@@ -136,6 +136,9 @@ function urNpc(slot, extra = {}) {
     palBtm: UR_SP2,
     dir: DIR_DOWN,
     wander: true,
+    // Start on the ROM's own tile and roam from there. Without this the random
+    // grass pool bunched nearly all ten into the south plaza by the entrance.
+    fixedSpawn: true,
     leash: 3,
     ...extra,
   };
@@ -218,89 +221,91 @@ export const UR_NPC_0F = urNpc(9, {
   ],
 });
 
-// ── Ur inn (map 8) upstairs + lobby guests ───────────────────────────────
-// Three more people the ROM puts in the inn that we never placed. Same
-// derivation; map 8's own sprite palettes.
-const INN_SP2 = [0x1A, 0x0F, 0x12, 0x36];  // map 8 sprite palette 6 — body
-const INN_SP3 = [0x1A, 0x0F, 0x15, 0x36];  // map 8 sprite palette 7 — skin / hair
-const innGuest = (slot) => ({
-  romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
-  palTop: INN_SP3, palBtm: INN_SP2,
-  dir: DIR_DOWN,
-  animate: true,        // indoors: stay on the ROM tile, march in place
+
+// ── Ur interiors ─────────────────────────────────────────────────────────
+//
+// Each map gets bundles THAT MAP ACTUALLY LOADS, read out of the PPU with
+// `node tools/nes-run.mjs --warp <id> --chrmap --bundles`. They are not the
+// same set as the town's: an interior loads its own cast, and handing a room a
+// bundle it never copies into sprite memory is how v1.7.973/974 put strangers
+// in Ur. Verified sets:
+//
+//   map 9 tavern : 0x1DF10 0x1E010 0x1E110 0x1E610 0x1E710
+//   map 8 inn    : 0x1E010 0x1E210
+//   map 6 elder  : 0x1EC10
+//   map 7 elder+ : 0x1E010 0x1E210 0x1EC10
+//   map 2 house  : 0x1E210
+
+// Interiors share one head/body palette pair; each map's own SP2/SP3 are the
+// same values for Ur's buildings.
+const INN_SP2 = [0x1A, 0x0F, 0x12, 0x36];  // body
+const INN_SP3 = [0x1A, 0x0F, 0x15, 0x36];  // skin / hair
+
+const interior = (romOffset, dir, dialogue) => ({
+  romOffset, palTop: INN_SP3, palBtm: INN_SP2,
+  dir, animate: true,        // indoors: hold the ROM tile, march in place
+  dialogue,
 });
-export const UR_INN_GUEST_15 = innGuest(0);
-export const UR_INN_GUEST_16A = innGuest(2);
-export const UR_INN_GUEST_16B = innGuest(3);
 
-
-// ── Ur tavern (map 9, up the stairs from the inn) ─────────────────────────
-// The ROM puts five people in the bar room at the top-right of map 9's shared
-// tilemap: a keep behind the counter and four drinkers at the tables. Coords
-// are the ROM's own (tools/npc-dump.mjs 9); each faces the counter or the
-// table they are sat at, which is what "seated" looks like with walk sprites.
-const tavern = (slot, dir, dialogue) => ({
-  romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
-  palTop: TAVERN_SP3, palBtm: TAVERN_SP2,
-  dir, animate: true, dialogue,
-});
-const TAVERN_SP2 = [0x1A, 0x0F, 0x12, 0x36];
-const TAVERN_SP3 = [0x1A, 0x0F, 0x15, 0x36];
-
-export const UR_TAVERN_KEEP = tavern(4, DIR_DOWN, [
+// Tavern — a keep behind the counter and four drinkers at the tables.
+export const UR_TAVERN_KEEP = interior(0x01E010, DIR_DOWN, [
   'Ale? Sit anywhere.',
   'No one hurries out.',
 ]);
-export const UR_TAVERN_DRINKER_A = tavern(0, DIR_RIGHT, [
+export const UR_TAVERN_DRINKER_A = interior(0x01DF10, DIR_RIGHT, [
   'Drink up, friend.',
   'The dark keeps anyway.',
 ]);
-export const UR_TAVERN_DRINKER_B = tavern(2, DIR_LEFT, [
+export const UR_TAVERN_DRINKER_B = interior(0x01E110, DIR_LEFT, [
   'I hauled ore here.',
   'Then the vein went black.',
 ]);
-export const UR_TAVERN_DRINKER_C = tavern(3, DIR_UP, [
+export const UR_TAVERN_DRINKER_C = interior(0x01E610, DIR_UP, [
   'The crystal picks four.',
   'Four! Look at us.',
 ]);
-export const UR_TAVERN_DRINKER_D = tavern(1, DIR_DOWN, [
+export const UR_TAVERN_DRINKER_D = interior(0x01E710, DIR_DOWN, [
   'Sit a while, warrior.',
   "North road's cold.",
 ]);
 
-// ── Ur elder's house (maps 6 ground / 7 upper) ───────────────────────────
-const elder = (slot, dir, dialogue) => ({
-  romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
-  palTop: UR_SP3, palBtm: UR_SP2,
-  dir, animate: true, dialogue,
-});
-export const UR_ELDER_ATTENDANT = elder(1, DIR_DOWN, [
+// Inn guests — map 8 only loads the two keeper bundles, so the guests share
+// them. That is the ROM's own economy, not a shortcut.
+export const UR_INN_GUEST_15  = interior(0x01E010, DIR_DOWN, [
+  'The beds cost nothing.',
+  'Sleep while you can.',
+]);
+export const UR_INN_GUEST_16A = interior(0x01E210, DIR_DOWN, [
+  'I came in from the road.',
+  'I am not going back out.',
+]);
+export const UR_INN_GUEST_16B = interior(0x01E210, DIR_LEFT, [
+  'Quiet night. Too quiet.',
+]);
+
+// Elder's house.
+export const UR_ELDER_ATTENDANT = interior(0x01EC10, DIR_DOWN, [
   'The elder is upstairs.',
   'He has not slept.',
 ]);
-export const UR_ELDER_KIN_A = elder(2, DIR_RIGHT, [
+export const UR_ELDER_KIN_A = interior(0x01E010, DIR_RIGHT, [
   'Father watches the road',
   'for riders long gone.',
 ]);
-export const UR_ELDER_KIN_B = elder(3, DIR_LEFT, [
+export const UR_ELDER_KIN_B = interior(0x01E210, DIR_LEFT, [
   'We kept the lamps lit',
   'for you.',
 ]);
-export const UR_ELDER_KIN_C = elder(0, DIR_DOWN, [
+export const UR_ELDER_KIN_C = interior(0x01EC10, DIR_DOWN, [
   'You came from the cave?',
   "Then it's all true.",
 ]);
 
-// ── Ur house (map 2) ─────────────────────────────────────────────────────
-export const UR_HOUSEHOLDER = {
-  romOffset: NPC_BUNDLES[2],
-  palTop: UR_SP3, palBtm: UR_SP2,
-  dir: DIR_DOWN, animate: true,
-  dialogue: [
-    'Bar your door at night.',
-    'Things walk the grass now.',
-  ],
-};
+// House (map 2).
+export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [
+  'Bar your door at night.',
+  'Things walk the grass now.',
+]);
 
 // Map ID → keepers to place on that map. One render path: every entry goes
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.

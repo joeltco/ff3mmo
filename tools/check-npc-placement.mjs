@@ -82,7 +82,14 @@ if (!checked) { console.error('check-npc-placement: no NPCs found — has TOWN_N
 // which traces live sprite memory back to ROM offsets and groups them into
 // 16-tile bundles. Re-run it if a map's cast changes; do not edit by hand.
 const LOADED_BUNDLES = new Map([
-  [114, new Set([0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E510])],
+  [114, new Set([0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E510])],  // town
+  [9,   new Set([0x01DF10, 0x01E010, 0x01E110, 0x01E610, 0x01E710])],  // tavern
+  [8,   new Set([0x01E010, 0x01E210])],                                // inn
+  [7,   new Set([0x01E010, 0x01E210, 0x01EC10])],                      // elder, upper
+  [6,   new Set([0x01EC10])],                                          // elder, ground
+  [5,   new Set([0x01E610])],                                          // weapon shop
+  [4,   new Set([0x01E610])],                                          // armor shop
+  [2,   new Set([0x01E210])],                                          // house
 ]);
 
 {
