@@ -59,128 +59,108 @@ export const INN_KEEPER = {
   ],
 };
 
-// ── Ur wandering townsfolk ────────────────────────────────────────────────
+// ── Ur townsfolk — the ROM's own roster ───────────────────────────────────
 //
-// Five wanderers populate map 114, mirroring the FF3 ROM's canonical Ur
-// layout (captured via OAM snap — see CHANGELOG v1.7.694 / v1.7.695). Each
-// uses a distinct ROM sprite bundle + SP3 hair color so they read as
-// different people; all share the SP2 blue tunic body. `wander: true` + a
-// 3-4 tile Chebyshev leash keeps each NPC in their plaza without migrating
-// across the whole map. Talks face the player; v1.7.693 yield-to-player
-// behavior is automatic.
-
-// Shared SP3 hair palettes — one swap-color per slot, palette is otherwise
-// the same as the shopkeepers' (only color 3 — the outfit / hair primary —
-// differs).
-const VILLAGER_HAIR_PEACH   = [0x1A, 0x0F, 0x26, 0x36];   // peach
-const VILLAGER_HAIR_YELLOW  = [0x1A, 0x0F, 0x27, 0x30];   // yellow (scene-attendant tone)
-const VILLAGER_HAIR_MAGENTA = TOWN_KEEPER_PAL_TOP;        // magenta (matches shopkeepers)
-
-// South plaza, near (15, 25). Bundle 0x01DF10 is the "common villager" body
-// — same sprite the FF3 ROM places twice in the Ur scene at canonical tiles
-// (7,19) + (8,27); see the v1.7.694 OAM snap. Peach hair so they read as a
-// distinct person at a glance from the magenta shopkeepers.
-export const UR_VILLAGER_PEACH = {
-  romOffset: 0x01DF10,
-  palTop: VILLAGER_HAIR_PEACH,
-  palBtm: TOWN_KEEPER_PAL_BTM,
-  dir: DIR_DOWN,
-  wander: true,
-  leash: 4,
-  dialogue: [
-    'Welcome to Ur, traveler.',
-    'Folks here keep to themselves.',
-    'The grass beyond hides things.',
-  ],
-};
-
-// South-west plaza quest giver, spawn (10, 28) facing RIGHT. Stays put
-// (no `wander: true`) but `animate: true` cycles the walk frames in place
-// so the NPC reads as alive instead of frozen — same pattern the
-// shopkeepers use. The canonical FF3 spot for this NPC. Placeholder
-// dialogue until the quest system lands; when it does, wire the trigger
-// here (the placement + rendering are stable). v1.7.696, animate v1.7.698.
+// FF3 stores a per-map NPC table (pointer table at $058010; {id,x,y,flags}
+// entries terminated by id 0) that `map-loader.js#readNPCs` has always
+// decoded — but only flame-sprites.js ever read it. The earlier Ur villagers
+// were placed from OAM snaps instead, i.e. from whoever happened to be on
+// screen, so FIVE of the ROM's TEN were missing and the five we did have used
+// bundles (gfx 31/32/34/35) that appear nowhere in Ur's roster.
 //
-// (10, 28) isn't openArea by the wander rule (lacks ≥3 walkable neighbors
-// for safe wandering), but that doesn't matter for `mode: 'idle-march'` —
-// the openArea check only gates _startWalk / _trySameDir, neither of which
-// run for non-wander modes.
+//   node tools/npc-dump.mjs 114     — the roster below, straight from the ROM
+//   node tools/npc-sheet.mjs 114 x.png — renders each gfx id so you can see them
 //
-// Bundle 0x01E210 (item-shop-keeper body) + peach hair gives the "adult
-// villager" silhouette distinct from the existing PEACH and RED villagers
-// (both bundle 0x01DF10, shorter common-villager body). Faces RIGHT so the
-// player approaches from the south or west and the NPC reads as facing into
-// the plaza. Talk-facing override (turns to face player on Z) still applies.
-export const UR_QUEST_NPC = {
-  romOffset: 0x01E210,
-  palTop: VILLAGER_HAIR_PEACH,
-  palBtm: TOWN_KEEPER_PAL_BTM,
-  dir: DIR_RIGHT,
-  animate: true,   // walk-cycle in place; no wander → stays on (10, 28)
+// Walk bundle = 0x01C010 + gfx*256, the same convention as MOOGLE_SPRITE_OFF
+// in sprite-init.js.
+//
+// Palettes are the map's OWN sprite palettes, split head/body the way FF3
+// draws them: head tiles take SP3, body tiles SP2 — which is why Ur's
+// townsfolk read as tan-faced in a blue tunic. I first gave each NPC ONE
+// flag-derived palette and rendered a row of uniformly pink people, nothing
+// like the game; `tools/npc-sheet.mjs` draws the split so it can be compared
+// against a real capture of Ur. Each entry's flags byte does carry a palette
+// selector — (flags >> 2) & 3, the field flame-sprites.js reads for torches —
+// but what it varies on a PERSON is not decoded, so it is not used here.
+const UR_SP2 = [0x1A, 0x0F, 0x12, 0x36];   // map 114 sprite palette 6 — blue body
+const UR_SP3 = [0x1A, 0x0F, 0x26, 0x36];   // map 114 sprite palette 7 — skin / hair
+
+/** One Ur townsperson, straight from a ROM roster row. */
+function urNpc(gfx, extra = {}) {
+  return {
+    romOffset: 0x01C010 + gfx * 256,
+    palTop: UR_SP3,
+    palBtm: UR_SP2,
+    dir: DIR_DOWN,
+    wander: true,
+    leash: 3,
+    ...extra,
+  };
+}
+
+// The five below carry the dialogue that shipped with the old placements,
+// re-attached to whichever ROM entry sits nearest the spot it used to stand
+// on. The other five are SILENT on purpose: FF3's NPC text lives behind the
+// event system, which is not decoded, and inventing lines for them would be
+// making up content that is not in the game.
+export const UR_NPC_05 = urNpc(0x05, {
+  // ROM (10,28) — exactly where the old quest NPC stood. Keeps its
+  // idle-march-in-place behaviour rather than wandering.
+  dir: DIR_RIGHT, wander: false, animate: true,
   dialogue: [
     'I have a task for the brave...',
     "...but not yet. Return soon.",
     'The crystal will guide you.',
   ],
-};
-
-// Northwest area, spawn (7, 19). Bundle 0x01E010 — same body as the
-// opening-scene left attendant + the inn keeper, recolored yellow. Yellow
-// hair distinguishes them from the south-plaza wanderers.
-export const UR_VILLAGER_MAIDEN = {
-  romOffset: 0x01E010,
-  palTop: VILLAGER_HAIR_YELLOW,
-  palBtm: TOWN_KEEPER_PAL_BTM,
-  dir: DIR_DOWN,
-  wander: true,
-  leash: 3,
-  dialogue: [
-    'Ur is quiet most days.',
-    'The cave drains the light.',
-    'Travelers like you give us hope.',
-  ],
-};
-
-// East plaza, spawn (20, 18). Bundle 0x01E310 is NEW — the taller hooded
-// silhouette captured in the v1.7.694 OAM snap (group 2). Magenta hair
-// keeps the visual link to the shopkeeper palette. This is the only NPC
-// using this bundle so far — distinct silhouette helps it stand out as a
-// "scholar / sage" rather than a generic villager. Spawn moved east from
-// (16, 24) in v1.7.714 — was crowding the south plaza next to PEACH +
-// QUEST + RED; the east plaza row 18 has its own open area away from the
-// crowd.
-export const UR_HOODED_SAGE = {
-  romOffset: 0x01E310,
-  palTop: VILLAGER_HAIR_MAGENTA,
-  palBtm: TOWN_KEEPER_PAL_BTM,
-  dir: DIR_DOWN,
-  wander: true,
-  leash: 3,
-  dialogue: [
-    "I study the crystal's silence.",
-    'The light wanes by the day.',
-    'Strange dreams come from the cave.',
-  ],
-};
-
-// South plaza east, spawn (27, 25). Same body as UR_VILLAGER_PEACH but
-// magenta hair — so it reads as a different person despite sharing the
-// bundle. Spawn history: (11,28) → v1.7.714 NW corner (3,13) which
-// landed ON the pond → v1.7.767 NW dry tile (3,12) → v1.7.768 east
-// plaza for visual spread against peach (15,25) + quest (10,28).
-export const UR_VILLAGER_RED = {
-  romOffset: 0x01DF10,
-  palTop: VILLAGER_HAIR_MAGENTA,
-  palBtm: TOWN_KEEPER_PAL_BTM,
-  dir: DIR_DOWN,
-  wander: true,
-  leash: 3,
+});
+export const UR_NPC_06 = urNpc(0x06);
+export const UR_NPC_07 = urNpc(0x07);
+export const UR_NPC_08 = urNpc(0x08, {
   dialogue: [
     'The shops are open by day.',
     "We've not seen a Light Warrior in years.",
     "Sleep at the inn — it's free.",
   ],
-};
+});
+export const UR_NPC_09 = urNpc(0x09);
+export const UR_NPC_0A = urNpc(0x0a);
+export const UR_NPC_0C = urNpc(0x0c, {
+  dialogue: [
+    'Welcome to Ur, traveler.',
+    'Folks here keep to themselves.',
+    'The grass beyond hides things.',
+  ],
+});
+export const UR_NPC_0D = urNpc(0x0d, {
+  dialogue: [
+    'Ur is quiet most days.',
+    'The cave drains the light.',
+    'Travelers like you give us hope.',
+  ],
+});
+export const UR_NPC_0E = urNpc(0x0e);
+export const UR_NPC_0F = urNpc(0x0f, {
+  dialogue: [
+    "I study the crystal's silence.",
+    'The light wanes by the day.',
+    'Strange dreams come from the cave.',
+  ],
+});
+
+// ── Ur inn (map 8) upstairs + lobby guests ───────────────────────────────
+// Three more people the ROM puts in the inn that we never placed. Same
+// derivation; map 8's own sprite palettes.
+const INN_SP2 = [0x1A, 0x0F, 0x12, 0x36];  // map 8 sprite palette 6 — body
+const INN_SP3 = [0x1A, 0x0F, 0x15, 0x36];  // map 8 sprite palette 7 — skin / hair
+const innGuest = (gfx) => ({
+  romOffset: 0x01C010 + gfx * 256,
+  palTop: INN_SP3, palBtm: INN_SP2,
+  dir: DIR_DOWN,
+  animate: true,        // indoors: stay on the ROM tile, march in place
+});
+export const UR_INN_GUEST_15 = innGuest(0x15);
+export const UR_INN_GUEST_16A = innGuest(0x16);
+export const UR_INN_GUEST_16B = innGuest(0x16);
 
 // Map ID → keepers to place on that map. One render path: every entry goes
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.
@@ -188,28 +168,29 @@ export const TOWN_NPCS = new Map([
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },
     { key: 'inn_keeper',      x: 3, y: 14, spec: INN_KEEPER },
+    // ROM roster (tools/npc-dump.mjs 8): three guests we never placed.
+    { key: 'ur_inn_guest_a',  x: 4, y:  3, spec: UR_INN_GUEST_15 },
+    { key: 'ur_inn_guest_b',  x: 7, y:  2, spec: UR_INN_GUEST_16A },
+    { key: 'ur_inn_guest_c',  x: 9, y:  2, spec: UR_INN_GUEST_16B },
   ]],
   [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
   // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
   // behind the ur_armor counter at (3,5).
   [4, [{ key: 'armor_keeper',    x: 3, y:  4, spec: WEAPON_KEEPER }]],
-  // Ur overworld (tileset 4) — five wandering villagers populate the south
-  // plaza + northwest + east plaza, mirroring the FF3 ROM's canonical layout
-  // (captured via OAM snap; see CHANGELOG). Each coord verified openArea
-  // (walkable + ≥3 walkable neighbors) — canonical snap tiles (10,28) and
-  // (8,27) shifted slightly to (10,27) / (11,28) so they pass the wander rule.
-  // v1.7.694 (1 NPC) → v1.7.695 (5 NPCs).
+  // Ur town — all TEN of the ROM's NPCs, at the ROM's own coordinates.
+  // Wanderers still have their spawn randomised per map entry (v1.7.769), so
+  // these coords are the fallback when the grass pool runs dry; the ROM entry
+  // they came from is in the comment.
   [114, [
-    { key: 'ur_villager_peach',  x: 15, y: 25, spec: UR_VILLAGER_PEACH },
-    { key: 'ur_quest_npc',       x: 10, y: 28, spec: UR_QUEST_NPC },
-    { key: 'ur_villager_maiden', x:  7, y: 19, spec: UR_VILLAGER_MAIDEN },
-    { key: 'ur_hooded_sage',     x: 20, y: 18, spec: UR_HOODED_SAGE },
-    // v1.7.947 — was (27,25), which is solid forest canopy. Reported by a
-    // player as "person in tree" (bug #4). The original placement passed the
-    // "openArea (walkable + >=3 walkable neighbours)" check because tree tiles
-    // ARE walkable in tileset 4 — walkability says nothing about what a tile
-    // depicts. (24,23) is open grass north-east of the INN with 4 grass
-    // neighbours, verified by rendering the map (tools/map-png.mjs).
-    { key: 'ur_villager_red',    x: 24, y: 23, spec: UR_VILLAGER_RED },
+    { key: 'ur_npc_05', x: 10, y: 28, spec: UR_NPC_05 },
+    { key: 'ur_npc_06', x: 17, y: 28, spec: UR_NPC_06 },
+    { key: 'ur_npc_08', x: 28, y: 28, spec: UR_NPC_08 },
+    { key: 'ur_npc_09', x: 21, y: 15, spec: UR_NPC_09 },
+    { key: 'ur_npc_0a', x: 29, y: 10, spec: UR_NPC_0A },
+    { key: 'ur_npc_0c', x: 16, y: 25, spec: UR_NPC_0C },
+    { key: 'ur_npc_0d', x:  9, y: 21, spec: UR_NPC_0D },
+    { key: 'ur_npc_0e', x: 15, y: 22, spec: UR_NPC_0E },
+    { key: 'ur_npc_0f', x: 21, y: 17, spec: UR_NPC_0F },
+    { key: 'ur_npc_07', x:  8, y: 27, spec: UR_NPC_07 },
   ]],
 ]);
