@@ -1344,7 +1344,13 @@ function _equipOptimum() {
   // Each half picks its own hand, so "optimum" could land a two-hander beside
   // an offhand. Combat normalises that anyway (normalizeGrip), but the screen
   // would show a loadout that cannot exist. v1.7.860.
-  releaseOffhandForTwoHanded(-100);
+  // v1.7.993 — the freed hand has to be emitted like every other caller does.
+  // Without this, Optimum could put a two-hander in the right hand, clear the
+  // left locally, and leave the mirror still holding the old offhand — so every
+  // other player saw a weapon the wearer had taken off. It was the only one of
+  // the four `releaseOffhandForTwoHanded` call sites that ignored the return.
+  const _freedOpt = releaseOffhandForTwoHanded(-100);
+  if (_freedOpt) sendNetEquipFromInv(-101, 0, 'equip-swap');
   recalcCombatStats();
   saveSlotsToDB();
   playSFX(SFX.CONFIRM);

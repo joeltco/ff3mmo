@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.993 — 2026-08-13
+
+### Found it: two equip paths never told the server
+
+Instrumented every code path that changes equipped gear
+(`tools/check-equip-emit.mjs`) rather than reading for it. Equipment moves two
+ways — through `setEquipSlotId`, and by assigning `ps.weaponR/weaponL/head/
+body/arms` DIRECTLY, which bypasses that helper entirely. Both of the real
+findings were the second kind, so grepping the helper would have found neither.
+
+**1. The Optimum button (`pause-menu.js#_equipOptimum`).** It calls
+`releaseOffhandForTwoHanded(-100)` to drop the offhand when Optimum lands a
+two-hander. Three of the four call sites in the codebase capture the return and
+emit for the freed hand; this one ignored it. So Optimum could put a two-hander
+in the right hand, clear the left locally, and leave the mirror still wearing
+the old offhand — which is precisely the shape of the prod report: mirror
+`weaponR 14 / weaponL 14`, client `weaponR 30 / weaponL 0`.
+
+**2. The quiver emptying (`input-handler.js`).** When the last arrow is spent
+the slot is cleared so the bow visibly stops working — silently. The mirror kept
+the arrows equipped. Now emits for whichever hand held them.
+
+Both are "other players see gear you already took off"; neither is visible to
+the player it happens to, which is why they survived this long.
+
+### Not findings
+
+`main.js` applying the server's own `inv-state` push, and `title-screen.js`
+restoring a save the server already has — emitting from either would bounce the
+mirror straight back at the sender. Both allow-listed with the reason.
+`inventory.js#releaseOffhandForTwoHanded` itself is a helper; only the caller
+knows which slot got freed, so the gate checks its CALL SITES instead.
+
+### The gate needed two passes to be honest
+
+- Its brace-depth "which function am I in" walk mis-scoped `rollHand` and
+  flagged a line that emits **on itself**.
+- Then a plain "is there an emit within four lines" window let the quiver revert
+  through, because the right-hand clear sat four lines above the LEFT hand's
+  emit. It is now slot-aware: a direct write to a slot must see that slot's own
+  eqIdx (`-100`..`-104`), or `sendNetEquipSwapHands`, which moves both hands.
+
+Both fixes fail the gate on revert. pvp-wire-sim 153/153.
+
 ## 1.7.992 — 2026-08-13
 
 ### [update divergence] now carries the client build

@@ -301,8 +301,12 @@ function _battleTargetConfirm() {
     if (ps.arrowCount === 0) {
       // Out of ammo: clear the quiver so the bow visibly stops working rather
       // than silently firing nothing.
-      if (isArrow(ps.weaponR)) ps.weaponR = 0;
-      if (isArrow(ps.weaponL)) ps.weaponL = 0;
+      //
+      // This IS an equip change and has to be emitted (v1.7.993). It used to
+      // mutate the slot silently, so the mirror kept the arrows equipped and
+      // other players saw a quiver the shooter had already spent.
+      if (isArrow(ps.weaponR)) { ps.weaponR = 0; sendNetEquipFromInv(-100, 0, 'arrows-spent'); }
+      if (isArrow(ps.weaponL)) { ps.weaponL = 0; sendNetEquipFromInv(-101, 0, 'arrows-spent'); }
       recalcCombatStats();
     }
   } else if (dualWield) {
