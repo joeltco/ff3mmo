@@ -75,7 +75,15 @@ function calcSpawnY(m, ex, ey) {
   return ey;
 }
 
-const seedX = md.entranceX, seedY = calcSpawnY(md, md.entranceX, md.entranceY);
+// `--seed x,y` builds the clip from a different tile than the spawn. The game
+// does this itself: coming BACK through a door hands returnX/returnY straight
+// to `new MapRenderer`, so the same map gets a different clip depending on how
+// you entered. Checking only the spawn seed cannot see that.
+let seedX = md.entranceX, seedY = calcSpawnY(md, md.entranceX, md.entranceY);
+{
+  const sd = flag('seed', null);
+  if (sd) { const [a, b] = sd.split(',').map(Number); seedX = a; seedY = b; }
+}
 const renderer = new MapRenderer(md, seedX, seedY);   // clip built ONCE, at the spawn
 
 const ourCanvas = createCanvas(W, H);
@@ -152,12 +160,40 @@ const clip = renderer._roomClip;
 const L = clip ? clip.x / TILE : 0, T = clip ? clip.y / TILE : 0;
 const R = clip ? (clip.x + clip.w) / TILE : 32, B = clip ? (clip.y + clip.h) / TILE : 32;
 
-let winner = null;
+// Two positions matter, not one. The BEST-agreeing camera proves our tiles are
+// right; it does NOT prove the clip is, because a stray row only enters the
+// 144x144 window when the camera is near that edge. Reporting only the best is
+// how map 13's bottom row and map 12's top rows both got called clean. So also
+// keep the confident position with the MOST stray cells — the worst case a
+// player can actually walk to.
+const strayAt = (px, py, off) => {
+  const data = renderAt(px, py);
+  let ours = 0;
+  for (let r = 0; r < H / TILE; r++) {
+    for (let c = 0; c < W / TILE; c++) {
+      let aD = 0, bD = 0;
+      for (let y = 0; y < TILE; y += 2) {
+        for (let x = 0; x < TILE; x += 2) {
+          if (!blank(pxAt(realData, realImg.width, zR, c * TILE + x, r * TILE + y))) aD++;
+          if (!blank(pxAt(data, W, 1, c * TILE + x + off.dx, r * TILE + y + off.dy))) bD++;
+        }
+      }
+      if (!aD && bD) ours++;
+    }
+  }
+  return ours;
+};
+
+let winner = null, worst = null;
 for (let y = T; y < B; y++) {
   for (let x = L; x < R; x++) {
     if (!renderer.isPassable(x, y, 0)) continue;      // the player must be able to stand there
     const s = score(renderAt(x, y));
     if (!winner || s.pct > winner.pct) winner = { ...s, x, y };
+    if (s.pct >= 0.6) {
+      const ours = strayAt(x, y, s);
+      if (!worst || ours > worst.ours) worst = { ...s, x, y, ours };
+    }
   }
 }
 
@@ -198,9 +234,15 @@ console.log(`map ${id}  spawn/seed (${seedX},${seedY})  best camera (${winner.x}
             `agreement ${(winner.pct * 100).toFixed(1)}%`);
 console.log(`  ${nAgree} agree, ${nDiff} differ, ${nReal} real-only, ${nOurs} OURS-ONLY` +
             (!confident ? '   (LOW CONFIDENCE — treat as inconclusive)'
-              : nOurs ? '   <-- TRAILING TILES' : '   clean'));
+              : nOurs ? '   <-- TRAILING TILES' : ''));
+if (confident) {
+  const w = worst && worst.ours ? worst : null;
+  console.log(w
+    ? `  WORST camera (${w.x},${w.y}): ${w.ours} OURS-ONLY   <-- TRAILING TILES a player can walk to`
+    : '  no camera position anywhere in the room shows a stray tile   clean');
+}
 if (has('ascii')) {
   console.log('\n   ' + [...Array(cols).keys()].map(i => i % 10).join(''));
   grid.forEach((l, i) => console.log(String(i).padStart(2) + ' ' + l));
 }
-process.exit(confident && nOurs ? 1 : 0);
+process.exit(confident && (nOurs || (worst && worst.ours)) ? 1 : 0);

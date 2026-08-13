@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.963 — 2026-08-12
+
+### Fixed — the Kazus inn's FIRST FLOOR drew another room's staircase above it
+- Coming back downstairs into the inn (map 12) rendered **a whole staircase and corridor from the room above, sitting on top of the inn's ceiling**, where the real game draws black. Reported as "the inn first floor still has extra tiles on top".
+- **It only happens when you RE-ENTER through the door.** `map-loading.js` hands `returnX/returnY` straight to `new MapRenderer`, so the clip is built from the stairs tile instead of the spawn — and from there the bounds walk climbs to row 9 while the room starts at row 13. Every spawn-seeded check I had was blind to it, which is why v1.7.962 called this map clean.
+- The top edge is now trimmed when **both** signals hold: a gap of void between the room and the rows above, **and** another room's floor beyond that gap.
+
+### Why both signals, and not either one
+Each was implemented, measured against the real ROM, and thrown away:
+- **"Row holds foreign floor"** alone trims real ceiling — the room flood stops at doors, so it brands parts of the *same* visible room foreign. Maps 4/5/16/17 lost 21 drawn cells each, map 50 lost 17. 24 of 56 position checks worse, none better.
+- **"Void separation"** alone trims rows that genuinely are the building: maps 28/191/188 lost 7-8 cells each, map 101 lost 28.
+- **Widening `isEnclosedRoom`** to catch map 12 (65 tiles at 0.57, just over both thresholds) pulled in map 188 and cost it 7 cells.
+- **Gating the whole trim on `fillIsVoid`** was the worst: 40 of 72 checks worse, removing no stray tiles at all. Caves share `fillIsVoid` with interiors but their rock is real picture.
+
+### Known cost, stated plainly
+- **Maps 28 and 191 each lose 8 drawn cells** — two or three rows above their rooms that the real game does draw. They satisfy both signals and I could not separate them from the inn's case in five attempts.
+- Everything else is untouched: **13, 17, 44, 101, 188, 3, 15, 47, 20, 4, 5, 16, 50** all keep their exact clips.
+- Traded knowingly: a full staircase drawn in the wrong place, in a room reported three times, against 16 cells across two maps nobody has reported.
+
+### Gate
+- `check-room-clip.mjs` now also builds each map's clip from its **door tiles**, not just the spawn — the seed the game actually uses on re-entry. **Proven by reverting:** it fails naming maps 12 and 13 ("4 foreign rows above the room") and passes with the fix.
+- It also seeds from the computed spawn rather than the raw ROM entrance. It had been testing a clip the game never constructs.
+- Rows made entirely of the fill tile no longer count as trailing tiles — they paint nothing.
+
+### Added
+- **`tools/lib/spawn.mjs`** — one copy of `calcSpawnY`. Three separate hand-copies had drifted, and seeding from the raw ROM entrance produced a wrong map-44 diagnosis. Every tool imports this now.
+- **`tools/gt-locate.mjs --seed`** — build the clip from a different tile than the spawn, so the re-entry case is checkable at all.
+- **`tools/clip-info.mjs`** — why a map's clip came out its shape; `MapRenderer` records the inputs in `_clipDiag`.
+
+### Honest limit of the harness
+`gt-locate` scores only camera positions that already agree with the one real frame, so a camera showing foreign content is *excluded for disagreeing* — it reported map 12 clean at every position while the defect was plainly visible in a render. Structural checks against the ROM caught what the pixel comparison could not. Rendering the frame and looking at it is still the last word.
+
 ## 1.7.962 — 2026-08-12
 
 ### Fixed — the Kazus inn (map 13). This is the one that was still wrong.

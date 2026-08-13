@@ -349,18 +349,55 @@ export class MapRenderer {
       // So walk down column-wise from the room's own bottom tiles and keep a
       // row only where the tile directly beneath a still-attached column is not
       // void. Interiors only; a town's scenery below its walkable area is real.
-      if (isEnclosedRoom) {
+      // Walk away from the room one row at a time, keeping only the columns
+      // still standing on non-void. When every attached column hits the fill
+      // tile the building has ended, and anything past it belongs to a
+      // different room on the same shared tilemap.
+      const attachedEdge = (startRow, step) => {
         let attach = new Set();
-        for (let x = 0; x < MAP_SIZE; x++) if (roomSet.has(rmaxY * MAP_SIZE + x)) attach.add(x);
-        let attachedBottom = rmaxY + 1;
-        for (let y = rmaxY + 1; y < MAP_SIZE && attach.size; y++) {
+        for (let x = 0; x < MAP_SIZE; x++) if (roomSet.has(startRow * MAP_SIZE + x)) attach.add(x);
+        let edge = startRow;
+        for (let y = startRow + step; y >= 0 && y < MAP_SIZE && attach.size; y += step) {
           const stillAttached = new Set();
           for (const x of attach) if (tilemap[y * MAP_SIZE + x] !== fillTile) stillAttached.add(x);
           if (!stillAttached.size) break;
-          attachedBottom = y + 1;
+          edge = y;
           attach = stillAttached;
         }
-        bottom = Math.min(bottom, attachedBottom);
+        return edge;
+      };
+
+      if (isEnclosedRoom) bottom = Math.min(bottom, attachedEdge(rmaxY, +1) + 1);
+
+      // TOP edge, for any interior sitting in void. The Kazus inn's FIRST FLOOR
+      // is the case: coming back downstairs seeds the clip at the stairs, so it
+      // reaches row 9 while the room starts at row 13 — and rows 9-12 render a
+      // whole staircase and corridor from the room above, where the real game
+      // draws black. Reported as "the inn first floor still has extra tiles on
+      // top". It survived every spawn-seeded check because the game only builds
+      // that clip when you RE-ENTER through the door.
+      //
+      // Void separation, not "contains foreign floor": `foreignAt` counts
+      // anything the room flood missed, and that flood stops at doors, so it
+      // brands parts of the SAME visible room. Measured, trimming on it cost 21
+      // drawn cells each on maps 4/5/16/17 and 17 on map 50.
+      // BOTH signals are required, and neither alone is enough — each was tried
+      // against the real ROM and each cost drawn area:
+      //   * "row holds foreign floor" alone trims real ceiling, because the room
+      //     flood stops at doors and so brands parts of the SAME room foreign
+      //     (maps 4/5/16/17 lost 21 cells each, map 50 lost 17).
+      //   * "void separation" alone trims rows that really are this building
+      //     (maps 28/191/188 lost 7-8 each, map 101 lost 28).
+      // Together they describe only the actual defect: a gap of void, and past
+      // it another room's floor. That is the Kazus inn's first floor and nothing
+      // else in the play area.
+      if (fillIsVoid) {
+        const attachedTop = attachedEdge(rminY, -1);
+        let foreignAbove = false;
+        for (let y = top; y < attachedTop && !foreignAbove; y++) {
+          for (let x = left; x < right && !foreignAbove; x++) if (foreignAt(x, y)) foreignAbove = true;
+        }
+        if (foreignAbove) top = Math.max(top, attachedTop);
       }
       left   = Math.min(left,   Math.max(0, rminX - 1));
       right  = Math.max(right,  Math.min(MAP_SIZE, rmaxX + 2));

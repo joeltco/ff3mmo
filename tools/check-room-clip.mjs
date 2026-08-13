@@ -30,6 +30,7 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
+const { calcSpawnY } = await import('./lib/spawn.mjs');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -40,7 +41,7 @@ const W = 32, TILE = 16;
 // Pinned by id rather than re-deriving "is this an interior" here, so the gate
 // tests the fix rather than restating the renderer's own heuristic and
 // agreeing with itself.
-const TRAILING_MAPS = new Set([3, 13, 15, 47]);
+const TRAILING_MAPS = new Set([3, 12, 13, 15, 47]);
 
 // Maps reachable on foot — see tools/map-audit.mjs --play.
 const PLAY = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25,26,27,28,29,30,
@@ -64,7 +65,10 @@ for (const id of IDS) {
       if (md.tilemap[i] === 0x5C) md.tilemap[i] = 0x5E;
     }
   }
-  const sx = md.entranceX, sy = md.entranceY;
+  // Seed from where the player actually LANDS, not the raw ROM entrance — the
+  // renderer builds its clip from this tile, so seeding it wrong tests a clip
+  // the game never constructs. See tools/lib/spawn.mjs.
+  const sx = md.entranceX, sy = calcSpawnY(md, md.entranceX, md.entranceY);
   let r;
   try { r = new MapRenderer(md, sx, sy); } catch { continue; }
   checked++;
@@ -94,7 +98,8 @@ for (const id of IDS) {
 
   const c = r._roomClip;
   if (!c) continue;                     // whole map drawn — nothing to check
-  const x0 = c.x / TILE, y0 = c.y / TILE, x1 = x0 + c.w / TILE, y1 = y0 + c.h / TILE;
+  const x0 = c.x / TILE, y0 = c.y / TILE, x1 = x0 + c.w / TILE;
+  let y1 = y0 + c.h / TILE;
   let outside = 0;
   for (const k of seen) {
     const x = k % W, y = (k - (k % W)) / W;
@@ -125,11 +130,54 @@ for (const id of IDS) {
   //
   // Interiors ONLY. A town's scenery legitimately sits below its walkable
   // tiles, and enforcing this everywhere is what deleted Kazus in v1.7.954.
+  // Coming BACK through a door seeds the renderer at the return position rather
+  // than the spawn (`map-loading.js` hands returnX/returnY straight to
+  // `new MapRenderer`), which builds a DIFFERENT clip from the same map. That is
+  // how the Kazus inn's first floor showed four foreign rows above its room:
+  // entering from town the clip started at row 10, coming back down from
+  // upstairs it started at row 9, while the room begins at row 13.
+  //
+  // Asserted only for the maps measured against the real ROM, and only on the
+  // TOP edge. A general "clip must not exceed the room" rule is not expressible
+  // here without re-deriving the renderer's own attachment walk — a gate that
+  // restates the implementation only ever agrees with it.
+  if (TRAILING_MAPS.has(id)) {
+    for (const [key, t] of md.triggerMap) {
+      if (t.type !== 1) continue;                     // doors only
+      const [dx, dy] = key.split(',').map(Number);
+      let dr;
+      try { dr = new MapRenderer(md, dx, dy); } catch { continue; }
+      const dd = dr._clipDiag;
+      if (!dr._roomClip || !dd || dd.rminY === undefined) continue;
+      const dTop = dr._roomClip.y / TILE;
+      if (dTop < dd.rminY) {
+        console.error(`  ✗ map ${id}: coming back through the door at (${dx},${dy}) starts the clip at ` +
+          `row ${dTop} for a room beginning at row ${dd.rminY} — ` +
+          `${dd.rminY - dTop} foreign row(s) above the room`);
+        failed++;
+        break;                                        // one report per map
+      }
+    }
+  }
+
   if (TRAILING_MAPS.has(id)) {
     let lastWalkRow = -1;
     for (const k of seen) {
       const y = (k - (k % W)) / W;
       if (y > lastWalkRow) lastWalkRow = y;
+    }
+    // Rows made entirely of the fill tile paint nothing — they are void, and
+    // including them is invisible. Only rows carrying real tiles can show as
+    // another room's wall band. (Map 12's clip ends one row low, but that row
+    // is pure fill.)
+    while (y1 > lastWalkRow + 1) {
+      const row = y1 - 1;
+      let anyDrawn = false;
+      for (let x = x0; x < x1 && !anyDrawn; x++) {
+        if (md.tilemap[row * W + x] !== md.fillTile) anyDrawn = true;
+      }
+      if (anyDrawn) break;
+      y1--;
     }
     if (y1 > lastWalkRow + 1) {
       console.error(`  ✗ map ${id}: clip bottom row ${y1 - 1} is past the room's last walkable row ` +
