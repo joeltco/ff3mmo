@@ -18,6 +18,27 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.974 — 2026-08-13
+
+### Fixed — Ur's townsfolk were sprites from other towns
+v1.7.973 "fixed" the shopkeeper problem by picking ten bundles off a contact sheet because they looked like villagers. **Seven of those ten are never loaded in Ur at all.**
+
+- FF3 is CHR-RAM: a walk bundle only exists on screen if the map copied it into sprite memory. Whether a sprite belongs in a town is not a matter of opinion — the PPU knows.
+- `nes-run.mjs --warp 114 --chrmap --bundles` traces live sprite memory back to ROM offsets and groups it into 16-tile bundles. **Ur loads exactly five:** `0x01DF10`, `0x01E010`, `0x01E210`, `0x01E310`, `0x01E510` (13-14 of 16 tiles each; the rest are duplicate tiles that dedupe against other sprites). Bundles 24, 25, 26, 27, 33, 36 and 39 appear nowhere in Ur's memory.
+- The pool is now those five, straight from the PPU.
+- **Five bundles for ten people is correct** — the ROM reuses them. The inn and item keepers draw from the same set; that is FF3's own doing, not a bug. Ur does not have ten unique character sprites in memory, and pretending otherwise is what produced two bad versions of this in a row.
+
+### Gate — `check-npc-placement.mjs` now verifies the sprite, not just the tile
+- Every NPC's bundle must be one its map actually loads. The verified set is pinned per map with the exact command that produced it.
+- **Proven by swapping one bundle for a real sprite Ur doesn't load:** fails with "uses bundle 0x1D910, which map 114 never loads into sprite memory".
+
+### Added — `--chrmap` / `--watchtiles` on nes-run.mjs
+- `--chrmap [--bundles]` traces the PPU's current contents back to ROM offsets by bank, and groups them into walk bundles. This is the tool that settled the above.
+- `--watchtiles <offset>` scans PPU each frame for a ROM offset's bytes and, on a hit, reports the tile slot and every OAM sprite using it — a sprite's real in-game placement. Self-tested against the player's own bundle at `0x01C010`.
+
+### The quest bubble is not placed anywhere in the ROM
+Investigated properly with the above rather than left as a shrug: the bubble tiles (`0x56A50`) never reach PPU across 900 frames in Ur or 3000 frames of cave play and battles; Ur's sprites come from banks 0D/0E/0F/28 and battle's from 0C/0D/20/28/3A — **never 2B**, the bank the bubble lives in; and a ROM-wide search for a graphics descriptor naming bank 2B with its address returns nothing. Bank 2B is battle monster art, and the bubble sits unplaced inside it. Scope of that claim: Ur, the opening cave, and cave battles — not the world map, later towns or endgame scenes, which I cannot reach from the savestate.
+
 ## 1.7.973 — 2026-08-13
 
 ### Fixed — dialogue was rendering OUTSIDE the message box

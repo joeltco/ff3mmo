@@ -325,6 +325,26 @@ if (has('chrmap')) {
     banks.get(bank).push(off);
   }
   console.log(`PPU tiles ${lo}..${hi - 1}: ${blank} blank, ${unknown} not found in ROM`);
+  // `--bundles` groups the located tiles into the 256-byte / 16-tile walk
+  // bundles that town-npcs.js uses, and reports which are FULLY present. Those
+  // are the sprites this scene actually loads — i.e. the real cast, rather than
+  // whatever looked like a villager on a contact sheet.
+  if (has('bundles')) {
+    const perBundle = new Map();
+    for (const offs of banks.values()) {
+      for (const o of offs) {
+        const b = o & ~0xFF;
+        if (!perBundle.has(b)) perBundle.set(b, new Set());
+        perBundle.get(b).add((o - b) >> 4);
+      }
+    }
+    const full = [], partial = [];
+    for (const [b, tiles] of [...perBundle].sort((a, c) => a[0] - c[0])) {
+      (tiles.size === 16 ? full : partial).push(`0x${b.toString(16).toUpperCase()}(${tiles.size}/16)`);
+    }
+    console.log(`  COMPLETE bundles loaded: ${full.join(' ') || 'none'}`);
+    if (partial.length) console.log(`  partial: ${partial.join(' ')}`);
+  }
   for (const [bank, offs] of [...banks].sort((a, b) => a[0] - b[0])) {
     const min = Math.min(...offs), max = Math.max(...offs);
     console.log(`  bank 0x${bank.toString(16).padStart(2,'0')}: ${offs.length} tiles  ` +

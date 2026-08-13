@@ -70,5 +70,36 @@ for (const [mapId, list] of TOWN_NPCS) {
 }
 
 if (!checked) { console.error('check-npc-placement: no NPCs found — has TOWN_NPCS moved?'); process.exit(2); }
+
+// ── every NPC must use a sprite bundle its MAP ACTUALLY LOADS ──────────────
+// FF3 is CHR-RAM: a walk bundle only exists on screen if the map copied it into
+// sprite memory. Picking a bundle that looks like a villager on a contact sheet
+// puts a sprite in the town that the real game never loads there — v1.7.973
+// dressed Ur in seven bundles from other towns' casts.
+//
+// The verified sets below come from the PPU itself:
+//   node tools/nes-run.mjs --warp <id> --chrmap --bundles
+// which traces live sprite memory back to ROM offsets and groups them into
+// 16-tile bundles. Re-run it if a map's cast changes; do not edit by hand.
+const LOADED_BUNDLES = new Map([
+  [114, new Set([0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E510])],
+]);
+
+{
+  let bundleBad = 0;
+  for (const [mapId, allowed] of LOADED_BUNDLES) {
+    const list = TOWN_NPCS.get(mapId) || [];
+    for (const e of list) {
+      const off = e.spec && e.spec.romOffset;
+      if (off == null || allowed.has(off)) continue;
+      console.error(`  ✗ ${e.key} (map ${mapId}) uses bundle 0x${off.toString(16).toUpperCase()}, ` +
+        `which map ${mapId} never loads into sprite memory`);
+      bundleBad++;
+    }
+  }
+  if (bundleBad) failed += bundleBad;
+  else console.log(`  ✓ every NPC uses a bundle its map actually loads`);
+}
+
 if (failed) { console.error(`\ncheck-npc-placement: FAIL (${failed} of ${checked})`); process.exit(1); }
 console.log(`\ncheck-npc-placement: OK (${checked} NPCs)`);

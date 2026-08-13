@@ -97,25 +97,29 @@ export const INN_KEEPER = {
 const UR_SP2 = [0x1A, 0x0F, 0x12, 0x36];   // map 114 sprite palette 6 — blue body
 const UR_SP3 = [0x1A, 0x0F, 0x26, 0x36];   // map 114 sprite palette 7 — skin / hair
 
-// Townsfolk walk bundles — TEN distinct people, one per Ur roster entry.
+// Ur's town NPC walk bundles — READ OUT OF THE PPU, not chosen by eye.
 //
-// These deliberately EXCLUDE bundles 32 (0x01E010), 34 (0x01E210) and 38
-// (0x01E610): those are the innkeeper, the item-shop keeper and the weapon
-// keeper. v1.7.970 built the town out of a five-bundle pool that included all
-// three, so Ur filled up with shopkeepers strolling around outside their own
-// shops. Bundle ids are 0x01C010 + id*256; ids 24..41 are the townsfolk range
-// (0..23 are the player job sprites — see the v1.7.968 note above).
+// `node tools/nes-run.mjs --warp 114 --chrmap --bundles` traces what the real
+// game has loaded in sprite memory while standing in Ur and groups it into
+// 16-tile walk bundles. Ur loads exactly these five (13-14 of 16 tiles each;
+// the remainder are duplicate tiles that dedupe against other sprites):
+//
+//   0x01DF10  0x01E010  0x01E210  0x01E310  0x01E510
+//
+// Everything else is a different town's cast. v1.7.973 replaced the pool with
+// ten bundles picked off a contact sheet because they "looked like villagers"
+// — seven of those ten (24, 25, 26, 27, 33, 36, 39) are never loaded in Ur at
+// all, which is why the town filled up with strangers.
+//
+// FIVE bundles for TEN people: the ROM reuses them, and so do we. The inn and
+// item keepers draw from this same set — that is FF3's own doing, not a bug;
+// Ur simply does not have ten unique character sprites in memory.
 const NPC_BUNDLES = [
-  0x01D810,  // 24
-  0x01D910,  // 25
-  0x01DA10,  // 26
-  0x01DB10,  // 27
-  0x01DF10,  // 31
-  0x01E110,  // 33
-  0x01E310,  // 35
-  0x01E410,  // 36
-  0x01E510,  // 37
-  0x01E710,  // 39
+  0x01DF10,
+  0x01E010,
+  0x01E210,
+  0x01E310,
+  0x01E510,
 ];
 
 /** One Ur townsperson. `slot` picks a verified bundle, NOT the ROM gfx byte. */
