@@ -14,6 +14,7 @@ import { hudSt } from './hud-state.js';
 import { getTrashCanvas } from './data/inventory-icons.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { AREA_NAMES } from './data/strings.js';
+import { songForMap } from './data/map-songs.js';
 import { mapSt } from './map-state.js';
 import { loadMapById, loadWorldMapAtPosition } from './map-loading.js';
 import { queueOpeningIntro } from './npc.js';
@@ -767,7 +768,12 @@ function _updateTitleMainOutCase() {
     transSt.pendingTrack = TRACKS.WORLD_MAP;
     loadWorldMapAtPosition(slot.worldX / TILE_SIZE, slot.worldY / TILE_SIZE);
   } else if (hasSavedPos) {
-    transSt.pendingTrack = TRACKS.TOWN_UR; // _loadRegularMap / floor music takes over if not Ur
+    // The saved map's OWN song. This said TOWN_UR with a comment claiming
+    // "_loadRegularMap / floor music takes over if not Ur" — it did not: that
+    // function only ever started music for map 114, so loading a save made in
+    // Kazus or Castle Sasune opened on Ur's town theme. null for a dungeon
+    // floor, whose own loader picks the track.
+    transSt.pendingTrack = songForMap(slot.currentMapId);
     const tx = slot.worldX != null ? slot.worldX / TILE_SIZE : undefined;
     const ty = slot.worldY != null ? slot.worldY / TILE_SIZE : undefined;
     loadMapById(slot.currentMapId, tx, ty);
@@ -782,7 +788,11 @@ function _updateTitleMainOutCase() {
     // would have pushed if the player had walked in from Ur naturally,
     // so each $68 exit_prev pop returns to the right map at the right
     // tile.
-    transSt.pendingTrack = TRACKS.TOWN_UR;
+    // Map 7's own song. In practice the elder house takes FF2's theme and
+    // `_loadRegularMap` clears this, but when the player has no FF2 ROM the
+    // fallback must still be map 7's measured song rather than a hardcoded
+    // TOWN_UR that happens to coincide with it.
+    transSt.pendingTrack = songForMap(7);
     // Pre-set topBox to "Ur" so the elder house's interior maps (7, 6)
     // inherit the town name in the top strip — same as any other Ur
     // building (shops). Without this, setupTopBox(7) would load map 7's

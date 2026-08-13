@@ -24,6 +24,34 @@
 //
 // Parity: reproduces all three hand-traced captures exactly —
 //   Fire 0x31 -> $c1 -> 130 | Ice 0x32 -> $9c -> 93 | Sleep 0x33 -> $d4 -> 149
+//
+// ── INDEPENDENTLY RE-VERIFIED, v1.7.997 ─────────────────────────────────
+// Joel reported Meteo's sound as wrong, so the whole table was re-measured
+// from scratch — a fresh sweep keeping the RAW $7F49 traces this time (the
+// original run persisted only the derived numbers, so nothing in this file was
+// checkable after the fact).
+//
+// Result: 48 of 48 values reproduce EXACTLY. Zero differ.
+//
+// It took three runs to get there, and the two failures were the harness, not
+// the data — worth writing down because both look like "the table is wrong":
+//   * Default run: 43 agree, 5 produce no sound at all — 0x04 Life2, 0x0b Heal,
+//     0x12 Soft, 0x28 Wash, 0x35 Pure. All cure-status/revive. Cause: AFFLICT
+//     is opt-in (`AFFLICT=1`), so the party was healthy and the spells no-opped
+//     exactly as this header already warned. I briefly concluded these five
+//     were never captured and started deleting them; the `[afflict:poison]`
+//     tags on the rows are what caught it.
+//   * AFFLICT=1: 47 agree. Only 0x28 Wash stays silent — it cures BLIND and the
+//     default mask is poison (2).
+//   * AFFLICT=1 AFFLICT_MASK=4: Wash reproduces 74 as well. 48/48.
+//
+// So Meteo (0x02 -> $88 -> 73) is measured, reproduced, and renders 896 ms of
+// audible PCM through libgme (tools/check-sfx-audio.mjs). Its offset is 65f
+// after its own CHR block goes live where the elemental spells sit at 78f,
+// because Meteo's block starts 112f later — self-consistent, not an artifact.
+//
+// To re-verify:  AFFLICT=1 node tools/monscan/spell-sweep.cjs both
+//                AFFLICT=1 AFFLICT_MASK=4 node tools/monscan/spell-sweep.cjs wm
 
 export const CAPTURED_SPELL_SFX = new Map([
   [0x00, 131],  // $c2, 57f

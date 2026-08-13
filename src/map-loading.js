@@ -13,6 +13,7 @@ import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, a
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
+import { mapEntryMusic } from './map-music.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { battleSt } from './battle-state.js';
@@ -286,19 +287,30 @@ function _loadRegularMap(mapId, returnX, returnY) {
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
   if (returnX !== undefined) _openReturnDoor(playerX, playerY);
-  // Elder house (both floors, maps 6 + 7) gets its own music — FF2 NSF track,
-  // played on the FF2 emulator while the FF3 track is stopped. Idempotent
-  // across the two floors (playFF2Track no-ops on the same track), so it plays
-  // continuously 6<->7 and only restarts the FF3 town theme on exit to Ur.
-  if ((mapId === 6 || mapId === 7) && ff2MusicReady()) {
-    // Clear any queued FF3 track (e.g. new-game pendingTrack=TOWN_UR) so the
-    // entry transition won't start FF3 music over the FF2 house theme.
+  // Which track this map entry starts is decided by `mapEntryMusic` — a pure
+  // function in src/map-music.js, so `tools/check-map-music.mjs` can exercise
+  // the REAL choice instead of a restatement of it. This block only performs
+  // the plan it returns.
+  //
+  // Elder house (maps 6 + 7) gets FF2's theme on the FF2 emulator while the FF3
+  // track is stopped. Idempotent across the two floors (playFF2Track no-ops on
+  // the same track), so it plays continuously 6<->7.
+  const plan = mapEntryMusic(mapId, {
+    ff2Ready: ff2MusicReady(),
+    pendingTrack: transSt.pendingTrack,
+    ff2ElderTrack: FF2_TRACKS.ELDER_HOUSE,
+  });
+  if (plan.kind === 'ff2') {
+    // Clear any queued FF3 track so the entry transition won't start FF3 music
+    // over the FF2 house theme.
     transSt.pendingTrack = null;
     stopMusic();
-    playFF2Track(FF2_TRACKS.ELDER_HOUSE);
+    playFF2Track(plan.track);
   } else {
     stopFF2Music();
-    if (mapId === 114 && transSt.pendingTrack == null) playTrack(TRACKS.TOWN_UR);
+    // 'deferred' means a transition already owns the start; 'none' means this
+    // map slot was never measured.
+    if (plan.kind === 'ff3') playTrack(plan.song);
   }
 }
 

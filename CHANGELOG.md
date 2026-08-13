@@ -18,6 +18,64 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.997 — 2026-08-13
+
+### Map music — every map plays its own song (Kazus / Castle Sasune fix)
+
+- **`_loadRegularMap` started music for exactly ONE map.** The branch was
+  `mapId === 114`, so every other map inherited whatever track the previous map
+  left running — Kazus, Castle Sasune and the mountain town played Ur's town
+  theme. `title-screen.js` compounded it: loading any save queued `TOWN_UR`
+  under a comment claiming `_loadRegularMap` would take over for non-Ur maps,
+  which it never did.
+- **Measured, not read.** New `tools/music-probe.mjs` warps the real ROM into
+  every map slot and records the song request at `$7F43`. 256/256 slots
+  returned a song, zero failures, and the Ur self-check reproduced 31. Map
+  property byte 10 IS the song for most maps but reads `0x81` for exactly the
+  three maps Joel reported — they actually play song 12, so trusting byte 10
+  would have shipped a second wrong answer.
+- New `src/data/map-songs.js` (generated, 256 rows) + `src/map-music.js`, a
+  pure `mapEntryMusic()` returning a plan so the choice is testable outside a
+  browser. The elder house keeps its FF2 theme (a design choice, not a ROM
+  value) and sits above the measured table.
+- Gate `tools/check-map-music.mjs` pins the table AND the wiring — a perfect
+  table that nothing calls is the failure it exists to catch. Proven by three
+  separate reverts, each verified to have landed.
+
+### Spell SFX — re-measured end to end, table vindicated
+
+- Joel reported Meteo's sound as wrong, so the whole table was re-captured. The
+  original sweep persisted only the derived numbers, so nothing in
+  `spell-sfx-captured.js` had been checkable after the fact; the raw `$7F49`
+  traces are now kept.
+- **48 of 48 non-summon castable spells reproduce their shipped value exactly.
+  Zero differ.** Meteo (`0x02 → $88 → 73`) is measured, reproduced, and renders
+  896 ms of audible PCM. No change made — see `docs/SFX-AUDIT.md` for what is
+  still unresolved about it.
+- Two intermediate runs looked like table bugs and were harness artifacts:
+  `AFFLICT` is opt-in, so five cure-status spells no-opped; `Wash` needs the
+  BLIND mask, not poison. I started deleting those five rows before the
+  `[afflict:poison]` tags caught the mistake.
+
+### New sound gates
+
+- `tools/check-sfx-audio.mjs` renders every FF3 SFX constant and music track
+  through the real libgme and fails on silence or a click. This check did not
+  exist for FF3 — it is the one that would have caught the FF2 blips shipping
+  silent. All 26 SFX + 9 tracks pass.
+- `tools/sfx-table.mjs` prints the whole catalogue with provenance per row;
+  `--dupes` lists sounds shared by more than one spell.
+- `tools/lib/browser-shim.mjs` extracted so Node tools stop hand-copying DOM
+  stubs. (`encounter-sim.js` keeps its copy for now — it is a deploy gate.)
+
+### Not fixed
+
+- **FF2 learn SFX.** The word menu plays FF2's `confirm` blip for every choice
+  including LEARN. Whether FF2 plays something distinct is still unverified —
+  reaching FF2 gameplay headlessly remains blocked. Progress: `B` advances
+  between characters in the kana name grid (previously recorded as "no button
+  confirms"); all four names fill, but nothing finalises.
+
 ## 1.7.996 — 2026-08-13
 
 ### Docs refresh — no code change
