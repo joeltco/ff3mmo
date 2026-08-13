@@ -2,21 +2,20 @@
 
 import { drawText, measureText } from './font-renderer.js';
 import { isMobile } from './ui-state.js';
-import { playSFX, SFX } from './music.js';
 
-// Per-character tick — OURS, not FF2's.
+// ⛔ THE TEXT TYPE-OUT IS SILENT. Do not add a per-character blip back.
 //
-// v1.7.981 mapped FF2's sound engine end to end (tools/ff2-sound-map.mjs):
-// every sound it can make is either a table entry requested through $E0 or one
-// of three short pulse-2 routines, and only TWO of those three are called by
-// anything in the ROM — the cursor blip and the confirm blip. There is no
-// per-character text sound in FF2 to copy. Its prologue draws ~7,700 frames of
-// text without requesting a single sound.
+// v1.7.979 shipped one (FF3's CURSOR every third glyph). Joel: "why are messages
+// having weird sfx as the words scroll". Removed in v1.7.986.
 //
-// So the tick stays our own: FF3's CURSOR, the shortest blip in the measured
-// table in music.js. FF2's own blips play on the menu (see word-menu.js), where
-// they are the real thing.
-const MSG_TYPE_SFX = SFX.CURSOR;
+// It was never authentic either. v1.7.981 mapped FF2's sound engine end to end
+// (tools/ff2-sound-map.mjs): every sound it can make is either a table entry
+// requested through $E0 or one of three short pulse-2 routines, and only TWO of
+// those three are called by anything in the ROM — the cursor blip and the
+// confirm blip. FF2 has NO per-character text sound. Its prologue draws ~7,700
+// frames of text without requesting a single one.
+//
+// FF2's real blips play on the ASK/LEARN menu (word-menu.js), where they belong.
 
 // NES layout constants — must match game.js
 const CANVAS_W   = 256;
@@ -27,12 +26,9 @@ const HUD_VIEW_H = 144;
 const SLIDE_MS  = 80;   // box slide-in/out duration
 const SCROLL_MS = 160;  // inter-page text scroll duration
 
-// FF2-style type-out. FF2 reveals dialogue a character at a time with a short
-// tick rather than snapping the whole page in. `TYPE_BLIP_EVERY` is why it
-// reads as speech and not a machine gun — FF2 does not sound one tick per
-// glyph.
+// FF2-style type-out: dialogue reveals a character at a time instead of the
+// whole page snapping in. Silent — see the block above.
 const TYPE_MS_PER_CHAR = 28;
-const TYPE_BLIP_EVERY  = 3;
 
 // ── Key Term highlighting ─────────────────────────────────────────────────
 //
@@ -107,7 +103,6 @@ export const msgState = {
   // the wrapped lines can be sliced directly without re-deriving glyph counts.
   typed:           0,
   typeTimer:       0,
-  typeBlips:       0,
 };
 
 /** True while the current page is still revealing. */
@@ -125,7 +120,6 @@ export function completeMsgTyping() {
 function _restartTyping() {
   msgState.typed = 0;
   msgState.typeTimer = 0;
-  msgState.typeBlips = 0;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -280,11 +274,7 @@ export function updateMsgBox(dt) {
     msgState.typeTimer += Math.min(dt, 33);
     while (msgState.typeTimer >= TYPE_MS_PER_CHAR && msgState.typed < msgState.bytes.length) {
       msgState.typeTimer -= TYPE_MS_PER_CHAR;
-      const b = msgState.bytes[msgState.typed++];
-      // Tick only on visible glyphs, and only every few of them.
-      if (b >= 0x28 && b !== 0xFF && (msgState.typeBlips++ % TYPE_BLIP_EVERY) === 0) {
-        playSFX(MSG_TYPE_SFX);
-      }
+      msgState.typed++;
     }
   }
 
