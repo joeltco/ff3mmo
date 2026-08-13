@@ -4,7 +4,7 @@
 // `romRaw` (header-inclusive). Located by byte-searching the captured OAM
 // tiles against the AWJ-patched ROM (see tools/npc-sprite-tool.mjs).
 
-import { DIR_DOWN, DIR_RIGHT } from '../sprite.js';
+import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from '../sprite.js';
 
 // Shared town-keeper palette (magenta hair / blue tunic). Every counter-bound
 // keeper in Ur uses this same SP3/SP2 pair — the only thing that differs
@@ -101,14 +101,18 @@ const UR_SP3 = [0x1A, 0x0F, 0x26, 0x36];   // map 114 sprite palette 7 — skin 
 const NPC_BUNDLES = [0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E610];
 
 /** One Ur townsperson. `slot` picks a verified bundle, NOT the ROM gfx byte. */
+// Townsfolk STAND on their ROM tile rather than wander. `wander: true` hands
+// the spec to the random-spawn pool (v1.7.769), which throws the ROM's
+// coordinates away — so all ten drew from the same grass pool and bunched up
+// instead of spreading across the town the way the ROM spaces them. Idle-march
+// keeps them animated in place.
 function urNpc(slot, extra = {}) {
   return {
     romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
     palTop: UR_SP3,
     palBtm: UR_SP2,
     dir: DIR_DOWN,
-    wander: true,
-    leash: 3,
+    animate: true,
     ...extra,
   };
 }
@@ -128,8 +132,18 @@ export const UR_NPC_05 = urNpc(0, {
     'The crystal will guide you.',
   ],
 });
-export const UR_NPC_06 = urNpc(1);
-export const UR_NPC_07 = urNpc(2);
+export const UR_NPC_06 = urNpc(1, {
+  dialogue: [
+    'The old well ran dry the night the light dimmed.',
+    'Draw your water at the pond now.',
+  ],
+});
+export const UR_NPC_07 = urNpc(2, {
+  dialogue: [
+    "Sasune's knights rode past at dawn.",
+    'None of them came back.',
+  ],
+});
 export const UR_NPC_08 = urNpc(3, {
   dialogue: [
     'The shops are open by day.',
@@ -137,8 +151,18 @@ export const UR_NPC_08 = urNpc(3, {
     "Sleep at the inn — it's free.",
   ],
 });
-export const UR_NPC_09 = urNpc(4);
-export const UR_NPC_0A = urNpc(5);
+export const UR_NPC_09 = urNpc(4, {
+  dialogue: [
+    'Mind the cave to the north.',
+    'Something down there took my brother.',
+  ],
+});
+export const UR_NPC_0A = urNpc(5, {
+  dialogue: [
+    'I keep the north field.',
+    'Nothing grows in the dark.',
+  ],
+});
 export const UR_NPC_0C = urNpc(6, {
   dialogue: [
     'Welcome to Ur, traveler.',
@@ -153,7 +177,12 @@ export const UR_NPC_0D = urNpc(7, {
     'Travelers like you give us hope.',
   ],
 });
-export const UR_NPC_0E = urNpc(8);
+export const UR_NPC_0E = urNpc(8, {
+  dialogue: [
+    'You carry a blade.',
+    'Then you go where we cannot.',
+  ],
+});
 export const UR_NPC_0F = urNpc(9, {
   dialogue: [
     "I study the crystal's silence.",
@@ -177,6 +206,75 @@ export const UR_INN_GUEST_15 = innGuest(0);
 export const UR_INN_GUEST_16A = innGuest(2);
 export const UR_INN_GUEST_16B = innGuest(3);
 
+
+// ── Ur tavern (map 9, up the stairs from the inn) ─────────────────────────
+// The ROM puts five people in the bar room at the top-right of map 9's shared
+// tilemap: a keep behind the counter and four drinkers at the tables. Coords
+// are the ROM's own (tools/npc-dump.mjs 9); each faces the counter or the
+// table they are sat at, which is what "seated" looks like with walk sprites.
+const tavern = (slot, dir, dialogue) => ({
+  romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
+  palTop: TAVERN_SP3, palBtm: TAVERN_SP2,
+  dir, animate: true, dialogue,
+});
+const TAVERN_SP2 = [0x1A, 0x0F, 0x12, 0x36];
+const TAVERN_SP3 = [0x1A, 0x0F, 0x15, 0x36];
+
+export const UR_TAVERN_KEEP = tavern(4, DIR_DOWN, [
+  'Ale? Sit anywhere you like.',
+  'Nobody is in a hurry to leave lately.',
+]);
+export const UR_TAVERN_DRINKER_A = tavern(0, DIR_RIGHT, [
+  'Drink up, friend.',
+  'The dark keeps either way.',
+]);
+export const UR_TAVERN_DRINKER_B = tavern(2, DIR_LEFT, [
+  'I hauled ore from the mines for years.',
+  'Then the vein went black.',
+]);
+export const UR_TAVERN_DRINKER_C = tavern(3, DIR_UP, [
+  'They say the crystal chooses four.',
+  'Four! And look at the state of us.',
+]);
+export const UR_TAVERN_DRINKER_D = tavern(1, DIR_DOWN, [
+  'Sit a while, warrior.',
+  'The road north is colder than this floor.',
+]);
+
+// ── Ur elder's house (maps 6 ground / 7 upper) ───────────────────────────
+const elder = (slot, dir, dialogue) => ({
+  romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
+  palTop: UR_SP3, palBtm: UR_SP2,
+  dir, animate: true, dialogue,
+});
+export const UR_ELDER_ATTENDANT = elder(1, DIR_DOWN, [
+  'The elder is upstairs.',
+  'He has not slept since the tremor.',
+]);
+export const UR_ELDER_KIN_A = elder(2, DIR_RIGHT, [
+  'Father watches the road',
+  'for riders that never come.',
+]);
+export const UR_ELDER_KIN_B = elder(3, DIR_LEFT, [
+  'We kept the lamps lit',
+  'for you.',
+]);
+export const UR_ELDER_KIN_C = elder(0, DIR_DOWN, [
+  'You came out of the cave?',
+  'Then the old stories are true.',
+]);
+
+// ── Ur house (map 2) ─────────────────────────────────────────────────────
+export const UR_HOUSEHOLDER = {
+  romOffset: NPC_BUNDLES[2],
+  palTop: UR_SP3, palBtm: UR_SP2,
+  dir: DIR_DOWN, animate: true,
+  dialogue: [
+    'Bar your door at night.',
+    'Things walk the grass that did not before.',
+  ],
+};
+
 // Map ID → keepers to place on that map. One render path: every entry goes
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.
 export const TOWN_NPCS = new Map([
@@ -189,6 +287,23 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_inn_guest_c',  x: 9, y:  2, spec: UR_INN_GUEST_16B },
   ]],
   [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
+  // Ur tavern — ROM roster (tools/npc-dump.mjs 9), bar room top-right.
+  [9, [
+    { key: 'ur_tavern_keep',      x: 23, y: 3, spec: UR_TAVERN_KEEP },
+    { key: 'ur_tavern_drinker_a', x: 22, y: 7, spec: UR_TAVERN_DRINKER_A },
+    { key: 'ur_tavern_drinker_b', x: 24, y: 7, spec: UR_TAVERN_DRINKER_B },
+    { key: 'ur_tavern_drinker_c', x: 28, y: 8, spec: UR_TAVERN_DRINKER_C },
+    { key: 'ur_tavern_drinker_d', x: 29, y: 5, spec: UR_TAVERN_DRINKER_D },
+  ]],
+  // Elder's house — ground floor (6) and upper floor (7).
+  [6, [{ key: 'ur_elder_attendant', x: 11, y: 14, spec: UR_ELDER_ATTENDANT }]],
+  [7, [
+    { key: 'ur_elder_kin_a', x: 2, y: 4, spec: UR_ELDER_KIN_A },
+    { key: 'ur_elder_kin_b', x: 6, y: 4, spec: UR_ELDER_KIN_B },
+    { key: 'ur_elder_kin_c', x: 4, y: 3, spec: UR_ELDER_KIN_C },
+  ]],
+  // Ur house (map 2).
+  [2, [{ key: 'ur_householder', x: 6, y: 26, spec: UR_HOUSEHOLDER }]],
   // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
   // behind the ur_armor counter at (3,5).
   [4, [{ key: 'armor_keeper',    x: 3, y:  4, spec: WEAPON_KEEPER }]],

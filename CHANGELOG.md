@@ -18,6 +18,34 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.970 — 2026-08-13
+
+### Ur is populated — 17 NPCs → 27, and the town no longer bunches up
+I had only scanned five Ur maps. Walking the town's own door table finds **eleven**, holding **45 ROM roster rows** between them. Sorting those by whether they sit on a walkable tile splits people from furniture cleanly (candles, counters and braziers all sit on solid tiles), and every remaining person in Ur is now placed.
+
+| map | what it is | ROM people | placed |
+|---|---|---|---|
+| 114 | town | 10 | 10 |
+| 8 | inn | 5 | 5 |
+| **9** | **tavern** | 5 | **5 (new)** |
+| **6** | elder's house, ground | 1 | **1 (new)** |
+| **7** | elder's house, upper | 3 | **3 (new)** |
+| **2** | house | 1 | **1 (new)** |
+| 3 / 4 / 5 | magic / armor / weapon shops | 1 / 1 / 1 | 1 / 1 / 1 |
+
+- **Map 9 is Ur's tavern** — bar counter, bottled shelves, tables and stools in the top-right room of its shared tilemap, with the ROM's five people sat right in it. It had nobody in it until now.
+- **The town's ten stopped wandering.** `wander: true` hands a spec to the random-spawn pool (v1.7.769), which throws the ROM's coordinates away — so all ten drew from the same grass pool and bunched together instead of spreading across Ur the way the ROM spaces them. They now stand on their own ROM tiles and idle-march in place.
+- Indoor NPCs face the counter or the table they're at, which is what "seated" looks like with walk sprites.
+
+### Dialogue for everyone — 50 pages
+Every NPC in Ur now talks. Written for this game, not lifted from anywhere: the ROM's own NPC text sits behind the event system, which still isn't decoded.
+- Threads planted for the quest work: the dry well, the blackened mine vein, Sasune's riders who never came back, the elder who hasn't slept since the tremor, and the cave that took a villager's brother.
+- **Each array entry is one message-box PAGE.** I first split sentences across entries, which reads as two disconnected pages — repaged so every page is one complete thought. All 50 verified ≤48 chars (the box is 16 chars × 3 lines); longest is exactly 48.
+
+### Notes for the quest work
+- `TOWN_NPCS` rows carry `dialogue` today; a quest hook belongs on the same spec so placement and rendering stay untouched.
+- `tools/npc-dump.mjs <maps…>` prints any map's ROM roster beside what we place, marking entries on solid tiles — that's the tool that found the tavern.
+
 ## 1.7.969 — 2026-08-12
 
 ### Fixed — v1.7.968 dressed all of Ur in PLAYER JOB SPRITES
