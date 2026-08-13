@@ -157,10 +157,22 @@ function urNpc(slot, extra = {}) {
 export const UR_NPC_05 = urNpc(0, {
   wander: false, animate: true, dir: DIR_DOWN,
   dialogue: [
-    'I have a task for the brave...',
-    "...but not yet. Return soon.",
-    'The crystal will guide you.',
+    'You have the look',
+    'of someone who asks.',
+    'Ask, then.',
   ],
+  // He will not offer the job unasked — the quest opens when you bring him the
+  // word BROTHER, which ur_npc_09 teaches. See QUESTS.ur_missing_brother.
+  answers: {
+    brother: [
+      'He was mine.',
+      'You know already.',
+    ],
+    cave: [
+      'It runs under Ur.',
+      'It has for years.',
+    ],
+  },
 });
 export const UR_NPC_06 = urNpc(1, {
   dialogue: [
@@ -186,19 +198,52 @@ export const UR_NPC_09 = urNpc(4, {
     'Mind the cave north.',
     'It took my brother.',
   ],
+  teaches: ['cave', 'brother'],
+  answers: {
+    brother: [
+      'Not mine. His.',
+      'Ask the man by',
+      'the elder\'s door.',
+    ],
+    cave: [
+      'The mouth is north.',
+      'Nothing comes back up.',
+    ],
+  },
 });
 export const UR_NPC_0A = urNpc(3, {
   dialogue: [
     'I keep the north field.',
     'Nothing grows in the dark.',
   ],
+  answers: {
+    cave: [
+      'My field ends at it.',
+      'I do not go closer.',
+    ],
+    vein: [
+      'It ran under my rows.',
+      'Then the soil turned.',
+    ],
+  },
 });
 export const UR_NPC_0C = urNpc(6, {
   dialogue: [
     'Welcome to Ur, traveler.',
-    'Folks here keep to themselves.',
-    'The grass beyond hides things.',
+    'Folks here keep to',
+    'themselves.',
   ],
+  answers: {
+    brother: [
+      'Eight days he is gone.',
+      'His kin waits below',
+      'the elder\'s house.',
+    ],
+    riders: [
+      'They passed at dawn.',
+      'None came back through.',
+    ],
+  },
 });
 export const UR_NPC_0D = urNpc(7, {
   dialogue: [
@@ -206,6 +251,13 @@ export const UR_NPC_0D = urNpc(7, {
     'The cave drains the light.',
     'You give us hope.',
   ],
+  teaches: ['cave'],
+  answers: {
+    cave: [
+      'The light thins',
+      'the nearer you get.',
+    ],
+  },
 });
 export const UR_NPC_0E = urNpc(8, {
   dialogue: [
@@ -241,17 +293,30 @@ export const UR_NPC_0F = urNpc(9, {
 const INN_SP2 = [0x1A, 0x0F, 0x12, 0x36];  // body
 const INN_SP3 = [0x1A, 0x0F, 0x15, 0x36];  // skin / hair
 
-const interior = (romOffset, dir, dialogue) => ({
+const interior = (romOffset, dir, dialogue, words) => ({
   romOffset, palTop: INN_SP3, palBtm: INN_SP2,
   dir, animate: true,        // indoors: hold the ROM tile, march in place
   dialogue,
+  // Word Memory (optional 4th arg): { teaches: [...], answers: { term: [...] } }.
+  ...(words || {}),
 });
 
 // Tavern — a keep behind the counter and four drinkers at the tables.
 export const UR_TAVERN_KEEP = interior(0x01E010, DIR_DOWN, [
   'Ale? Sit anywhere.',
   'No one hurries out.',
-]);
+], {
+  answers: {
+    brother: [
+      'He drank here.',
+      'Then he went down.',
+    ],
+    vein: [
+      'Ore paid for this bar.',
+      'Not any more.',
+    ],
+  },
+});
 export const UR_TAVERN_DRINKER_A = interior(0x01DF10, DIR_RIGHT, [
   'Drink up, friend.',
   'The dark keeps anyway.',
@@ -259,7 +324,19 @@ export const UR_TAVERN_DRINKER_A = interior(0x01DF10, DIR_RIGHT, [
 export const UR_TAVERN_DRINKER_B = interior(0x01E110, DIR_LEFT, [
   'I hauled ore here.',
   'Then the vein went black.',
-]);
+], {
+  teaches: ['vein'],
+  answers: {
+    vein: [
+      'Black to the rock.',
+      'It started below.',
+    ],
+    cave: [
+      'The vein and the cave',
+      'are the same dark.',
+    ],
+  },
+});
 export const UR_TAVERN_DRINKER_C = interior(0x01E610, DIR_UP, [
   'The crystal picks four.',
   'Four! Look at us.',
@@ -267,7 +344,18 @@ export const UR_TAVERN_DRINKER_C = interior(0x01E610, DIR_UP, [
 export const UR_TAVERN_DRINKER_D = interior(0x01E710, DIR_DOWN, [
   'Sit a while, warrior.',
   "North road's cold.",
-]);
+], {
+  answers: {
+    riders: [
+      'They took the north road.',
+      'I poured for them.',
+    ],
+    cave: [
+      'Cold comes off it.',
+      'Even in here.',
+    ],
+  },
+});
 
 // Inn guests — map 8 only loads the two keeper bundles, so the guests share
 // them. That is the ROM's own economy, not a shortcut.
@@ -287,11 +375,30 @@ export const UR_INN_GUEST_16B = interior(0x01E210, DIR_LEFT, [
 export const UR_ELDER_ATTENDANT = interior(0x01EC10, DIR_DOWN, [
   'The elder is upstairs.',
   'He has not slept.',
-]);
+], {
+  answers: {
+    cave: [
+      'Say nothing of it',
+      'in front of him.',
+    ],
+    brother: [
+      'His kin still waits',
+      'outside our door.',
+    ],
+  },
+});
 export const UR_ELDER_KIN_A = interior(0x01E010, DIR_RIGHT, [
   'Father watches the road',
   'for riders long gone.',
-]);
+], {
+  teaches: ['riders'],
+  answers: {
+    riders: [
+      'Knights of the crown.',
+      'They rode north once.',
+    ],
+  },
+});
 export const UR_ELDER_KIN_B = interior(0x01E210, DIR_LEFT, [
   'We kept the lamps lit',
   'for you.',
@@ -299,7 +406,18 @@ export const UR_ELDER_KIN_B = interior(0x01E210, DIR_LEFT, [
 export const UR_ELDER_KIN_C = interior(0x01EC10, DIR_DOWN, [
   'You came from the cave?',
   "Then it's all true.",
-]);
+], {
+  answers: {
+    riders: [
+      'Father counts the days',
+      'since they rode.',
+    ],
+    cave: [
+      'You were down there.',
+      'I can see it on you.',
+    ],
+  },
+});
 
 // House (map 2).
 export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [

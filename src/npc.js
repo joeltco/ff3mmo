@@ -14,7 +14,8 @@
 import { NPCS } from './data/npcs.js';
 import { romRaw } from './boot.js';
 import { mapSt } from './map-state.js';
-import { msgState, showMsgBoxPages } from './message-box.js';
+import { msgState, showMsgBoxPages, dismissMsgBox } from './message-box.js';
+import { openWordMenu } from './word-menu.js';
 import { questMarkerState, talkQuest, getMarkerFrames } from './quests.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
@@ -750,7 +751,7 @@ export function talkToNpc(npc) {
       npc.talkFacing = pd === DIR_DOWN ? DIR_UP : pd === DIR_UP ? DIR_DOWN
                      : pd === DIR_LEFT ? DIR_RIGHT : DIR_LEFT;
     }
-    showMsgBoxPages(qPages.map(l => _nameToBytes(l)), () => { npc.talkFacing = null; });
+    _sayThenOfferWords(npc, qPages);
     return;
   }
   if (!npc.dialogue || npc.dialogue.length === 0) return;
@@ -763,8 +764,30 @@ export function talkToNpc(npc) {
     else if (pdir === DIR_LEFT)  npc.talkFacing = DIR_RIGHT;
     else if (pdir === DIR_RIGHT) npc.talkFacing = DIR_LEFT;
   }
-  const pages = npc.dialogue.map(line => _nameToBytes(line));
-  showMsgBoxPages(pages, () => { npc.talkFacing = null; });
+  _sayThenOfferWords(npc, npc.dialogue);
+}
+
+// Show an NPC's lines, then hand off to the FF2-style ASK/LEARN menu if this
+// NPC teaches or answers any Key Term. `keepOpen` parks the box on the last
+// page so the verb list appears under a window that's still up — without it
+// the box slides out and the menu floats on nothing.
+function _sayThenOfferWords(npc, lines) {
+  const bytes = lines.map(l => _nameToBytes(l));
+  const spec  = npc.scene;
+  const hasWords = !!(spec && ((spec.teaches && spec.teaches.length) ||
+                               (spec.answers && Object.keys(spec.answers).length)));
+  if (!hasWords) {
+    showMsgBoxPages(bytes, () => { npc.talkFacing = null; });
+    return;
+  }
+  showMsgBoxPages(bytes, () => {
+    // openWordMenu returns false when there's nothing left to learn or ask —
+    // then the box has to be closed by hand, since keepOpen suppressed it.
+    if (!openWordMenu(npc, () => { npc.talkFacing = null; })) {
+      npc.talkFacing = null;
+      dismissMsgBox();
+    }
+  }, null, { keepOpen: true });
 }
 
 // Thunder + screen flash (reuses the pond-drink viewport strobe).

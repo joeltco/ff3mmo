@@ -148,13 +148,24 @@ export function replaceMsgBoxText(bytes, onClose) {
 // onPage(idx) — optional, fires as each page becomes the active one (page 0 at
 // open, then on every advance). Used by the opening-scene intro to turn the
 // player to face whichever NPC is speaking.
-export function showMsgBoxPages(pages, onAllDone, onPage) {
+export function showMsgBoxPages(pages, onAllDone, onPage, opts) {
   if (!pages || pages.length === 0) return;
+  const keepOpen = !!(opts && opts.keepOpen);
   let idx = 0;
   const advance = () => {
     idx++;
     if (idx >= pages.length) {
       msgState.onAdvance = null;
+      if (keepOpen) {
+        // The conversation isn't over — park on the last page instead of
+        // sliding out and hand control to whoever asked (the ASK/LEARN menu).
+        // They own dismissMsgBox from here.
+        msgState.scrollFromBytes = null;
+        msgState.state = 'hold';
+        msgState.timer = 0;
+        if (onAllDone) onAllDone();
+        return;
+      }
       msgState.onClose = onAllDone || null;
       // Final page: slide the whole box out. If still mid-scroll, snap.
       msgState.scrollFromBytes = null;
@@ -181,7 +192,21 @@ export function showMsgBoxPages(pages, onAllDone, onPage) {
       msgState.bytes = pages[idx];
     }
   };
-  showMsgBox(pages[0]);
+  // A keepOpen sequence opened on top of a box that's already held (an ASK
+  // reply following the NPC's dialogue) scrolls the new text up into place
+  // instead of re-animating the whole box — same as a page advance.
+  if (keepOpen && msgState.state === 'hold' && msgState.bytes) {
+    msgState.scrollFromBytes = msgState.bytes;
+    msgState.bytes     = pages[0];
+    msgState.state     = 'page-scroll';
+    msgState.timer     = 0;
+    msgState.onClose   = null;
+    msgState.isPrompt  = false;
+    msgState.onAccept  = null;
+    msgState.onDecline = null;
+  } else {
+    showMsgBox(pages[0]);
+  }
   if (onPage) onPage(0);
   msgState.onAdvance = advance;
 }

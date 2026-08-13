@@ -37,10 +37,13 @@ const check = (where, page) => {
 for (const [mapId, list] of TOWN_NPCS) {
   for (const e of list) {
     for (const page of e.spec.dialogue || []) check(`map ${mapId} ${e.key}`, page);
+    // ASK replies go through the same box.
+    for (const [term, pages] of Object.entries(e.spec.answers || {}))
+      for (const page of pages) check(`map ${mapId} ${e.key} answers.${term}`, page);
   }
 }
 for (const q of Object.values(QUESTS)) {
-  for (const stage of ['offer', 'active', 'complete', 'done']) {
+  for (const stage of ['offer', 'accepted', 'denied', 'active', 'complete', 'done']) {
     for (const page of q[stage] || []) check(`quest ${q.id}.${stage}`, page);
   }
 }

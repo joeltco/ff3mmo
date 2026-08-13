@@ -17,6 +17,7 @@ import { tickPartyInvite } from './party-invite.js';
 import { tickTrade, drawTradePick } from './trade.js';
 import { drawInspect } from './inspect.js';
 import { updateMsgBox, drawMsgBox } from './message-box.js';
+import { drawWordMenu, updateWordMenu } from './word-menu.js';
 import { titleSt, drawTitleSkyInHUD, drawTitle, updateTitle } from './title-screen.js';
 import { updatePauseMenu, drawPauseMenu } from './pause-menu.js';
 import { drawShop, updateShop } from './shop.js';
@@ -179,6 +180,7 @@ function _gameLoopUpdate(dt) {
   updateShop(dt);
   updateBed(dt);
   updateMsgBox(dt);
+  updateWordMenu();
   updateBattle(dt);
   // v1.7.754 P-6c — server-arbitrated PvP animation driver. Drains
   // arbViewSt.pendingDeltas one at a time, fires shake / damage-num /
@@ -241,6 +243,8 @@ function _gameLoopDraw() {
     // Message box renders LAST so dialogue / prompts (e.g. the FenixDown "Use?"
     // confirm) sit on top of the battle scene instead of behind it.
     drawMsgBox(ctx, drawBorderedBox);
+    // ASK/LEARN sits under the dialogue box it keeps open, so it draws after.
+    drawWordMenu();
   } catch (e) { _reportError('BATTLE DRAW ERROR', e); }
   if (transSt.state === 'hud-fade-out') {
     const alpha = Math.min(transSt.timer / ((HUD_INFO_FADE_STEPS + 1) * HUD_INFO_FADE_STEP_MS), 1);

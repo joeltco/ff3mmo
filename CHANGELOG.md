@@ -18,6 +18,54 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.980 — 2026-08-13
+
+### Word Memory — FF2's ASK / LEARN, and quests you have to earn the right to take
+
+FF2 doesn't hand out quests. Somebody says something, you LEARN the word out of
+it, and you carry that word to whoever it means something to. This is Phase 2 of
+the FF2 messaging work: the same layout, the same cursor and confirm SFX, and
+the accept/deny prompt riding on the same rows.
+
+- **`src/data/keywords.js`** — the vocabulary: BROTHER, CAVE, RIDERS, VEIN. Each
+  one is a word an Ur NPC **already says** in the dialogue that shipped; LEARN
+  taking a word out of thin air isn't LEARN.
+- **`src/word-memory.js`** — `ps.words` state, `learnWord` / `hasWord` /
+  `knownWords` / `sanitizeWords`. Persisted through all five hops (ps default,
+  client serializer, DB payload, `api.js` validator, load path) per the save
+  whitelist lockstep rule.
+- **`src/word-menu.js`** — the verb list, drawn with the existing
+  `drawBorderedBox` / `drawCursorFaded` / `drawText` and parked under the
+  dialogue box rather than replacing it. Key Terms read RED like FF2's
+  highlighted words; a term this NPC can't answer is greyed but still listed —
+  hiding it would tell you which NPC matters before you asked. `SFX.CURSOR` on
+  move, `SFX.CONFIRM` on select.
+- **`showMsgBoxPages(..., { keepOpen: true })`** — a conversation that isn't over
+  parks on its last page instead of sliding out, and a reply opened on top of a
+  held box scrolls up into place. Without it the verb list floated on nothing.
+- **The Ur quest is now word-gated.** `ur_npc_09` says "It took my brother." —
+  LEARN takes BROTHER and CAVE. Carry BROTHER to the man below the elder's house
+  and he offers the job, with **ACCEPT / DENY** rows. Walking up to him and
+  pressing Z no longer accepts anything; he just talks.
+- Answers wired across the placed cast: the tavern (keep, ore hauler, the one
+  who poured for the riders), the elder's house (kin, attendant), and the four
+  townsfolk outside.
+
+### Gates
+
+- **`tools/check-words.mjs`** — every term must have a teacher AND an answerer
+  among NPCs actually **placed** in `TOWN_NPCS`, not merely defined; a teacher
+  must say the word in their own dialogue; and `ps.words` must be present at all
+  five persistence hops (anchored to line starts, so a commented-out hop reads
+  as missing).
+- **`tools/check-word-flow.mjs`** — drives the real menu with the real key
+  objects: LEARN → ASK → wrong-person shrug → offer → DENY → ACCEPT → live
+  `ps.quests` entry, plus "plain talk must not start a word-gated quest".
+- Both fail on revert (teacher removed, validator commented out, term nobody
+  says, giver's answer removed, LEARN not persisting, offer not intercepting,
+  ACCEPT not writing, word gate removed). `check-quests` and
+  `check-dialogue-fit` updated to the new contract.
+
 ## 1.7.979 — 2026-08-13
 
 ### Added — FF2-style type-out with a per-character tick

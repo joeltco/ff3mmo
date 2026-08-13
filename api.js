@@ -258,6 +258,19 @@ function _validateSaveData(data) {
     }
     out.quests = q;
   }
+  // Word Memory: { termId: 1 }. Shape-validated only — the server doesn't
+  // import the client's keyword table — and bounded so a modded client can't
+  // stuff the save. Knowing a term you never earned only unlocks that
+  // player's own ASK list; the quest reward still flows through grantGil /
+  // grantExp, which the inventory mirror covers.
+  if (data.words && typeof data.words === 'object' && !Array.isArray(data.words)) {
+    const w = {};
+    for (const [id, v] of Object.entries(data.words).slice(0, 256)) {
+      if (typeof id !== 'string' || id.length > 64) continue;
+      if (v) w[id] = 1;
+    }
+    out.words = w;
+  }
   if (data.consumedTiles && typeof data.consumedTiles === 'object' && !Array.isArray(data.consumedTiles)) {
     // Keep as-is; capped indirectly by overall payload size. Each key is a
     // map id, each value is a per-tile set of consumed coords.

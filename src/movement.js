@@ -8,6 +8,7 @@ import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-han
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
 import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt, yesNoLabels, isMsgTyping, completeMsgTyping } from './message-box.js';
+import { isWordMenuOpen, handleWordMenuInput } from './word-menu.js';
 import { _nameToBytes } from './text-utils.js';
 import { hasItem, removeItem } from './inventory.js';
 import { sendNetInvEvent } from './net.js';   // v1.7.742 Phase 1c
@@ -154,6 +155,10 @@ export function handleInput() {
   // invite, trade offering, and yes/no prompts all share this single path.
   // v1.7.222 added X-back-out; v1.7.223 tightened to "any close = forfeit".
   if (msgState.state !== 'none') {
+    // ASK/LEARN keeps the box parked open and owns the keys while it's up.
+    // Returns false while a reply is still typing / has pages left, so the
+    // normal advance path below still drives the text. v1.7.980.
+    if (isWordMenuOpen() && handleWordMenuInput(keys)) return;
     if (msgState.state === 'hold') {
       if (isSearchActive() && !isSearchResolving()) {
         // Only X (B / back) forfeits. Z is inert while searching —

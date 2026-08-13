@@ -21,6 +21,12 @@ export const QUESTS = {
     id: 'ur_missing_brother',
     giver: { mapId: 114, npcKey: 'ur_npc_05' },
 
+    // FF2 Word Memory hook: he does NOT offer the job on sight. You learn
+    // BROTHER from ur_npc_09 ("It took my brother.") and ASK him about it —
+    // then the offer comes, with ACCEPT / DENY. Talking to him without the
+    // word just gets his idle lines.
+    startWord: 'brother',
+
     // Objective: clear encounters inside the Altar Cave. `zonePrefix` matches
     // against `currentEncounterZoneKey()`, which returns keys like
     // `altar_cave_f1` / `altar_cave_boss`, so one prefix covers every floor.
@@ -35,6 +41,16 @@ export const QUESTS = {
       'Eight days ago now.',
       'Thin out what nests there.',
       "I'll pay you well.",
+    ],
+    // Shown after ACCEPT, and after DENY, respectively. Both are replies to a
+    // choice the player made, so neither repeats the offer.
+    accepted: [
+      'Then go. Tonight.',
+      'Three of them. No more.',
+    ],
+    denied: [
+      'No. I understand.',
+      'The word will keep.',
     ],
     active: [
       'Still down there?',

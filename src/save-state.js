@@ -80,6 +80,8 @@ export async function saveSlotsToDB() {
     // the server validator in api.js — one without the other and it silently
     // resets on the next login.
     slot.quests = ps.quests ? JSON.parse(JSON.stringify(ps.quests)) : {};
+    // Word Memory (Key Terms learned). Same lockstep rule as quests above.
+    slot.words = ps.words ? JSON.parse(JSON.stringify(ps.words)) : {};
     slot.consumedTiles = ps.consumedTiles ? JSON.parse(JSON.stringify(ps.consumedTiles)) : {};
     slot.consumedTilesAt = ps.consumedTilesAt ? JSON.parse(JSON.stringify(ps.consumedTilesAt)) : {};
   }
@@ -111,6 +113,7 @@ export async function saveSlotsToDB() {
       playTime: s.playTime || 0,
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
       quests: s.quests || {},
+      words: s.words || {},
       consumedTiles: s.consumedTiles || {},
       consumedTilesAt: s.consumedTilesAt || {},
     } : null);

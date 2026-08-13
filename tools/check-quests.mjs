@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // check-quests.mjs — drive the quest state machine end to end.
 //
-// The loop is: no entry -> talk (accept) -> fight -> objective met -> talk
-// (hand in, reward) -> finished. Each step has a marker colour derived from
+// The loop is: no entry -> ASK the giver the start word (accept) -> fight ->
+// objective met -> talk (hand in, reward) -> finished. Acceptance moved onto
+// the FF2-style word menu in v1.7.980; plain talk no longer starts anything. Each step has a marker colour derived from
 // state, and the whole thing has to survive a save round-trip. This asserts all
 // of it headlessly, because the alternative is walking to Ur in a browser every
 // time a line of it changes.
@@ -37,9 +38,20 @@ is(q.questMarkerState(mapId, 'ur_npc_06'), null, 'a non-giver NPC shows no marke
 is(q.questMarkerState(999, npcKey), null, 'the giver on the wrong map shows no marker');
 
 let rewarded = null;
-const pages1 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
-is(Array.isArray(pages1) && pages1 === quest.offer, true, 'talking first time returns the OFFER pages');
+// Word-gated: he has nothing to say until you bring him the term, so talkQuest
+// returns null and the caller falls back to his idle lines.
+is(q.talkQuest(mapId, npcKey, () => { bad('accepted on plain talk!'); }), null,
+   'talking without the start word returns no quest pages');
+is(ps.quests[QID] === undefined, true, 'plain talk does NOT start the quest');
+
+const offer = q.askQuestWord(mapId, npcKey, quest.startWord);
+is(offer && offer.pages === quest.offer, true, 'asking about the start word returns the OFFER pages');
+is(ps.quests[QID] === undefined, true, 'the offer alone does not start the quest');
+is(q.acceptQuest(QID), true, 'ACCEPT starts it');
 is(ps.quests[QID].s, 'active', 'quest is now active');
+is(q.acceptQuest(QID), false, 'ACCEPT twice is a no-op');
+is(q.askQuestWord(mapId, npcKey, quest.startWord), null, 'the offer does not come back once taken');
+is(q.askQuestWord(mapId, npcKey, 'cave'), null, 'a different word does not open the offer');
 is(rewarded, null, 'no reward on accept');
 is(q.questMarkerState(mapId, npcKey), 'active', 'marker turns AMBER once accepted');
 
@@ -104,7 +116,12 @@ for (const state of ['available', 'active', 'turnin', 'repeat']) {
 // serializer but not to api.js's validator is silently dropped on the next
 // server round-trip, and the player loses their progress on login.
 const { _testValidateSaveData } = await import('../api.js');
-const v = _testValidateSaveData({ quests: { [QID]: { s: 'done', n: 3 } } });
+const v = _testValidateSaveData({ quests: { [QID]: { s: 'done', n: 3 } }, words: { brother: 1 } });
+if (v && v.ok && v.data && v.data.words && v.data.words.brother === 1) {
+  ok('server whitelist keeps words: learned terms survive login');
+} else {
+  bad('server whitelist DROPPED words — the ASK list would empty on login');
+}
 if (v && v.ok && v.data && v.data.quests && v.data.quests[QID]) {
   ok(`server whitelist keeps quests: ${JSON.stringify(v.data.quests[QID])}`);
 } else {

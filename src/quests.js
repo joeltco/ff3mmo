@@ -112,9 +112,10 @@ export function talkQuest(mapId, npcKey, grantReward) {
     const e = _entry(quest.id);
 
     if (!e) {
-      // Accept on talk. A yes/no prompt would be nicer, but prompt input is
-      // owned by movement.js's `msgState.isPrompt` block and that coupling is
-      // not worth threading through the first quest.
+      // Word-gated quests stay shut until the player ASKs about the start
+      // term (see askQuestWord). Returning null drops the caller back to the
+      // giver's ordinary idle dialogue — which is where the ASK menu opens.
+      if (quest.startWord) return null;
       ps.quests[quest.id] = { s: QUEST_ACTIVE, n: 0 };
       return quest.offer;
     }
@@ -127,6 +128,34 @@ export function talkQuest(mapId, npcKey, grantReward) {
     return quest.active;
   }
   return null;
+}
+
+/**
+ * The player asked this NPC about `wordId`. Returns the quest's offer when
+ * that is the start term of an untaken quest they give, else null — the caller
+ * then falls back to the NPC's ordinary answer for the word.
+ *
+ * Nothing is written here: the offer is a question, and `acceptQuest` is what
+ * actually starts it.
+ */
+export function askQuestWord(mapId, npcKey, wordId) {
+  for (const quest of Object.values(QUESTS)) {
+    if (quest.giver.mapId !== mapId || quest.giver.npcKey !== npcKey) continue;
+    if (quest.startWord !== wordId) continue;
+    if (_entry(quest.id)) continue;                 // already offered and taken
+    return { id: quest.id, pages: quest.offer, accepted: quest.accepted, denied: quest.denied };
+  }
+  return null;
+}
+
+/** Take the quest that askQuestWord offered. */
+export function acceptQuest(id) {
+  const quest = QUESTS[id];
+  if (!quest) return false;
+  if (!ps.quests || typeof ps.quests !== 'object') ps.quests = {};
+  if (ps.quests[id]) return false;
+  ps.quests[id] = { s: QUEST_ACTIVE, n: 0 };
+  return true;
 }
 
 /**
