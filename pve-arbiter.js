@@ -193,7 +193,7 @@ export function recordIntent(userId, intent) {
 // Returns:
 //   { status: 'applied', canonical }       success path (P-2 echoes claim)
 //   { status: 'rejected', reason }         failure path
-export function endPveBattle(userId, payload) {
+export function endPveBattle(userId, payload, clientBuild) {
   const battleId = payload?.battleId;
   const battle = _battles.get(battleId);
   if (!battle) return { status: 'rejected', reason: 'no-battle' };
@@ -230,7 +230,13 @@ export function endPveBattle(userId, payload) {
   if (result.divergences && result.divergences.length) {
     const claimIds = Array.isArray(payload.claimedOutcome && payload.claimedOutcome.monsterIds)
       ? payload.claimedOutcome.monsterIds : null;
+    // The client's build belongs on THIS line. Twice now a desync has been
+    // diagnosed by hand-correlating it with a separate [stale-client] line
+    // further up the log — and both times the answer was "that client is
+    // running an older build", not a live bug. Already sanitised at the hello
+    // (String().slice(0,16) in ws-presence).
     console.log('[pve-reward-desync] battle=' + battleId + ' user=' + userId +
+      ' build=' + (clientBuild || '?') +
       ' ' + result.divergences.join(' ') +
       ' serverMons=' + JSON.stringify(result.serverMonsterIds) +
       ' clientMons=' + JSON.stringify(claimIds) +

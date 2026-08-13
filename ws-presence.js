@@ -1324,7 +1324,7 @@ function _handleMessage(entry, msg) {
       if (!entry.helloed) return;
       if (!PVE_ARBITER) return;
       const slot = (entry.slot | 0);
-      const result = endPveBattle(entry.userId, parsed);
+      const result = endPveBattle(entry.userId, parsed, entry.build);
       if (result.status === 'applied' && result.canonical) {
         _applyPveCanonical(entry.userId, slot, result.canonical);
       }

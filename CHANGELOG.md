@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.983 — 2026-08-13
+
+### Not a new bug: the desync after v1.7.982 was a client on v1.7.980
+
+`[pve-reward-desync] battle=1 user=9 exp claim=15 expected=10 gil claim=9
+expected=7 serverMons=[5,5]` landed right after the v1.7.982 fix deployed, with
+the divergence pointing the OTHER way (client high instead of low). The server
+had already written the answer four lines earlier:
+
+    [stale-client] user=9 build=v1.7.980 server=1.7.982
+
+That page never reloaded, so it is still running the pre-fix claim builder. The
+arithmetic corroborates it independently: exp 15 / gil 9 is not any two-monster
+result, but it IS the reward for a THREE-monster grasslands formation (4,4,4 /
+4,4,5 / 4,5,3 / 5,5,3), and `[pve-start] battle=7 ... zone=grasslands_wild
+mons=3` is the last battle that client fought before reconnecting. Old bug, old
+build, leftover rewards from battle 7 claimed on a flee. No code change.
+
+### The desync line now carries the client build
+
+Twice now this has been diagnosed by hand-correlating the desync with a separate
+`[stale-client]` line further up the log, and twice the answer was "that client
+is old". `endPveBattle` takes the connection's build and prints it, so each
+report stands on its own. Already sanitised at the hello
+(`String(...).slice(0, 16)`).
+
+No gate: this is a log-string change on a path the existing desync flow already
+exercises, and a gate asserting the shape of a `console.log` would pin the
+wording rather than any behaviour.
+
 ## 1.7.982 — 2026-08-13
 
 ### Fix: fleeing a battle claimed the previous battle's victory
