@@ -256,6 +256,81 @@ if (has('probe')) {
 
 run(parseInt(flag('frames', '30'), 10));
 
+// `--watchtiles <fileOffset>` answers "does the game ever DISPLAY this sprite,
+// and where does it put it". FF3 is CHR-RAM, so art only exists on screen once
+// it has been copied into PPU pattern memory. Each frame this scans the pattern
+// tables for the 16 bytes at `fileOffset`; when it finds them it reports the
+// PPU tile slot, then walks OAM for sprites using that slot and prints their
+// screen X/Y. That is the sprite's real placement, straight out of the running
+// game — not inferred from the art.
+if (has('watchtiles')) {
+  const srcOff = parseInt(flag('watchtiles', '0'), 16);
+  const romBytes = fs.readFileSync(ROM);
+  const want = [];
+  for (let i = 0; i < 16; i++) want.push(romBytes[srcOff + i] & 0xFF);
+  const frames = parseInt(flag('watchframes', '600'), 10);
+  let found = false;
+  for (let f = 0; f < frames && !found; f++) {
+    nes.frame();
+    const vram = nes.ppu.vramMem;
+    for (let slot = 0; slot < 512; slot++) {
+      const base = slot * 16;
+      let match = true;
+      for (let i = 0; i < 16; i++) { if ((vram[base + i] & 0xFF) !== want[i]) { match = false; break; } }
+      if (!match) continue;
+      found = true;
+      const tileIdx = slot & 0xFF;
+      const table = slot < 256 ? '$0000' : '$1000';
+      console.log(`frame ${f}: tiles present in PPU ${table} at tile $${tileIdx.toString(16).padStart(2,'0')}`);
+      // OAM: 4 bytes per sprite — y, tile, attr, x
+      let shown = 0;
+      for (let s = 0; s < 64; s++) {
+        const y = nes.ppu.spriteMem[s * 4], t = nes.ppu.spriteMem[s * 4 + 1];
+        const a = nes.ppu.spriteMem[s * 4 + 2], x = nes.ppu.spriteMem[s * 4 + 3];
+        if (t !== tileIdx) continue;
+        console.log(`  OAM #${s}: x=${x} y=${y} tile=$${t.toString(16)} attr=$${a.toString(16)}`);
+        shown++;
+      }
+      if (!shown) console.log('  (loaded into PPU but NOT referenced by any OAM sprite this frame)');
+      break;
+    }
+  }
+  if (!found) console.log(`tiles from 0x${srcOff.toString(16)} never appeared in PPU across ${frames} frames`);
+  process.exit(0);
+}
+
+// `--chrmap` traces the CURRENT contents of PPU sprite memory back to the ROM.
+// FF3 is CHR-RAM, so every on-screen tile was copied from somewhere in PRG;
+// finding each tile's source offset shows which ROM regions actually feed
+// sprites. If a region never shows up here, nothing in that scene draws from it.
+if (has('chrmap')) {
+  const romBytes = fs.readFileSync(ROM);
+  const vram = nes.ppu.vramMem;
+  const index = new Map();
+  for (let off = 0; off + 16 <= romBytes.length; off += 16) {
+    index.set(romBytes.subarray(off, off + 16).toString('latin1'), off);
+  }
+  const banks = new Map();
+  let blank = 0, unknown = 0;
+  const lo = parseInt(flag('chrfrom', '256'), 10), hi = parseInt(flag('chrto', '512'), 10);
+  for (let slot = lo; slot < hi; slot++) {
+    const key = Buffer.from(vram.subarray(slot * 16, slot * 16 + 16)).toString('latin1');
+    if (/^\x00{16}$/.test(key)) { blank++; continue; }
+    const off = index.get(key);
+    if (off === undefined) { unknown++; continue; }
+    const bank = (off - 0x10) >> 13;
+    if (!banks.has(bank)) banks.set(bank, []);
+    banks.get(bank).push(off);
+  }
+  console.log(`PPU tiles ${lo}..${hi - 1}: ${blank} blank, ${unknown} not found in ROM`);
+  for (const [bank, offs] of [...banks].sort((a, b) => a[0] - b[0])) {
+    const min = Math.min(...offs), max = Math.max(...offs);
+    console.log(`  bank 0x${bank.toString(16).padStart(2,'0')}: ${offs.length} tiles  ` +
+                `file 0x${min.toString(16)}..0x${max.toString(16)}`);
+  }
+  process.exit(0);
+}
+
 // `--pal` prints the live BG palette ($3F00-$3F0F) as raw NES colour indices.
 // This is the ground truth for "what colour is this room actually", so a
 // palette bug in our loader becomes a diff of sixteen numbers instead of an
