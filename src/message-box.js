@@ -2,6 +2,14 @@
 
 import { drawText, measureText } from './font-renderer.js';
 import { isMobile } from './ui-state.js';
+import { playSFX, SFX } from './music.js';
+
+// Per-character tick. CURSOR is the shortest measured blip we have (see the
+// SFX table in music.js — every entry there was captured from the running ROM).
+// It is OUR pick from that table, NOT FF2's actual text sound: FF2's blip is an
+// FF2 NSF track and picking one needs ears, so audition with /ff2 <n> and this
+// constant can point at it instead.
+const MSG_TYPE_SFX = SFX.CURSOR;
 
 // NES layout constants — must match game.js
 const CANVAS_W   = 256;
@@ -11,6 +19,13 @@ const HUD_VIEW_H = 144;
 
 const SLIDE_MS  = 80;   // box slide-in/out duration
 const SCROLL_MS = 160;  // inter-page text scroll duration
+
+// FF2-style type-out. FF2 reveals dialogue a character at a time with a short
+// tick rather than snapping the whole page in. `TYPE_BLIP_EVERY` is why it
+// reads as speech and not a machine gun — FF2 does not sound one tick per
+// glyph.
+const TYPE_MS_PER_CHAR = 28;
+const TYPE_BLIP_EVERY  = 3;
 
 // ── Mutable state ──────────────────────────────────────────────────────────
 export const msgState = {
@@ -26,7 +41,31 @@ export const msgState = {
   isPrompt:        false,
   onAccept:        null,
   onDecline:       null,
+  // Type-out: how many BYTES of the current page are revealed so far, and the
+  // accumulator that advances it. `typed` is byte-based, not glyph-based, so
+  // the wrapped lines can be sliced directly without re-deriving glyph counts.
+  typed:           0,
+  typeTimer:       0,
+  typeBlips:       0,
 };
+
+/** True while the current page is still revealing. */
+export function isMsgTyping() {
+  return msgState.state === 'hold' && msgState.bytes &&
+         msgState.typed < msgState.bytes.length;
+}
+
+/** Reveal the rest of the page immediately (Z during type-out). */
+export function completeMsgTyping() {
+  if (msgState.bytes) msgState.typed = msgState.bytes.length;
+  msgState.typeTimer = 0;
+}
+
+function _restartTyping() {
+  msgState.typed = 0;
+  msgState.typeTimer = 0;
+  msgState.typeBlips = 0;
+}
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -151,13 +190,26 @@ export function updateMsgBox(dt) {
   if (msgState.state === 'none') return;
   msgState.timer += Math.min(dt, 33);
 
+  if (msgState.state === 'hold' && msgState.bytes && msgState.typed < msgState.bytes.length) {
+    msgState.typeTimer += Math.min(dt, 33);
+    while (msgState.typeTimer >= TYPE_MS_PER_CHAR && msgState.typed < msgState.bytes.length) {
+      msgState.typeTimer -= TYPE_MS_PER_CHAR;
+      const b = msgState.bytes[msgState.typed++];
+      // Tick only on visible glyphs, and only every few of them.
+      if (b >= 0x28 && b !== 0xFF && (msgState.typeBlips++ % TYPE_BLIP_EVERY) === 0) {
+        playSFX(MSG_TYPE_SFX);
+      }
+    }
+  }
+
   if (msgState.state === 'slide-in') {
-    if (msgState.timer >= SLIDE_MS) { msgState.state = 'hold'; msgState.timer = 0; }
+    if (msgState.timer >= SLIDE_MS) { msgState.state = 'hold'; msgState.timer = 0; _restartTyping(); }
   } else if (msgState.state === 'page-scroll') {
     if (msgState.timer >= SCROLL_MS) {
       msgState.state = 'hold';
       msgState.timer = 0;
       msgState.scrollFromBytes = null;
+      _restartTyping();
     }
   } else if (msgState.state === 'slide-out') {
     if (msgState.timer >= SLIDE_MS) {
@@ -199,7 +251,7 @@ export function drawMsgBox(ctx, drawBorderedBoxFn) {
   drawBorderedBoxFn(0, boxY, boxW, boxH, true);
 
   if (msgState.state === 'hold' || msgState.state === 'slide-out') {
-    _drawMsgText(ctx, msgState.bytes, boxY, boxW, boxH, maxChars, lineH, 0);
+    _drawMsgText(ctx, msgState.bytes, boxY, boxW, boxH, maxChars, lineH, 0, msgState.typed);
   } else if (msgState.state === 'page-scroll') {
     // Inner clip — keep scrolling text inside the box, so it doesn't bleed
     // over the borders as old/new pages slide past each other.
@@ -220,7 +272,7 @@ export function drawMsgBox(ctx, drawBorderedBoxFn) {
   ctx.restore();
 }
 
-function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff) {
+function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff, reveal) {
   const lines = _wrapMsgBytes(bytes, maxChars);
   const fadedPal = [0x02, 0x02, 0x02, 0x30];
   // Glyphs are 8px tall but lineH is 12 — the trailing 4px gap below the
@@ -230,10 +282,19 @@ function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff) {
   const GLYPH_H = 8;
   const visualH = lines.length === 0 ? 0 : lines.length * lineH - (lineH - GLYPH_H);
   const startTY = boxY + Math.floor((boxH - visualH) / 2) + yOff;
+  // Type-out: `reveal` caps how many BYTES of the page are drawn. The layout
+  // (line breaks, centring) is computed from the FULL page first, so revealed
+  // text does not shift around as more of it appears — FF2 reveals into a fixed
+  // block, it does not re-flow on every character.
+  let budget = reveal == null ? Infinity : reveal;
   for (let i = 0; i < lines.length; i++) {
-    const tw = measureText(lines[i]);
+    if (budget <= 0) break;
+    const full = lines[i];
+    const shown = budget >= full.length ? full : full.slice(0, budget);
+    budget -= full.length + 1;             // +1 for the space the wrap consumed
+    const tw = measureText(full);          // centre on the FULL line
     const tx = Math.floor((boxW - tw) / 2);
-    drawText(ctx, tx, startTY + i * lineH, lines[i], fadedPal);
+    drawText(ctx, tx, startTY + i * lineH, shown, fadedPal);
   }
 }
 

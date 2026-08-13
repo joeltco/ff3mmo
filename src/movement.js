@@ -7,7 +7,7 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
-import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt, yesNoLabels } from './message-box.js';
+import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt, yesNoLabels, isMsgTyping, completeMsgTyping } from './message-box.js';
 import { _nameToBytes } from './text-utils.js';
 import { hasItem, removeItem } from './inventory.js';
 import { sendNetInvEvent } from './net.js';   // v1.7.742 Phase 1c
@@ -202,7 +202,11 @@ export function handleInput() {
         }
       } else if (keys['z'] || keys['Z']) {
         keys['z'] = false; keys['Z'] = false;
-        if (msgState.onAdvance) msgState.onAdvance();
+        // Mid type-out, Z fills the page in instead of advancing — the standard
+        // JRPG contract. Without it a fast reader either waits out the reveal or
+        // skips a page they never saw.
+        if (isMsgTyping()) completeMsgTyping();
+        else if (msgState.onAdvance) msgState.onAdvance();
         else dismissMsgBox();
       } else if (!msgState.onAdvance && (keys['x'] || keys['X'] || keys['Escape'])) {
         keys['x'] = false; keys['X'] = false; keys['Escape'] = false;

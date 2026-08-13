@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.979 — 2026-08-13
+
+### Added — FF2-style type-out with a per-character tick
+Phase 1 of moving dialogue toward FF2. Text now reveals a character at a time instead of snapping in whole, with a short blip every 3rd glyph (FF2 does not tick once per character — that is what stops it sounding like a machine gun).
+
+- **Z fills the page in** rather than skipping it, the standard JRPG contract: a fast reader shouldn't have to sit through the reveal or lose a page they never saw.
+- Layout is computed from the FULL page before revealing, so text does not re-flow as it appears — FF2 reveals into a fixed block.
+- **The blip is `SFX.CURSOR`, our pick from the measured table — NOT FF2's actual text sound.** FF2's is an NSF track and choosing one needs ears; audition with `/ff2 <n>` and the constant repoints in one line.
+
+### Gate — `tools/check-msgbox-typing.mjs`
+A stalled reveal traps the player in a half-drawn box with no way forward. Asserts the page starts hidden, the reveal always terminates, every byte lands, Z completes it in one press, and a whitespace-only page doesn't hang. In deploy.sh.
+
+### Researched — how FF2 actually does dialogue
+Ran FF2 in the emulator and captured it. Two layers, verified:
+- **Presentation:** boxes carry a **character portrait** beside the text (FF3 never does), rounded border, and a **pointing-hand cursor** rather than FF3's arrow.
+- **Word Memory — FF2's actual quest system:** dialogue contains Key Terms highlighted in red; **LEARN** stores one, **ASK** repeats it at another NPC to unlock info/items/progress (usually yielding the next term), **ITEM** shows or gives an object. Terms can be missed permanently. A quest is *carry the right word to the right person*, not *kill N and return*.
+
+Phase 2 (ASK/LEARN menu, `ps.words`, keyword-driven quest state, portrait boxes) is next.
+
 ## 1.7.978 — 2026-08-13
 
 ### Changed — quest bubble hides while a message box is open
