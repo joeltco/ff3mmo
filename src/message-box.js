@@ -42,7 +42,14 @@ const TYPE_MS_PER_CHAR = 28;
 // term only counts on word boundaries: "cave" must not light up inside
 // "caves"... it must, actually — plurals are still the term — so the boundary
 // test allows a trailing 's' and stops at punctuation.
-const TEXT_HIGHLIGHT = [0x0F, 0x06, 0x06, 0x16];   // TEXT_RED, matching the ASK list
+// Key Term colour. Slots 1 and 2 MUST be the box's own blue, exactly like the
+// body text's `fadedPal` below — only slot 3 (the glyph fill) changes.
+// font-renderer paints colour index 0 as transparent but indices 1 and 2 as
+// SOLID, so a palette carrying 0x0F/0x06 there (which is what the shared
+// TEXT_RED constant has, since it is designed for a black background) stamps a
+// dark block behind every highlighted word. On a blue box that reads as "black
+// in the text".
+const TEXT_HIGHLIGHT = [0x02, 0x02, 0x02, 0x16];   // box blue + bright red fill
 let _highlightWords = [];    // lowercase strings
 
 /** Register the words the box should colour. Replaces any previous set. */

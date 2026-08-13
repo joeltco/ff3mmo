@@ -13,7 +13,7 @@
 import { createCanvas } from '@napi-rs/canvas';
 
 globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false }) };
-globalThis.document = { createElement: (t) => (t === 'canvas' ? createCanvas(8, 8) : {}), addEventListener() {} };
+globalThis.document = { createElement: () => createCanvas(8, 8), addEventListener() {}, getElementById: () => null };
 
 const { _nameToBytes } = await import('../src/text-utils.js');
 const mb = await import('../src/message-box.js');
@@ -194,6 +194,54 @@ const contiguousInk = (cols) => {
   }
   if (redBottom === 0) err('BROTHER is on line 2 and nothing there is red — the mask is not sliced per line');
   if (redTop !== 0) err(`line 1 has ${redTop} red pixels but holds no term — the mask is off by a line`);
+}
+
+// ── no DARK pixels inside the box ───────────────────────────────────────
+// font-renderer paints colour index 0 transparent but 1 and 2 SOLID. The shared
+// TEXT_RED / TEXT_GREY constants carry 0x0F / 0x06 / 0x00 in those slots
+// because they are built for a black background, so on the blue message box
+// they stamp a dark block behind every highlighted word — "there's black in the
+// text". Counting red pixels does not see it: the red is still there, sitting
+// on a black tile. This does.
+{
+  // The other cases above pass a NO-OP border function, which is fine when all
+  // they count is glyph ink. Here the box must actually be PAINTED — with no
+  // border the interior is the black backdrop and every pixel reads as "dark",
+  // which is how the first version of this check failed on correct code.
+  const { ui } = await import('../src/ui-state.js');
+  const { initHUD } = await import('../src/hud-init.js');
+  const { drawBorderedBox } = await import('../src/hud-drawing.js');
+  const { applyIPS } = await import('../src/ips-patcher.js');
+  const romPatched = new Uint8Array(fs.readFileSync(ROM_PATH));
+  applyIPS(romPatched, new Uint8Array(fs.readFileSync(new URL('../patches/ff3-awj.ips', import.meta.url).pathname)));
+  ui.ctx = ctx;
+  initHUD(romPatched);
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  mb.forceCloseMsgBox();
+  mb.showMsgBox(_nameToBytes('my brother'));
+  mb.msgState.state = 'hold';
+  mb.msgState.typed = mb.msgState.bytes.length;
+  mb.drawMsgBox(ctx, drawBorderedBox);
+  // Box interior only: x 8..136, y 40..72. The border is white and the ground
+  // outside the box is black, so both would poison the measurement.
+  const px = ctx.getImageData(8, 40, 128, 32).data;
+  // Compare by BRIGHTNESS against the box's own blue, not against black. The
+  // offending block is NES 0x06, which renders (90,4,0) — a dark red that sails
+  // through a "< 40 on every channel" test. Box blue 0x02 is (18,18,171), sum
+  // 207; the glyph fills are all brighter still. Anything below 150 is a slot
+  // painting something that does not belong in this box.
+  let dark = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] === 0) continue;
+    if (px[i] + px[i + 1] + px[i + 2] < 150) dark++;
+  }
+  if (dark > 0) {
+    err(`${dark} pixels inside the message box are darker than its own blue — a text ` +
+        `palette is painting colour index 1/2 with a dark colour (the block behind ` +
+        `highlighted words)`);
+  }
 }
 
 if (fail.length) {

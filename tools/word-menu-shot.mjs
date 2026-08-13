@@ -22,7 +22,8 @@ globalThis.document = {
   getElementById: () => null,
 };
 
-const W = 256, H = 240, ZOOM = 3;
+const W = 256, H = 240;
+const ZOOM = Math.max(1, parseInt(flag('zoom', '3'), 10));
 const canvas = createCanvas(W, H);
 const ctx = canvas.getContext('2d');
 

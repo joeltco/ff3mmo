@@ -15,7 +15,15 @@
 
 import { ui } from './ui-state.js';
 import { drawBorderedBox, drawCursorFaded } from './hud-drawing.js';
-import { drawText, measureText, TEXT_WHITE, TEXT_RED, TEXT_GREY } from './font-renderer.js';
+import { drawText, measureText } from './font-renderer.js';
+
+// Row palettes. Slots 1-2 are the BOX's blue, matching how message-box.js draws
+// its body text — font-renderer paints those two indices solid, so the shared
+// TEXT_WHITE / TEXT_RED / TEXT_GREY constants (built for a black background)
+// stamp a dark block behind every label. Only slot 3, the glyph fill, differs.
+const ROW_PLAIN     = [0x02, 0x02, 0x02, 0x30];   // white — a verb
+const ROW_TERM      = [0x02, 0x02, 0x02, 0x16];   // red — a Key Term, as FF2 shows them
+const ROW_TERM_DIM  = [0x02, 0x02, 0x02, 0x10];   // grey — a term this NPC cannot answer
 import { _nameToBytes } from './text-utils.js';
 import { playFF2Sfx, FF2_SFX_NAMES } from './music.js';
 import { keywordText } from './data/keywords.js';
@@ -268,7 +276,7 @@ export function drawWordMenu() {
     const row = rows[first + i];
     // Key Terms read red like FF2's highlighted words; a term this NPC has no
     // answer for is greyed instead.
-    const pal = !row.term ? TEXT_WHITE : row.has ? TEXT_RED : TEXT_GREY;
+    const pal = !row.term ? ROW_PLAIN : row.has ? ROW_TERM : ROW_TERM_DIM;
     drawText(ctx, boxX + PAD_X + TEXT_INDENT, boxY + PAD_Y + i * ROW_STEP, _nameToBytes(row.label), pal);
   }
   drawCursorFaded(boxX + PAD_X, boxY + PAD_Y + (wordMenuSt.index - first) * ROW_STEP + CURSOR_DY, 0);
