@@ -5,9 +5,9 @@
 // static lives here so the save stays small and the server has a fixed table to
 // validate claims against.
 //
-// Marker colour is derived, never stored: see `questMarkerState` in quests.js.
-// The ROM has only ONE bubble glyph (see data/quest-marker.js), so a quest's
-// stage is carried by the mark's colour rather than by a second symbol.
+// There is no overhead marker. Quest stage lives in `ps.quests[id].s` and is
+// surfaced by what the giver SAYS, not by a sprite — removed in v1.7.990/991
+// because Word Memory (ASK/LEARN) is the signposting now.
 
 export const QUEST_ACTIVE = 'active';   // accepted, objective unfinished
 export const QUEST_DONE   = 'done';     // handed in, finished for good

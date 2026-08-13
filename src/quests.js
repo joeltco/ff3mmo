@@ -6,11 +6,10 @@
 // (save-state.js) and the server validator (api.js) — a `ps.*` field added to
 // only one of those silently vanishes on the next login.
 //
-// There is NO overhead marker. v1.7.990 removed it: the Word Memory system
-// carries the signposting now, the FF2 way — you find out who matters by
-// talking to people and carrying their words, not by following a bubble. The
-// ripped sprite is kept in data/quest-marker.js (unused) so the ROM hunt that
-// found it never has to be repeated.
+// There is NO overhead marker. v1.7.990 removed it and v1.7.991 deleted the
+// sprite data with it: the Word Memory system carries the signposting now, the
+// FF2 way — you find out who matters by talking to people and carrying their
+// words, not by following a bubble.
 
 import { ps } from './player-stats.js';
 import { QUESTS, QUEST_ACTIVE, QUEST_DONE } from './data/quests.js';
