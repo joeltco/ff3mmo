@@ -1,3 +1,11 @@
+// ⚠ UNUSED as of v1.7.990 — the overhead quest bubble was removed. Word Memory
+// (ASK/LEARN) carries the signposting now, which is how FF2 does it.
+//
+// KEPT ON PURPOSE. These offsets are the result of a long ROM hunt (the sprite
+// never reaches the PPU in Ur, the cave or a battle, and no graphics descriptor
+// references it), and re-finding them would cost that search all over again.
+// Nothing imports this file; deleting it loses measured data, not code.
+//
 // Quest-marker sprite — the NPC talk bubble with an exclamation mark.
 //
 // ROM-located, never hand-authored. Found by shape-searching the ROM with

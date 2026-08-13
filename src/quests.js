@@ -1,4 +1,4 @@
-// Quest runtime — state, the overhead marker, and the talk handler.
+// Quest runtime — state and the talk handler.
 //
 // State lives in `ps.quests[id] = { s, n }` (state + objective count) and
 // nothing more; the static half is in data/quests.js so the server has a fixed
@@ -6,71 +6,14 @@
 // (save-state.js) and the server validator (api.js) — a `ps.*` field added to
 // only one of those silently vanishes on the next login.
 //
-// Marker colour is DERIVED from state every frame, never stored, so the sprite
-// can never disagree with the save.
+// There is NO overhead marker. v1.7.990 removed it: the Word Memory system
+// carries the signposting now, the FF2 way — you find out who matters by
+// talking to people and carrying their words, not by following a bubble. The
+// ripped sprite is kept in data/quest-marker.js (unused) so the ROM hunt that
+// found it never has to be repeated.
 
 import { ps } from './player-stats.js';
 import { QUESTS, QUEST_ACTIVE, QUEST_DONE } from './data/quests.js';
-import {
-  QUEST_MARKER_OFFSET, QUEST_MARKER_FRAMES, QUEST_MARKER_TILES_PER_FRAME,
-  QUEST_MARKER_PALETTES,
-} from './data/quest-marker.js';
-import { NES_SYSTEM_PALETTE, decodeTile } from './tile-decoder.js';
-import { _makeCanvas16 } from './canvas-utils.js';
-
-// ── marker sprite ─────────────────────────────────────────────────────────
-// Decoded once from the ROM, then coloured per state on demand. Same shape as
-// flame-sprites.js: 2 frames of 4 tiles, 16x16.
-let _rawFrames = null;                 // [[tl,tr,bl,br], [tl,tr,bl,br]]
-const _canvasCache = new Map();        // "state" -> [canvas, canvas]
-
-export function initQuestMarker(romData) {
-  if (_rawFrames) return;
-  _rawFrames = [];
-  for (let f = 0; f < QUEST_MARKER_FRAMES; f++) {
-    const base = QUEST_MARKER_OFFSET + f * QUEST_MARKER_TILES_PER_FRAME * 16;
-    const tiles = [];
-    for (let t = 0; t < QUEST_MARKER_TILES_PER_FRAME; t++) {
-      tiles.push(decodeTile(romData, base + t * 16));
-    }
-    _rawFrames.push(tiles);
-  }
-}
-
-/** Both frames of the marker in `state`'s palette, or null before init. */
-export function getMarkerFrames(state) {
-  if (!_rawFrames) return null;
-  const cached = _canvasCache.get(state);
-  if (cached) return cached;
-  const pal = QUEST_MARKER_PALETTES[state];
-  if (!pal) return null;
-  const rgb = pal.map(v => NES_SYSTEM_PALETTE[v & 0x3F] || [0, 0, 0]);
-  const offsets = [[0, 0], [8, 0], [0, 8], [8, 8]];
-  const out = [];
-  for (const tiles of _rawFrames) {
-    const c = _makeCanvas16();
-    const cx = c.getContext('2d');
-    const img = cx.createImageData(16, 16);
-    for (let q = 0; q < 4; q++) {
-      const tile = tiles[q];
-      const [ox, oy] = offsets[q];
-      for (let y = 0; y < 8; y++) {
-        for (let x = 0; x < 8; x++) {
-          const v = tile[y * 8 + x];
-          const i = ((oy + y) * 16 + (ox + x)) * 4;
-          if (v === 0) { img.data[i + 3] = 0; continue; }   // index 0 = transparent
-          const col = rgb[v];
-          img.data[i] = col[0]; img.data[i + 1] = col[1]; img.data[i + 2] = col[2];
-          img.data[i + 3] = 255;
-        }
-      }
-    }
-    cx.putImageData(img, 0, 0);
-    out.push(c);
-  }
-  _canvasCache.set(state, out);
-  return out;
-}
 
 // ── state ─────────────────────────────────────────────────────────────────
 function _entry(id) {
@@ -82,22 +25,6 @@ function _entry(id) {
 /** True once the objective count is met. */
 function _objectiveMet(quest, entry) {
   return !!entry && (entry.n | 0) >= (quest.objective.count | 0);
-}
-
-/**
- * Marker to draw over this NPC, or null for none. Derived — never stored, so
- * the bubble cannot drift out of sync with the save.
- */
-export function questMarkerState(mapId, npcKey) {
-  for (const quest of Object.values(QUESTS)) {
-    if (quest.giver.mapId !== mapId || quest.giver.npcKey !== npcKey) continue;
-    const e = _entry(quest.id);
-    if (!e) return 'available';                       // red — not taken yet
-    if (e.s === QUEST_DONE) return null;              // finished; no marker
-    return _objectiveMet(quest, e) ? 'turnin'         // green — hand it in
-                                   : 'active';        // amber — still working
-  }
-  return null;
 }
 
 /**

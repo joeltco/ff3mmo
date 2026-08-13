@@ -33,9 +33,6 @@ const { mapId, npcKey } = quest.giver;
 
 // ── the loop ──────────────────────────────────────────────────────────────
 ps.quests = {};
-is(q.questMarkerState(mapId, npcKey), 'available', 'fresh save shows the RED available marker');
-is(q.questMarkerState(mapId, 'ur_npc_06'), null, 'a non-giver NPC shows no marker');
-is(q.questMarkerState(999, npcKey), null, 'the giver on the wrong map shows no marker');
 
 let rewarded = null;
 // Word-gated: he has nothing to say until you bring him the term, so talkQuest
@@ -53,7 +50,6 @@ is(q.acceptQuest(QID), false, 'ACCEPT twice is a no-op');
 is(q.askQuestWord(mapId, npcKey, quest.startWord), null, 'the offer does not come back once taken');
 is(q.askQuestWord(mapId, npcKey, 'cave'), null, 'a different word does not open the offer');
 is(rewarded, null, 'no reward on accept');
-is(q.questMarkerState(mapId, npcKey), 'active', 'marker turns AMBER once accepted');
 
 // Wrong zone must not count.
 q.noteEncounterVictory('grasslands_wild');
@@ -62,14 +58,12 @@ is(ps.quests[QID].n, 0, 'a win outside the Altar Cave does not count');
 q.noteEncounterVictory('altar_cave_f1');
 q.noteEncounterVictory('altar_cave_f2');
 is(ps.quests[QID].n, 2, 'two Altar Cave wins counted');
-is(q.questMarkerState(mapId, npcKey), 'active', 'still AMBER while short of the count');
 
 const pagesMid = q.talkQuest(mapId, npcKey, () => { bad('rewarded early!'); });
 is(pagesMid === quest.active, true, 'talking mid-quest returns the ACTIVE nag, not the reward');
 
 q.noteEncounterVictory('altar_cave_boss');
 is(ps.quests[QID].n, 3, 'third win counted');
-is(q.questMarkerState(mapId, npcKey), 'turnin', 'marker turns GREEN at the objective count');
 
 q.noteEncounterVictory('altar_cave_f1');
 is(ps.quests[QID].n, 3, 'count does not overshoot the objective');
@@ -78,7 +72,6 @@ const pages2 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
 is(pages2 === quest.complete, true, 'handing in returns the COMPLETE pages');
 is(rewarded && rewarded.gil, quest.reward.gil, 'reward gil paid out');
 is(ps.quests[QID].s, 'done', 'quest is done');
-is(q.questMarkerState(mapId, npcKey), null, 'marker is gone once finished');
 
 rewarded = null;
 const pages3 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
@@ -95,20 +88,20 @@ is(q.sanitizeQuests({ [QID]: { s: 'active', n: 9999 } })[QID].n, quest.objective
 is(q.sanitizeQuests({ [QID]: { s: 'nonsense', n: -5 } })[QID].n, 0,
    'a negative count is clamped to 0');
 
-// ── the marker sprite actually decodes ────────────────────────────────────
-const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM ||
-  new URL('../FF3-English.nes', import.meta.url).pathname));
-q.initQuestMarker(rom);
-for (const state of ['available', 'active', 'turnin', 'repeat']) {
-  const frames = q.getMarkerFrames(state);
-  if (!frames || frames.length !== 2) { bad(`marker "${state}" did not decode 2 frames`); continue; }
-  // Frame 0 and frame 1 must differ — otherwise the "animation" is a still.
-  const a = frames[0].getContext('2d').getImageData(0, 0, 16, 16).data;
-  const b = frames[1].getContext('2d').getImageData(0, 0, 16, 16).data;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff++;
-  if (diff > 0) ok(`marker "${state}" decodes 2 distinct frames (${diff} bytes differ)`);
-  else bad(`marker "${state}" frames are identical — not animating`);
+// ── the marker is GONE ────────────────────────────────────────────────────
+// v1.7.990 removed the overhead bubble; Word Memory carries the signposting.
+// Asserted so it cannot creep back in as "just a small indicator" — the whole
+// point of the FF2 system is that you find people by talking, not by following
+// a marker.
+{
+  const src = fs.readFileSync(new URL('../src/npc.js', import.meta.url), 'utf8');
+  if (/questMarkerState|getMarkerFrames|QUEST_MARKER/.test(src)) {
+    bad('npc.js still draws a quest marker — the bubble was removed on purpose');
+  } else ok('no overhead quest marker is drawn');
+  for (const name of ['questMarkerState', 'getMarkerFrames', 'initQuestMarker']) {
+    if (q[name]) bad(`quests.js still exports ${name}`);
+  }
+  ok('quests.js exports no marker API');
 }
 
 // ── the SERVER keeps it too ───────────────────────────────────────────────

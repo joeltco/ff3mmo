@@ -16,7 +16,7 @@ import { romRaw } from './boot.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBoxPages, dismissMsgBox } from './message-box.js';
 import { openWordMenu } from './word-menu.js';
-import { questMarkerState, talkQuest, getMarkerFrames } from './quests.js';
+import { talkQuest } from './quests.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -632,20 +632,6 @@ function _grantQuestReward(reward) {
   if (reward.exp) grantExp(reward.exp);
 }
 
-// Frame dwell for the two-frame quest bubble.
-const QUEST_MARKER_MS = 350;
-
-// The bubble is NOT drawn centred. Its tail hangs off the bottom-LEFT and that
-// trail is LONG — the tip sits at sprite-local x 3-4, y 15, so roughly a third
-// of the sprite's width is trail before the balloon proper begins. Blitting at
-// the NPC's own x centres the whole 16px cell and leaves the balloon sitting
-// left, over the speaker rather than beside them.
-//
-// 10 puts the balloon body clearly up-and-right of the head with the trail
-// still running back down to it. 5 (v1.7.972) was measured off the tail tip
-// alone and did not account for how much of the sprite the trail eats.
-const QUEST_MARKER_DX = 10;
-
 export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   if (_npcs.length === 0) return;
   // Map tiles use `originY` (3px below `spriteY`); sprites use `spriteY` so
@@ -670,24 +656,6 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
     else               s.setWalkProgress(phase);
     s.draw(ctx, sx, sy);
 
-    // Quest bubble, floating one tile above the NPC's head. State (and so the
-    // mark's colour) is derived from ps.quests every frame — see quests.js.
-    //
-    // Hidden while a message box is up. The box slides down from the top of the
-    // view and the bubble sits a tile ABOVE an NPC's head, so the two fight for
-    // the same strip of screen; and once you are already talking to someone the
-    // marker has nothing left to tell you. Covers every NPC on the map, not just
-    // the one being spoken to — a second bubble poking out beside an open box
-    // reads as a glitch.
-    const boxOpen = msgState.state !== 'none';
-    const mark = (!boxOpen && npc.key) ? questMarkerState(mapSt.currentMapId, npc.key) : null;
-    if (mark) {
-      const frames = getMarkerFrames(mark);
-      if (frames) {
-        const bob = Math.floor(performance.now() / QUEST_MARKER_MS) % frames.length;
-        ctx.drawImage(frames[bob], sx + QUEST_MARKER_DX, sy - TILE_SIZE);
-      }
-    }
   }
 }
 
