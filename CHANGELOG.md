@@ -18,6 +18,52 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.985 — 2026-08-13
+
+### Fix: the ASK/LEARN panel was black, and its cursor was thrown on
+
+Both reported by Joel from the live build, both mine, and neither had ever been
+looked at — the panel shipped without anyone rendering it once.
+
+- **Black box under a blue one.** `drawWordMenu` called `drawBorderedBox`
+  without the `blue` flag; the message box it hangs under draws its own frame
+  with `blue = true`. Now matches.
+- **Cursor overlapping its own label.** The cursor tile is **16x16** (measured
+  off `initCursorTile`, not assumed) and the rows were 12px apart, so the hand
+  collided with the rows above and below. Geometry is now copied verbatim from
+  the shop's root menu, which is the same widget: row pitch 16, text at
+  `x + 16`, cursor at `x`, cursor drawn 4px high. Visible rows capped at 4 so
+  the taller box still fits under the message box inside the viewport.
+
+### tools/word-menu-shot.mjs
+
+Renders the panel through the real modules and writes a PNG. There was no way
+to look at this thing, which is why it shipped wrong. Also caught, immediately:
+the first render came out as garbled glyphs because the tool read the
+**unpatched** ROM — the game applies `patches/ff3-awj.ips` before it touches the
+font, and without it every string is nonsense. A tool that skips a step the game
+performs reports a bug that isn't there.
+
+### The FF2 blips: proven audible, and no longer able to go silent
+
+Joel reported hearing nothing on LEARN. `tools/check-ff2-sfx-audio.mjs` loads
+the real `lib/libgme.js` in Node, opens the real NSF, starts each sound-effect
+track and measures the PCM:
+
+    reference: FF2 track 24 (elder house)  peak 19159
+    cursor        track 31  peak  8604
+    confirm       track 32  peak  9317
+
+So the rip and the stubs are fine — `check-ff2-sfx.mjs` proved the 6502 writes
+the right registers, and this proves the player would hear them. What was NOT
+fine: `playFF2Sfx` returned silently when the FF2 NSF had not been built (no FF2
+ROM supplied, or an older build with no FF2 sfx tracks at all), so the menu made
+no sound whatsoever. It now falls back to the FF3 blip on every failure path —
+missing NSF, bad track, `gme_open_data` or `gme_start_track` failing.
+
+Both gates run on deploy. Executing the 6502 and rendering the audio are
+different questions; only the second one is what the player hears.
+
 ## 1.7.984 — 2026-08-13
 
 ### Fix: an NPC was standing outside Ur's northern house

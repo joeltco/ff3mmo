@@ -602,10 +602,15 @@ export function playMentionChime() {
  * callers can fire it unconditionally the way they do playSFX.
  */
 export function playFF2Sfx(name) {
-  if (!ff2NsfData) return;
+  // NEVER silent. The FF2 blips only exist once the player has supplied the FF2
+  // ROM and initFF2Music has built the NSF; before that this used to return and
+  // the menu made no sound at all, which is indistinguishable from "the audio is
+  // broken". Fall back to the nearest FF3 blip instead.
+  const fallback = () => playSFX(name === FF2_SFX_NAMES.CONFIRM ? SFX.CONFIRM : SFX.CURSOR);
+  if (!ff2NsfData) { fallback(); return; }
   if (typeof Module === 'undefined' || !Module.ccall) return;
   const track = ff2SfxTrack(name);
-  if (track < 0) return;
+  if (track < 0) { fallback(); return; }
   if (!audioCtx) { audioCtx = new AudioContext(); }
   if (audioCtx.state === 'suspended') { audioCtx.resume(); }
   if (sfxMuted) return;
@@ -613,12 +618,12 @@ export function playFF2Sfx(name) {
 
   if (!ff2SfxEmuRef) { ff2SfxEmuRef = Module.allocate(1, 'i32', Module.ALLOC_STATIC); }
   if (Module.ccall('gme_open_data', 'number', ['array', 'number', 'number', 'number'],
-      [ff2NsfData, ff2NsfData.length, ff2SfxEmuRef, audioCtx.sampleRate]) !== 0) return;
+      [ff2NsfData, ff2NsfData.length, ff2SfxEmuRef, audioCtx.sampleRate]) !== 0) { fallback(); return; }
   ff2SfxEmu = Module.getValue(ff2SfxEmuRef, 'i32');
   // NOT gme_ignore_silence: these tracks are mostly silence by design and the
   // sound is over in a fifth of a second.
   if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [ff2SfxEmu, track]) !== 0) {
-    _stopFF2Sfx(); return;
+    _stopFF2Sfx(); fallback(); return;
   }
 
   if (!ff2SfxBuf) { ff2SfxBuf = Module._malloc(SFX_BUF_SIZE * 2 * 2); }

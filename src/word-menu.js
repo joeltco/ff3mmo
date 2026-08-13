@@ -30,9 +30,23 @@ const HUD_VIEW_W = 144;
 const HUD_VIEW_H = 144;
 const MSG_BOX_H  = 48;          // message-box.js draws 48px tall at HUD_VIEW_Y
 
-const ROW_H       = 12;
-const PAD         = 8;
-const MAX_VISIBLE = 6;          // the vocabulary can outgrow the viewport
+// Geometry copied from the shop's ROOT menu (src/shop.js#_drawRootMenu), which
+// is the same widget: a short labelled list with a hand cursor.
+//   text   at MENU_X + 16,  row pitch MENU_STEP = 16
+//   cursor at MENU_X,       drawn 4px high
+// The cursor tile is 16x16 — MEASURED off initCursorTile, not assumed. The 12px
+// row pitch that shipped made a 16px hand overlap the rows above and below and
+// collide with its own label; that is what "the cursor is sloppily thrown on
+// there" was. Render it with tools/word-menu-shot.mjs before touching any of
+// these numbers.
+const ROW_STEP    = 16;
+const PAD_X       = 8;
+const PAD_Y       = 10;   // 8px border + 2 so the glyphs don't touch the frame
+const TEXT_INDENT = 16;
+const CURSOR_DY   = -4;
+// 4 rows max: the box hangs under the 48px message box at y=80, so
+// 4*16 + 20 = 84 puts its bottom at 164, inside the 176 viewport floor.
+const MAX_VISIBLE = 4;
 
 export const wordMenuSt = {
   open:   false,
@@ -239,12 +253,15 @@ export function drawWordMenu() {
   let widest = 0;
   for (let i = first; i < first + vis; i++) widest = Math.max(widest, measureText(_nameToBytes(rows[i].label)));
 
-  const boxW = Math.min(HUD_VIEW_W, Math.max(56, widest + PAD * 2 + 10));
-  const boxH = vis * ROW_H + PAD * 2;
+  const boxW = Math.min(HUD_VIEW_W, Math.max(64, widest + PAD_X * 2 + TEXT_INDENT));
+  const boxH = vis * ROW_STEP + PAD_Y * 2;
   const boxX = HUD_VIEW_X;
   const boxY = Math.min(HUD_VIEW_Y + MSG_BOX_H, HUD_VIEW_Y + HUD_VIEW_H - boxH);
 
-  drawBorderedBox(boxX, boxY, boxW, boxH);
+  // BLUE, like the message box it sits under (message-box.js draws its own with
+  // `blue = true`). The default is a black interior, which stacked a black panel
+  // directly beneath a blue one.
+  drawBorderedBox(boxX, boxY, boxW, boxH, true);
 
   const ctx = ui.ctx;
   for (let i = 0; i < vis; i++) {
@@ -252,7 +269,7 @@ export function drawWordMenu() {
     // Key Terms read red like FF2's highlighted words; a term this NPC has no
     // answer for is greyed instead.
     const pal = !row.term ? TEXT_WHITE : row.has ? TEXT_RED : TEXT_GREY;
-    drawText(ctx, boxX + PAD + 10, boxY + PAD + i * ROW_H, _nameToBytes(row.label), pal);
+    drawText(ctx, boxX + PAD_X + TEXT_INDENT, boxY + PAD_Y + i * ROW_STEP, _nameToBytes(row.label), pal);
   }
-  drawCursorFaded(boxX + PAD, boxY + PAD + (wordMenuSt.index - first) * ROW_H, 0);
+  drawCursorFaded(boxX + PAD_X, boxY + PAD_Y + (wordMenuSt.index - first) * ROW_STEP + CURSOR_DY, 0);
 }

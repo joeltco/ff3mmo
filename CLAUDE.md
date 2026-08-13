@@ -29,6 +29,52 @@ The v1.7.49 spell-anim rewrite was reverted in v1.7.53; the captured Poisona tar
 
 If the user reports a visual bug, believe them and fix or revert — don't argue or re-analyze.
 
+## USE THE TOOLS. RENDER IT AND LOOK. — HARD RULE
+
+**If a tool can answer it, answer it yourself. If no tool exists, BUILD ONE —
+that is the normal first move, not a last resort. Reading the code and reasoning
+about it is NOT an answer.**
+
+Building the extractor is always cheaper than being wrong in prod. Every tool in
+`tools/` exists because a question came up and one got written; that is the
+expected response to a new question, every time. Do not answer "I can't tell
+from here" — write the thing that tells you.
+
+Shipped to prod on 2026-08-13 because this rule was ignored:
+- The ASK/LEARN verb menu went out with a **black** panel stacked under the
+  message box's **blue** one, and its cursor on the text baseline instead of the
+  4px-high offset every other list uses. Nobody rendered it. Joel found it in
+  the live build.
+- `tools/map-ascii.mjs` carried a hand-copy of `calcSpawnY` (the REJECTED
+  bounded variant) and reported Ur's northern house as a 5-tile dead end. A
+  false "players are stuck" bug was one step from being filed off it.
+- An NPC was placed on a real ROM coordinate that turned out to be floor in a
+  DIFFERENT house on the same shared tilemap. A flood-fill found it in seconds
+  — after the player did.
+
+**Before shipping ANY visual change:**
+1. **Render it to a PNG and Read the image.** `tools/word-menu-shot.mjs`,
+   `tools/map-png.mjs`, `tools/nes-run.mjs`, `tools/check-msg-highlight.mjs`
+   all draw through the real modules in Node. A new panel needs a shot tool
+   BEFORE it ships. "It renders" and "the code looks right" are not checks.
+2. **Mirror the sibling widget's constants, don't invent them.** `src/shop.js`
+   is the canonical list-with-cursor: `ROW_H = 12`, cursor at `x`, text at
+   `x + 16`, cursor drawn at `y - 4`. The message box draws its frame with
+   `blue = true` — panels stacked with it must match.
+3. **Measure placement, never eyeball it.** Flood-fill from the real entrance
+   (`tools/check-npc-room.mjs`). FF3 packs several interiors per tilemap, so a
+   valid ROM coordinate can be the wrong room.
+4. **A tool that disagrees with the game is worse than no tool.** Every tool
+   imports the REAL module — `MapRenderer`, `msgLineCount`, and `calcSpawnY`
+   from `tools/lib/spawn.mjs`. NEVER hand-copy a game function into a tool;
+   that has now happened four times with `calcSpawnY` alone.
+5. **The ROM and emulator are ground truth already in the repo.** `~/roms/`,
+   jsnes, `tools/nes-run.mjs --warp/--chrmap/--bundlecheck`,
+   `tools/ff2-sfx-rip.mjs` (hook `cpu.write`, NOT `mmap.write` — RAM writes
+   below $2000 never reach the mapper), `tools/ff2-sound-map.mjs`.
+6. **Asking the user to look is the LAST resort**, and only after stating what
+   was already run.
+
 ## STOP WASTING TOKENS — Hard Limits
 
 ### When the user says something LOOKS wrong visually:
