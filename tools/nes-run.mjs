@@ -315,7 +315,9 @@ if (has('chrmap')) {
   const lo = parseInt(flag('chrfrom', '256'), 10), hi = parseInt(flag('chrto', '512'), 10);
   for (let slot = lo; slot < hi; slot++) {
     const key = Buffer.from(vram.subarray(slot * 16, slot * 16 + 16)).toString('latin1');
-    if (/^\x00{16}$/.test(key)) { blank++; continue; }
+    let allZero = true;
+    for (let i = 0; i < 16; i++) { if (vram[slot * 16 + i] !== 0) { allZero = false; break; } }
+    if (allZero) { blank++; continue; }
     const off = index.get(key);
     if (off === undefined) { unknown++; continue; }
     const bank = (off - 0x10) >> 13;
