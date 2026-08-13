@@ -199,12 +199,20 @@ if (!isMainThread) {
     // number so the cast cue ($A1, written at pre-animation start) can be told
     // apart from the spell's own impact sound.
     const sfxWrites = [];
+    // SONG requests. FF3 has TWO sound channels and this sweep only ever
+    // watched one: short SFX go to $7F49, but whole songs/jingles are requested
+    // at $7F43. src/music.js already documents a sound (FALL) that the SFX
+    // sweep "could never see" for exactly this reason. A spell whose real sound
+    // is song-type is therefore invisible here, and whatever minor $7F49 cue
+    // happens to land in the window gets recorded as its impact instead.
+    const songWrites = [];
     let _sfxFrame = -1;
     let afflictSlots = null;
     const n = new Nes(romPath, {
       onBatteryRamWrite: (addr, val) => {
-        if ((addr | 0) !== 0x7F49) return;
-        sfxWrites.push({ f: _sfxFrame, val: val & 0xFF });
+        const a = addr | 0;
+        if (a === 0x7F49) sfxWrites.push({ f: _sfxFrame, val: val & 0xFF });
+        else if (a === 0x7F43) songWrites.push({ f: _sfxFrame, val: val & 0xFF });
       },
     });
     n.run(300);
@@ -303,7 +311,7 @@ if (!isMainThread) {
     // end. Recorded so the dump can assert it rather than the reader trusting
     // the patch landed.
     const survived = sc(n) > 12;
-    return { blocks, oamFrames, survived, sfxWrites, diag };
+    return { blocks, oamFrames, survived, sfxWrites, songWrites, diag };
   }
 
   const { job, mask, colBase, cells } = workerData;
@@ -317,6 +325,7 @@ if (!isMainThread) {
   parentPort.postMessage({
     control: [...ctrlOffs],
     controlSfx: control.sfxWrites,
+    controlSong: control.songWrites,
     controlBlocks: [...control.blocks.entries()].map(([off, r]) => ({ off, first: r.first, last: r.last })),
   });
 
@@ -332,6 +341,10 @@ if (!isMainThread) {
       const ctrlSfx = new Set(control.sfxWrites.map((w) => w.val));
       out.sfxWrites = r.sfxWrites;
       out.sfxOwn = r.sfxWrites.filter((w) => !ctrlSfx.has(w.val));
+      // Song-type requests, control-subtracted the same way.
+      const ctrlSong = new Set((control.songWrites || []).map((w) => w.val));
+      out.songWrites = r.songWrites;
+      out.songOwn = (r.songWrites || []).filter((w) => !ctrlSong.has(w.val));
       const own = [...r.blocks.entries()].filter(([off]) => !ctrlOffs.has(off)).sort((a, b) => a[0] - b[0]);
       out.blocks = own.map(([off, rec]) => ({
         off, slots: [...rec.slots].sort((a, b) => a - b), first: rec.first, last: rec.last,

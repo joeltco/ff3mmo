@@ -18,6 +18,59 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.998 — 2026-08-13
+
+### Meteo was playing DRAIN's sound — found by hex-patching the ROM
+
+- **v1.7.997 called this table verified. That was wrong.** The re-measurement
+  reported "48 of 48 reproduce exactly" and I reported the table vindicated —
+  but the re-run repeated the ORIGINAL's mistake, so all it proved was that the
+  harness is deterministic. A reproduction that repeats the same error is not
+  evidence. Joel was right.
+- **Cause, written at the top of `spell-sweep.cjs` the whole time:** Black and
+  White Mage both cap at magic level 7, so a level-8 pick is *refused*, the list
+  stays open, and later presses **drift the cursor onto a lower spell**. Every
+  level-8 spell was swept with a job that cannot cast level 8, so the LEVEL 7
+  spell in the same column was cast and its sound filed under the level-8 id.
+- **The evidence was in the shipped table**: each level-8 value equalled the
+  level-7 value directly beneath it — Flare 131 = Quake 131, Death 91 = Brak2
+  91, **Meteo 73 = Drain 73**.
+- **Fix: hex patch the ROM.** Byte 7 of a spell record (`SPELL_DATA 0x0618D0`)
+  is its castability gate — L8 carries `0x3d`/`0x3e`, L1 carries `0x2f`.
+  Rewriting that one byte lets a Black Mage cast the spell while it keeps its
+  own id, menu slot, animation and sound lookup. New
+  `tools/monscan/build-capture-rom.cjs` builds it, also applying the sweep's
+  unkillable/harmless-goblin patch so no death cue or victory fanfare can be
+  mistaken for the impact. (Copying the whole record into a level-1 slot does
+  NOT work — the sound is looked up by spell ID, which is how that got proven.)
+- **Corrected, each reproduced on a second independent run:**
+  Flare 131 → **125**, Death 91 → **82**, **Meteo 73 → 67**.
+  Track 67 renders 2219 ms of audible PCM against 73's 896 ms, consistent with
+  Meteo being a long screen sweep.
+- The three WHITE level-8 spells were re-cast the same way: 0x03 (74) and 0x05
+  (90) came back unchanged — they genuinely share a sound with the L7 spell
+  below, so value-matching alone could never have separated drift from truth.
+  0x04 Life2 is a revive and stayed silent with no dead target.
+- Levels 1-7 are castable by those jobs, are untouched by the drift, and
+  re-measure identical.
+
+### New tooling
+
+- `tools/monscan/build-capture-rom.cjs` — ROM patcher for captures.
+- `tools/monscan/meteo-probe.cjs` — casts one spell and SCREENSHOTS every menu
+  step, so a refused pick is visible instead of silently mis-recorded. It also
+  drives the round until it actually starts; the first version captured 1200
+  frames of a battle that never took its turn, which reads exactly like "this
+  spell makes no sound".
+- `tools/monscan/refusal-trace.cjs` — ring-buffers executed PCs into the
+  refusal buzz.
+- `spell-sweep.cjs` now records the `$7F43` SONG channel alongside `$7F49`.
+  Result: no spell requests a song; the seven that appeared to were the victory
+  fanfare from spells that killed the target. Hypothesis tested and refuted
+  rather than assumed.
+- Gate `tools/check-spell-sfx-drift.mjs` — a level-8 spell must not wear the
+  level-7 spell's sound. Proven by reverting Meteo to 73 (2 checks fail).
+
 ## 1.7.997 — 2026-08-13
 
 ### Map music — every map plays its own song (Kazus / Castle Sasune fix)

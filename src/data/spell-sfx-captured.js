@@ -45,18 +45,55 @@
 //     default mask is poison (2).
 //   * AFFLICT=1 AFFLICT_MASK=4: Wash reproduces 74 as well. 48/48.
 //
-// So Meteo (0x02 -> $88 -> 73) is measured, reproduced, and renders 896 ms of
-// audible PCM through libgme (tools/check-sfx-audio.mjs). Its offset is 65f
-// after its own CHR block goes live where the elemental spells sit at 78f,
-// because Meteo's block starts 112f later — self-consistent, not an artifact.
+// ── THAT CONCLUSION WAS WRONG. v1.7.998 ─────────────────────────────────
 //
-// To re-verify:  AFFLICT=1 node tools/monscan/spell-sweep.cjs both
-//                AFFLICT=1 AFFLICT_MASK=4 node tools/monscan/spell-sweep.cjs wm
+// "48 of 48 reproduce" was true and meaningless: the re-run reproduced the
+// ARTIFACT, because it repeated the same mistake the original made. Joel was
+// right about Meteo, and the reason is written at the top of spell-sweep.cjs:
+//
+//   "Black/White Mage both cap at maxMagicLv 7, so level 8 is rejected
+//    outright — the pick is refused, the list stays open, and LATER PRESSES
+//    DRIFT THE CURSOR ONTO A LOWER SPELL."
+//
+// Every level-8 spell was swept with a job that cannot cast level 8. The
+// cursor drifted one row down, the LEVEL 7 spell in the same column was cast,
+// and its sound was filed under the level-8 id. The evidence was sitting in
+// the table the whole time — each L8 value equalled the L7 value directly
+// below it:
+//
+//   0x00 Flare 131 == 0x07 Quake 131  |  0x01 Death 91 == 0x08 Brak2 91
+//   0x02 Meteo  73 == 0x09 Drain  73   <- Meteo has been playing DRAIN's sound
+//
+// Fixed by HEX PATCHING THE ROM instead of accepting the refusal. Byte 7 of a
+// spell's 8-byte record is its castability gate: level-8 spells carry 0x3d
+// (black) / 0x3e (white), level-1 carries 0x2f. Rewriting that ONE byte to
+// 0x2f leaves the spell at its own id, in its own menu slot, with its own
+// animation and its own sound lookup — it just lets a Black Mage cast it.
+// (Copying the whole record into a level-1 slot does NOT work: the sound is
+// looked up by spell ID, so that route returns the level-1 spell's sound.)
+//
+// Captured on the unkillable/harmless goblin so no death cue or victory
+// fanfare could be mistaken for the impact, and each value reproduced on a
+// second independent run:
+//
+//   0x00 Flare  131 -> 125 ($bc)   0x01 Death 91 -> 82 ($91)
+//   0x02 Meteo   73 ->  67 ($82)
+//
+// The three WHITE level-8 spells were re-cast the same way and 0x03 (74) and
+// 0x05 (90) came back UNCHANGED — they genuinely share a sound with the L7
+// spell below, which is why value-matching alone could not have told drift
+// from truth. 0x04 Life2 is a revive and stayed silent with no dead target.
+//
+// To re-verify:
+//   node tools/monscan/build-capture-rom.cjs /tmp/cap.nes --unlock 0x02
+//   ROM=/tmp/cap.nes JOB=4 MASK=0x07 ROW=0 COL=2 node tools/monscan/meteo-probe.cjs
+//   AFFLICT=1 node tools/monscan/spell-sweep.cjs both        # levels 1-7
+//   AFFLICT=1 AFFLICT_MASK=4 node tools/monscan/spell-sweep.cjs wm
 
 export const CAPTURED_SPELL_SFX = new Map([
-  [0x00, 131],  // $c2, 57f
-  [0x01,  91],  // $9a, 78f
-  [0x02,  73],  // $88, 65f
+  [0x00, 125],  // MEASURED v1.7.998 on a ROM-unlocked cast (was 131 = the L7 spell below it)
+  [0x01,   82],  // MEASURED v1.7.998 on a ROM-unlocked cast (was 91 = the L7 spell below it)
+  [0x02,   67],  // MEASURED v1.7.998 on a ROM-unlocked cast (was 73 = the L7 spell below it)
   [0x03,  74],  // $89, 77f
   [0x04,  74],  // $89, 77f  [afflict:poison]
   [0x05,  90],  // $99, 77f
