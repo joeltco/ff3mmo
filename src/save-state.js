@@ -76,6 +76,10 @@ export async function saveSlotsToDB() {
     slot.lastWorldExitX = ps.lastWorldExitX;
     slot.lastWorldExitY = ps.lastWorldExitY;
     slot.knownSpells = ps.knownSpells ? [...ps.knownSpells] : [];
+    // Quest progress. A ps.* field must be added to BOTH this serializer and
+    // the server validator in api.js — one without the other and it silently
+    // resets on the next login.
+    slot.quests = ps.quests ? JSON.parse(JSON.stringify(ps.quests)) : {};
     slot.consumedTiles = ps.consumedTiles ? JSON.parse(JSON.stringify(ps.consumedTiles)) : {};
     slot.consumedTilesAt = ps.consumedTilesAt ? JSON.parse(JSON.stringify(ps.consumedTilesAt)) : {};
   }
@@ -106,6 +110,7 @@ export async function saveSlotsToDB() {
       lastWorldExitY: s.lastWorldExitY != null ? s.lastWorldExitY : null,
       playTime: s.playTime || 0,
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
+      quests: s.quests || {},
       consumedTiles: s.consumedTiles || {},
       consumedTilesAt: s.consumedTilesAt || {},
     } : null);

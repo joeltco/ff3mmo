@@ -10,6 +10,8 @@ import { pvpSt, resetPVPState, updatePVPBattle } from './pvp.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { jobHasMagic } from './data/jobs.js';
+import { currentEncounterZoneKey } from './battle-encounter.js';
+import { noteEncounterVictory } from './quests.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP, grantGil } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
@@ -868,6 +870,10 @@ function _updateMonsterDeath() {
         battleSt.battleTimer = 0;
         return true;
       }
+      // Quest objectives that count encounters. Counted here, at the single
+      // all-dead victory point, so it cannot double-fire from the several
+      // battle-state branches that lead to the victory flow.
+      try { noteEncounterVictory(currentEncounterZoneKey()); } catch (_) { /* quests are cosmetic here */ }
       const rawExp = battleSt.encounterMonsters.reduce((sum, m) => sum + m.exp, 0);
       grantExp(rawExp);
       battleSt.encounterExpGained = Math.max(1, Math.floor(rawExp / 4));

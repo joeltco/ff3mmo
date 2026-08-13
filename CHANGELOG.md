@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.971 — 2026-08-13
+
+### Added — the quest system, and Ur's first quest end to end
+The vertical slice: **red marker → talk → amber → clear the Altar Cave → green → hand in → reward**. One quest, every layer real, so the next twenty are data entry rather than plumbing.
+
+- **`ur_missing_brother`** — the townsman who already said the cave took his brother (`UR_NPC_09`). That thread was written into his idle dialogue before the quest system existed, so the hook was already standing there. Clear 3 Altar Cave encounters; 300 gil + 80 exp.
+- **`src/data/quests.js`** — definitions. `src/quests.js` — state, marker resolution, talk handler, objective progress.
+- **Marker colour is DERIVED from state every frame, never stored**, so the bubble cannot disagree with the save. Red available → amber active → green ready to hand in → gone when finished.
+- Bubble floats one tile above the NPC's head and alternates its two ROM frames every 350ms.
+
+### Why colour and not a second symbol
+The ROM has exactly one bubble glyph — a silhouette scan of the whole surrounding bank found the two `!` frames and nothing else. WoW's "`!` to take, `?` to hand in" needs art we don't have and won't invent, so stage rides on the mark's colour instead, which is a one-entry palette swap because index 2 is the mark alone. That's closer to RuneScape's colour-coded journal than to WoW's shape vocabulary — and it's what the ROM allows.
+
+### Persistence — both halves, because one is silent
+`ps.quests` is written by the client serializer in `save-state.js` **and** validated in `api.js`. A `ps.*` field added to only one of those doesn't error; it just quietly resets on the next login, which has bitten this project before (`consumedTilesAt`, v1.7.617).
+- Loads run through `sanitizeQuests`, so a removed quest id or a hand-edited count can't come back off disk.
+- The server clamps a forged entry, and validates by shape — it doesn't import client data modules. A faked `s: 'done'` buys nothing anyway: rewards go through `grantGil`/`grantExp`, which the inventory mirror already covers.
+
+### Gate — `tools/check-quests.mjs`, wired into deploy.sh
+28 assertions driving the whole loop: accept, wrong-zone kills not counting, the mid-quest nag instead of an early reward, the count not overshooting, **the reward not paying twice**, the save round-trip, the clamps, and that all four marker palettes decode two *distinct* frames (a still image would pass a naive check).
+- **Proven by deleting the `api.js` block** — the gate fails with "server whitelist DROPPED quests". That's the exact mistake it exists to catch.
+
+### Known, deliberate
+- Talking to an unstarted quest **accepts it** — no yes/no prompt. Prompt input is owned by `movement.js`'s `msgState.isPrompt` block and that coupling wasn't worth threading through the first quest.
+- Progress is counted client-side. It only decides the bubble's colour; the reward rides the already-validated path.
+
 ## 1.7.970 — 2026-08-13
 
 ### Ur is populated — 17 NPCs → 27, and the town no longer bunches up

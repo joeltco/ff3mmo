@@ -1,6 +1,7 @@
 // title-screen.js — title screen state, rendering, and player select screen
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { sanitizeQuests } from './quests.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
@@ -741,6 +742,9 @@ function _updateTitleMainOutCase() {
   ps.lastWorldExitX = (slot && slot.lastWorldExitX != null) ? slot.lastWorldExitX : null;
   ps.lastWorldExitY = (slot && slot.lastWorldExitY != null) ? slot.lastWorldExitY : null;
   ps.knownSpells = (slot && Array.isArray(slot.knownSpells)) ? [...slot.knownSpells] : [];
+  // Quest progress. Run through sanitizeQuests so an unknown id (a quest that
+  // was removed) or a hand-edited count can't come back into ps from disk.
+  ps.quests = sanitizeQuests(slot && slot.quests);
   ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
   ps.consumedTilesAt = (slot && slot.consumedTilesAt) ? JSON.parse(JSON.stringify(slot.consumedTilesAt)) : {};
   swapBattleSprites(ps.jobIdx);

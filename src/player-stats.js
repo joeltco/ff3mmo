@@ -63,6 +63,9 @@ export const ps = {
   // revealed / rock puzzles stay solved across map re-entry (and saves).
   // Pre-v1.7.215 these mutations were in-memory only and reset on re-entry,
   // letting players farm chests by exiting and walking back in.
+  // Quest progress: id -> { s: 'active'|'done', n: objective count }. Static
+  // quest data lives in data/quests.js; only progress is saved.
+  quests: {},
   consumedTiles: {},
   // Parallel to consumedTiles, keyed the same way (mapId → "x,y" → epoch ms):
   // the time a chest tile was opened. Used by expireResettableChests to bring

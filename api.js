@@ -243,6 +243,21 @@ function _validateSaveData(data) {
   if (typeof data.lastWorldExitY === 'number' || data.lastWorldExitY === null) out.lastWorldExitY = data.lastWorldExitY == null ? null : _clamp(data.lastWorldExitY, 0, 4096);
   if (typeof data.playTime === 'number')     out.playTime = Math.max(0, Math.min(data.playTime, 999999));  // seconds
   if (Array.isArray(data.knownSpells))       out.knownSpells = data.knownSpells.slice(0, 64).map(s => _clamp(s, 0, 255));
+  // Quest progress: { questId: { s: 'active'|'done', n: <count> } }. Validated
+  // by SHAPE here rather than against the quest table — the server does not
+  // import client data modules — and bounded so a modded client cannot stuff
+  // the save. The reward itself is granted through grantGil / grantExp, which
+  // the inventory mirror already covers, so a forged `s: 'done'` buys nothing
+  // beyond hiding a marker on that player's own screen.
+  if (data.quests && typeof data.quests === 'object' && !Array.isArray(data.quests)) {
+    const q = {};
+    for (const [id, v] of Object.entries(data.quests).slice(0, 128)) {
+      if (typeof id !== 'string' || id.length > 64) continue;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+      q[id] = { s: v.s === 'done' ? 'done' : 'active', n: _clamp(v.n | 0, 0, 9999) };
+    }
+    out.quests = q;
+  }
   if (data.consumedTiles && typeof data.consumedTiles === 'object' && !Array.isArray(data.consumedTiles)) {
     // Keep as-is; capped indirectly by overall payload size. Each key is a
     // map id, each value is a per-tile set of consumed coords.

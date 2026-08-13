@@ -15,6 +15,7 @@ import { NPCS } from './data/npcs.js';
 import { romRaw } from './boot.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBoxPages } from './message-box.js';
+import { questMarkerState, talkQuest, getMarkerFrames } from './quests.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -26,7 +27,7 @@ import { TOWN_NPCS } from './data/town-npcs.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
-import { ps } from './player-stats.js';
+import { ps, grantGil, grantExp } from './player-stats.js';
 import { playSFX, SFX } from './music.js';
 import { saveSlotsToDB } from './save-state.js';
 
@@ -614,6 +615,18 @@ function _walkPhase(npc) {
   return null;
 }
 
+// Quest reward payout. Routed through the same grantGil / grantExp the battle
+// rewards use, so the server's inventory mirror sees it the way it sees any
+// other gain rather than through a second, unvalidated path.
+function _grantQuestReward(reward) {
+  if (!reward) return;
+  if (reward.gil) grantGil(reward.gil);
+  if (reward.exp) grantExp(reward.exp);
+}
+
+// Frame dwell for the two-frame quest bubble.
+const QUEST_MARKER_MS = 350;
+
 export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   if (_npcs.length === 0) return;
   // Map tiles use `originY` (3px below `spriteY`); sprites use `spriteY` so
@@ -637,6 +650,17 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
     if (phase == null) s.resetFrame();
     else               s.setWalkProgress(phase);
     s.draw(ctx, sx, sy);
+
+    // Quest bubble, floating one tile above the NPC's head. State (and so the
+    // mark's colour) is derived from ps.quests every frame — see quests.js.
+    const mark = npc.key ? questMarkerState(mapSt.currentMapId, npc.key) : null;
+    if (mark) {
+      const frames = getMarkerFrames(mark);
+      if (frames) {
+        const bob = Math.floor(performance.now() / QUEST_MARKER_MS) % frames.length;
+        ctx.drawImage(frames[bob], sx, sy - TILE_SIZE);
+      }
+    }
   }
 }
 
@@ -687,6 +711,20 @@ export function talkToNpc(npc) {
   // no dialogue box. Keep the NPC's south-facing pose (don't flip to player).
   if (npc.shopId) {
     openShop(npc.shopId);
+    return;
+  }
+  // A quest giver says its quest line instead of its idle dialogue. Returns
+  // null when this NPC has no quest, so everyone else is unaffected.
+  const qPages = npc.key
+    ? talkQuest(mapSt.currentMapId, npc.key, _grantQuestReward)
+    : null;
+  if (qPages && qPages.length) {
+    if (playerSprite) {
+      const pd = playerSprite.getDirection();
+      npc.talkFacing = pd === DIR_DOWN ? DIR_UP : pd === DIR_UP ? DIR_DOWN
+                     : pd === DIR_LEFT ? DIR_RIGHT : DIR_LEFT;
+    }
+    showMsgBoxPages(qPages.map(l => _nameToBytes(l)), () => { npc.talkFacing = null; });
     return;
   }
   if (!npc.dialogue || npc.dialogue.length === 0) return;

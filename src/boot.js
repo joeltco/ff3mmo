@@ -10,6 +10,7 @@ import { hudSt } from './hud-state.js';
 import { ui } from './ui-state.js';
 import { battleSt } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
+import { initQuestMarker } from './quests.js';
 import { setLandTurtleFrames, setLandTurtleFadeFrames, setLoadingMoogleFadeFrames, setCrystalFrames } from './npc.js';
 import { initCrystalSprite } from './crystal-sprite.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater,
@@ -124,6 +125,7 @@ export function initSpriteAssets(rom) {
 
   initMusic(rom);
   initFlameRawTiles(rom);
+  initQuestMarker(rom);
   initStarTiles(rom);
 }
 
