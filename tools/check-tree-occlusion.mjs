@@ -124,5 +124,52 @@ if (atlas && atlas.canvas.width <= 128 * TILE && atlas.canvas.height === TILE) {
   bad('priority atlas is missing or unexpectedly large');
 }
 
+// ── 6. A mountain must NOT cover the player's head ────────────────────────
+// render.js draws the map at `SCREEN_CENTER_Y + 3` while placing the sprite at
+// `SCREEN_CENTER_Y`. With that 3px offset the overlay's tile walk reaches the
+// row ABOVE the player even when perfectly tile-aligned — so a mountain
+// directly above, which carries the L bit, redrew its bottom 3px across the
+// player's head. Reported as "top of the player sprite is getting cut off when
+// walking below overworld mountains".
+//
+// Every check above used originY = 0 and so never saw it. This one mirrors the
+// real origins.
+function drawAtRealOrigin(tx, ty) {
+  LOG = [];
+  const spriteY = 0;
+  const originY = spriteY + 3;                    // exactly what render.js passes
+  r.drawOverlay({ canvas: { width: 256, height: 240 }, ...mkCanvas().getContext('2d') },
+    tx * TILE, ty * TILE, 0, originY, 0, spriteY);
+  return LOG;
+}
+
+// A walkable tile with a foot-blocked, L-bit mountain directly above it.
+let belowMountain = null;
+for (let y = 1; y < SIZE && !belowMountain; y++) {
+  for (let x = 0; x < SIZE; x++) {
+    const here = world.tilemap[y * SIZE + x] & 0x7F;
+    const up = world.tilemap[(y - 1) * SIZE + x] & 0x7F;
+    const pHere = world.tileProps[here], pUp = world.tileProps[up];
+    if (!pHere || !pUp) continue;
+    if (pHere.byte1 & 0x01) continue;                       // player must be able to stand here
+    if (!(pUp.byte1 & 0x10) || (pUp.byte1 & 0x20)) continue; // L-only tile above
+    if (!(pUp.byte1 & 0x01)) continue;                       // and it must be foot-blocked
+    belowMountain = { x, y };
+    break;
+  }
+}
+if (!belowMountain) {
+  bad('found no walkable tile below a foot-blocked L-bit mountain to test');
+} else {
+  const drawn = drawAtRealOrigin(belowMountain.x, belowMountain.y)
+    .filter(e => e.op === 'drawImage');
+  if (drawn.length === 0) {
+    ok(`standing below a mountain at (${belowMountain.x},${belowMountain.y}) draws nothing over the player`);
+  } else {
+    bad(`a mountain above (${belowMountain.x},${belowMountain.y}) drew ${drawn.length} tile(s) over the ` +
+        `player's head — the L bit must only apply to the tile being stood on`);
+  }
+}
+
 if (failed) { console.error(`\ncheck-tree-occlusion: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-tree-occlusion: OK');

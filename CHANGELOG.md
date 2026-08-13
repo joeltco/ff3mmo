@@ -18,6 +18,22 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.967 — 2026-08-12
+
+### Fixed — mountains cut the top off the player sprite
+- Standing anywhere below an overworld mountain, the mountain redrew its bottom edge across the player's head. Measured: **32-48 of the sprite's 128 top-half pixels** were covered at every spot tested. Now **0**, with the tree canopy over the lower half untouched.
+- **Cause.** `render.js` draws the map at `SCREEN_CENTER_Y + 3` while placing the sprite at `SCREEN_CENTER_Y`. With that 3px offset the overlay's tile walk reaches the row ABOVE the player even when perfectly tile-aligned, and the overworld mountains (`$05-$07`, `$15-$17`, `$26`) carry the L bit — "redraw over the sprite's top 8px".
+- **Fix.** The L bit now applies only to the tile the player is standing on. That is the only case where covering the head is right — walking under a castle arch, which also carries L. Mountains are foot-blocked (`byte1 & 0x01`), so the player can never be behind one; applying L from a neighbour was always wrong. The U bit is unchanged and unrestricted — that is the tree canopy.
+
+### The gate had the same blind spot as the bug
+- Every existing check in `check-tree-occlusion.mjs` called `drawOverlay` with `originY = 0`, so the 3px offset — the whole cause — never existed in the test. It passed on the broken build.
+- New check mirrors render.js's real origins, finds a walkable tile below a foot-blocked L-bit mountain, and asserts nothing is drawn over the player. **Proven by reverting only the renderer:** it fails with "a mountain above (35,23) drew 1 tile(s) over the player's head", and passes with the fix.
+
+### Added — `tools/world-shot.mjs`
+- Screenshots the OVERWORLD as the player sees it (the 144×144 window), paints a flat magenta stand-in sprite, then runs the priority pass. Any terrain pixel inside that block is terrain drawn *over* the player, so "is the head cut off" is a pixel count split by half, not an opinion.
+- `--off dx,dy` shifts the camera by sub-tile pixels for mid-step frames; `--report` prints the counts without writing a file.
+- It mirrors render.js's map-vs-sprite origins exactly. My first version did not, reported zero occlusion for all five test spots, and would have had me close this as not-reproducible.
+
 ## 1.7.966 — 2026-08-12
 
 ### Fixed — MAPS tab died on open: "md.fillTile is undefined"

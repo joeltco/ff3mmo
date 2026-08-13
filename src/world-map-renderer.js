@@ -295,6 +295,11 @@ export class WorldMapRenderer {
     const y0 = Math.floor((worldTop + spriteY) / TILE_SIZE);
     const y1 = Math.floor((worldTop + spriteY + TILE_SIZE - 1) / TILE_SIZE);
 
+    // The tile the player is actually standing on, measured from the sprite's
+    // centre so a mid-step position resolves to the tile it mostly covers.
+    const onX = ((Math.floor((worldLeft + spriteX + 8) / TILE_SIZE) % size) + size) % size;
+    const onY = ((Math.floor((worldTop + spriteY + 8) / TILE_SIZE) % size) + size) % size;
+
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const wx = ((tx % size) + size) % size;
@@ -302,6 +307,16 @@ export class WorldMapRenderer {
         const m = tilemap[wy * size + wx] & 0x7F;
         const pr = tileProps[m];
         if (!pr || !(pr.byte1 & 0x30)) continue;
+        // The L bit covers the sprite's HEAD, which is only ever right when the
+        // player is standing on the tile — walking under a castle arch. The
+        // overworld mountains ($05-$07, $15-$17, $26) also carry L and are
+        // foot-blocked (byte1 & 0x01), so you can never be behind one: applying
+        // it to a neighbour meant a mountain redrew over the player's head
+        // whenever they walked past underneath it. Reported as "top of the
+        // player sprite is getting cut off when walking below overworld
+        // mountains". The U bit is unrestricted — that is the tree canopy the
+        // player walks behind.
+        if (!(pr.byte1 & 0x20) && (wx !== onX || wy !== onY)) continue;
         const sx = prio.slot.get(m);
         if (sx === undefined) continue;
         // U clips to the sprite's lower half, L to its upper half.
