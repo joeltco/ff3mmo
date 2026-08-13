@@ -18,6 +18,26 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.976 — 2026-08-13
+
+### Fixed — the double NPCs. Ur: 27 NPCs → 19.
+**A map only holds a handful of NPC walk bundles in sprite memory. Place more people than bundles and the same face appears twice.** I placed the ROM's full roster on every map without ever checking how many distinct sprites the map could actually show.
+
+- **Ur town loads exactly 5 bundles** (`nes-run.mjs --warp 114 --bundlecheck`, which counts a bundle's tiles in PPU directly instead of via a first-match index that mis-credits shared tiles). Ten people over five bundles = every face twice. Now **five people, one per bundle**.
+- **The inn loads exactly 2**, and both are the keepers — so the three guests I added in v1.7.970 were each a copy of a keeper. Dropped. The ROM lists them; we cannot draw them as distinct people, so shipping them as twins was the wrong call.
+- Tavern (5 bundles / 5 people), elder's upper floor (3/3), elder ground (1/1), house (1/1) and the shops were already one-to-one.
+
+### Fixed — the NPC crowding the elder's house doorway
+- `(8,27)` sits diagonally off the elder's door at `(9,26)`, and its wander leash let it step onto `(9,27)` — the tile you exit onto. **Dropped.**
+- Checked properly rather than guessed: flood-filling Ur with a static NPC on each ROM coordinate shows none of them actually disconnects the map (315 tiles reachable, 314 with any single tile blocked). So it was a *crowded doorway*, not a severed path — the fix is not standing there, and the five kept are spread over rows 10-28.
+
+### Gate — two new invariants in `check-npc-placement.mjs`
+- **No two NPCs on a map may share a sprite bundle.** This is what caught the inn: it flagged `ur_inn_guest_a` and `inn_keeper` on `0x1E010` the moment it was written.
+- Combined with the existing "bundle must be one the map loads" check, both halves of the sprite problem are now machine-checked instead of eyeballed.
+
+### Added — `nes-run.mjs --bundlecheck lo,hi`
+- Reports, for every candidate bundle in a ROM range, how many of its 16 tiles are in PPU right now. `--chrmap` builds a tile→offset index and credits shared tiles to whichever bundle sits earliest in the ROM, so genuinely-loaded bundles can read as 1/16. This does not, and it is what confirmed Ur's five.
+
 ## 1.7.975 — 2026-08-13
 
 ### Fixed — the town crowd bunched at the entrance

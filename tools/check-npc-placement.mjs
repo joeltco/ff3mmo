@@ -106,6 +106,26 @@ const LOADED_BUNDLES = new Map([
   }
   if (bundleBad) failed += bundleBad;
   else console.log(`  ✓ every NPC uses a bundle its map actually loads`);
+
+  // No two NPCs on a map may share a sprite bundle. A map only ever holds a
+  // handful of walk bundles, so placing more people than bundles means the same
+  // face appears twice on screen — reported as "SEEING DOUBLE NPCS". Place at
+  // most one person per bundle.
+  let twins = 0;
+  for (const [mapId, list] of TOWN_NPCS) {
+    const seen = new Map();
+    for (const e of list) {
+      const off = e.spec && e.spec.romOffset;
+      if (off == null) continue;
+      if (seen.has(off)) {
+        console.error(`  ✗ map ${mapId}: ${e.key} and ${seen.get(off)} both use bundle ` +
+          `0x${off.toString(16).toUpperCase()} — they render as the same person`);
+        twins++;
+      } else seen.set(off, e.key);
+    }
+  }
+  if (twins) failed += twins;
+  else console.log(`  ✓ no two NPCs on a map share a sprite bundle`);
 }
 
 if (failed) { console.error(`\ncheck-npc-placement: FAIL (${failed} of ${checked})`); process.exit(1); }

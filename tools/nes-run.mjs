@@ -299,6 +299,31 @@ if (has('watchtiles')) {
   process.exit(0);
 }
 
+// `--bundlecheck lo,hi` asks, for EVERY candidate bundle in a ROM range, how
+// many of its 16 tiles are present in PPU right now. Unlike --chrmap this does
+// not build a tile->offset index: identical tiles are shared between bundles,
+// and a first-match index credits them all to whichever bundle appears earliest
+// in the ROM, so bundles that genuinely ARE loaded read as 1/16. That flaw made
+// Ur look like it loads five sprites when it loads more.
+if (has('bundlecheck')) {
+  const [loB, hiB] = (flag('bundlecheck', '1DF00,1E800')).split(',').map(h => parseInt(h, 16));
+  const romBytes = fs.readFileSync(ROM);
+  const vram = nes.ppu.vramMem;
+  const present = new Set();
+  for (let slot = 0; slot < 512; slot++) {
+    present.add(Buffer.from(vram.subarray(slot * 16, slot * 16 + 16)).toString('latin1'));
+  }
+  for (let b = loB; b <= hiB; b += 0x100) {
+    let n = 0;
+    for (let t = 0; t < 16; t++) {
+      const key = romBytes.subarray(b + 0x10 + t * 16, b + 0x10 + t * 16 + 16).toString('latin1');
+      if (present.has(key)) n++;
+    }
+    if (n) console.log(`  bundle 0x${(b + 0x10).toString(16).toUpperCase()}: ${n}/16 tiles in PPU${n === 16 ? '   FULLY LOADED' : ''}`);
+  }
+  process.exit(0);
+}
+
 // `--chrmap` traces the CURRENT contents of PPU sprite memory back to the ROM.
 // FF3 is CHR-RAM, so every on-screen tile was copied from somewhere in PRG;
 // finding each tile's source offset shows which ROM regions actually feed

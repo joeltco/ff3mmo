@@ -187,7 +187,7 @@ export const UR_NPC_09 = urNpc(4, {
     'It took my brother.',
   ],
 });
-export const UR_NPC_0A = urNpc(5, {
+export const UR_NPC_0A = urNpc(3, {
   dialogue: [
     'I keep the north field.',
     'Nothing grows in the dark.',
@@ -313,10 +313,11 @@ export const TOWN_NPCS = new Map([
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },
     { key: 'inn_keeper',      x: 3, y: 14, spec: INN_KEEPER },
-    // ROM roster (tools/npc-dump.mjs 8): three guests we never placed.
-    { key: 'ur_inn_guest_a',  x: 4, y:  3, spec: UR_INN_GUEST_15 },
-    { key: 'ur_inn_guest_b',  x: 7, y:  2, spec: UR_INN_GUEST_16A },
-    { key: 'ur_inn_guest_c',  x: 9, y:  2, spec: UR_INN_GUEST_16B },
+    // The ROM lists three more people here, but map 8 only ever holds TWO NPC
+    // walk bundles in sprite memory and both are taken by the keepers — so any
+    // guest would render as a copy of one of them. Left out rather than shipped
+    // as twins. If FF3's gfx-id -> bundle mapping is ever decoded, or the inn is
+    // seen loading more bundles, they can come back.
   ]],
   [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
   // Ur tavern — ROM roster (tools/npc-dump.mjs 9), bar room top-right.
@@ -339,20 +340,23 @@ export const TOWN_NPCS = new Map([
   // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
   // behind the ur_armor counter at (3,5).
   [4, [{ key: 'armor_keeper',    x: 3, y:  4, spec: WEAPON_KEEPER }]],
-  // Ur town — all TEN of the ROM's NPCs, at the ROM's own coordinates.
-  // Wanderers still have their spawn randomised per map entry (v1.7.769), so
-  // these coords are the fallback when the grass pool runs dry; the ROM entry
-  // they came from is in the comment.
+  // Ur town — FIVE of the ROM's ten, one per sprite bundle.
+  //
+  // Ur only ever has five NPC walk bundles in sprite memory (verified with
+  // `nes-run.mjs --warp 114 --bundlecheck`), so placing all ten meant every
+  // face appeared twice — the "double NPCs". One person per bundle removes the
+  // twins and thins the crowd.
+  //
+  // The five kept are spread across the whole map (rows 10-28) and, apart from
+  // the quest giver, none is adjacent to the elder's house door at (9,26).
+  // DROPPED on purpose: (8,27) sat beside that door and its wander leash let it
+  // step onto (9,27), the tile you exit onto — that is the one that felt like it
+  // was blocking the path. Also dropped: (17,28), (28,28), (15,22), (21,17).
   [114, [
-    { key: 'ur_npc_05', x: 10, y: 28, spec: UR_NPC_05 },
-    { key: 'ur_npc_06', x: 17, y: 28, spec: UR_NPC_06 },
-    { key: 'ur_npc_08', x: 28, y: 28, spec: UR_NPC_08 },
-    { key: 'ur_npc_09', x: 21, y: 15, spec: UR_NPC_09 },
-    { key: 'ur_npc_0a', x: 29, y: 10, spec: UR_NPC_0A },
-    { key: 'ur_npc_0c', x: 16, y: 25, spec: UR_NPC_0C },
-    { key: 'ur_npc_0d', x:  9, y: 21, spec: UR_NPC_0D },
-    { key: 'ur_npc_0e', x: 15, y: 22, spec: UR_NPC_0E },
-    { key: 'ur_npc_0f', x: 21, y: 17, spec: UR_NPC_0F },
-    { key: 'ur_npc_07', x:  8, y: 27, spec: UR_NPC_07 },
+    { key: 'ur_npc_05', x: 10, y: 28, spec: UR_NPC_05 },   // quest giver, static
+    { key: 'ur_npc_0a', x: 29, y: 10, spec: UR_NPC_0A },   // far north
+    { key: 'ur_npc_09', x: 21, y: 15, spec: UR_NPC_09 },   // north centre
+    { key: 'ur_npc_0d', x:  9, y: 21, spec: UR_NPC_0D },   // west
+    { key: 'ur_npc_0c', x: 16, y: 25, spec: UR_NPC_0C },   // south centre
   ]],
 ]);
