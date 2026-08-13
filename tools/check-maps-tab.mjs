@@ -35,7 +35,29 @@ function el(tag) {
 
 globalThis.document = { createElement: el };
 
+// `ctx.getFF3Buffer()` returns the raw **ArrayBuffer** from the file/zip loader,
+// NOT a Uint8Array — `main.js#loadROM` is what wraps it. Handing this shim a
+// Uint8Array made the gate more forgiving than the browser: the tab shipped
+// indexing an ArrayBuffer, every byte read came back undefined, and the panel
+// died with "md.fillTile is undefined" while this check passed. Feed it exactly
+// what the game feeds it.
+const romArrayBuffer = rom.buffer.slice(rom.byteOffset, rom.byteOffset + rom.byteLength);
+
+// The tab applies patches/ff3-awj.ips the way boot does. Serve it from disk if
+// present so the patched path is the one under test; a miss must degrade to the
+// raw ROM, not throw.
+globalThis.fetch = async (url) => {
+  const path = new URL('../' + String(url).replace(/^\.?\//, ''), import.meta.url).pathname;
+  if (!fs.existsSync(path)) return { ok: false, arrayBuffer: async () => new ArrayBuffer(0) };
+  const buf = fs.readFileSync(path);
+  return { ok: true, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+};
+
 const { mount, unmount } = await import('../src/debug/tabs/maps.js');
+
+// mount() now loads the ROM asynchronously (the IPS fetch), so the controls
+// cannot be driven until that settles.
+const settle = () => new Promise((r) => setImmediate(() => setImmediate(r)));
 
 const root = el('div');
 let failures = 0;
@@ -48,8 +70,11 @@ const step = (what, fn) => {
 
 // Mount with no ROM first — must degrade, not throw.
 step('mount without a ROM', () => mount(el('div'), { getFF3Buffer: () => null }));
+await settle();
 
-step('mount with the ROM', () => mount(root, { getFF3Buffer: () => rom }));
+step('mount with the ROM', () => mount(root, { getFF3Buffer: () => romArrayBuffer }));
+await settle();
+await settle();
 
 // Walk the control surface. Buttons live on the bar, which is the first child.
 const find = (node, pred, out = []) => {

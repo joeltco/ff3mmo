@@ -22,6 +22,7 @@
 
 import { loadMap } from '../../map-loader.js';
 import { MapRenderer } from '../../map-renderer.js';
+import { applyIPS } from '../../ips-patcher.js';
 
 const MAP_SIZE = 32;
 const TILE = 16;
@@ -32,6 +33,7 @@ const SCREEN_CENTER_X = (HUD_VIEW_W - 16) / 2;
 const SCREEN_CENTER_Y = (HUD_VIEW_H - 16) / 2 - 3;
 
 let dom = null;
+let activeMount = null;
 let state = {
   id: 12, view: 'full', seed: 'spawn', cam: null,
   showClip: true, showGrid: false, showDoors: true,
@@ -207,6 +209,27 @@ function draw(rom) {
   }
 }
 
+// `ctx.getFF3Buffer()` hands back the raw **ArrayBuffer** the file/zip loader
+// produced — `main.js#loadROM` is what wraps it in a Uint8Array. Passing the
+// ArrayBuffer straight to `loadMap` indexes it like a byte array, every read
+// comes back undefined, and the map parses into nothing ("md.fillTile is
+// undefined"). It also arrives UNPATCHED: the game applies patches/ff3-awj.ips
+// during boot, so reading maps without it shows different bytes than the ones
+// the player is walking around in.
+async function romBytesFor(ctx) {
+  const raw = ctx?.getFF3Buffer?.();
+  if (!raw) return null;
+  const bytes = new Uint8Array(raw instanceof Uint8Array ? raw : new Uint8Array(raw));
+  try {
+    const resp = await fetch('patches/ff3-awj.ips');
+    // IPS is overwrite-only, so re-applying to an already-patched buffer is a no-op.
+    if (resp && resp.ok) applyIPS(bytes, new Uint8Array(await resp.arrayBuffer()));
+  } catch (e) {
+    console.warn('[maps] IPS fetch failed, showing the raw ROM', e);
+  }
+  return bytes;
+}
+
 export function mount(root, ctx) {
   const rom = ctx?.getFF3Buffer?.();
   if (!rom) {
@@ -255,6 +278,9 @@ export function mount(root, ctx) {
   root.appendChild(wrap);
 
   let zoom = 2;
+  let romBytes = null;
+  const mountToken = {};
+  activeMount = mountToken;
   dom = { canvas, ctx: canvas.getContext('2d'), info, seedSel };
 
   const applyZoom = () => {
@@ -269,7 +295,7 @@ export function mount(root, ctx) {
     clipBtn.style.cssText = state.showClip ? S.btnOn : S.btn;
     gridBtn.style.cssText = state.showGrid ? S.btnOn : S.btn;
     doorBtn.style.cssText = state.showDoors ? S.btnOn : S.btn;
-    draw(rom);
+    if (romBytes) draw(romBytes);
     applyZoom();
   };
   const setId = (v) => {
@@ -300,10 +326,22 @@ export function mount(root, ctx) {
     refresh();
   };
 
-  refresh();
+  info.textContent = 'loading ROM…';
+  applyZoom();
+  romBytesFor(ctx).then((bytes) => {
+    // The tab can be swapped away while the IPS fetch is in flight; drawing
+    // then would write into a detached canvas and clobber the next tab's state.
+    if (activeMount !== mountToken) return;
+    romBytes = bytes;
+    refresh();
+  }).catch((e) => {
+    if (activeMount !== mountToken) return;
+    info.textContent = 'failed to read the ROM: ' + e.message;
+  });
 }
 
 export function unmount() {
+  activeMount = null;
   dom = null;
   cache = { id: -1, seedKey: '', md: null, renderer: null };
 }
