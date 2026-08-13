@@ -1,4 +1,4 @@
-# SFX / music audit — v1.7.997-998
+# SFX / music audit — v1.7.997-999
 
 Joel: *"lots of sfx are wrong. meteo sfx, the ff2 learn sfx, and im sure many
 others. kazus and the castle arent playing the right music... pull them all and
@@ -22,6 +22,9 @@ before believing the audit is finished.
 | `tools/monscan/meteo-probe.cjs` | Casts one spell and SCREENSHOTS every menu step, so a refused pick is visible instead of silently mis-recorded. |
 | `tools/monscan/refusal-trace.cjs` | Ring-buffers executed PCs and dumps the path into the refusal buzz. |
 | `tools/check-spell-sfx-drift.mjs` | Deploy gate: a level-8 spell must not wear the level-7 spell's sound. |
+| `tools/sound-catalog.mjs` | Renders EVERY track in all three ROMs, measures it, fingerprints the PCM, and labels what ff3mmo uses it for. |
+| `tools/ff2-name-escape.mjs` | Brute-forces every input combination out of FF2's name grid. |
+| `tools/ff2-name-trace.mjs` | RAM-diff + PC-trace of FF2's name-entry scene. |
 
 ## 1. Map music — FIXED
 
@@ -150,13 +153,58 @@ Every SFX constant (26) and music track (9) renders audible PCM. Nothing is
 silent, nothing is a click. This is the check that did not exist before, and the
 one that would have caught the FF2 blips shipping silent.
 
+## 5. Every sound in every ROM — catalogued
+
+`tools/sound-catalog.mjs` renders **every track in FF1, FF2 and FF3** through the
+real libgme and measures it: peak, RMS, audible duration, loops-or-ends, and a
+**PCM fingerprint**. Output: `docs/SOUND-CATALOG.md` (human) and
+`tools/monscan/sound-catalog.json` (machine).
+
+| ROM | tracks | distinct | duplicates | silent | used by ff3mmo |
+|---|---|---|---|---|---|
+| Final Fantasy III | 192 | 162 | 1 | 29 | 65 |
+| Final Fantasy I | 23 | 22 | 1 | 0 | 2 |
+| Final Fantasy II | 42 | 35 | 5 | 2 | 5 |
+| **total** | **257** | **219** | | | |
+
+The fingerprint is what makes this a catalogue rather than a track list. Peak and
+duration cannot tell a real track from a pointer hole — FF2's `$FFFF` entries
+render *something*, with identical peak and length, because they all fall through
+to one fallback. Only comparing samples shows they are one sound wearing four
+numbers.
+
+**Three previously unreachable FF2 songs recovered.** The song pointer table at
+`$9E0D` was read straight from the ROM: ids 0–30 real, ids **31/32/33/36/39 are
+`$FFFF` holes**, and ids **34/35/37/38 are real songs** our builder never
+exposed (`TOTAL_SONGS` was 31). Raising it to 39 exposes them — 34 renders
+silent, and **35, 37 and 38 are three genuinely new pieces of music**. FF2's 35
+distinct sounds now match the 35 real pointers counted in the table, from two
+independent directions.
+
+Moving the song count shifted the appended blips from tracks 31–33 to 39–41.
+Everything reads `ff2SfxTrack()` rather than a literal, so they followed — but
+`check-ff2-sfx` had a hardcoded `31` and failed on correct code. It now checks
+the thing that actually matters (the header must cover the highest sfx track, or
+libgme refuses it and the blip is silent), proven by undercounting the header.
+
 ## Unresolved — read this part
 
 - ~~Meteo~~ — **FIXED**, see section 2. It was playing Drain's sound. The
   lesson worth keeping: "48 of 48 reproduce" proved only that the harness was
   deterministic, not that it was correct. A reproduction that repeats the
   original's mistake is not evidence.
-- **FF2 learn SFX — NOT FIXED.** The word menu plays FF2's `confirm` blip for
+- **FF2 learn SFX — NOT FIXED, and now bounded.** Reaching FF2 gameplay is
+  blocked at the kana name grid, and that is no longer a guess:
+  `tools/ff2-name-escape.mjs` brute-forced **all 36 single and two-button
+  combinations** with the name filled — **zero escape the grid**. A disassembly
+  of the live mapped bank shows the scene tests only the direction bits and A/B;
+  there is no `AND #$10` (START) anywhere in it. `B` advances between party
+  members (the memory said no button confirmed — B had never been tried), all
+  four names fill, then it cycles back to the first. The exit is not reachable
+  by input, so the next move is a ROM patch or a RAM poke into the post-intro
+  scene, not more button-pressing. Savestates parked at `ff2-name.state` /
+  `ff2-play.state`; `tools/ff2-name-trace.mjs` does RAM-diff and PC-trace.
+- **FF2 learn SFX — original question.** The word menu plays FF2's `confirm` blip for
   every choice including LEARN, so learning a word sounds identical to moving
   through a menu. Whether FF2 plays something distinct there is unverified:
   reaching FF2 gameplay headlessly is still blocked. **Progress: `B` advances

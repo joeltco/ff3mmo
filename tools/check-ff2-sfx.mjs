@@ -150,9 +150,19 @@ for (const s of FF2_SFX) {
 }
 
 // ── 3. the header must actually advertise the extra tracks ────────────────
+//
+// The song count is no longer a literal here. It was 31, which broke when the
+// builder was raised to 39 to expose the four songs the ROM's pointer table has
+// past id 30 — a stale expectation failing correct code.
+//
+// The check that MATTERS is behavioural anyway: the header must cover the
+// highest sfx track, and libgme must actually accept it. A header that
+// undercounts makes libgme refuse the track, which is silence in the game.
 const advertised = nsf[0x06];
-if (advertised !== 31 + FF2_SFX.length) {
-  err(`NSF header advertises ${advertised} tracks; 31 songs + ${FF2_SFX.length} sfx = ${31 + FF2_SFX.length}. libgme refuses a track past the count.`);
+const highestSfx = Math.max(...FF2_SFX.map((s) => ff2SfxTrack(s.name)));
+if (advertised <= highestSfx) {
+  err(`NSF header advertises ${advertised} tracks but the highest sfx is track ${highestSfx}. ` +
+      `libgme refuses a track past the count, so that blip is silent.`);
 }
 
 if (fail.length) {

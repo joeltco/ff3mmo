@@ -13,7 +13,21 @@
 const PAGE_SIZE = 0x1000;  // 4KB NSF page
 const HEADER_SIZE = 128;
 const TOTAL_PAGES = 5;     // 4 pages for bank $0D + 1 page for stubs
-const TOTAL_SONGS = 31;    // FF2 song pointer table has 31 entries
+// FF2's song pointer table lives at $9E0D in bank $0D. MEASURED from the ROM
+// (v1.7.999): the first 39 entries are the table, and 35 of them are real
+// pointers into $8000-$BFFF. The $FFFF holes are ids 31, 32, 33, 36 and 39;
+// ids 34, 35, 37 and 38 are REAL SONGS. Entry 40 onward is not pointer data.
+//
+// This was 31 for a long time, which silently dropped those four songs — they
+// are in the player's ROM and the game could never reach them. Raising it to 39
+// exposes them; the four holes render as silence (harmless, and the sound
+// catalogue labels them SILENT so nobody mistakes one for a usable track).
+//
+// Changing this MOVES the appended sfx tracks, since `ff2SfxTrack` is
+// TOTAL_SONGS + index. Everything reads that function rather than a literal, so
+// the blips follow automatically — and check-ff2-sfx / check-ff2-sfx-audio
+// re-derive the track number the same way.
+const TOTAL_SONGS = 39;
 const BANK_0D_OFF = 0x0D * 0x4000 + 0x10;  // ROM offset for bank $0D (+ iNES header)
 
 // ── FF2's short sound effects ─────────────────────────────────────────────
