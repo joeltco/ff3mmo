@@ -15,6 +15,7 @@ import { NPCS } from './data/npcs.js';
 import { romRaw } from './boot.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBoxPages, dismissMsgBox } from './message-box.js';
+import { sendNetInvEvent } from './net.js';
 import { openWordMenu } from './word-menu.js';
 import { talkQuest } from './quests.js';
 import { _nameToBytes } from './text-utils.js';
@@ -628,7 +629,17 @@ function _walkPhase(npc) {
 // other gain rather than through a second, unvalidated path.
 function _grantQuestReward(reward) {
   if (!reward) return;
-  if (reward.gil) grantGil(reward.gil);
+  if (reward.gil) {
+    grantGil(reward.gil);
+    // Gil is WIRE-MANAGED: the mirror in inv_economies is authoritative and the
+    // next inv-state push overwrites ps.gil. Without this the quest paid out on
+    // screen and the reward vanished at the next sync. Same channel battle loot
+    // and chests use. v1.7.994.
+    sendNetInvEvent('gil-delta', 0, reward.gil, 'quest');
+  }
+  // exp needs no event — main.js ignores exp from inv-state ("NOT wire-managed;
+  // the mirror only snapshots it at /api/save time"), so the local value is
+  // canonical until the save round-trip carries it.
   if (reward.exp) grantExp(reward.exp);
 }
 

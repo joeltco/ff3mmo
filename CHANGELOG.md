@@ -18,6 +18,44 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.994 — 2026-08-13
+
+### Quest gil never reached the server
+
+Swept the bag and gil paths the same way as the equip ones
+(`tools/check-inv-emit.mjs`). Out of 44 mutation sites, exactly one had no
+channel to the server: `_grantQuestReward` in `npc.js` — my own code from the
+v1.7.980 quest slice.
+
+Gil is WIRE-MANAGED: `inv_economies` is authoritative and the next `inv-state`
+push overwrites `ps.gil`. So finishing the Ur quest paid out 300 gil on screen
+and the reward evaporated at the next sync. Now emits `gil-delta` on the same
+channel battle loot and chests use.
+
+**Exp is fine and deliberately left alone.** `main.js` ignores exp arriving from
+`inv-state` — "not wire-managed; the mirror only snapshots it at /api/save
+time" — so the local value is canonical until the save round-trip. There is no
+exp wire event to add, and inventing one would be a protocol change nobody asked
+for.
+
+### The gate had to understand "silent on purpose"
+
+Unlike equipment, several inventory paths correctly send nothing, because the
+server is the sole writer and a client emit would double-count:
+
+    SERVER_ECONOMY   shop buy/sell, chest opens, vase searches
+    PVE_ARBITER      battle rewards, applied from the pve-battle-end claim
+
+A naive "must call sendNetInvEvent" rule would have flagged all of them and
+invited exactly the double-counting those flags exist to prevent. A mutation
+passes if it has an inv-event, a dedicated wire call
+(`sendNetShopTransaction` / `sendNetGiveItem` / trade), or a visible
+server-authoritative gate in scope. Allow-listed by file: the load path, the
+`inv-state` applier, the serialiser, the mutators themselves (their call sites
+are what gets checked), and the dev-only chat commands.
+
+Fails on revert. pvp-wire-sim 153/153.
+
 ## 1.7.993 — 2026-08-13
 
 ### Found it: two equip paths never told the server
