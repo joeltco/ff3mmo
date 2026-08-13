@@ -264,6 +264,6 @@ if (ur) {
 }
 
 if (args.includes('--json')) {
-  fs.writeFileSync('music-probe.json', JSON.stringify(results, null, 2));
+  fs.writeFileSync(new URL('./monscan/music-probe.json', import.meta.url).pathname, JSON.stringify(results, null, 2));
   console.log('wrote music-probe.json');
 }
