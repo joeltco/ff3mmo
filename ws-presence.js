@@ -1070,10 +1070,17 @@ function _handleMessage(entry, msg) {
               if (fields[k] === mirror[k]) continue;
               // Throttled: a client that disagrees with the mirror re-sends
               // the same claim on every update frame, forever.
+              //
+              // The build is on the line because diagnosing this by
+              // hand-correlating it against a separate [stale-client] line
+              // further up the log is how the last two of these went, and both
+              // times the answer was "that client is running an older build".
+              // Sanitised at the hello (String(...).slice(0, 16)).
               _warnThrottled(
                 entry.userId + ':divergence:' + (entry.slot | 0) + ':' + k,
                 fields[k] + '/' + mirror[k],
                 () => '[update divergence] user=' + entry.userId + ' slot=' + (entry.slot | 0) +
+                  ' build=' + (entry.build || '?') +
                   ' ' + k + ' claimed=' + fields[k] + ' mirror=' + mirror[k]);
               fields[k] = mirror[k];
               entry.profile[k] = mirror[k];
