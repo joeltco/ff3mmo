@@ -671,7 +671,15 @@ export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
 
     // Quest bubble, floating one tile above the NPC's head. State (and so the
     // mark's colour) is derived from ps.quests every frame — see quests.js.
-    const mark = npc.key ? questMarkerState(mapSt.currentMapId, npc.key) : null;
+    //
+    // Hidden while a message box is up. The box slides down from the top of the
+    // view and the bubble sits a tile ABOVE an NPC's head, so the two fight for
+    // the same strip of screen; and once you are already talking to someone the
+    // marker has nothing left to tell you. Covers every NPC on the map, not just
+    // the one being spoken to — a second bubble poking out beside an open box
+    // reads as a glitch.
+    const boxOpen = msgState.state !== 'none';
+    const mark = (!boxOpen && npc.key) ? questMarkerState(mapSt.currentMapId, npc.key) : null;
     if (mark) {
       const frames = getMarkerFrames(mark);
       if (frames) {
