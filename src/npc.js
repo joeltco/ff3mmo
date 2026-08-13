@@ -634,13 +634,16 @@ function _grantQuestReward(reward) {
 // Frame dwell for the two-frame quest bubble.
 const QUEST_MARKER_MS = 350;
 
-// The bubble is NOT drawn centred. Its tail hangs off the bottom-LEFT — the
-// tip sits at sprite-local x 3-4, y 15 — so the balloon body is meant to float
-// up and to the RIGHT of whoever is speaking, with the trail pointing back down
-// at their head. Blitting it at the NPC's own x centres the balloon instead and
-// leaves the tail pointing at nothing. Shifting right by 5 puts the tail tip
-// over the NPC's centre column (local 3.5 -> sprite centre 8).
-const QUEST_MARKER_DX = 5;
+// The bubble is NOT drawn centred. Its tail hangs off the bottom-LEFT and that
+// trail is LONG — the tip sits at sprite-local x 3-4, y 15, so roughly a third
+// of the sprite's width is trail before the balloon proper begins. Blitting at
+// the NPC's own x centres the whole 16px cell and leaves the balloon sitting
+// left, over the speaker rather than beside them.
+//
+// 10 puts the balloon body clearly up-and-right of the head with the trail
+// still running back down to it. 5 (v1.7.972) was measured off the tail tip
+// alone and did not account for how much of the sprite the trail eats.
+const QUEST_MARKER_DX = 10;
 
 export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
   if (_npcs.length === 0) return;
