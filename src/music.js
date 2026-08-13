@@ -5,7 +5,7 @@
 
 import { buildNSF } from './nsf-builder.js';
 import { buildFF1NSF } from './ff1-nsf-builder.js';
-import { buildFF2NSF } from './ff2-nsf-builder.js';
+import { buildFF2NSF, ff2SfxTrack } from './ff2-nsf-builder.js';
 import { getSetting, volGain } from './settings.js';
 
 // Track indices — ROM song IDs (map properties byte 10)
@@ -66,6 +66,12 @@ export const FF2_TRACKS = {
   MENTION_CHIME: 8,  // short jingle played when someone @-mentions you in chat
 };
 
+// FF2's own menu blips, ripped from the ROM and appended to the FF2 NSF as
+// extra tracks (see ff2-nsf-builder.js FF2_SFX for the measurement).
+// MEASURED v1.7.981 on the kana name-entry grid: a direction press fires
+// CURSOR 4/4 and never CONFIRM; A or B fires CONFIRM and never CURSOR.
+export const FF2_SFX_NAMES = { CURSOR: 'cursor', CONFIRM: 'confirm' };
+
 let nsfData = null;    // Built NSF Uint8Array
 let audioCtx = null;   // Web Audio context
 let gainNode = null;   // Master gain — used for fade-out
@@ -116,6 +122,15 @@ let chimeNode = null;
 let chimeBuf = null;
 let chimeGainNode = null;
 let chimeStopTimer = null;
+// FF2 sound effects get their own emulator for the same reason the chime does:
+// a blip must never disturb the map music.
+let ff2SfxEmu = null;
+let ff2SfxEmuRef = null;
+let ff2SfxNode = null;
+let ff2SfxBuf = null;
+let ff2SfxGainNode = null;
+let ff2SfxStopTimer = null;
+const FF2_SFX_MS = 900;   // hard cap; the blips self-silence in 12-16 frames
 const CHIME_MS = 2200;  // hard cap — a looping NSF track won't run forever
 
 const BUF_SIZE = 4096; // samples per channel per callback (music, ~85ms at 48kHz)
@@ -580,6 +595,55 @@ export function playMentionChime() {
   chimeGainNode.gain.setValueAtTime(0.85, audioCtx.currentTime);
   chimeNode.connect(chimeGainNode);
   chimeStopTimer = setTimeout(_stopChime, CHIME_MS);
+}
+
+/**
+ * Play one of FF2's ripped menu blips. No-op until the FF2 ROM is loaded, so
+ * callers can fire it unconditionally the way they do playSFX.
+ */
+export function playFF2Sfx(name) {
+  if (!ff2NsfData) return;
+  if (typeof Module === 'undefined' || !Module.ccall) return;
+  const track = ff2SfxTrack(name);
+  if (track < 0) return;
+  if (!audioCtx) { audioCtx = new AudioContext(); }
+  if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+  if (sfxMuted) return;
+  _stopFF2Sfx();   // re-trigger cleanly on a held direction
+
+  if (!ff2SfxEmuRef) { ff2SfxEmuRef = Module.allocate(1, 'i32', Module.ALLOC_STATIC); }
+  if (Module.ccall('gme_open_data', 'number', ['array', 'number', 'number', 'number'],
+      [ff2NsfData, ff2NsfData.length, ff2SfxEmuRef, audioCtx.sampleRate]) !== 0) return;
+  ff2SfxEmu = Module.getValue(ff2SfxEmuRef, 'i32');
+  // NOT gme_ignore_silence: these tracks are mostly silence by design and the
+  // sound is over in a fifth of a second.
+  if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [ff2SfxEmu, track]) !== 0) {
+    _stopFF2Sfx(); return;
+  }
+
+  if (!ff2SfxBuf) { ff2SfxBuf = Module._malloc(SFX_BUF_SIZE * 2 * 2); }
+  ff2SfxNode = audioCtx.createScriptProcessor(SFX_BUF_SIZE, 0, 2);
+  ff2SfxNode.onaudioprocess = (e) => {
+    const ch0 = e.outputBuffer.getChannelData(0);
+    const ch1 = e.outputBuffer.getChannelData(1);
+    if (!ff2SfxEmu) { ch0.fill(0); ch1.fill(0); return; }
+    Module.ccall('gme_play', 'number', ['number', 'number', 'number'], [ff2SfxEmu, SFX_BUF_SIZE * 2, ff2SfxBuf]);
+    const base = ff2SfxBuf >> 1;
+    for (let i = 0; i < SFX_BUF_SIZE; i++) {
+      ch0[i] = Module.HEAP16[base + i * 2]     / 32768;
+      ch1[i] = Module.HEAP16[base + i * 2 + 1] / 32768;
+    }
+  };
+  if (!ff2SfxGainNode) { ff2SfxGainNode = audioCtx.createGain(); ff2SfxGainNode.connect(_sfxMaster()); }
+  ff2SfxGainNode.gain.setValueAtTime(0.9, audioCtx.currentTime);
+  ff2SfxNode.connect(ff2SfxGainNode);
+  ff2SfxStopTimer = setTimeout(_stopFF2Sfx, FF2_SFX_MS);
+}
+
+function _stopFF2Sfx() {
+  if (ff2SfxStopTimer) { clearTimeout(ff2SfxStopTimer); ff2SfxStopTimer = null; }
+  if (ff2SfxNode) { ff2SfxNode.disconnect(); ff2SfxNode = null; }
+  if (ff2SfxEmu) { Module.ccall('gme_delete', 'number', ['number'], [ff2SfxEmu]); ff2SfxEmu = null; }
 }
 
 function _stopChime() {

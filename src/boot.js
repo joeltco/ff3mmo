@@ -11,6 +11,8 @@ import { ui } from './ui-state.js';
 import { battleSt } from './battle-state.js';
 import { initFlameRawTiles, initStarTiles } from './flame-sprites.js';
 import { initQuestMarker } from './quests.js';
+import { registerMsgHighlights } from './message-box.js';
+import { KEYWORDS } from './data/keywords.js';
 import { setLandTurtleFrames, setLandTurtleFadeFrames, setLoadingMoogleFadeFrames, setCrystalFrames } from './npc.js';
 import { initCrystalSprite } from './crystal-sprite.js';
 import { initTitleWater, initTitleSky, initTitleUnderwater,
@@ -126,6 +128,10 @@ export function initSpriteAssets(rom) {
   initMusic(rom);
   initFlameRawTiles(rom);
   initQuestMarker(rom);
+  // FF2 colours Key Terms inside the dialogue itself — that highlight is the
+  // cue to LEARN. Registered from the vocabulary so a new term lights up
+  // everywhere it is spoken without touching a single line of dialogue.
+  registerMsgHighlights(Object.values(KEYWORDS).map(k => k.text));
   initStarTiles(rom);
 }
 

@@ -18,6 +18,63 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.981 — 2026-08-13
+
+### Key Terms are highlighted in the dialogue, and the menu uses FF2's OWN blips
+
+- **Inline highlight.** Key Terms now print in red inside the message box, the
+  way FF2 does it — the colour is the cue to LEARN. Each wrapped line is split
+  into runs wherever the term mask changes and drawn by chaining `drawText`'s
+  returned width, so the line never drifts. Plurals count (`caves` lights up);
+  substrings do not (`caveman` stays plain). Terms register at boot from
+  `data/keywords.js`, so a new term lights up everywhere it is spoken without
+  touching one line of dialogue.
+- **FF2's cursor and confirm blips, ripped from the ROM.** `word-menu.js` no
+  longer borrows FF3's menu sounds.
+
+### How the FF2 sounds were found (new tools)
+
+- **`tools/ff2-sound-map.mjs`** maps the driver in PRG bank $0D. FF2's entire
+  audio API is one zero-page byte: `$E0` with bit 6 = play table entry (id &
+  $3F), bit 7 = restore the stashed music. Short sound effects are NOT in that
+  table — they are three routines in the fixed bank that poke pulse 2 directly
+  and set a frame countdown in `$E5`, which the driver decrements and ends by
+  writing `$30` to `$4004`.
+- **`tools/ff2-sfx-rip.mjs`** runs the ROM headlessly and logs those writes with
+  a screenshot of the moment. On FF2's kana name-entry grid a DIRECTION press
+  fired `$DB45` four times out of four and never `$DB2E`; A and B fired `$DB2E`
+  and never `$DB45`. That contrast is the evidence.
+  - It hooks `cpu.write`, not `mmap.write` — jsnes short-circuits every store
+    below $2000 straight into `cpu.mem` and never calls the mapper, so the
+    obvious hook sees zero writes and reports "this game never asks for a
+    sound". A false negative that looks exactly like a measurement.
+- **Ripped, not recreated.** `ff2-nsf-builder.js` appends the blips to the FF2
+  NSF as extra tracks whose stubs write the ROM's own four APU values and run
+  the ROM's own countdown. `FF2_SFX` carries the bytes verbatim.
+
+### What was NOT found
+
+FF2 has **no per-character text sound**. Only two of its three blip routines are
+called by anything in the ROM (the third, at `$C921`, has no JSR or JMP anywhere
+— shipped as a track, wired to nothing), and its prologue draws ~7,700 frames of
+text without requesting a single sound. So the type-out tick stays OURS and is
+labelled as such. FF2's in-game message box could not be reached headlessly —
+its name entry needs input the harness could not produce — so that one screen is
+unverified rather than claimed.
+
+### Gates
+
+- **`tools/check-ff2-sfx.mjs`** EXECUTES the hand-assembled 6502 NSF stubs on a
+  minimal 6502 core and compares every APU write against the values read back
+  out of the FF2 ROM — not against our own table, which would agree with itself.
+  Catches the branch off-by-one the first draft actually had (`BCS +11` past a
+  10-byte path), a register typo, a duration typo, and a stale track count.
+- **`tools/check-msg-highlight.mjs`** RENDERS the box and reads pixels: term
+  lit, contiguous, in the right place; substring not lit; plural lit; runs
+  aligned against a same-length plain line; highlight never ahead of the
+  type-out reveal; and the mask sliced per line on a two-line page.
+- Both fail on every revert (5 and 5).
+
 ## 1.7.980 — 2026-08-13
 
 ### Word Memory — FF2's ASK / LEARN, and quests you have to earn the right to take

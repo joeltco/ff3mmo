@@ -8,12 +8,16 @@
 //
 // The row list is deliberately open-ended — ACCEPT / DENY / ITEM slot in as
 // more `act` values without touching the drawing or the input loop.
+//
+// The cursor and confirm blips are FF2's OWN, ripped from the ROM in v1.7.981
+// (src/ff2-nsf-builder.js FF2_SFX) rather than borrowed from FF3 — measured by
+// pressing directions and A on FF2's kana grid and watching which routine ran.
 
 import { ui } from './ui-state.js';
 import { drawBorderedBox, drawCursorFaded } from './hud-drawing.js';
 import { drawText, measureText, TEXT_WHITE, TEXT_RED, TEXT_GREY } from './font-renderer.js';
 import { _nameToBytes } from './text-utils.js';
-import { playSFX, SFX } from './music.js';
+import { playFF2Sfx, FF2_SFX_NAMES } from './music.js';
 import { keywordText } from './data/keywords.js';
 import { knownWords, learnableFrom, answerFor, learnWord } from './word-memory.js';
 import { showMsgBoxPages, dismissMsgBox, msgState } from './message-box.js';
@@ -127,7 +131,7 @@ function _moveCursor(delta) {
   const vis = Math.min(MAX_VISIBLE, n);
   if (wordMenuSt.index < wordMenuSt.scroll) wordMenuSt.scroll = wordMenuSt.index;
   else if (wordMenuSt.index >= wordMenuSt.scroll + vis) wordMenuSt.scroll = wordMenuSt.index - vis + 1;
-  playSFX(SFX.CURSOR);
+  playFF2Sfx(FF2_SFX_NAMES.CURSOR);
 }
 
 /**
@@ -158,7 +162,7 @@ export function handleWordMenuInput(keys) {
   }
   if (keys['x'] || keys['X'] || keys['Escape']) {
     keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
-    if (wordMenuSt.mode === 'ask') { playSFX(SFX.CURSOR); _backToVerbs(); }
+    if (wordMenuSt.mode === 'ask') { playFF2Sfx(FF2_SFX_NAMES.CURSOR); _backToVerbs(); }
     else closeWordMenu();
     return true;
   }
@@ -167,7 +171,7 @@ export function handleWordMenuInput(keys) {
 
 function _choose(row) {
   if (!row) { closeWordMenu(); return; }
-  playSFX(SFX.CONFIRM);
+  playFF2Sfx(FF2_SFX_NAMES.CONFIRM);
 
   if (row.act === 'learn') {
     const names = row.ids.filter(id => learnWord(id)).map(id => keywordText(id)).filter(Boolean);

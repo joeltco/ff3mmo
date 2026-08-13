@@ -4,11 +4,18 @@ import { drawText, measureText } from './font-renderer.js';
 import { isMobile } from './ui-state.js';
 import { playSFX, SFX } from './music.js';
 
-// Per-character tick. CURSOR is the shortest measured blip we have (see the
-// SFX table in music.js — every entry there was captured from the running ROM).
-// It is OUR pick from that table, NOT FF2's actual text sound: FF2's blip is an
-// FF2 NSF track and picking one needs ears, so audition with /ff2 <n> and this
-// constant can point at it instead.
+// Per-character tick — OURS, not FF2's.
+//
+// v1.7.981 mapped FF2's sound engine end to end (tools/ff2-sound-map.mjs):
+// every sound it can make is either a table entry requested through $E0 or one
+// of three short pulse-2 routines, and only TWO of those three are called by
+// anything in the ROM — the cursor blip and the confirm blip. There is no
+// per-character text sound in FF2 to copy. Its prologue draws ~7,700 frames of
+// text without requesting a single sound.
+//
+// So the tick stays our own: FF3's CURSOR, the shortest blip in the measured
+// table in music.js. FF2's own blips play on the menu (see word-menu.js), where
+// they are the real thing.
 const MSG_TYPE_SFX = SFX.CURSOR;
 
 // NES layout constants — must match game.js
@@ -26,6 +33,60 @@ const SCROLL_MS = 160;  // inter-page text scroll duration
 // glyph.
 const TYPE_MS_PER_CHAR = 28;
 const TYPE_BLIP_EVERY  = 3;
+
+// ── Key Term highlighting ─────────────────────────────────────────────────
+//
+// FF2 prints its Key Terms in a second colour inside the dialogue itself —
+// that highlight IS the prompt to LEARN. Terms are registered once at boot
+// (boot.js, from data/keywords.js) rather than imported here, so the box stays
+// a generic widget and any future highlight source can register too.
+//
+// Matching runs on a case-folded copy of the page where every byte maps to one
+// character, so a match index in that string is a byte index in the page. A
+// term only counts on word boundaries: "cave" must not light up inside
+// "caves"... it must, actually — plurals are still the term — so the boundary
+// test allows a trailing 's' and stops at punctuation.
+const TEXT_HIGHLIGHT = [0x0F, 0x06, 0x06, 0x16];   // TEXT_RED, matching the ASK list
+let _highlightWords = [];    // lowercase strings
+
+/** Register the words the box should colour. Replaces any previous set. */
+export function registerMsgHighlights(words) {
+  _highlightWords = (words || []).map(w => String(w).toLowerCase()).filter(Boolean);
+}
+
+// Byte -> lowercase letter, or '\u0000' for anything that is not a letter.
+function _foldByte(b) {
+  if (b >= 0x8A && b <= 0xA3) return String.fromCharCode(b - 0x8A + 97);   // A-Z
+  if (b >= 0xA4 && b <= 0xBD) return String.fromCharCode(b - 0xA4 + 97);   // a-z
+  return '\u0000';
+}
+
+/**
+ * A Uint8Array parallel to `bytes`: 1 where that byte is part of a Key Term.
+ * Returns null when nothing matches, so the common case allocates nothing.
+ */
+function _highlightMask(bytes) {
+  if (!_highlightWords.length || !bytes || !bytes.length) return null;
+  let fold = '';
+  for (let i = 0; i < bytes.length; i++) fold += _foldByte(bytes[i]);
+  let mask = null;
+  for (const w of _highlightWords) {
+    let from = 0;
+    for (;;) {
+      const at = fold.indexOf(w, from);
+      if (at < 0) break;
+      from = at + 1;
+      const before = at === 0 ? '\u0000' : fold[at - 1];
+      let end = at + w.length;
+      if (fold[end] === 's') end++;              // plural still reads as the term
+      const after = end >= fold.length ? '\u0000' : fold[end];
+      if (before !== '\u0000' || after !== '\u0000') continue;   // inside a longer word
+      if (!mask) mask = new Uint8Array(bytes.length);
+      for (let i = at; i < end; i++) mask[i] = 1;
+    }
+  }
+  return mask;
+}
 
 // ── Mutable state ──────────────────────────────────────────────────────────
 export const msgState = {
@@ -298,7 +359,9 @@ export function drawMsgBox(ctx, drawBorderedBoxFn) {
 }
 
 function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff, reveal) {
-  const lines = _wrapMsgBytes(bytes, maxChars);
+  const ranges = _wrapMsgRanges(bytes, maxChars);
+  const lines = ranges.map(([a, b]) => bytes.slice(a, b));
+  const mask = _highlightMask(bytes);
   const fadedPal = [0x02, 0x02, 0x02, 0x30];
   // Glyphs are 8px tall but lineH is 12 — the trailing 4px gap below the
   // last line throws off geometric centering (visually biased upward, most
@@ -315,11 +378,23 @@ function _drawMsgText(ctx, bytes, boxY, boxW, boxH, maxChars, lineH, yOff, revea
   for (let i = 0; i < lines.length; i++) {
     if (budget <= 0) break;
     const full = lines[i];
-    const shown = budget >= full.length ? full : full.slice(0, budget);
+    const shownLen = budget >= full.length ? full.length : budget;
     budget -= full.length + 1;             // +1 for the space the wrap consumed
     const tw = measureText(full);          // centre on the FULL line
-    const tx = Math.floor((boxW - tw) / 2);
-    drawText(ctx, tx, startTY + i * lineH, shown, fadedPal);
+    let tx = Math.floor((boxW - tw) / 2);
+    const ty = startTY + i * lineH;
+    const lineMask = mask ? mask.subarray(ranges[i][0], ranges[i][1]) : null;
+    if (!lineMask) { drawText(ctx, tx, ty, full.slice(0, shownLen), fadedPal); continue; }
+    // Split the visible part into runs of one colour. drawText returns the
+    // width it drew, so the runs chain exactly — no re-measuring, no drift.
+    let r = 0;
+    while (r < shownLen) {
+      const on = lineMask[r];
+      let e = r + 1;
+      while (e < shownLen && lineMask[e] === on) e++;
+      tx += drawText(ctx, tx, ty, full.slice(r, e), on ? TEXT_HIGHLIGHT : fadedPal);
+      r = e;
+    }
   }
 }
 
@@ -338,8 +413,10 @@ export function msgLineCount(bytes, maxChars = MSG_MAX_CHARS) {
   return _wrapMsgBytes(bytes, maxChars).length;
 }
 
-function _wrapMsgBytes(bytes, maxChars) {
-  const lines = [];
+// Wrap into [start, end) BYTE RANGES rather than slices, so the highlight mask
+// (which is indexed against the unwrapped page) can be sliced the same way.
+function _wrapMsgRanges(bytes, maxChars) {
+  const ranges = [];
   let lineStart = 0, lastSpace = -1, lineLen = 0;
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
@@ -347,13 +424,17 @@ function _wrapMsgBytes(bytes, maxChars) {
     if (b === 0xFF) lastSpace = i;
     if (b >= 0x28) lineLen++;
     if (lineLen > maxChars && lastSpace > lineStart) {
-      lines.push(bytes.slice(lineStart, lastSpace));
+      ranges.push([lineStart, lastSpace]);
       lineStart = lastSpace + 1;
       lastSpace = -1;
       lineLen = 0;
       for (let j = lineStart; j <= i; j++) { if (bytes[j] >= 0x28) lineLen++; }
     }
   }
-  if (lineStart < bytes.length) lines.push(bytes.slice(lineStart));
-  return lines;
+  if (lineStart < bytes.length) ranges.push([lineStart, bytes.length]);
+  return ranges;
+}
+
+function _wrapMsgBytes(bytes, maxChars) {
+  return _wrapMsgRanges(bytes, maxChars).map(([a, b]) => bytes.slice(a, b));
 }
