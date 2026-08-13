@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.995 — 2026-08-13
+
+### Spell and job-level paths: clean, and now gated
+
+Checked the same way as equipment and inventory, but the question is a different
+one. Spells, job levels, cp and unlocked jobs are **not wire-managed** — as
+`main.js` puts it, "the mirror only snapshots them at /api/save time", and it
+deliberately IGNORES them arriving from an `inv-state` push. So there is no
+per-event emit to look for and nothing to fix there. Their integrity check is
+the SAVE chain instead.
+
+**`tools/check-save-lockstep.mjs`** walks every persisted field through all four
+hops:
+
+    1. ps -> slot        slot.x = ps.x            save-state.js
+    2. slot -> payload   x: s.x                   save-state.js data literal
+    3. server validator  out.x = ...              api.js _validateSaveData
+    4. payload -> ps     ps.x = slot.x            title-screen.js load
+
+29 fields, 0 broken — `knownSpells`, `jobLevels`, `unlockedJobs` and `cp` all
+survive intact.
+
+Hop 3 is the one the codebase already warns about in a comment (the rule that
+caught `ps.words` in v1.7.980). **Hop 4 was unguarded and is just as fatal**: a
+field can persist perfectly and never be read back, so the player loses it at
+login with the save row sitting there holding the right value.
+
+### Two ways this gate was nearly useless
+
+- **A revert that didn't revert.** My first attempt to break `jobLevels` left an
+  inner `slot.jobLevels` on the same line, so the gate "passed" a change that
+  hadn't been made. Re-running it properly is what surfaced the next problem.
+- **Hop 4 accepted any mention of `slot.<field>` in title-screen.js.** The NEW
+  GAME slot template on line 657 lists half these field names, so fields could
+  pass while the load path never restored them. Tightened to require a real
+  assignment into `ps`.
+
+That tightening flagged the four position fields, which are restored by being
+REPLAYED (`loadWorldMapAtPosition` / `loadMapById`) rather than assigned. I read
+the load path before exempting them — an exemption written on a guess is worse
+than no gate.
+
+Fails on revert for hop 3 and hop 4 independently.
+
 ## 1.7.994 — 2026-08-13
 
 ### Quest gil never reached the server
