@@ -18,6 +18,23 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.965 — 2026-08-12
+
+### Added — MAPS tab in the Konami debugger
+Open the debugger (↑↑↓↓←→←→ X Z Start) → **MAPS**. View any of the 256 maps without leaving the game.
+
+- **Two views.** **FULL MAP** is the whole 32×32 tilemap with the room clip drawn on it. **PLAYER VIEW** is the 144×144 window the player actually looks at (9×9 tiles), through the same camera math `render.js` uses. Both matter: reviewing the full tilemap and calling a room fine is how four bad room-clip changes shipped, because the player never sees that picture.
+- **SEED picker** — the important one. `MapRenderer` builds the room clip ONCE from the tile it is constructed on, and coming back through a door hands it the *return* position, so the same map has a different clip depending on how you entered. That is what hid the Kazus inn bug. The dropdown lists the spawn and every door, so switching between "entered from town" and "came back down the stairs" is one click.
+- **Overlays:** gold = room clip, green = spawn, magenta = the tile the clip was seeded from, blue = doors, white = the 9×9 window. Toggles for clip / grid / doors, zoom 1×-6×, and click the full map to move the camera then flip to PLAYER VIEW.
+- **Readout:** tileset, fill tile, entrance → computed spawn, clip rect, room bbox, walkable count and map fraction, whether it counts as an enclosed room, and every door with its destination map.
+- Pure by construction — it reads ROM bytes through `loadMap` / `MapRenderer` and never touches the game's live map state. Debug tabs import a *second* copy of every module (no `?_v=` cache-bust), so a tab that leans on the game's singletons silently gets uninitialised ones.
+
+### Gate — `tools/check-maps-tab.mjs`
+- Mounts the tab against a DOM shim (real canvases via `@napi-rs/canvas`) and fires every control in both views through every seed. `npm run lint` cannot see a tab that throws on mount — the panel just renders an empty pane.
+- Defaults to a 15-map spread (towns, shared-tilemap interiors, a cave, an outdoor map with no clip, and every map this arc's clip changes touched) — 14s. `--all` sweeps the full 69, which costs ~3 minutes because each seed re-prerenders a 512×512 canvas and re-floods the room.
+- **Proven by breaking it:** an undefined call inside the draw path fails the gate with 77 errors and exit 1; restored, it passes. Wired into `deploy.sh`.
+- `--png <file> [--map N] [--seed X,Y] [--player]` dumps what the tab draws, so the overlays can be looked at instead of assumed.
+
 ## 1.7.964 — 2026-08-12
 
 ### Fixed — v1.7.963 cut the inn's ceiling along with the foreign corridor

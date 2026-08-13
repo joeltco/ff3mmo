@@ -4,6 +4,7 @@
 const TAB_DEFS = [
   { id: 'sprites',   label: 'SPRITES',   loader: () => import('./tabs/sprites.js') },
   { id: 'emu',       label: 'EMU',       loader: () => import('./tabs/emu.js') },
+  { id: 'maps',      label: 'MAPS',      loader: () => import('./tabs/maps.js') },
   { id: 'formation', label: 'FORMATION', loader: () => import('./tabs/formation.js') },
   { id: 'bestiary',  label: 'BESTIARY',  loader: () => import('./tabs/bestiary.js') },
   { id: 'magic',     label: 'MAGIC',     loader: () => import('./tabs/magic.js') },
