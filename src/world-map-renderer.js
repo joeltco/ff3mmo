@@ -74,7 +74,7 @@ export class WorldMapRenderer {
     const ids = [];
     for (let m = 0; m < 128; m++) {
       const pr = tileProps[m];
-      if (pr && (pr.byte1 & 0x30)) ids.push(m);
+      if (pr && (pr.byte1 & 0x20)) ids.push(m);   // U only — see _drawPriorityTerrain
     }
     if (!ids.length) { this._prioAtlas = null; return null; }
 
@@ -295,18 +295,22 @@ export class WorldMapRenderer {
     const y0 = Math.floor((worldTop + spriteY) / TILE_SIZE);
     const y1 = Math.floor((worldTop + spriteY + TILE_SIZE - 1) / TILE_SIZE);
 
-    // The tile the player is actually standing on, measured from the sprite's
-    // centre so a mid-step position resolves to the tile it mostly covers.
-    const onX = ((Math.floor((worldLeft + spriteX + 8) / TILE_SIZE) % size) + size) % size;
-    const onY = ((Math.floor((worldTop + spriteY + 8) / TILE_SIZE) % size) + size) % size;
-
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const wx = ((tx % size) + size) % size;
         const wy = ((ty % size) + size) % size;
         const m = tilemap[wy * size + wx] & 0x7F;
         const pr = tileProps[m];
-        if (!pr || !(pr.byte1 & 0x30)) continue;
+        // U ONLY. The L bit ("redraw over the sprite's TOP 8px") has produced
+        // two reported bugs on the overworld and not one confirmed correct
+        // frame: mountains cut the player's head off from the row above
+        // (v1.7.967), and the Altar Cave mouth — an L tile you STAND on when
+        // you step out — cut it off again even after that fix restricted L to
+        // the tile underfoot. Overworld terrain that should hide the player
+        // hides the LOWER half: tree canopy, which is the U bit and is
+        // unaffected. If a future overworld tile genuinely needs to cover the
+        // head, it needs a verified frame from the real ROM first.
+        if (!pr || !(pr.byte1 & 0x20)) continue;
         // The L bit covers the sprite's HEAD, which is only ever right when the
         // player is standing on the tile — walking under a castle arch. The
         // overworld mountains ($05-$07, $15-$17, $26) also carry L and are
@@ -316,11 +320,10 @@ export class WorldMapRenderer {
         // player sprite is getting cut off when walking below overworld
         // mountains". The U bit is unrestricted — that is the tree canopy the
         // player walks behind.
-        if (!(pr.byte1 & 0x20) && (wx !== onX || wy !== onY)) continue;
         const sx = prio.slot.get(m);
         if (sx === undefined) continue;
         // U clips to the sprite's lower half, L to its upper half.
-        const clipY = (pr.byte1 & 0x20) ? spriteY + 8 : spriteY;
+        const clipY = spriteY + 8;      // U: the sprite's lower half
         ctx.save();
         try {
           ctx.beginPath();

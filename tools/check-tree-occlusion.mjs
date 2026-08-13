@@ -171,5 +171,33 @@ if (!belowMountain) {
   }
 }
 
+// ── 7. A cave mouth must NOT cover the player's head either ───────────────
+// The Altar Cave entrance is an L-bit tile the player STANDS ON when stepping
+// out onto the overworld, so restricting L to "the tile underfoot" (v1.7.967)
+// did not save it — 80 of the sprite's 128 top-half pixels were covered.
+// Reported as "player's head is getting cut off when exiting altar cave".
+// The overworld now honours the U bit only.
+let caveMouth = null;
+for (let i = 0; i < world.tilemap.length && !caveMouth; i++) {
+  const m = world.tilemap[i] & 0x7F;
+  const p = world.tileProps[m];
+  if (!p) continue;
+  if ((p.byte1 & 0x10) && !(p.byte1 & 0x20) && (p.byte1 & 0x80)) {
+    caveMouth = { x: i % SIZE, y: (i - (i % SIZE)) / SIZE, m };
+  }
+}
+if (!caveMouth) {
+  bad('found no L-bit entrance tile on the overworld to test');
+} else {
+  const drawn = drawAtRealOrigin(caveMouth.x, caveMouth.y).filter(e => e.op === 'drawImage');
+  if (drawn.length === 0) {
+    ok(`standing on the cave mouth $${caveMouth.m.toString(16)} at ` +
+       `(${caveMouth.x},${caveMouth.y}) draws nothing over the player`);
+  } else {
+    bad(`the cave mouth at (${caveMouth.x},${caveMouth.y}) drew ${drawn.length} tile(s) over ` +
+        `the player's head — the overworld must honour the U bit only`);
+  }
+}
+
 if (failed) { console.error(`\ncheck-tree-occlusion: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-tree-occlusion: OK');

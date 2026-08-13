@@ -65,14 +65,26 @@ export const INN_KEEPER = {
 // entries terminated by id 0) that `map-loader.js#readNPCs` has always
 // decoded — but only flame-sprites.js ever read it. The earlier Ur villagers
 // were placed from OAM snaps instead, i.e. from whoever happened to be on
-// screen, so FIVE of the ROM's TEN were missing and the five we did have used
-// bundles (gfx 31/32/34/35) that appear nowhere in Ur's roster.
+// screen, so FIVE of the ROM's TEN were simply missing.
 //
 //   node tools/npc-dump.mjs 114     — the roster below, straight from the ROM
 //   node tools/npc-sheet.mjs 114 x.png — renders each gfx id so you can see them
 //
-// Walk bundle = 0x01C010 + gfx*256, the same convention as MOOGLE_SPRITE_OFF
-// in sprite-init.js.
+// POSITIONS and COUNT come from the ROM. The SPRITES do not, and this is the
+// important caveat: the roster's `gfx` byte is NOT an index into the sprite
+// bundle table at 0x01C010. I shipped it as one in v1.7.968 and dressed all of
+// Ur in PLAYER JOB SPRITES — bundles 0..23 of that table are the Onion Knight
+// and the job classes, which is exactly what `0x01C010 + gfx*256` lands on for
+// Ur's gfx ids $05-$0f. Render the range with `tools/npc-sheet.mjs` and it is
+// obvious.
+//
+// The real townsfolk bundles live around 24..41 (0x01DF10, 0x01E010, 0x01E210,
+// 0x01E310, 0x01E610 are the OAM-verified ones). The ROM must translate gfx id
+// -> bundle through a lookup that is not decoded: the known pairs ($14->32,
+// $15->34, $19->38) are not a constant offset, so guessing one would just be
+// the same mistake again. Until that table is found, every NPC below uses a
+// VERIFIED townsfolk bundle — reused across people, which the ROM itself does
+// (the inn lists gfx $16 twice).
 //
 // Palettes are the map's OWN sprite palettes, split head/body the way FF3
 // draws them: head tiles take SP3, body tiles SP2 — which is why Ur's
@@ -85,10 +97,13 @@ export const INN_KEEPER = {
 const UR_SP2 = [0x1A, 0x0F, 0x12, 0x36];   // map 114 sprite palette 6 — blue body
 const UR_SP3 = [0x1A, 0x0F, 0x26, 0x36];   // map 114 sprite palette 7 — skin / hair
 
-/** One Ur townsperson, straight from a ROM roster row. */
-function urNpc(gfx, extra = {}) {
+// Verified townsfolk walk bundles (OAM-located, see tools/npc-sprite-tool.mjs).
+const NPC_BUNDLES = [0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E610];
+
+/** One Ur townsperson. `slot` picks a verified bundle, NOT the ROM gfx byte. */
+function urNpc(slot, extra = {}) {
   return {
-    romOffset: 0x01C010 + gfx * 256,
+    romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
     palTop: UR_SP3,
     palBtm: UR_SP2,
     dir: DIR_DOWN,
@@ -103,7 +118,7 @@ function urNpc(gfx, extra = {}) {
 // on. The other five are SILENT on purpose: FF3's NPC text lives behind the
 // event system, which is not decoded, and inventing lines for them would be
 // making up content that is not in the game.
-export const UR_NPC_05 = urNpc(0x05, {
+export const UR_NPC_05 = urNpc(0, {
   // ROM (10,28) — exactly where the old quest NPC stood. Keeps its
   // idle-march-in-place behaviour rather than wandering.
   dir: DIR_RIGHT, wander: false, animate: true,
@@ -113,33 +128,33 @@ export const UR_NPC_05 = urNpc(0x05, {
     'The crystal will guide you.',
   ],
 });
-export const UR_NPC_06 = urNpc(0x06);
-export const UR_NPC_07 = urNpc(0x07);
-export const UR_NPC_08 = urNpc(0x08, {
+export const UR_NPC_06 = urNpc(1);
+export const UR_NPC_07 = urNpc(2);
+export const UR_NPC_08 = urNpc(3, {
   dialogue: [
     'The shops are open by day.',
     "We've not seen a Light Warrior in years.",
     "Sleep at the inn — it's free.",
   ],
 });
-export const UR_NPC_09 = urNpc(0x09);
-export const UR_NPC_0A = urNpc(0x0a);
-export const UR_NPC_0C = urNpc(0x0c, {
+export const UR_NPC_09 = urNpc(4);
+export const UR_NPC_0A = urNpc(5);
+export const UR_NPC_0C = urNpc(6, {
   dialogue: [
     'Welcome to Ur, traveler.',
     'Folks here keep to themselves.',
     'The grass beyond hides things.',
   ],
 });
-export const UR_NPC_0D = urNpc(0x0d, {
+export const UR_NPC_0D = urNpc(7, {
   dialogue: [
     'Ur is quiet most days.',
     'The cave drains the light.',
     'Travelers like you give us hope.',
   ],
 });
-export const UR_NPC_0E = urNpc(0x0e);
-export const UR_NPC_0F = urNpc(0x0f, {
+export const UR_NPC_0E = urNpc(8);
+export const UR_NPC_0F = urNpc(9, {
   dialogue: [
     "I study the crystal's silence.",
     'The light wanes by the day.',
@@ -152,15 +167,15 @@ export const UR_NPC_0F = urNpc(0x0f, {
 // derivation; map 8's own sprite palettes.
 const INN_SP2 = [0x1A, 0x0F, 0x12, 0x36];  // map 8 sprite palette 6 — body
 const INN_SP3 = [0x1A, 0x0F, 0x15, 0x36];  // map 8 sprite palette 7 — skin / hair
-const innGuest = (gfx) => ({
-  romOffset: 0x01C010 + gfx * 256,
+const innGuest = (slot) => ({
+  romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
   palTop: INN_SP3, palBtm: INN_SP2,
   dir: DIR_DOWN,
   animate: true,        // indoors: stay on the ROM tile, march in place
 });
-export const UR_INN_GUEST_15 = innGuest(0x15);
-export const UR_INN_GUEST_16A = innGuest(0x16);
-export const UR_INN_GUEST_16B = innGuest(0x16);
+export const UR_INN_GUEST_15 = innGuest(0);
+export const UR_INN_GUEST_16A = innGuest(2);
+export const UR_INN_GUEST_16B = innGuest(3);
 
 // Map ID → keepers to place on that map. One render path: every entry goes
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.

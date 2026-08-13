@@ -18,6 +18,19 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.969 — 2026-08-12
+
+### Fixed — v1.7.968 dressed all of Ur in PLAYER JOB SPRITES
+- The NPC roster's `gfx` byte is **not** an index into the sprite bundle table at `0x01C010`. I shipped it as one, and bundles `0..23` of that table are the Onion Knight and the job classes — which is exactly where Ur's gfx ids `$05-$0f` land. The whole town turned into a crowd of adventurers.
+- Every NPC is back on a **verified townsfolk bundle** (`0x01DF10 / 0x01E010 / 0x01E210 / 0x01E310 / 0x01E610`, the OAM-located ones), reused across people — which the ROM itself does, listing gfx `$16` twice in the inn.
+- **The ROM's positions and count still stand: Ur town has all 10, the inn all 5.** Only the sprite identity is ours rather than the ROM's.
+- The real translation (gfx id → bundle) is undecoded and stays that way for now: the three known pairs (`$14→32`, `$15→34`, `$19→38`) are not a constant offset, so inventing a formula would repeat the same mistake. Written down in `town-npcs.js` so the next person doesn't rediscover it the hard way.
+
+### Fixed — head cut off stepping out of the Altar Cave
+- The cave mouth is an L-bit tile the player **stands on**, so v1.7.967's "L only applies to the tile underfoot" rule didn't save it: **80 of the sprite's 128 top-half pixels** were covered on every entrance tile on the map. Now 0.
+- **The overworld honours the U bit only.** L ("redraw over the sprite's top 8px") has now produced two reported bugs — mountains, then cave mouths — and not one confirmed correct frame. Overworld terrain that should hide the player hides the LOWER half: tree canopy, which is U and is untouched (verified still occluding 59/128 bottom-half px).
+- Gate extended to stand on a cave mouth and assert nothing draws over the player. **Proven by reverting the renderer:** fails with "the cave mouth at (37,23) drew 1 tile(s) over the player's head".
+
 ## 1.7.968 — 2026-08-12
 
 ### Ur now has everyone the ROM puts there — 9 NPCs → 17
