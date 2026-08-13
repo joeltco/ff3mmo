@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.984 — 2026-08-13
+
+### Fix: an NPC was standing outside Ur's northern house
+
+`ur_householder` was placed on map 2 at (6,26). That IS a real ROM coordinate —
+map 2's NPC table lists (4,24) (6,24) (8,24) (11,25) (6,26) — but FF3 packs
+several building interiors into one 32x32 tilemap, and none of those five is in
+the room the northern house door opens into. The entrance walks the player to
+(8,21), whose room is rows 17-23; the ROM's five belong to another interior
+sharing the tilemap. So the householder stood in a neighbouring room, outside
+the house the player was in.
+
+Removed. Putting someone in that room means inventing a coordinate the ROM does
+not have, which is a question, not a fix.
+
+### Gate: tools/check-npc-room.mjs
+
+Flood-fills from each town map's real entrance and requires every placed NPC to
+be within reach of that region. `check-npc-placement.mjs` only ever checked
+sprite bundles and spacing, so it had nothing to say about which ROOM anyone was
+in.
+
+The range is 2 tiles, not adjacency: FF3's shops are keeper / solid counter /
+player, so a keeper legitimately sits two tiles from the nearest floor (map 4's
+armour shop is the clean case — floor rows 6-7, counter row 5, keeper row 4). An
+adjacency rule failed all four keepers, which would have been four wrong "fixes".
+The gate found five candidates and only one survived the correct rule.
+
+### tools/map-ascii.mjs was lying
+
+It carried its own copy of `calcSpawnY` — the BOUNDED variant, which is the
+rejected proposal, not the shipped rule. It reported map 2 as spawning at (8,31)
+into a 5-tile dead end when the game spawns at (8,21) with 28 tiles reachable,
+and I nearly filed "players are stuck in the northern house" off the back of it.
+Now imports `tools/lib/spawn.mjs` like everything else. That file exists
+precisely to stop hand-copies of this function; this was the fourth.
+
+### Not changed
+
+`weapon_keeper` on map 5 sits at (3,14) where the ROM says (3,22). It passes the
+new gate — it is within talking range of the player's room — so it is a
+cosmetic difference from the ROM, not a broken placement. Left alone rather than
+bundled into an unrelated fix.
+
 ## 1.7.983 — 2026-08-13
 
 ### Not a new bug: the desync after v1.7.982 was a client on v1.7.980

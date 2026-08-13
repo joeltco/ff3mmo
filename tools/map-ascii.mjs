@@ -28,6 +28,7 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
+const { calcSpawnY } = await import('./lib/spawn.mjs');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -35,32 +36,13 @@ const W = 32;
 const mapId = parseInt(process.argv[2], 10);
 const r = loadMap(rom, mapId);
 
-function calcSpawnY(m, ex, ey) {
-  const eMid = m.tilemap[ey * 32 + ex];
-  const eColl = m.collision[eMid < 128 ? eMid : eMid & 0x7F];
-  // Mirrors src/map-loading.js#_calcSpawnY (v1.7.943): doorway search bounded
-  // to 3 tiles, floor scans stop at the first impassable tile.
-  if ((eColl & 0x07) === 3) {
-    for (let dy = 1; dy <= 3; dy++) { const ny = ey - dy; if (ny < 0) break;
-      if (m.tilemap[ny * 32 + ex] === m.fillTile) break;
-      if (m.tilemap[ny * 32 + ex] === 0x44) return ny; }
-    for (let dy = 1; dy <= 16; dy++) { const ny = ey + dy; if (ny >= 32) break; const mid = m.tilemap[ny * 32 + ex];
-      if (mid === m.fillTile) break; const mm = mid < 128 ? mid : mid & 0x7F;
-      if ((m.collision[mm] & 0x07) !== 3 && !(m.collision[mm] & 0x80)) return ny; break; }
-    for (let dy = 1; dy <= 16; dy++) { const ny = ey - dy; if (ny < 0) break; const mid = m.tilemap[ny * 32 + ex];
-      if (mid === m.fillTile) break; const mm = mid < 128 ? mid : mid & 0x7F;
-      if ((m.collision[mm] & 0x07) !== 3 && !(m.collision[mm] & 0x80)) return ny; break; }
-    return ey;
-  }
-  const entMid = m.tilemap[ey * 32 + ex];
-  const entM = entMid < 128 ? entMid : entMid & 0x7F;
-  if (entMid === 0x44) return ey;
-  if ((m.collision[entM] & 0x80) && ((m.collisionByte2[entM] >> 4) & 0x0F) === 0) {
-    for (let dy = 1; dy <= 8; dy++) { const ny = ey - dy; if (ny < 0) break; if (m.tilemap[ny * 32 + ex] === 0x44) return ny; }
-  }
-  return ey;
-}
-
+// Spawn comes from tools/lib/spawn.mjs — the ONE copy, which mirrors
+// src/map-loading.js#_calcSpawnY. This file used to carry its own BOUNDED
+// variant (doorway search capped at 3 tiles, floor scans `break`ing after one
+// step). That is the REJECTED proposal, not the shipped rule, so this viewer
+// reported map 2 as spawning at (8,31) into a 5-tile dead end when the game
+// actually spawns at (8,21) with 28 tiles. A viewer that disagrees with the
+// game is worse than no viewer — the header of this file already said so.
 const sx = r.entranceX, sy = calcSpawnY(r, r.entranceX, r.entranceY);
 const _renderer = new MapRenderer(r, sx, sy);
 const passable = (x, y) => (x >= 0 && x < W && y >= 0 && y < W) && _renderer.isPassable(x, y);

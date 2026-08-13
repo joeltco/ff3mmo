@@ -453,8 +453,15 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_elder_kin_b', x: 6, y: 4, spec: UR_ELDER_KIN_B },
     { key: 'ur_elder_kin_c', x: 4, y: 3, spec: UR_ELDER_KIN_C },
   ]],
-  // Ur house (map 2).
-  [2, [{ key: 'ur_householder', x: 6, y: 26, spec: UR_HOUSEHOLDER }]],
+  // Ur northern house (map 2) — NOBODY. The ROM lists five NPCs for map 2, at
+  // (4,24) (6,24) (8,24) (11,25) (6,26), and not one of them is in the room
+  // this door opens into: the entrance walks the player to (8,21), whose room
+  // is rows 17-23. Those five belong to another interior packed into the same
+  // shared tilemap. `ur_householder` was placed on the ROM's (6,26) without
+  // checking which room that is, so it stood outside the house the player was
+  // standing in. Gated now by tools/check-npc-room.mjs.
+  // Putting someone in the northern house means inventing a coordinate the ROM
+  // does not have — ask first.
   // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
   // behind the ur_armor counter at (3,5).
   [4, [{ key: 'armor_keeper',    x: 3, y:  4, spec: WEAPON_KEEPER }]],
