@@ -128,6 +128,8 @@ Before writing new code, read the relevant `docs/design-notes.md` section. Each 
 | A town keeper / building NPC from an OAM snap | `design-notes#town-keepers--scene-npcs` | `tools/npc-sprite-tool.mjs` (`search` OAM tiles → ROM offset, `render` to verify 4 dirs) → add a spec to `src/data/town-npcs.js` + a `TOWN_NPCS` row (map ID → keeper). Placed by `npc.js#placeTownNpcs`. Optional `dialogue` array. Shop keepers behind counters stay `DIR_DOWN`. |
 | A scripted intro / cutscene (auto-dialogue + facing) | `design-notes#town-keepers--scene-npcs` | `OPENING_INTRO` (`data/opening-scene.js`) `[{dir,text}]`; `queueOpeningIntro`/`tickOpeningIntro` in `npc.js`; uses `showMsgBoxPages(..., onPage)` to face the speaker. Queued from title-screen (fresh-slot), fired from game-loop. Open box locks movement. |
 | Building / area music (FF2 NSF or FF1/FF3) | `design-notes#music-ff3--ff1--ff2-nsf` | `src/music.js` — `playFF2Track`/`playTrack`; wire in `map-loading.js#_loadRegularMap` by `mapId`. FF2 builder `ff2-nsf-builder.js` (bank `$0D`, PLAY `$9800`, INIT `$9867`). Audition indices by ear via `/ff2 <n>` (0-based), then set the `FF2_TRACKS.*` constant. |
+| A quest, or anything ASK/LEARN | `design-notes#word-memory--ff2-ask--learn-v17980-991` | `src/data/keywords.js` (vocabulary — every term must be a word an NPC already SAYS), `teaches`/`answers` on the NPC spec in `data/town-npcs.js`, `src/word-memory.js` (ps.words), `src/word-menu.js` (verb rows; geometry COPIED from `shop.js#_drawRootMenu`). ⛔ Quests are WORD-GATED — plain talk must NOT offer one. ⛔ NO overhead marker; ASK/LEARN opening on ordinary villagers is correct. Gates: `check-words`, `check-word-flow`, `check-msg-highlight`. |
+| Anything that changes equipment, bag, gil, spells or job levels | `design-notes#mirror-integrity--which-resource-lives-where-v17993-995` | The four resources have DIFFERENT authorities — equipment and bag/gil are mirror-backed and must emit; spells/job levels ride the SAVE chain; exp is local-canonical. Silence is correct under `SERVER_ECONOMY` / `PVE_ARBITER`. Gates: `check-equip-emit`, `check-inv-emit`, `check-save-lockstep`. Watch for DIRECT `ps.weaponR = ...` writes that bypass `setEquipSlotId`. |
 | A new overworld dialogue / sign / popup | `design-notes#message-box` | `src/message-box.js` — `showMsgBox(bytes, onClose?)` for one-shot, `showMsgBoxPages(pages, onAllDone?)` for multi-page (scroll-up between pages, slide-out on last). Text via `_nameToBytes` from `text-utils.js`. Wrap is 16 chars/line, ≤3 lines per page. NEVER fork a parallel box system. |
 | Battle message strip text | `design-notes#battle-message-strip` | `src/battle-msg.js` — `queueBattleMsg(bytes)` cuts in immediately (no waits), display name via `getSpellNameShrinesClean` / `getItemNameShrinesClean`. No `isBattleMsgBusy` gates — don't reintroduce them. |
 | A bed / inn rest tile | `design-notes#bed-rest-inn-sleep` | `src/data/beds.js` (tile-id registry — add the tileset+metatile), `src/bed.js` (scene lifecycle), `src/map-renderer.js#isBedTileAt` (passable + trigger). Tile-id driven; no per-coordinate wiring. |
@@ -173,6 +175,22 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `tools/wire-stats-diag.js` | Wire-profile parity — builds a real `ps` via `recalcCombatStats`, ships it through the `main.js#connectNet` profile shape, runs `generateAllyStats` on the receiver, asserts every combat-stat field matches. Guards the realized-stats wire fix. | `node tools/wire-stats-diag.js` |
 | `tools/pvp-wire-sim.js` | Multiplayer wire — 37 tests across math lockstep / server unit / E2E suites (PvP, party, chat, give-item, JWT). Boots `attachWebSocketPresence` on a localhost port + two real JWT-authed `ws` clients. Spec: `tools/pvp-wire-sim.PLAN.md`. | `node tools/pvp-wire-sim.js [--suite=math\|server\|wire] [--filter=...]` |
 | `tools/pvp-load-sim.js` | Multiplayer load test — N clients × duration against in-process server. Spoofs X-Forwarded-For per client to bypass the per-IP cap. Reports peak state-map sizes + RSS/client for right-sizing. | `node tools/pvp-load-sim.js --clients=50 --duration=30` |
+
+### Content / integrity gates (all in `deploy.sh`, all fail-on-revert)
+
+| gate | what it pins |
+|---|---|
+| `check-npc-room` / `check-npc-placement` | every placed NPC is in the room the player walks into, and on a sprite bundle that map loads |
+| `check-dialogue-fit` | every page wraps to ≤2 lines through the REAL wrapper |
+| `check-msgbox-typing` | the type-out finishes, Z fills it in, and `message-box.js` calls NO audio |
+| `check-msg-highlight` | Key Terms render red, runs stay aligned, nothing darker than the box blue |
+| `check-words` / `check-word-flow` | every term has a teacher AND answerer among PLACED NPCs; the menu walks learn→ask→offer→deny→accept |
+| `check-quests` | the quest state machine + no overhead marker |
+| `check-equip-emit` / `check-inv-emit` | every equipment / bag / gil change reaches the server |
+| `check-save-lockstep` | every persisted field survives all FOUR save hops |
+| `check-ff2-sfx` / `check-ff2-sfx-audio` | the ripped blips execute AND render audible PCM through libgme |
+| `check-pve-claim` | the end-of-battle claim describes the battle it came from |
+| `ur-audit` (manual) | sweeps every Ur interior: spawn, exits, chests, NPC rooms |
 
 `deploy.sh` runs `npm run lint:errors` + `node tools/encounter-sim.js` + `node tools/wire-stats-diag.js` + `node tools/pvp-wire-sim.js` as pre-flight gates before commit; failure aborts the deploy. (The `tools/coop-*-sim.js` harnesses were deleted in v1.7.500 along with the co-op battle system.)
 

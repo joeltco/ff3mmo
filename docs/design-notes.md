@@ -269,8 +269,38 @@ Three (now four) libgme emulators run side-by-side in `src/music.js`, each fed a
 - **State machine.** `msgState.state` ∈ `{ 'none', 'slide-in', 'hold', 'page-scroll', 'slide-out' }`. Slide-in / slide-out use `SLIDE_MS = 80` (whole box slides through the top of the viewport). `page-scroll` uses `SCROLL_MS = 160` (box stays still, text scrolls inside an inner clip `boxY+4 to boxY+boxH-4`). `msgState.onAdvance` is the multi-page hook — when set, the overworld Z handler in `movement.js` routes to it instead of `dismissMsgBox`.
 - **Scroll-up transition.** `showMsgBoxPages` plays slide-in once for page 1; every Z scrolls the previous page UP and the next page in from below over 160ms; slide-out only after the final Z. Spam-press Z mid-scroll snaps to the next page. Final Z forces slide-out regardless of current sub-state.
 - **Text centering.** `_drawMsgText` centers on **visual glyph height** (`GLYPH_H = 8`) not nominal `lineH = 12`. The trailing 4px gap below the last line was biasing 3-line pages toward the top of the box — fixed in v1.7.297, do not revert. Inner clip `boxY+4 to boxY+boxH-4` keeps the scrolling text from bleeding over the border tiles.
-- **Layout.** Box is 144 × 48px, top-aligned in HUD viewport (`HUD_VIEW_Y = 32`). Wrap is 16 chars/line via `_wrapMsgBytes`; 3 lines max fit comfortably. Write dialogue strings short enough that the wrap result lands at ≤3 lines per page.
+- **Layout.** Box is 144 × 48px, top-aligned in HUD viewport (`HUD_VIEW_Y = 32`). Wrap is 16 chars/line via `_wrapMsgBytes`. **TWO lines max, not three** (corrected v1.7.971): three sit flush against the border and FOUR start ABOVE the interior, i.e. the text renders outside the box. Never validate a page by counting characters — word wrap turns a 37-char line into four. `tools/check-dialogue-fit.mjs` runs the real `msgLineCount` over every page in the game and gates on `MSG_MAX_LINES = 2`.
+- **Type-out (v1.7.979).** Text reveals a character at a time at `TYPE_MS_PER_CHAR = 28`; `msgState.typed` counts BYTES revealed, and layout is computed from the FULL page first so text does not re-flow as it appears. Z fills the page in rather than advancing (`isMsgTyping` / `completeMsgTyping`, handled in `movement.js`). ⛔ **It is SILENT and must stay silent** — a per-character blip shipped in v1.7.979 and was pulled in v1.7.986. FF2 has no text sound to copy: its entire engine is one request byte plus three pulse-2 blips, only two of which anything calls (see `reference_ff2_sound_engine`). `check-msgbox-typing.mjs` asserts `message-box.js` contains no call into the audio layer at all.
+- **Page scroll draws the incoming page EMPTY** (v1.7.988). The scroll renders two pages at once; the incoming one is passed `reveal = 0` and types out after the scroll lands. Drawing it in full (which is what an omitted `reveal` argument does) makes the page flash up and then blank itself, because `page-scroll → hold` calls `_restartTyping()`.
+- **`keepOpen` (v1.7.980).** `showMsgBoxPages(pages, done, onPage, { keepOpen: true })` parks on the last page instead of sliding out, and a sequence opened on top of a held box scrolls in rather than re-animating. The caller then owns `dismissMsgBox`. Used by the ASK/LEARN menu so its verb list has a box to sit under.
+- **Key Term highlighting (v1.7.981/989).** `registerMsgHighlights(words)` is called once at boot from `data/keywords.js`; matching words draw in red, on word boundaries, plurals included. Each wrapped line is split into runs and drawn by CHAINING `drawText`'s returned width — never by re-measuring. ⚠ **A text palette's slots 1 and 2 must be the BOX's blue** (`0x02`), not black: `font-renderer` paints index 0 transparent but 1 and 2 SOLID, so the shared `TEXT_RED` / `TEXT_GREY` constants (built for a black background) stamp a dark block behind every coloured word. Only slot 3, the glyph fill, should differ.
 - **Behavior coupling.** Movement is blocked while `msgState.state !== 'none'` (overworld Z handler in `movement.js`). NPC wander ticks also freeze the same way. `onClose` (one-shot) / `onAllDone` (pages) fire AFTER slide-out completes, in `updateMsgBox`.
+
+## Word Memory — FF2 ASK / LEARN (v1.7.980-991)
+
+The quest system IS the word system; there is no separate quest UI and **no overhead marker** (removed v1.7.990, sprite data deleted v1.7.991).
+
+- **Vocabulary** in `src/data/keywords.js`. Every term must be a word an NPC already SAYS in shipped dialogue — that is what makes LEARN honest. WHO teaches or answers a term lives on the NPC spec in `data/town-npcs.js` (`teaches: []`, `answers: { term: [pages] }`), so placement, dialogue and word behaviour sit in one row.
+- **State** is `ps.words = { termId: 1 }` (`src/word-memory.js`), persisted through all four save hops plus the server validator.
+- **Menu** in `src/word-menu.js`. Rows are open-ended `act` values — `learn` / `ask` / `say` / `accept` / `deny`; new verbs are new cases, not new drawing code. Geometry is COPIED from the shop's root menu (`src/shop.js#_drawRootMenu`): row pitch 16, text at `x + 16`, cursor at `x` drawn 4px high, box painted `blue = true` to match the message box above it. The cursor tile is 16×16 — a 12px row pitch makes it collide with its own label.
+- ⛔ **Quests are WORD-GATED.** `talkQuest` returns null for any quest with a `startWord`, so plain talk gets the giver's idle lines. The offer only opens when the player ASKs about the term (`askQuestWord`), and ACCEPT / DENY are rows on the same menu. A giver offering a quest on plain talk is a REGRESSION — `tools/check-word-flow.mjs` fails on it.
+- ⛔ **ASK/LEARN opens on ANY NPC with `teaches`/`answers`, and that is correct.** Ordinary villagers having the menu with no marker is the FF2 feel. Do not add a marker for them.
+- **Gates:** `check-words.mjs` (every term needs a teacher AND an answerer among NPCs actually PLACED, plus the persistence hops), `check-word-flow.mjs` (drives the real menu with real key objects), `check-msg-highlight.mjs` (renders and reads pixels).
+
+## Mirror integrity — which resource lives where (v1.7.993-995)
+
+Four server-side tables mirror player state, and they do NOT all work the same way. Getting this wrong means either a silent desync or double-counting.
+
+| resource | authority | a local change must… | gate |
+|---|---|---|---|
+| equipment (`inv_equipped`) | mirror | emit `sendNetEquipFromInv` / `sendNetEquipSwapHands` | `check-equip-emit.mjs` |
+| bag + gil (`inv_inventories`, `inv_economies`) | mirror | emit `sendNetInvEvent`, **or** route through a server-authoritative path | `check-inv-emit.mjs` |
+| spells, job levels, cp, unlocked jobs | the SAVE | survive all four save hops | `check-save-lockstep.mjs` |
+| exp | local `ps` | nothing — `main.js` ignores exp from `inv-state` | — |
+
+- **Equipment moves two ways** and both must be found: through `setEquipSlotId`, and by assigning `ps.weaponR/weaponL/head/body/arms` DIRECTLY. The two real bugs (Optimum's offhand release, the quiver-empty clear) were both the second kind.
+- **Silence is sometimes CORRECT.** Under `SERVER_ECONOMY` (shop / chest / vase) and `PVE_ARBITER` (battle rewards) the server is sole writer and a client emit would double-count. A naive "must call `sendNetInvEvent`" rule flags all of them.
+- **The save chain is four hops**, not two: `ps → slot → payload → server validator → back into ps`. The codebase warns about the validator hop; the LOAD hop is just as fatal and was unguarded until v1.7.995.
 
 ## Battle message strip
 

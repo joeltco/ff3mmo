@@ -18,6 +18,32 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.996 — 2026-08-13
+
+### Docs refresh — no code change
+
+- **README** status header was 190 versions stale (v1.7.805). Now leads with
+  Word Memory and the mirror-integrity sweep; the old paragraph is kept as
+  "Historical status".
+- **design-notes.md** — new `#word-memory--ff2-ask--learn` and
+  `#mirror-integrity--which-resource-lives-where` sections. The message-box
+  section was corrected: it still said "3 lines max fit comfortably" when the
+  real limit is **2** (three sit flush, four render outside the box), and it
+  predated the type-out, `keepOpen`, and Key Term highlighting — including the
+  palette trap where slots 1-2 must be the box's blue.
+- **CLAUDE.md** — two new rows in the "where things live" table (quests/ASK-LEARN,
+  and anything touching a mirrored resource), plus a table of all eleven
+  content/integrity gates.
+- **MULTIPLAYER.md** — the mirror section now records the three desync sources
+  the sweep found and the two traps that make them easy to miss.
+- **SWEEP-DISCIPLINE.md** — five new rows in the record, and four new checklist
+  items drawn from gates that passed on broken code this session: where a check
+  SAMPLES, whether the harness performs every step the game performs, never
+  deriving the expectation from the value under test, and verifying a revert
+  actually reverted.
+
+All fifteen gates green, `ur-audit` clean.
+
 ## 1.7.995 — 2026-08-13
 
 ### Spell and job-level paths: clean, and now gated
