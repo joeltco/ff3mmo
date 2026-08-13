@@ -18,6 +18,55 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.7.987 — 2026-08-13
+
+### Swept every Ur interior for the northern-house class of bug
+
+`tools/ur-audit.mjs` — one table across Ur town and all ten interiors its doors
+lead to: where the player lands, how big that room is, whether an exit is
+reachable from it, chests in-room vs stranded, how many of the ROM's NPCs are in
+that room, and whether ours are.
+
+**Result: no problems.** Every interior has a reachable exit (no soft-locks),
+every one of our 18 NPCs is talkable, and no room the ROM populates is left
+empty within the sprite-bundle ceiling.
+
+The northern house stays empty and that is now verified rather than asserted.
+Its only in-room ROM NPCs sit at (6,24) and (8,24) — both on SOLID tiles in the
+band below the room, and the only tile you could talk to (8,24) from is (8,23),
+the exit door. Step on it and you leave the house.
+
+### tools/lib/talkable.mjs — one definition, two consumers
+
+Three drafts of the reachability rule got three different answers, so it now
+lives in one file that `check-npc-room.mjs` and `ur-audit.mjs` both import:
+
+- **Range 1 (adjacent only)** flagged all four shop/inn/tavern keepers, who
+  stand behind a solid counter by design. Four wrong "fixes" avoided.
+- **Range 2 (a 5x5 box)** accepted diagonals through walls, and accepted map 2's
+  (6,24)/(8,24) — the false "the northern house should have someone in it".
+- **The real rule:** face to face, or player / solid counter / NPC in a straight
+  line, and the tile the player stands on may not be a door. Doors are walkable
+  but not standable — you cannot linger on one to talk.
+
+That last clause is the whole northern-house story in one line: a plain
+"solid tile between" rule says you can talk through the doorway to someone
+standing outside.
+
+### Also corrected in the audit
+
+- Chests outside the player's room are NOT flagged. Every Ur tilemap holds
+  several interiors, so other rooms' chests are the normal layout, not loot the
+  player is locked out of.
+- "The ROM puts more people here than we do" is only reported when the map has a
+  spare walk bundle AND no other code path places them. Map 6 (elder ground)
+  loads exactly ONE bundle and map 8 (inn) two, so those rooms are correctly
+  capped, not under-populated; map 3's keeper comes from
+  `addBlackMageShopkeeper`, not `TOWN_NPCS`.
+
+Both gates fail on revert (householder back in the wrong room; armour keeper
+moved one tile off its counter line).
+
 ## 1.7.986 — 2026-08-13
 
 ### The message-box type-out is SILENT

@@ -32,6 +32,7 @@ const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 const { calcSpawnY } = await import('./lib/spawn.mjs');
+const { playerRegion, isTalkable } = await import('./lib/talkable.mjs');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 let rom;
@@ -42,35 +43,13 @@ const W = 32;
 const fail = [];
 const err = (m) => fail.push(m);
 
-/** The connected walkable region the player lands in, as a Set of y*32+x. */
-function playerRegion(md) {
-  const sx = md.entranceX;
-  const sy = calcSpawnY(md, md.entranceX, md.entranceY);
-  const renderer = new MapRenderer(md, sx, sy);
-  const passable = (x, y) => x >= 0 && x < W && y >= 0 && y < W && renderer.isPassable(x, y);
-  const reach = new Set();
-  if (passable(sx, sy)) {
-    const q = [[sx, sy]];
-    reach.add(sy * W + sx);
-    while (q.length) {
-      const [x, y] = q.pop();
-      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-        const nx = x + dx, ny = y + dy, k = ny * W + nx;
-        if (reach.has(k) || !passable(nx, ny)) continue;
-        reach.add(k); q.push([nx, ny]);
-      }
-    }
-  }
-  return { reach, sx, sy, renderer, passable };
-}
-
 let checked = 0;
 for (const [mapId, list] of TOWN_NPCS) {
   let md;
   try { md = loadMap(rom, mapId); }
   catch (e) { err(`map ${mapId}: loadMap threw — ${e.message}`); continue; }
 
-  const { reach, sx, sy, passable } = playerRegion(md);
+  const { reach, stand, sx, sy, passable } = playerRegion(md, MapRenderer, calcSpawnY);
   if (!reach.size) { err(`map ${mapId}: the player's own spawn (${sx},${sy}) is not walkable`); continue; }
 
   for (const n of list) {
@@ -86,20 +65,13 @@ for (const [mapId, list] of TOWN_NPCS) {
     // talk: the NPC must be on, or orthogonally beside, the region the entrance
     // opens into. Anything further away is in a neighbouring interior sharing
     // the tilemap, which is what "an NPC outside the house" looks like.
-    // Range 2, not 1: FF3's shop layout is keeper / COUNTER / player, so the
-    // keeper sits two tiles from the nearest floor the player can stand on
-    // (map 4's armour shop is the clean example — floor rows 6-7, solid counter
-    // row 5, keeper on row 4). One tile would fail every keeper in the game.
-    let talkable = false;
-    for (let dy = -2; dy <= 2 && !talkable; dy++) {
-      for (let dx = -2; dx <= 2 && !talkable; dx++) {
-        if (reach.has((n.y + dy) * W + (n.x + dx))) talkable = true;
-      }
-    }
-    if (!talkable) {
+    // "Talkable" is defined once, in tools/lib/talkable.mjs: face to face, or
+    // across a solid counter in a straight line. Never a diagonal, and never
+    // from a door tile — stepping on one transitions the map.
+    if (!isTalkable(md, stand, n.x, n.y)) {
       err(`map ${mapId} ${n.key} at (${n.x},${n.y}) is in a different room than the player ` +
-          `— the entrance (${sx},${sy}) opens into ${reach.size} tiles and none of them touches it, ` +
-          `so the player can never stand next to them`);
+          `— the entrance (${sx},${sy}) opens into ${reach.size} tiles and the player can never ` +
+          `stand anywhere that reaches them`);
       continue;
     }
     // A wanderer must not be able to step onto the entrance tile either: the
