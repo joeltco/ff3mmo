@@ -339,9 +339,16 @@ export function drawMsgBox(ctx, drawBorderedBoxFn) {
     const oldOff = -Math.round(boxH * t);
     const newOff = Math.round(boxH * (1 - t));
     if (msgState.scrollFromBytes) {
+      // The OUTGOING page was fully revealed, so it scrolls away complete.
       _drawMsgText(ctx, msgState.scrollFromBytes, boxY, boxW, boxH, maxChars, lineH, oldOff);
     }
-    _drawMsgText(ctx, msgState.bytes, boxY, boxW, boxH, maxChars, lineH, newOff);
+    // The INCOMING page scrolls in EMPTY and types out once the scroll lands.
+    // Drawing it in full here (which is what an omitted `reveal` did) made the
+    // whole page flash up during the scroll and then vanish, because the
+    // page-scroll -> hold transition calls _restartTyping() and resets `typed`
+    // to 0. That was "the text appears then disappears before it scrolls".
+    // Page 1 already behaves this way: nothing is drawn during slide-in.
+    _drawMsgText(ctx, msgState.bytes, boxY, boxW, boxH, maxChars, lineH, newOff, 0);
     ctx.restore();
   }
 
