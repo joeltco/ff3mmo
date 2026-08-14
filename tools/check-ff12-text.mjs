@@ -115,7 +115,55 @@ const ok = (m) => console.log('  ✓ ' + m);
     bad(`only ${good}/${total} FF2 strings are >=60% kana — the encoding has drifted`);
   } else ok(`FF2 script decodes: ${good}/${total} strings >=60% literal kana`);
 
-  // 4. specific ids carry specific text.
+  // 4. the map object table + dialogueId == objType
+  //
+  // MEASURED: standing in the throne room and talking produced
+  // 【ヒルダ】「あいことばは【のばら】です。よく おぼえておくのよ。」 — string 1
+  // of the 0x18010 table — and that map's object list starts with type 1.
+  {
+    let objs = 0, maps = 0;
+    for (const { base, maps: n } of F2.MAPOBJ_BLOCKS) {
+      for (let m = 0; m < n; m++) {
+        const o = F2.mapObjects(rom, base, m);
+        if (o.length) { maps++; objs += o.length; }
+        if (o.some(e => e.y > 63)) bad(`FF2 block 0x${base.toString(16)} map ${m} has Y>63 — the table has moved`);
+      }
+    }
+    if (objs < 280) bad(`FF2 map objects yield only ${objs}, expected ~311`);
+    // read the base from the CONSTANT, not a literal — otherwise shifting
+    // MAPOBJ_BLOCKS silently still passes.
+    const hilda = F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[0].base, 4);
+    if (!hilda.length || hilda[0].type !== 1) {
+      bad('FF2 0x3510 map 4 does not start with object type 1 — the block base has drifted');
+    }
+    // ...and anchor the SECOND block too, or shifting it passes unnoticed.
+    const b2 = F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[1].base, 0);
+    if (!b2.length || b2[0].type !== 62) {
+      bad(`FF2 second block map 0 starts with type ${b2[0]?.type} — expected 62`);
+    } else if (!/ミスリル/.test(F2.decodeLine(rom, 62))) {
+      bad('FF2 object 62 no longer mentions ミスリル — the second block has drifted');
+    }
+    const line = F2.decodeLine(rom, 1);
+    if (!/あいこと/.test(line)) {
+      bad(`FF2 dialogue 1 is "${line.slice(0, 40)}…" — not the line the running game displayed`);
+    }
+    // ⛔ Pointer validity does NOT identify the bank: both blocks validate
+    // "100%" against table 0x4010 too, which decodes them to garbage.
+    // Content is the discriminator.
+    const wrong = F2.decodeLine(rom, 1, { table: 0x4010 });
+    if (/あいこと/.test(wrong)) bad('FF2 table 0x4010 also yields the Hilda line — the bank test is meaningless');
+    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps; type 1 is Hilda, matching the running game`);
+  }
+
+  // 5. the 0x18 N name/keyword insert
+  {
+    const line = F2.decodeLine(rom, 1);
+    if (!/^【/.test(line)) bad('FF2 dialogue 1 does not begin with a name insert — 0x18 N is not expanding');
+    if (!/【のら】|【のばら】/.test(line)) bad('FF2 dialogue 1 lost its keyword insert (0x1F1, のばら)');
+    if (since()) ok('FF2 0x18 N expands to string 0x100+N (ヒルダ and のばら both insert)');
+  }
+
+  // 6. specific ids carry specific text.
   // ⛔ "some string somewhere contains アルテア" is SHIFT-INVARIANT — moving the
   // pointer table by one entry still satisfies it, and that revert passed. Pin
   // the id, so a shifted table fails.

@@ -213,6 +213,67 @@ map and position; it does not yet have its picture.
 - `tools/check-ff12-text.mjs` — **11 reverts tested, all fail** — in `deploy.sh`
 - `docs/sprites/ff1-npc-dialogue.txt`, `docs/sprites/ff2-script.txt`
 
+## 1.8.26 — 2026-08-14
+
+### FF2's map object table, found — all three games now link NPC to dialogue
+
+Same rule as FF1 and FF3:
+
+```
+dialogueId == objType        (into the table at 0x18010)
+```
+
+FF2's map objects are **12 slots of 3 bytes** (type, X + flags, Y) in **two
+blocks** — `0x3510` (17 maps) and `0x3990` (32 maps), **311 objects across 44
+populated maps**. FF2 does *not* use FF1's `0x3410`; 332 of 569 entries there
+give Y > 63.
+
+**Measured**: standing in the throne room and talking produced
+**【ヒルダ】「あいことばは【のばら】です。よく おぼえておくのよ。」** — string 1
+of the `0x18010` table — and that map's object list starts with type 1. Its
+neighbours corroborate: type 8 is the line about **シド (Cid)** building the
+airship, type 13 is about **ミンウ (Minwu)** healing her father.
+
+### Name and keyword inserts decoded
+
+Control byte `0x18` followed by N inserts string `0x100 | N` from the `0x28010`
+table (character names + the ASK/LEARN keyword list):
+
+```
+0x18 0xEF -> 0x1EF = ヒルダ        0x18 0xF1 -> 0x1F1 = のばら
+```
+
+That is why speakers appear at all — the name is never in the line. **69 objects
+have a named speaker, 13 distinct**; レイラ (Leila) and ミンウ (Minwu) come
+through exactly.
+
+### The trap that nearly sold a wrong answer
+
+FF2 has **eight** text pointer tables. Both object blocks validate **"100%"**
+against table `0x4010` too — because almost any small id has *a* pointer there —
+but `0x4010` decodes them to **garbage**. Pointer validity does not identify the
+bank; content does. The gate now asserts that `0x4010` does *not* yield the
+Hilda line.
+
+Two gate holes found and closed by revert-testing: the Hilda anchor read a
+literal `0x3510` instead of the constant, so shifting `MAPOBJ_BLOCKS` passed
+silently; and the second block had no anchor at all until object 62's ミスリル
+line was pinned.
+
+### Still open
+
+The sub-`0x8A` dictionary. It is **not** a uniform two-character DTE like FF1's
+and FF3's — some codes are single dakuten kana (`0x49` = で, `0x4B` = ば,
+`0x69` = パ). The cost: dakuten go missing inside names, so ヒルダ prints as
+ヒル. Codes print as `{xx}`, never guessed.
+
+### New
+
+- `tools/npc-dialogue-ff2.mjs` — FF2 objects with speaker, position and line
+- `docs/sprites/ff2-npc-dialogue.txt`, `ff2-npc-names.txt`
+- `check-ff12-text` grew FF2 object-table + insert assertions (**15 reverts
+  tested, all fail**)
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware

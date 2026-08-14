@@ -33,6 +33,14 @@ import fs from 'node:fs';
 export const PTR_TABLE = 0x28010;
 export const TEXT_BANK = 0x28010;
 
+/** NPC dialogue lives in its own bank; 0x28010 holds names + keywords. */
+export const DIALOGUE_TABLE = 0x18010;
+/** {type, x, y} x 12 per map. Two blocks — see the header. */
+export const MAPOBJ_BLOCKS = [{ base: 0x3510, maps: 17 }, { base: 0x3990, maps: 32 }];
+export const MAPOBJ_PER_MAP = 12;
+/** 0x18 N -> string (0x100 | N) from PTR_TABLE. */
+export const INSERT_CODE = 0x18;
+
 /** 45 kana — no を; 0xB6 is ん. See the header. */
 export const HIRAGANA = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん';
 export const KATAKANA = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン';
@@ -80,3 +88,54 @@ export function literalRatio(rom, id) {
 
 export const loadRom = (p) =>
   new Uint8Array(fs.readFileSync(p || process.env.FF2_ROM || '/home/joeltco/roms/ff2-jp.nes'));
+
+/** Raw bytes of a string in table `T`. */
+export function rawString(rom, T, id, max = 220) {
+  const p = rom[T + id * 2] | (rom[T + id * 2 + 1] << 8);
+  if (p < 0x8000 || p >= 0xC000) return null;
+  const off = T + (p - 0x8000);
+  const out = [];
+  for (let i = 0; i < max; i++) {
+    const b = rom[off + i];
+    if (b === undefined || b === 0x00) break;
+    out.push(b);
+  }
+  return out;
+}
+
+/** Literal kana of a string, codes dropped — used for matching against screen text. */
+export function skeleton(rom, T, id) {
+  const b = rawString(rom, T, id) || [];
+  let s = '';
+  for (const x of b) { const c = glyph(x); if (c && c !== ' ') s += c; }
+  return s;
+}
+
+/** Decode an NPC line, expanding 0x18 N name/keyword inserts as 【…】. */
+export function decodeLine(rom, id, { table = DIALOGUE_TABLE, nl = ' / ' } = {}) {
+  const b = rawString(rom, table, id);
+  if (!b) return '';
+  let s = '';
+  for (let i = 0; i < b.length; i++) {
+    if (b[i] === INSERT_CODE && i + 1 < b.length) {
+      const ins = skeleton(rom, PTR_TABLE, 0x100 | b[i + 1]);
+      s += '【' + ins + '】'; i++; continue;
+    }
+    if (b[i] === 0x01) { s += nl; continue; }
+    const c = glyph(b[i]);
+    s += (c === null ? '{' + b[i].toString(16) + '}' : c);
+  }
+  return s.trim();
+}
+
+/** The 12 object slots of one map, as {slot,type,x,y}. */
+export function mapObjects(rom, base, mapIndex) {
+  const o = base + mapIndex * MAPOBJ_PER_MAP * 3;
+  const out = [];
+  for (let i = 0; i < MAPOBJ_PER_MAP; i++) {
+    const t = rom[o + i * 3];
+    if (!t) break;                       // lists are packed: a zero ends them
+    out.push({ slot: i, type: t, x: rom[o + i * 3 + 1] & 0x3F, y: rom[o + i * 3 + 2] });
+  }
+  return out;
+}

@@ -308,35 +308,71 @@ map and its position; it does not yet have its picture.
 
 ---
 
-## FF2 — kana decoded, NPC link not found
+## FF2 — the map object table, found
 
 **Encoding** calibrated off Altair's own verb menu, which reads
 たずねる / おぼえる / アイテム as tile indices `99 96 a1 b2` / `8e a7 8d b2` /
-`ca cb dc ea` — fixing **hiragana at 0x8A, katakana at 0xCA**. Same shape as
-FF1 (A–Z at 0x8A) and FF3 (a–z at 0xCA).
+`ca cb dc ea` — fixing **hiragana at 0x8A, katakana at 0xCA**.
 
 > ⛔ The kana run is **45 long, not 46: there is no を**, and `0xB6` is **ん**.
-> The text proves it — `0xB6` appears mid-word in はんらん ("rebellion") and
-> さくせんかいぎ ("strategy meeting"), where を is impossible.
+> `0xB6` appears mid-word in はんらん and さくせんかいぎ, where を is impossible.
 
-**String pointer table at `0x28010`** — identical to FF1.
+### The objects
 
-Decoded, it reads: *ここは はんらんぐんの さくせんかいぎしつです* ("this is the
-rebel army's strategy room"), with place names intact — アルテア (Altair),
-パルム (Palm), カシュオーン (Kashuan).
+Map objects are **12 slots of 3 bytes** (type, X + flags, Y), in **two blocks** —
+FF2 does *not* use FF1's `0x3410` (332 of 569 entries there give Y > 63):
 
-**356 of 394 strings decode at ≥60% literal kana.** Dump:
-`docs/sprites/ff2-script.txt`.
+| block | maps |
+|---|---|
+| `0x3510` | 17 |
+| `0x3990` | 32 |
 
-**Two things are NOT solved, and are printed rather than guessed:**
+**311 objects across 44 populated maps**, and the rule is the same as FF1 and
+FF3:
 
-1. The sub-`0x8A` dictionary. Roughly a fifth of each line is `{xx}`. It is not
-   a uniform two-character DTE like FF1's and FF3's — some codes are single
-   dakuten kana (`0x49` = で, `0x3D` = ぎ, `0x69` = パ, derived from context),
-   and no table has been located.
-2. **The map-object table.** It is *not* at FF1's `0x3410` — 332 of 569 entries
-   there decode to Y > 63, i.e. nonsense. So FF2 has no NPC → dialogue link yet,
-   and therefore no named NPCs.
+```
+dialogueId == objType        (into the table at 0x18010)
+```
+
+**Measured**: standing in the throne room and talking produced
+**【ヒルダ】「あいことばは【のばら】です。よく おぼえておくのよ。」** — that is
+string **1** of the `0x18010` table, and that map's object list starts with
+**type 1**. Its neighbours corroborate: type 8 is the line about **シド (Cid)**
+building the airship, type 13 is about **ミンウ (Minwu)** healing her father.
+
+> ⛔ FF2 has **eight** text pointer tables. Both object blocks validate "100%"
+> against `0x4010` as well — because almost any small id has *a* pointer there —
+> but `0x4010` decodes them to garbage. **Pointer validity does not identify the
+> bank; content does.** The gate asserts that `0x4010` does *not* yield the
+> Hilda line.
+
+### Name and keyword inserts
+
+Control byte `0x18` followed by N inserts string `0x100 | N` from the `0x28010`
+table, which holds character names and the **ASK/LEARN keyword list**:
+
+```
+0x18 0xEF -> string 0x1EF = ヒルダ        0x18 0xF1 -> string 0x1F1 = のばら
+```
+
+That is why speakers appear at all — the name is never in the line itself. FF2
+writes a speaker as `NAME「…」` (`0xB9` is the opening quote).
+
+> ⛔ 【…】 appearing **mid-line** are keywords, not speakers. *"【ヒルダ】さまに
+> はけんされてきた?"* is a guard talking **about** Hilda. Only a name in the
+> opening-quote position counts.
+
+**69 objects have a named speaker, 13 distinct.** レイラ (Leila) and ミンウ
+(Minwu) come through exactly. Rosters: `docs/sprites/ff2-npc-dialogue.txt` and
+`ff2-npc-names.txt`.
+
+### Still not decoded
+
+The sub-`0x8A` dictionary. It is **not** a uniform two-character DTE like FF1's
+and FF3's — some codes are single dakuten kana (`0x49` = で, `0x3D` = ぎ,
+`0x4B` = ば, `0x69` = パ, derived from context) — and no table has been located.
+The practical cost: **dakuten go missing inside names**, so ヒルダ prints as
+ヒル and ヨーゼフ as ヨフ. Codes are printed as `{xx}`, never guessed.
 
 ---
 
@@ -352,7 +388,8 @@ rebel army's strategy room"), with place names intact — アルテア (Altair),
 | `tools/check-npc-dialogue.mjs` | dialogue gate — 6 reverts tested, all fail |
 | `docs/sprites/ff3-npc-dialogue*.txt` | the named FF3 rosters |
 | `tools/lib/ff1-text.mjs` / `tools/npc-dialogue-ff1.mjs` | FF1 script + named NPC roster |
-| `tools/lib/ff2-text.mjs` / `tools/ff2-script-dump.mjs` | FF2 kana decoder + script dump |
+| `tools/lib/ff2-text.mjs` / `tools/npc-dialogue-ff2.mjs` | FF2 decoder + named NPC roster |
+| `tools/ff2-script-dump.mjs` | FF2 raw script dump |
 | `tools/check-ff12-text.mjs` | FF1/FF2 gate — 11 reverts tested, all fail |
 | `docs/sprites/ff3-npc-catalog.png` | 88 FF3 sprites, labelled |
 | `docs/sprites/ff1-npc-catalog.png` | 48 FF1 entries |
