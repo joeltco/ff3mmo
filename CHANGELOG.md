@@ -153,6 +153,66 @@ cursed cast and their own lines say so.
 - `tools/check-npc-dialogue.mjs` — **6 reverts tested, all fail** — in `deploy.sh`
 - `docs/sprites/ff3-npc-dialogue{,-all}.txt` — the named rosters
 
+## 1.8.25 — 2026-08-14
+
+### FF1's dialogue table decoded, and FF2's kana
+
+Same result as FF3, one game earlier: **`dialogueId == objType`, exactly 1:1.**
+
+FF1's map objects are 16 slots of 3 bytes per map at file `0x3410` (bank 0, CPU
+`$B400`) — type, X (bit 7 = in a room, bit 6 = does not move), Y. Verified: all
+**290 placed objects across 40 maps have Y ≤ 63**. Confirmed by talking to a
+Coneria Castle guard in the running game, which displayed *"The King is looking
+for the LIGHT WARRIORS. You do not happen to be them, do you?"* — that box is
+string 49, and object type 49 is on map 0. Map 1's object 4 is Garland.
+
+### FF1's text
+
+- Encoding calibrated off the game's own class-select menu ("FIGHTER" renders as
+  `8f 92 90 91 9d 8e 9b`) → **A–Z = 0x8A+, a–z = 0xA4+**
+- String pointer table at **`0x28010`** — the same offset FF2 uses
+- **DTE**: bytes `0x1A`–`0x69`, 80 entries, two parallel arrays stored in the
+  **opposite order to FF3** — *second* chars at `0x3F060`, *first* chars at
+  `0x3F0B0`. That reversal defeated pairs-adjacent, firsts-then-seconds and a
+  whole-ROM delta-invariant sweep; it was found only by deriving 16 codes from
+  one line read off the screen, then searching each half independently.
+
+Five FF1 objects name themselves: **Jane** (Queen of Coneria), **Lukahn**,
+**Arylon the Dancer**, **Jim**, **Kope**. Others — Garland, Bahamut — are only
+named in the third person, so the NPCs saying those lines are not named.
+
+### FF2's kana
+
+Calibrated off Altair's own verb menu (たずねる / おぼえる / アイテム) →
+**hiragana at 0x8A, katakana at 0xCA**, string table at `0x28010`. The kana run
+is **45 long, not 46 — there is no を, and `0xB6` is ん**; the text proves it
+(はんらん, さくせんかいぎ). **356 of 394 strings decode at ≥60% literal kana**,
+with place names intact (アルテア, パルム, カシュオーン).
+
+**Not solved for FF2, and printed as `{xx}` rather than guessed:** the sub-`0x8A`
+dictionary (not a uniform 2-char DTE — some codes are single dakuten kana), and
+the map-object table, which is *not* at FF1's `0x3410` (332 of 569 entries there
+give Y > 63). So FF2 has no NPC → dialogue link and no named NPCs yet.
+
+**Also still open for FF1:** objType → sprite entry. Every FF1 NPC has its line,
+map and position; it does not yet have its picture.
+
+### Traps recorded
+
+- FF1 writes ellipsis as `::`, so a `"Name:"` speaker rule matches *"Oh:: My
+  sister::"* and invents a character called **Oh**.
+- Sweeping FF1 past map 63 yields plausible rows with Y of 161+ — it invented
+  eight extra "Kope"s before the `Y ≤ 63` invariant caught it.
+- "some string somewhere contains アルテア" is **shift-invariant** — that revert
+  passed the gate until specific ids were pinned to specific text.
+
+### New
+
+- `tools/lib/ff1-text.mjs` + `tools/npc-dialogue-ff1.mjs` — FF1 script and roster
+- `tools/lib/ff2-text.mjs` + `tools/ff2-script-dump.mjs` — FF2 kana decoder
+- `tools/check-ff12-text.mjs` — **11 reverts tested, all fail** — in `deploy.sh`
+- `docs/sprites/ff1-npc-dialogue.txt`, `docs/sprites/ff2-script.txt`
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware
