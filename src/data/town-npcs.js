@@ -466,7 +466,103 @@ export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [
 // disjoint, and `tools/audit-words.mjs` gates both — if a spec ever gains a
 // shopId, or addSceneNpc starts forwarding one, the word behaviour on that NPC
 // dies silently and the gate fires instead.
+
+// ── Kazus ────────────────────────────────────────────────────────────────
+//
+// Second town. Map 10 (the game prints "Kazus" on entry — that is how the map
+// block was confirmed), inn/tavern 12, shops 15 magic / 16 weapon / 17 armor.
+// Full measurements in docs/KAZUS.md.
+//
+// ⛔ ONE NPC PER LOADED BUNDLE. FF3 is CHR-RAM, so a map holds only the walk
+// bundles it decompresses and two NPCs sharing one render as the same person.
+// The sets below were read off the PPU (`MAPS=10,12,15,16,17 node
+// tools/monscan/map-bundles.cjs`), not guessed from the ROM's NPC table — which
+// lists 7 townsfolk on map 10 for 4 bundles. The extras stay unplaced.
+//
+//   map 10  0x1D910 0x1DF10 0x1E010 0x1E210
+//   map 12  0x1DF10 0x1E010 0x1E410 0x1ED10
+//   map 15  0x1C410 0x1ED10        16/17  0x1DF10 0x1ED10
+//
+// ⚠ DIALOGUE IS FILLER. Kazus, Sasune and Ur all get a dialogue + quest pass
+// once the three are structurally complete; nothing here is final text. Kept
+// short, in-world and inside the 16-char/2-line box so check-dialogue-fit
+// stays honest in the meantime.
+
+// Town — coordinates taken from the ROM's own roster for this map.
+export const KAZUS_TOWN_A = interior(0x01D910, DIR_DOWN, [
+  'Kazus keeps to itself.',
+  'You will see why.',
+]);
+export const KAZUS_TOWN_B = interior(0x01DF10, DIR_DOWN, [
+  'The mines gave out.',
+  'The town went with them.',
+]);
+export const KAZUS_TOWN_C = interior(0x01E010, DIR_DOWN, [
+  'Mythril still comes up.',
+  'Little else does.',
+]);
+export const KAZUS_TOWN_D = interior(0x01E210, DIR_DOWN, [
+  'Travelers are rare here.',
+  'Rest before you go on.',
+]);
+
+// Inn / tavern (map 12).
+export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
+  'Beds upstairs.',
+  'Ale down here.',
+]);
+export const KAZUS_INN_GUEST_A = interior(0x01E010, DIR_DOWN, [
+  'I came for the mythril.',
+  'I am still waiting.',
+]);
+export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
+  'Quiet town.',
+  'Too quiet, some nights.',
+]);
+export const KAZUS_INN_GUEST_C = interior(0x01ED10, DIR_RIGHT, [
+  'Sasune lies north.',
+  'The castle still stands.',
+]);
+
+// Shop keepers — one tile above their counter, facing DOWN, exactly as Ur's
+// keepers stand (design-notes#town-keepers). Counters mirror Ur's positions
+// because the rooms are byte-identical layouts.
+export const KAZUS_WEAPON_KEEPER = interior(0x01ED10, DIR_DOWN, [
+  'Mythril holds an edge.',
+  'It costs what it costs.',
+]);
+export const KAZUS_ARMOR_KEEPER = interior(0x01ED10, DIR_DOWN, [
+  'Mythril plate.',
+  'Dear, but it turns a blade.',
+]);
+export const KAZUS_MAGIC_KEEPER = interior(0x01ED10, DIR_DOWN, [
+  'Scrolls, if you can read.',
+  'Take your time.',
+]);
+
 export const TOWN_NPCS = new Map([
+  // --- Kazus --- (see the bundle note above KAZUS_TOWN_A)
+  [10, [
+    { key: 'kazus_town_a', x: 17, y: 21, spec: KAZUS_TOWN_A },
+    { key: 'kazus_town_b', x: 18, y: 27, spec: KAZUS_TOWN_B },
+    { key: 'kazus_town_c', x: 15, y: 20, spec: KAZUS_TOWN_C },
+    { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
+  ]],
+  // Coordinates MEASURED, not taken from the ROM roster: map 12's own NPC
+  // coords land in sealed pockets (check-npc-placement caught all three), and
+  // the keeper's ROM tile at (5,27) is a 2-tile dead end. These come from the
+  // map's largest connected room (63 tiles, x2-6 / y16-20) picking spots with
+  // >=3 open neighbours.
+  [12, [
+    { key: 'kazus_inn_keep',    x: 3, y: 17, spec: KAZUS_INN_KEEP },
+    { key: 'kazus_inn_guest_a', x: 5, y: 17, spec: KAZUS_INN_GUEST_A },
+    { key: 'kazus_inn_guest_b', x: 3, y: 19, spec: KAZUS_INN_GUEST_B },
+    { key: 'kazus_inn_guest_c', x: 6, y: 16, spec: KAZUS_INN_GUEST_C },
+  ]],
+  [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 14, spec: KAZUS_WEAPON_KEEPER }]],
+  [17, [{ key: 'kazus_armor_keeper',  x: 3, y: 4,  spec: KAZUS_ARMOR_KEEPER }]],
+  [15, [{ key: 'kazus_magic_keeper',  x: 4, y: 3,  spec: KAZUS_MAGIC_KEEPER }]],
+
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },
     { key: 'inn_keeper',      x: 3, y: 14, spec: INN_KEEPER },
