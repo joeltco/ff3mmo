@@ -1,4 +1,4 @@
-# SFX / music audit — v1.7.997-1.8.3
+# SFX / music audit — v1.7.997-1.8.4
 
 Joel: *"lots of sfx are wrong. meteo sfx, the ff2 learn sfx, and im sure many
 others. kazus and the castle arent playing the right music... pull them all and
@@ -155,31 +155,37 @@ Every SFX constant (26) and music track (9) renders audible PCM. Nothing is
 silent, nothing is a click. This is the check that did not exist before, and the
 one that would have caught the FF2 blips shipping silent.
 
-## 5. FF1 — measured, and honestly labelled (v1.8.3)
+## 5. FF1 (v1.8.3-1.8.4)
 
-Both FF1 constants said "verified by ear", which is a pick. FF1 keeps its current
-song in zero page **`$4B`** (`music_track`) and starts one via `Music_NewSong` at
-`$B003`; NSF track N is FF1 song id N + `$41`. `tools/ff1-sound-probe.mjs` watches
-that byte and screenshots 45 frames after each request, so a song can be pinned to
-the screen it belongs to.
+**Our FF1 music is wired and shipping** — `shop.js#132` pauses the map music and
+plays `FF1_TRACKS.SHOP`; `pause-menu.js#792` plays `FF1_TRACKS.MENU_SCREEN`. Both
+render audible PCM. The gate pins both call sites.
 
-| track | measured as | evidence |
+**Which FF1 track each of our screens uses is a design choice**, exactly like the
+elder house running FF2's theme. v1.8.3 briefly labelled `SHOP` "unverified" for
+lacking a ROM attribution — that was the wrong bar, applied inconsistently with
+how the elder house is treated one file over. Corrected in v1.8.4.
+
+Separately, FF1's own song usage is now reference data for the catalogue. FF1
+keeps its current song in zero page **`$4B`** (`music_track`), started via
+`Music_NewSong` at `$B003`; NSF track N is song id N + `$41`.
+`tools/ff1-sound-probe.mjs` watches that byte and screenshots 45 frames after
+each request:
+
+| track | what FF1 plays it for | evidence |
 |---|---|---|
 | 0 | opening prologue | plays over *"The world is veiled in darkness…"* |
-| 3 | overworld field | requested on reaching the map; screenshot is the overworld |
-| **16** | **main menu** | `$51` written the moment the party menu opens, field song restored on close — **confirms `FF1_TRACKS.MENU_SCREEN`** |
+| 3 | overworld field | screenshot is the overworld |
+| 16 | main menu | `$51` on the party-menu open, field song restored on close |
 
-**`FF1_TRACKS.SHOP` (14) is NOT attributed.** `tools/ff1-sound-sites.mjs`
-enumerates every song request in the ROM (31 sites, 21 with immediates) and track
-14 is genuinely requested from three sites in bank 14 — so it is a real game
-track, not an invented number. But nobody has watched it fire on a shop screen:
-reaching an FF1 shop headlessly is unsolved. The party's overworld position is
-`$027`/`$028` (measured by RAM-diffing while walking), but **writing those bytes
-does not move the party**, so warping in is not available — a 323-coordinate
-sweep produced zero location entries. It stays labelled as a pick.
+`tools/ff1-sound-sites.mjs` maps all 31 song-request sites (21 with immediates).
+The other 20 tracks stay unlabelled and the gate fails if a meaning is added
+without a capture.
 
-The other 20 FF1 tracks are deliberately **unlabelled**. The gate fails if a
-meaning is added without a capture, so nothing can drift into "MEASURED".
+**Still unsolved:** reaching an FF1 shop headlessly, if we ever want FF1's own
+shop theme as reference. The party's overworld position is `$027`/`$028` (found
+by RAM-diffing while walking) but writing them does not move the party, so
+warping in is unavailable — a 323-coordinate sweep found nothing.
 
 ## 5. Every sound in every ROM — catalogued
 

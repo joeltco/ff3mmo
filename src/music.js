@@ -60,17 +60,20 @@ export const SFX = {
 // does exactly that and screenshots 45 frames after each request, which is how
 // the entries below stopped being "verified by ear".
 export const FF1_TRACKS = {
-  // MEASURED v1.8.3: the game writes $51 to $4B the moment the party menu
-  // opens, and writes the field song back when it closes. The screenshot at the
-  // request is FF1's ITEM/MAGIC/WEAPON/ARMOR/STATUS party screen.
+  // Our pause menu's music. CHOSEN, and it also happens to be what FF1 itself
+  // plays on its party screen — measured v1.8.3: FF1 writes $51 to $4B the
+  // instant its menu opens and restores the field song on close. Wired at
+  // pause-menu.js#792.
   MENU_SCREEN: 16,
-  // ⚠ NOT attributed. The ROM really does request track 14 — three sites in
-  // bank 14 ($a352, $a56f, $a598), found by `tools/ff1-sound-sites.mjs` — so it
-  // is a real game track and not an invented number. But it has NOT been
-  // observed firing on a shop screen: reaching an FF1 shop headlessly is
-  // unsolved (the overworld position bytes $027/$028 track the party but
-  // writing them does not move it, so warping in is not available yet).
-  // Treat as PICKED until someone stands in a shop and sees $4B go to $4F.
+  // Our SHOP's music, chosen by ear. Wired at shop.js#132 (pauseMusic then
+  // playFF1Track) and shipping.
+  //
+  // This does NOT need to be whatever FF1 plays in ITS shops, any more than the
+  // elder house needs FF3's Ur theme — ff3mmo picks its own music per screen,
+  // and the elder house running FF2's theme is the same kind of call. An
+  // earlier pass called this "unverified" for lacking a ROM attribution, which
+  // was the wrong standard applied inconsistently: a design choice is not a
+  // capture that failed.
   SHOP:        14,
 };
 

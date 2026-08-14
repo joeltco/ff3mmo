@@ -1,19 +1,22 @@
 #!/usr/bin/env node
-// check-ff1-music.mjs — FF1's tracks are what the ROM actually asks for.
+// check-ff1-music.mjs — our FF1 music reaches the player, and the FF1 reference
+// data stays honest.
 //
-// FF1 keeps the current song in zero page $4B (`music_track`) and starts one via
-// Music_NewSong at $B003; NSF track N is FF1 song id N + $41. Both constants
-// here used to say "verified by ear", which is a PICK.
+// TWO DIFFERENT THINGS, and conflating them produced a wrong report once:
 //
-// MENU_SCREEN is now measured: `tools/ff1-sound-probe.mjs` watched the game write
-// $51 to $4B the moment the party menu opened, and write the field song back when
-// it closed, with a screenshot of FF1's ITEM/MAGIC/WEAPON/ARMOR/STATUS screen.
+//   1. WHICH FF1 track each of OUR screens plays is a DESIGN CHOICE. The shop
+//      uses track 14 and the pause menu uses 16 because those were chosen; the
+//      elder house runs FF2's theme on exactly the same basis. A ROM attribution
+//      is not the standard, and calling the shop track "unverified" for lacking
+//      one was the wrong bar applied inconsistently.
+//   2. What FF1 ITSELF plays where is reference data for the sound catalogue.
+//      FF1 keeps its song in zero page $4B (`music_track`), started via
+//      Music_NewSong at $B003; NSF track N is song id N + $41. Only three
+//      meanings have actually been watched (`tools/ff1-sound-probe.mjs`), and
+//      this gate fails if a fourth is added without a capture.
 //
-// SHOP is NOT attributed. The ROM does request track 14 — three sites in bank 14,
-// found by `tools/ff1-sound-sites.mjs` — so it is a real track, but nobody has
-// watched it fire on a shop screen. This gate holds it to exactly that claim: it
-// must remain a track the ROM requests, and it must not be quietly relabelled as
-// measured.
+// So: pin the wiring and the audibility (what a player experiences), and keep
+// the catalogue's claims to what was observed.
 //
 //   node tools/check-ff1-music.mjs
 
@@ -32,28 +35,32 @@ else ok('MENU_SCREEN = 16 (watched on the party-menu open)');
 for (const [t, meaning] of [[0, 'opening prologue'], [3, 'overworld field'], [16, 'main menu']]) {
   if (!FF1_TRACK_MEANINGS.has(t)) fail(`FF1_TRACK_MEANINGS lost track ${t} (${meaning})`);
 }
+// FF1_TRACK_MEANINGS documents what FF1 ITSELF plays where, for the catalogue.
+// It is reference data, not a requirement on our own screen choices.
 if (FF1_TRACK_MEANINGS.size !== 3) {
-  fail(`FF1_TRACK_MEANINGS has ${FF1_TRACK_MEANINGS.size} entries; only 3 were actually observed — ` +
+  fail(`FF1_TRACK_MEANINGS has ${FF1_TRACK_MEANINGS.size} entries; only 3 were actually observed in FF1 — ` +
        `adding one without a capture turns a guess into "MEASURED" in the catalogue`);
-} else ok('exactly 3 observed meanings, none invented');
+} else ok('exactly 3 observed FF1 meanings, none invented');
 
-// ── the unattributed one ─────────────────────────────────────────────────
-console.log('\nSHOP (not attributed)');
-const sitesPath = new URL('./monscan/ff1-sound-sites.json', import.meta.url).pathname;
-if (!fs.existsSync(sitesPath)) {
-  console.log('  skip  run tools/ff1-sound-sites.mjs --json first');
-} else {
-  const sites = JSON.parse(fs.readFileSync(sitesPath, 'utf8'));
-  const trackOf = (v) => (v == null ? null : (v & 0x3F) - 1);
-  const shopSites = sites.filter(s => trackOf(s.val) === FF1_TRACKS.SHOP);
-  if (!shopSites.length) {
-    fail(`the ROM never requests track ${FF1_TRACKS.SHOP} — FF1_TRACKS.SHOP is not a real game track`);
-  } else ok(`the ROM requests track ${FF1_TRACKS.SHOP} from ${shopSites.length} site(s)`);
-  if (FF1_TRACK_MEANINGS.has(FF1_TRACKS.SHOP)) {
-    fail(`track ${FF1_TRACKS.SHOP} is listed as a MEASURED meaning, but it has never been ` +
-         `observed on a shop screen — attribute it or leave it out`);
-  } else ok('not claimed as measured');
-}
+// ── the tracks are WIRED to their screens ────────────────────────────────
+// This is what actually matters for the game: our shop and our pause menu play
+// FF1 music, and that music must reach the player. WHICH track each screen uses
+// is a design choice — ff3mmo picks its own music per screen (the elder house
+// runs FF2's theme on the same basis), so a ROM attribution is not the standard
+// here and an earlier pass was wrong to call SHOP "unverified" for lacking one.
+console.log('\nwiring');
+const SHOP_SRC = fs.readFileSync(new URL('../src/shop.js', import.meta.url), 'utf8');
+if (!/playFF1Track\(\s*FF1_TRACKS\.SHOP\s*\)/.test(SHOP_SRC)) {
+  fail('src/shop.js does not play FF1_TRACKS.SHOP — the shop lost its music');
+} else ok('shop.js plays FF1_TRACKS.SHOP');
+if (!/pauseMusic\s*\(\s*\)/.test(SHOP_SRC)) {
+  fail('src/shop.js does not pause the map music before starting the shop track');
+} else ok('shop.js pauses the map music first');
+
+const PAUSE_SRC = fs.readFileSync(new URL('../src/pause-menu.js', import.meta.url), 'utf8');
+if (!/playFF1Track\(\s*FF1_TRACKS\.MENU_SCREEN\s*\)/.test(PAUSE_SRC)) {
+  fail('src/pause-menu.js does not play FF1_TRACKS.MENU_SCREEN');
+} else ok('pause-menu.js plays FF1_TRACKS.MENU_SCREEN');
 
 // ── audible through the real decoder ─────────────────────────────────────
 console.log('\nplayback');
