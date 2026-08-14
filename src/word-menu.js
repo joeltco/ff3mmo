@@ -266,7 +266,14 @@ export function drawWordMenu() {
   let widest = 0;
   for (let i = first; i < first + vis; i++) widest = Math.max(widest, measureText(_nameToBytes(rows[i].label)));
 
-  const boxW = Math.min(HUD_VIEW_W, Math.max(64, widest + PAD_X * 2 + TEXT_INDENT));
+  // A scrolling list needs a gutter for the arrow, or it lands on top of the
+  // last glyph of the longest label: "BROTHER" ends at x=80 in an 88-wide box
+  // and the arrow draws at boxW-12 = 76. MEASURED, not eyeballed — the shot
+  // tool draws it.
+  const needArrows = rows.length > vis;
+  const ARROW_GUTTER = 12;
+  const boxW = Math.min(HUD_VIEW_W,
+    Math.max(64, widest + PAD_X * 2 + TEXT_INDENT + (needArrows ? ARROW_GUTTER : 0)));
   const boxH = vis * ROW_STEP + PAD_Y * 2;
   const boxX = HUD_VIEW_X;
   const boxY = Math.min(HUD_VIEW_Y + MSG_BOX_H, HUD_VIEW_Y + HUD_VIEW_H - boxH);
@@ -283,6 +290,26 @@ export function drawWordMenu() {
     // answer for is greyed instead.
     const pal = !row.term ? ROW_PLAIN : row.has ? ROW_TERM : ROW_TERM_DIM;
     drawText(ctx, boxX + PAD_X + TEXT_INDENT, boxY + PAD_Y + i * ROW_STEP, _nameToBytes(row.label), pal);
+  }
+
+  // Scroll arrows — the SAME primitives the shop list and the pause inventory
+  // use (`ui.scrollArrowUp/Down`, 8x8 ROM tiles, 250 ms blink), not a new
+  // marker. MAX_VISIBLE is 4 because a 5th row puts the box past the 176 px
+  // viewport floor, and the vocabulary was ALREADY 4 when this shipped: the
+  // next term added would have started the list scrolling with nothing on
+  // screen saying so, and a player holding six words would see four. v1.8.7.
+  if (needArrows) {
+    const arrowX = boxX + boxW - ARROW_GUTTER;
+    const blink = (Math.floor(Date.now() / 250) & 1) === 0;
+    // Inside the frame, not on it. The 8px border runs boxY..boxY+8, so an
+    // arrow at boxY+2 straddles the white edge and reads as a smudge — drawn
+    // and looked at, which is the only way that shows up.
+    if (first > 0 && ui.scrollArrowUp && blink) {
+      ctx.drawImage(ui.scrollArrowUp, arrowX, boxY + 8);
+    }
+    if (first + vis < rows.length && ui.scrollArrowDown && blink) {
+      ctx.drawImage(ui.scrollArrowDown, arrowX, boxY + boxH - 16);
+    }
   }
   drawCursorFaded(boxX + PAD_X, boxY + PAD_Y + (wordMenuSt.index - first) * ROW_STEP + CURSOR_DY, 0);
 }

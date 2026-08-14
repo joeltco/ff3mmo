@@ -22,7 +22,11 @@ const { ps }   = await import('../src/player-stats.js');
 const { mapSt } = await import('../src/map-state.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 const { msgState } = await import('../src/message-box.js');
-const { hasWord } = await import('../src/word-memory.js');
+// `knownWords()` rather than a `hasWord` seam: it is what `_askRows` actually
+// calls to build the list, so this asserts the path the game runs. hasWord was
+// exported for this gate alone and is module-private again as of v1.8.7.
+const { knownWords } = await import('../src/word-memory.js');
+const hasWord = (id) => knownWords().includes(id);
 const { talkQuest } = await import('../src/quests.js');
 
 const fail = [];

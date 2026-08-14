@@ -186,6 +186,7 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-msg-highlight` | Key Terms render red, runs stay aligned, nothing darker than the box blue |
 | `check-words` / `check-word-flow` | every term has a teacher AND answerer among PLACED NPCs; the menu walks learn→ask→offer→deny→accept |
 | `check-quests` | the quest state machine + no overhead marker |
+| `audit-words` | learning persists, client/server agree on term ids, the ASK list shows it scrolls, shop-opening and word-bearing NPCs stay disjoint, no unused exports. Open DESIGN items print but do not fail |
 | `audit-quests` | the 7 v1.8.6 holes stay closed: hand-in persists, server ledger pays once, `reward.item` lands, giver ranks its quests, progress tokens fill, clamps agree, no dead exports |
 | `check-equip-emit` / `check-inv-emit` | every equipment / bag / gil change reaches the server |
 | `check-save-lockstep` | every persisted field survives all FOUR save hops |

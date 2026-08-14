@@ -427,6 +427,18 @@ export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [
 
 // Map ID → keepers to place on that map. One render path: every entry goes
 // through npc.js#placeTownNpcs → addSceneNpc → shared Sprite class.
+// The keepers below are ORDINARY talkable NPCs — the shop opens from the
+// counter TILE (`movement.js` counter lookup), not from them — so giving one
+// `teaches` / `answers` works normally.
+//
+// ⛔ What does NOT work is an NPC that carries `shopId`: `npc.js#talkToNpc`
+// calls openShop and returns before the verb menu is reached. Today that is
+// only `addBlackMageShopkeeper`, which takes no spec at all (`npc.scene` stays
+// null, so `_verbRows` returns nothing anyway) and `addSceneNpc` deliberately
+// does not forward `spec.shopId`. Those two facts are what keep the mechanisms
+// disjoint, and `tools/audit-words.mjs` gates both — if a spec ever gains a
+// shopId, or addSceneNpc starts forwarding one, the word behaviour on that NPC
+// dies silently and the gate fires instead.
 export const TOWN_NPCS = new Map([
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },

@@ -287,6 +287,18 @@ The quest system IS the word system; there is no separate quest UI and **no over
 - ⛔ **ASK/LEARN opens on ANY NPC with `teaches`/`answers`, and that is correct.** Ordinary villagers having the menu with no marker is the FF2 feel. Do not add a marker for them.
 - **Gates:** `check-words.mjs` (every term needs a teacher AND an answerer among NPCs actually PLACED, plus the persistence hops), `check-word-flow.mjs` (drives the real menu with real key objects), `check-msg-highlight.mjs` (renders and reads pixels).
 
+### Word Memory audit (v1.8.7)
+
+`tools/audit-words.mjs` gates what `check-words.mjs` does not: not "is the chain walkable" but "does the system behave the way this section claims". Six checks, each proven by reverting its fix.
+
+- **`learnWord` writes to disk immediately.** Pre-fix nothing on the LEARN path called `saveSlotsToDB`, so a term survived only until some unrelated save happened to run. A word is the only thing the player earns by exploring instead of fighting.
+- **`api.js` validates term ids against `KEYWORDS`**, matching the client's `sanitizeWords` exactly. ⛔ `src/data/keywords.js` must stay IMPORT-FREE — the server imports it, same as `data/quests.js`.
+- **The ASK list draws scroll arrows** (`ui.scrollArrowUp/Down`, the shop/pause-inventory primitives, 250 ms blink) plus a 12 px gutter so the arrow clears the longest label. `MAX_VISIBLE` stays 4 — a 5th row puts the box past the 176 px viewport floor — so the arrows are what makes a growing vocabulary legible. Render with `tools/word-menu-shot.mjs --rows scroll`.
+- ⛔ **An NPC with `shopId` never reaches the verb menu** — `talkToNpc` opens the shop and returns. `addSceneNpc` deliberately does not forward `spec.shopId`, and the gate asserts it stays that way. The TOWN_NPCS keepers are NOT this case: their shop opens from the counter tile, so `answers` on them works normally.
+- **`hasWord` is module-private**; `check-word-flow.mjs` asserts through `knownWords()`, the call `_askRows` actually makes.
+
+**OPEN, by decision — the vocabulary is flat.** This section says an answer can hand over the next term. It cannot: an answer is `pages[]`, and `learnableFrom` reads the NPC's static `teaches`. Every term is learnable from an empty vocabulary and the only gate in the system is BROTHER opening the quest offer. One LEARN press also takes every word an NPC has. The audit prints both as `[OPEN — design]` every run without failing the deploy. Closing them means an answer shape that can teach (`answers: { cave: { pages, teaches: 'vein' } }`) plus re-authoring who in Ur knows what.
+
 ### Quest audit (v1.8.6)
 
 `check-quests.mjs` walked the one happy path and passed while seven holes sat under it. `tools/audit-quests.mjs` reproduces each and is now a deploy gate; every check was proven by reverting its fix.

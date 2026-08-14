@@ -18,6 +18,63 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.7 — 2026-08-14
+
+### Word Memory audit — the mechanical half
+
+`check-words.mjs` is a good gate and passes: every term has a teacher AND an
+answerer among PLACED NPCs, every teacher actually says their own word, the
+LEARN line fits the box, `ps.words` survives all five persistence hops. What it
+never asked is whether the SYSTEM does what its own design notes claim. New
+`tools/audit-words.mjs` does, and is now a deploy gate; all six checks proven by
+reverting the fix.
+
+- **A learned word was not written down.** `learnWord` mutated `ps.words` and
+  nothing on the LEARN path called `saveSlotsToDB`, so a term lived in memory
+  until some unrelated event (a battle ending, a map change) happened to write
+  it. Learn a word in the tavern, close the tab, gone — and on iOS
+  `beforeunload` never fires. Same shape as the v1.8.6 quest hand-in, opposite
+  direction: the player LOSES what they earned. `learnWord` persists now.
+- **Client and server disagreed about what a term id is.** `api.js`
+  shape-validated (any string ≤64 chars, 256 of them), so `{not_a_term: 1}`
+  survived login while `sanitizeWords` dropped it. The stated reason — "the
+  server doesn't import the client's keyword table" — stopped being true in
+  v1.8.6 when `data/quests.js` was imported there for the same job.
+  `data/keywords.js` is import-free and now validated against.
+- **The ASK list scrolled with nothing saying so.** `MAX_VISIBLE` is 4 (a 5th
+  row puts the box past the 176 px viewport floor) and the vocabulary was
+  ALREADY 4, so the next term added would have started silent scrolling. Added
+  the SAME `ui.scrollArrowUp/Down` primitives the shop list and pause inventory
+  use — 8×8 ROM tiles, 250 ms blink — plus a 12 px gutter, because "BROTHER"
+  ends at x=80 in an 88-wide box and the arrow draws at boxW−12=76. Drawn and
+  looked at (`tools/word-menu-shot.mjs --rows scroll`, which now inits the
+  arrows and pins the blink phase — without both, the shot showed no arrows
+  against code that draws them).
+- **`hasWord` is module-private.** It was exported for `check-word-flow.mjs`
+  alone; that gate now asserts through `knownWords()`, which is what `_askRows`
+  actually calls to build the list.
+- **Shop-opening and word-bearing NPCs are asserted disjoint.** An NPC carrying
+  `shopId` never reaches the verb menu (`talkToNpc` opens the shop and returns),
+  and today only `addBlackMageShopkeeper` makes one — it takes no spec, and
+  `addSceneNpc` does not forward `spec.shopId`. Both halves are now gated, so
+  either changing fires instead of silently killing that NPC's answers.
+  ⚠ An earlier pass reported this as a live trap on the inn/weapon keepers; it
+  was not — those open their shop from the counter TILE and are ordinary
+  talkable NPCs. Corrected.
+
+### Still open — a design decision, printed by the gate every run
+
+- **No word gates any other word.** `word-menu.js` claims "an answer can hand
+  over the next term — that's the FF2 chain"; it cannot. An answer is authored
+  as `pages[]` and nothing else, and `learnableFrom` reads the NPC's static
+  `teaches` list, never what was asked. All 4 terms are learnable from an empty
+  vocabulary. The only gate in the system is BROTHER opening the quest offer.
+- **One LEARN press takes every word an NPC has** (`ur_npc_09` hands over CAVE
+  and BROTHER together). FF2 makes you pick the word out of the sentence.
+
+Both are flagged `[OPEN — design]` and deliberately do NOT fail the deploy:
+closing them means re-authoring who in Ur knows what, which is a decision.
+
 ## 1.8.6 — 2026-08-14
 
 ### Quest system audit — seven holes, all closed

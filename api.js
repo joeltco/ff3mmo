@@ -7,6 +7,10 @@ import { MAX_LEVEL, INV_CAP } from './src/data/limits.js';
 // instead of a shape-only 0..9999 bound. data/quests.js is import-free for
 // exactly this reason; see its header before adding an import there.
 import { QUESTS } from './src/data/quests.js';
+// v1.8.7 — same reason, one file over: the save validator drops term ids that
+// are not in the vocabulary instead of keeping any string it is handed.
+// data/keywords.js is import-free; keep it that way.
+import { KEYWORDS } from './src/data/keywords.js';
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
@@ -270,15 +274,23 @@ function _validateSaveData(data) {
     }
     out.quests = q;
   }
-  // Word Memory: { termId: 1 }. Shape-validated only — the server doesn't
-  // import the client's keyword table — and bounded so a modded client can't
-  // stuff the save. Knowing a term you never earned only unlocks that
-  // player's own ASK list; the quest reward still flows through grantGil /
-  // grantExp, which the inventory mirror covers.
+  // Word Memory: { termId: 1 }. Validated against the REAL vocabulary as of
+  // v1.8.7 — an id that is not a term is dropped, exactly as the client's
+  // `sanitizeWords` drops it. It used to be shape-only (any string up to 64
+  // chars, 256 of them) on the grounds that "the server doesn't import the
+  // client's keyword table", which stopped being true when data/quests.js was
+  // imported here for the same job; both files are import-free for exactly
+  // this reason. Two halves of one save must agree on what is legal.
+  //
+  // Knowing a term you never earned only unlocks that player's own ASK list —
+  // the quest reward rides the server-validated `quest-claim` ledger — but a
+  // save the server accepts and the client silently rewrites is a divergence
+  // waiting to be read as a bug.
   if (data.words && typeof data.words === 'object' && !Array.isArray(data.words)) {
     const w = {};
     for (const [id, v] of Object.entries(data.words).slice(0, 256)) {
       if (typeof id !== 'string' || id.length > 64) continue;
+      if (!KEYWORDS[id]) continue;                            // not a term -> drop
       if (v) w[id] = 1;
     }
     out.words = w;

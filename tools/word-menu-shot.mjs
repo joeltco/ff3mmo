@@ -30,7 +30,7 @@ const ctx = canvas.getContext('2d');
 const { initFont } = await import('../src/font-renderer.js');
 const { ui } = await import('../src/ui-state.js');
 const { initHUD } = await import('../src/hud-init.js');
-const { initCursorTile } = await import('../src/sprite-init.js');
+const { initCursorTile, initScrollArrows } = await import('../src/sprite-init.js');
 const { drawBorderedBox } = await import('../src/hud-drawing.js');
 const { _nameToBytes } = await import('../src/text-utils.js');
 const mb = await import('../src/message-box.js');
@@ -52,6 +52,17 @@ initHUD(rom);
 const _ct = initCursorTile(rom);
 ui.cursorTileCanvas = _ct.cursorTileCanvas;
 ui.cursorFadeCanvases = _ct.cursorFadeCanvases;
+// The scroll arrows are a separate init (boot.js does both). Without this the
+// shot draws a scrolling list with no arrows and looks like the arrows are
+// broken — which is exactly what the first run of the v1.8.7 scroll shot did.
+const _sa = initScrollArrows(rom);
+ui.scrollArrowUp = _sa.scrollArrowUp;
+ui.scrollArrowDown = _sa.scrollArrowDown;
+// The arrows blink on a 250 ms wall-clock phase; a shot has to be deterministic,
+// so pin Date.now to the ON half rather than running the tool twice hoping.
+const _realNow = Date.now;
+Date.now = () => 0;
+process.on('exit', () => { Date.now = _realNow; });
 
 mb.registerMsgHighlights(Object.values(KEYWORDS).map(k => k.text));
 
@@ -64,16 +75,28 @@ mb.showMsgBox(_nameToBytes('Mind the cave north. It took my brother.'));
 mb.msgState.state = 'hold';
 mb.msgState.typed = mb.msgState.bytes.length;
 
-const rows = flag('rows', 'verbs') === 'ask'
+// `--rows scroll` is the case the scroll arrows exist for: MAX_VISIBLE is 4
+// and the vocabulary was already 4 when v1.8.7 added them, so the very next
+// term starts the list scrolling. Draw it at 6 and check the arrow does not
+// land on the last glyph of the longest label.
+const mode = flag('rows', 'verbs');
+const rows = mode === 'ask'
   ? [{ label: 'BROTHER', act: 'say', term: true, has: true },
      { label: 'CAVE',    act: 'say', term: true, has: true },
      { label: 'RIDERS',  act: 'say', term: true, has: false }]
+  : mode === 'scroll'
+  ? [{ label: 'BROTHER', act: 'say', term: true, has: true },
+     { label: 'CAVE',    act: 'say', term: true, has: true },
+     { label: 'RIDERS',  act: 'say', term: true, has: false },
+     { label: 'VEIN',    act: 'say', term: true, has: true },
+     { label: 'CRYSTAL', act: 'say', term: true, has: false },
+     { label: 'DJINN',   act: 'say', term: true, has: true }]
   : [{ label: 'LEARN', act: 'learn' }, { label: 'ASK', act: 'ask' }];
 
 wm.wordMenuSt.open = true;
 wm.wordMenuSt.rows = rows;
-wm.wordMenuSt.index = 1;
-wm.wordMenuSt.scroll = 0;
+wm.wordMenuSt.index = mode === 'scroll' ? parseInt(flag('index', '2'), 10) : 1;
+wm.wordMenuSt.scroll = mode === 'scroll' ? parseInt(flag('scroll', '1'), 10) : 0;
 
 mb.drawMsgBox(ctx, drawBorderedBox);
 wm.drawWordMenu();

@@ -4,12 +4,21 @@
 // data/keywords.js and the teach/answer tables on the NPC specs. Persisted
 // through BOTH the client serializer (save-state.js) and the server validator
 // (api.js) — a ps.* field added to only one silently resets on next login.
+//
+// ⛔ LEARNING WRITES TO DISK IMMEDIATELY. Pre-v1.8.7 `learnWord` only mutated
+// `ps.words` and nothing on the LEARN path called saveSlotsToDB, so a term was
+// held in memory until some unrelated event (a battle ending, a map change)
+// happened to write it. Learn a word in the tavern, close the tab, and it was
+// gone — and on iOS `beforeunload` never fires, so that is a swipe. A word is
+// the only thing the player earns by exploring rather than fighting; losing one
+// is losing the exploration.
 
 import { ps } from './player-stats.js';
+import { saveSlotsToDB } from './save-state.js';
 import { KEYWORDS } from './data/keywords.js';
 
-/** Has the player learned this term? */
-export function hasWord(id) {
+/** Has the player learned this term? Module-private — see learnableFrom. */
+function hasWord(id) {
   return !!(ps.words && ps.words[id]);
 }
 
@@ -19,6 +28,7 @@ export function learnWord(id) {
   if (!ps.words || typeof ps.words !== 'object') ps.words = {};
   if (ps.words[id]) return false;
   ps.words[id] = 1;
+  try { saveSlotsToDB(); } catch (_) { /* pre-boot / headless harness */ }
   return true;
 }
 
