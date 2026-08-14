@@ -573,7 +573,11 @@ export const KAZUS_MAGIC_KEEPER = interior(0x01C410, DIR_DOWN, [
 export const TOWN_NPCS = new Map([
   // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)
   [10, [
-    { key: 'kazus_town_a', x: 17, y: 21, spec: KAZUS_TOWN_A },
+    // ⛔ (17,21) is a DOORWAY — one open neighbour. A wanderer placed there can
+    // never legally move (npc.js only steps onto tiles with >= 3 open
+    // neighbours), so it stood in the inn's door permanently. Gated now by
+    // check-npc-placement.
+    { key: 'kazus_town_a', x: 11, y: 18, spec: KAZUS_TOWN_A },
     { key: 'kazus_town_b', x: 18, y: 27, spec: KAZUS_TOWN_B },
     { key: 'kazus_town_c', x: 15, y: 20, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
@@ -643,7 +647,12 @@ export const TOWN_NPCS = new Map([
   [114, [
     { key: 'ur_npc_05', x: 10, y: 28, spec: UR_NPC_05 },   // quest giver, static
     { key: 'ur_npc_0a', x: 29, y: 10, spec: UR_NPC_0A },   // far north
-    { key: 'ur_npc_09', x: 21, y: 15, spec: UR_NPC_09 },   // north centre
+    // ⛔ Was (21,15) — a DOORWAY, one open neighbour. He WANDERS, and npc.js only
+    // steps onto tiles with >= 3, so he has been standing in that doorway since
+    // he was placed, unable to move. Found by check-npc-placement's wander rule
+    // (added v1.8.14 after the same bug shipped in Kazus). (21,16) is the
+    // nearest open ground — one tile south, same spot for the player.
+    { key: 'ur_npc_09', x: 21, y: 16, spec: UR_NPC_09 },   // north centre
     { key: 'ur_npc_0d', x:  9, y: 21, spec: UR_NPC_0D },   // west
     { key: 'ur_npc_0c', x: 16, y: 25, spec: UR_NPC_0C },   // south centre
   ]],

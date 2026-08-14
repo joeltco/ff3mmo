@@ -31,6 +31,7 @@ import { TOWN_NPCS } from './data/town-npcs.js';
 // The map is the authority on how it colours people — see data/npc-palette.js.
 // Node-clean and shared with the gate so the rule lives in exactly one place.
 import { mapPalettesForSpec } from './data/npc-palette.js';
+import { isOpenAreaTile } from './data/npc-walk-area.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
@@ -576,17 +577,11 @@ function _isWalkableForNpc(mapData, x, y) {
   return true;
 }
 
-function _isOpenAreaTile(mapData, x, y) {
-  if (!mapData) return false;
-  if (x < 1 || x > 30 || y < 1 || y > 30) return false;
-  if (!_isWalkableForNpc(mapData, x, y)) return false;
-  let nbrs = 0;
-  if (_isWalkableForNpc(mapData, x + 1, y)) nbrs++;
-  if (_isWalkableForNpc(mapData, x - 1, y)) nbrs++;
-  if (_isWalkableForNpc(mapData, x, y + 1)) nbrs++;
-  if (_isWalkableForNpc(mapData, x, y - 1)) nbrs++;
-  return nbrs >= 3;
-}
+// Delegates to data/npc-walk-area.js so the placement gate can test the SAME
+// rule. A gate with its own copy of this drifts, and the thing it guards
+// against — a wanderer placed somewhere it can never step off — is invisible
+// until someone walks up to it.
+const _isOpenAreaTile = (mapData, x, y) => isOpenAreaTile(mapData, x, y);
 
 function _tileOccupied(tx, ty, selfNpc) {
   // Player straddles two tiles mid-walk (lerped worldX/worldY). Treat both

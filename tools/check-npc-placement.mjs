@@ -150,6 +150,27 @@ const LOADED_BUNDLES = new Map([
   // Compared through `npc.js#mapPalettesForSpec` — the function the game
   // actually places with — never a copy of the rule. Slot 0 is the transparent
   // index the renderer never paints, so only slots 1-3 are compared.
+  // A WANDERER must start where it can actually move. npc.js only steps onto
+  // tiles with >= MIN_OPEN_NEIGHBOURS open neighbours, so one placed on a
+  // doorway (1 neighbour) is stuck there for the life of the save — which is
+  // exactly what shipped in v1.8.13, a townsman standing in the inn's door.
+  // Uses the game's OWN predicate, never a copy.
+  const { isOpenAreaTile, MIN_OPEN_NEIGHBOURS } = await import('../src/data/npc-walk-area.js');
+  let stuck = 0;
+  for (const [mapId, list] of TOWN_NPCS) {
+    const md = loadMap(rom, mapId);
+    for (const e of list) {
+      if (!e.spec || !e.spec.wander) continue;      // keepers stand still on purpose
+      if (isOpenAreaTile(md, e.x, e.y)) continue;
+      console.error(`  ✗ map ${mapId}: ${e.key} WANDERS but starts at (${e.x},${e.y}), which has ` +
+        `fewer than ${MIN_OPEN_NEIGHBOURS} open neighbours — it can never step off and will ` +
+        `stand there forever (a doorway, usually)`);
+      stuck++;
+    }
+  }
+  if (stuck) failed += stuck;
+  else console.log('  ✓ every wandering NPC starts somewhere it can actually walk');
+
   const { mapPalettesForSpec } = await import('../src/data/npc-palette.js');
   // ⛔ The DATA check below runs the rule itself, so it passes whether or not
   // the game applies it — reverting the fix left this gate green until this
