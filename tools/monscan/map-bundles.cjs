@@ -87,13 +87,31 @@ function inBattle(nes) {
 // and raises $AB = $80; the engine clears $AB once it accepts the load. Hold
 // both across a window — a single poke gets eaten while the engine is in a
 // menu/dialogue state.
+// POKE=0x609d holds the Kazus curse flag across the warp, so the map loads as
+// the LIVING town. Diffing the bundle sets cursed-vs-living is what says
+// whether ghosts have their own sprites or are a palette on the same ones —
+// and that has to be measured, not assumed.
+const POKE = (() => {
+  if (!process.env.POKE) return null;
+  const [a, v] = String(process.env.POKE).split(':');
+  return { addr: parseInt(a, 16), value: v ? parseInt(v, 16) : 0xFF };
+})();
+
 function warp(nes, mapId, holdFrames = 300) {
   const cpu = nes.nes.cpu;
+  if (POKE) {
+    cpu.mem[POKE.addr] = POKE.value;
+    if (cpu.load(POKE.addr) !== POKE.value) console.log('  !! poke did not land — result is meaningless');
+  }
   for (let f = 0; f < holdFrames; f++) {
+    if (POKE) cpu.mem[POKE.addr] = POKE.value;
     cpu.mem[0x0700] = mapId & 0xFF;
     cpu.mem[0x00AB] = 0x80;
     nes.nes.frame();
-    if (cpu.mem[0x00AB] !== 0x80) return true;
+    if (cpu.mem[0x00AB] !== 0x80) {
+      for (let k = 0; k < 90; k++) { if (POKE) cpu.mem[POKE.addr] = POKE.value; nes.nes.frame(); }
+      return true;
+    }
   }
   return false;
 }
