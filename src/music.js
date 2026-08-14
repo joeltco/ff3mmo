@@ -52,11 +52,38 @@ export const SFX = {
   REVIVE:       0x92,  // NSF track $92 — party-death/angel revive jingle. Verified via REC OAM @ f311 (capture STARTED before death): CPU writes `$D1` to $7F49 at frame 40 → track `$D1 - $3F = $92`, firing as the angel appears. The earlier f5299 residual `$40` was post-consume bookkeeping, NOT the request (same trap as SIGHT/FIRE_BOOM).
 };
 
-// FF1 track indices (0-based, for ff1 NSF)
+// FF1 track indices (0-based, for ff1 NSF).
+//
+// FF1 keeps its current song in zero page $4B (`music_track`) and starts one via
+// Music_NewSong at $B003; NSF track N is FF1 song id N + $41. So "which song is
+// this screen" is answerable by watching one byte — `tools/ff1-sound-probe.mjs`
+// does exactly that and screenshots 45 frames after each request, which is how
+// the entries below stopped being "verified by ear".
 export const FF1_TRACKS = {
-  MENU_SCREEN: 16,  // Song $51 (music_track $11) — FF1 menu music
-  SHOP:        14,  // FF1 NSF — shop theme (verified by ear via /ff1 14)
+  // MEASURED v1.8.3: the game writes $51 to $4B the moment the party menu
+  // opens, and writes the field song back when it closes. The screenshot at the
+  // request is FF1's ITEM/MAGIC/WEAPON/ARMOR/STATUS party screen.
+  MENU_SCREEN: 16,
+  // ⚠ NOT attributed. The ROM really does request track 14 — three sites in
+  // bank 14 ($a352, $a56f, $a598), found by `tools/ff1-sound-sites.mjs` — so it
+  // is a real game track and not an invented number. But it has NOT been
+  // observed firing on a shop screen: reaching an FF1 shop headlessly is
+  // unsolved (the overworld position bytes $027/$028 track the party but
+  // writing them does not move it, so warping in is not available yet).
+  // Treat as PICKED until someone stands in a shop and sees $4B go to $4F.
+  SHOP:        14,
 };
+
+/**
+ * FF1 tracks whose meaning has actually been observed, for the sound catalogue.
+ * Anything not in here is unlabelled ON PURPOSE — the ROM has 23 tracks and only
+ * these three have been watched being requested at a known screen.
+ */
+export const FF1_TRACK_MEANINGS = new Map([
+  [0,  'opening prologue ("The world is veiled in darkness...")'],
+  [3,  'overworld field'],
+  [16, 'main menu (party screen)'],
+]);
 
 // FF2 NSF track indices (0-based into the 31-entry song table). Audition-
 // confirm the exact index by ear if a track sounds wrong (off-by-one between

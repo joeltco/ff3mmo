@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.3 — 2026-08-14
+
+### FF1 sounds — measured instead of "verified by ear"
+
+- Both FF1 constants carried the comment "verified by ear", which is a PICK. FF1
+  keeps its current song in zero page **`$4B`** (`music_track`) and starts one
+  via `Music_NewSong` at `$B003`; NSF track N is FF1 song id N + `$41` — all
+  already documented in `ff1-nsf-builder.js`, which drives that same entry.
+- New `tools/ff1-sound-probe.mjs` watches `$4B` and screenshots 45 frames after
+  each request, so a song is pinned to the screen it belongs to:
+  - **track 0** = opening prologue (plays over *"The world is veiled in
+    darkness…"*)
+  - **track 3** = overworld field
+  - **track 16** = main menu — `$51` is written the instant the party menu opens
+    and the field song is restored on close. **`FF1_TRACKS.MENU_SCREEN` is
+    correct and now measured.**
+- New `tools/ff1-sound-sites.mjs` enumerates every song request in the ROM (31
+  sites, 21 with immediate values) with bank + CPU address.
+
+### FF1_TRACKS.SHOP is still a pick, and is labelled as one
+
+Track 14 IS genuinely requested by the ROM — three sites in bank 14 — so it is a
+real track, not an invented number. But it has **not** been observed firing on a
+shop screen, so it stays a pick. Reaching an FF1 shop headlessly is unsolved:
+the party's overworld position is `$027`/`$028` (found by RAM-diffing while
+walking — `$027` moves on RIGHT only, `$028` on DOWN only), but **writing those
+bytes does not move the party**, so warping in is not available. A 323-coordinate
+sweep produced zero location entries.
+
+`check-ff1-music.mjs` holds it to exactly that claim: track 14 must remain
+something the ROM requests, and it must NOT be listed as a measured meaning. The
+other 20 FF1 tracks stay deliberately unlabelled — the gate fails if a meaning is
+added without a capture, so nothing drifts into "MEASURED". Proven by two
+reverts.
+
 ## 1.8.2 — 2026-08-14
 
 ### 0x14 fixed — all 8 summons verified, nothing in the catalogue left unmeasured

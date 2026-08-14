@@ -48,7 +48,7 @@ await (async () => {
 if (!Module.ccall) { console.error('sound-catalog: SKIP — libgme did not initialise'); process.exit(0); }
 
 // ── labels: what does ff3mmo use each track FOR ──────────────────────────
-const { SFX, TRACKS, FF1_TRACKS, FF2_TRACKS } = await import('../src/music.js');
+const { SFX, TRACKS, FF1_TRACKS, FF2_TRACKS, FF1_TRACK_MEANINGS } = await import('../src/music.js');
 const { CAPTURED_SPELL_SFX } = await import('../src/data/spell-sfx-captured.js');
 const { SPELL_NAMES_SHRINES: SPELL_NAMES } = await import('../src/data/spells.js');
 const { MAP_SONGS } = await import('../src/data/map-songs.js');
@@ -67,7 +67,12 @@ function ff3Labels(track) {
   return out;
 }
 function ff1Labels(track) {
-  return Object.entries(FF1_TRACKS).filter(([, v]) => v === track).map(([k]) => 'FF1_TRACKS.' + k);
+  const out = Object.entries(FF1_TRACKS).filter(([, v]) => v === track).map(([k]) => 'FF1_TRACKS.' + k);
+  // Only meanings that were WATCHED being requested at a known screen. The other
+  // 20 tracks stay unlabelled rather than guessed from their character.
+  const meaning = FF1_TRACK_MEANINGS.get(track);
+  if (meaning) out.push('MEASURED: ' + meaning);
+  return out;
 }
 function ff2Labels(track) {
   const out = Object.entries(FF2_TRACKS).filter(([, v]) => v === track).map(([k]) => 'FF2_TRACKS.' + k);
@@ -151,7 +156,11 @@ const GAMES = [
   { key: 'ff1', name: 'Final Fantasy I',
     rom: process.env.FF1_ROM || '/home/joeltco/roms/ff1-usa.nes',
     build: buildFF1NSF, count: 23, labels: ff1Labels,
-    note: '23 tracks, 0-based into the FF1 song table.' },
+    note: '23 tracks, 0-based. FF1 keeps the current song in zero page $4B ' +
+          '(music_track) and starts one via Music_NewSong at $B003; NSF track N ' +
+          'is FF1 song id N + $41. Meanings marked MEASURED were watched being ' +
+          'requested at a known screen (tools/ff1-sound-probe.mjs); the rest are ' +
+          'deliberately unlabelled. Request sites: tools/ff1-sound-sites.mjs.' },
   { key: 'ff2', name: 'Final Fantasy II',
     rom: process.env.FF2_ROM || '/home/joeltco/roms/ff2-jp.nes',
     build: buildFF2NSF, count: 42, labels: ff2Labels,
