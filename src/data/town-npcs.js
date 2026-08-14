@@ -196,6 +196,22 @@ const urNpc = (slot, extra = {}) => townNpc(NPC_BUNDLES, slot, extra);
 /** One Kazus townsperson. Same helper, that town's bundles. */
 const kazusNpc = (slot, extra = {}) => townNpc(KAZUS_TOWN_BUNDLES, slot, extra);
 
+// Castle Sasune's courtyard (map 18) loads exactly TWO NPC walk bundles —
+// `MAPS=18 node tools/monscan/map-bundles.cjs`. The ROM lists six people there
+// (one id48, one id59 and FOUR identical id60 guards), the same over-listing
+// Ur and Kazus have, so four of them cannot be drawn distinctly.
+//
+// ⛔ Do NOT compute a bundle from an NPC id. `0x1C010 + id*256` puts id60 at
+// 0x1FC10, which renders BLANK on the catalog sheet — the same trap the Kazus
+// campfire had. These two are what the PPU actually holds.
+const SASUNE_BUNDLES = [
+  0x01E010,
+  0x01EE10,
+];
+
+/** One Castle Sasune courtyard NPC. */
+const sasuneNpc = (slot, extra = {}) => townNpc(SASUNE_BUNDLES, slot, extra);
+
 // The five below carry the dialogue that shipped with the old placements,
 // re-attached to whichever ROM entry sits nearest the spot it used to stand
 // on. The other five are SILENT on purpose: FF3's NPC text lives behind the
@@ -609,7 +625,42 @@ export const KAZUS_ARMOR_KEEPER = interior(0x01DF10, DIR_DOWN, [
 // counter, with no shopId, so he stood in the wrong place AND the shop had no
 // menu — he just said a line.
 
+
+// ── Castle Sasune ────────────────────────────────────────────────────────
+//
+// Map 18, the courtyard — the game prints "Castle Sasune" on entry, which is
+// how the map was confirmed. Map 29 is the "Sasune Throne Room" (its own
+// banner) and is deliberately EMPTY here: the King and Princess Sara are story
+// characters and belong on the scene path, not in this table. Its NPC entries
+// even come in PAIRS on identical tiles (id55+id56 both at 10,6), which is a
+// scripted character's two states, not two villagers.
+//
+// ⛔ NO SHOPS. Nothing in maps 18-30 carries a shop-marker id (227-244), which
+// matches FF3: Sasune sells nothing. Do not add one.
+//
+// Guards stand their posts: `wander: false`. `animate` comes from townNpc, so
+// they march in place rather than freezing.
+//
+// ⚠ DIALOGUE IS FILLER, like Ur's and Kazus's, pending the one dialogue+quest
+// pass once all three locations are structurally complete.
+export const SASUNE_GUARD_W = sasuneNpc(0, {
+  wander: false,
+  dir: DIR_RIGHT,
+  dialogue: ['The gate stays open.', 'His Majesty wills it.'],
+});
+export const SASUNE_GUARD_E = sasuneNpc(1, {
+  wander: false,
+  dir: DIR_LEFT,
+  dialogue: ['Kazus lies south.', 'Go carefully.'],
+});
+
 export const TOWN_NPCS = new Map([
+  // --- Castle Sasune --- (two bundles; see the block above SASUNE_GUARD_W)
+  [18, [
+    { key: 'sasune_guard_w', x: 8,  y: 19, spec: SASUNE_GUARD_W },
+    { key: 'sasune_guard_e', x: 22, y: 19, spec: SASUNE_GUARD_E },
+  ]],
+
   // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)
   [10, [
     // ⛔ (17,21) is a DOORWAY — one open neighbour. A wanderer placed there can

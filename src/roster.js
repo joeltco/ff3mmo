@@ -79,6 +79,37 @@ const UR_ROOM_LOC = new Map([
   [147, 'ur-well'],     // well
 ]);
 
+// Castle Sasune. Map 18 is the courtyard, 29 the throne room (both named by
+// the game itself on entry); the rest of the block is castle interiors. Listed
+// for the same reason Kazus is: `rosterLocForMapId` DEFAULTS to 'ur', which is
+// a real answer rather than an "unknown", so an unlisted map reports players as
+// standing in Ur.
+// Kazus. Map 10 is the town (the game prints its name on entry), the rest are
+// its interiors.
+//
+// ⛔ These were LOST once already: they shipped in v1.8.12, the revert of that
+// version took them out, and the rebuild restored the NPCs without them — the
+// same way all three Kazus shops went missing. `rosterLocForMapId` DEFAULTS to
+// 'ur', so nothing looked broken; players standing in Kazus simply reported as
+// being in Ur. `check-roster-locs.mjs` pins this now.
+const KAZUS_ROOM_LOC = new Map([
+  [12, 'kazus-inn'],
+  [15, 'kazus-magic'],
+  [16, 'kazus-weapon'],
+  [17, 'kazus-armor'],
+  [11, 'kazus-house'],
+  [13, 'kazus-house2'],
+  [14, 'kazus-house3'],
+]);
+
+const SASUNE_ROOM_LOC = new Map([
+  [29, 'sasune-throne'],
+  [19, 'sasune-a'], [20, 'sasune-b'], [21, 'sasune-c'],
+  [23, 'sasune-d'], [24, 'sasune-e'], [25, 'sasune-f'],
+  [26, 'sasune-g'], [27, 'sasune-h'], [28, 'sasune-i'],
+  [30, 'sasune-j'],
+]);
+
 // Single source for "what roster location is this map?". getPlayerLocation()
 // delegates here so the live location and the transition-change check
 // (map-triggers.js) can never drift apart.
@@ -87,7 +118,12 @@ export function rosterLocForMapId(mapId) {
   if (mapId === 114) return 'ur';
   if (mapId === 1004) return 'crystal';
   if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
-  return UR_ROOM_LOC.get(mapId) || 'ur';
+  if (mapId === 10) return 'kazus';
+  if (mapId === 18) return 'sasune';
+  return UR_ROOM_LOC.get(mapId)
+      || KAZUS_ROOM_LOC.get(mapId)
+      || SASUNE_ROOM_LOC.get(mapId)
+      || 'ur';
 }
 
 export function getPlayerLocation() {
