@@ -124,6 +124,44 @@ that never landed is indistinguishable from "not the flag".
 
 Which BIT of `$609D` matters is not yet narrowed — 0xFF is what has been tested.
 
+### Kazus catalogs — CAPTURED (with `POKE=0x609d`)
+
+Read off the screen from the living town, prices included.
+
+**Kazus weapon (map 16)**
+
+| item | gil |
+|---|---|
+| MythrilRod | 400 |
+| MythrilKnife | 500 |
+| MythrilSwrd | 500 |
+
+**Kazus armor (map 17)**
+
+| item | gil |
+|---|---|
+| MythrilArmor | 350 |
+| MythrilShield | 180 |
+| MythrilHelm | 180 |
+| MythrilGlv | 120 |
+| MythrilBrc | 120 |
+
+Exactly the Mythril tier canon describes, and a clean step up from Ur (whose
+dearest item is a 100 gil Longsword).
+
+⚠ **Kazus magic (map 15) not captured.** Not a curse problem and not a step
+count — tried 5 and 9, and the town is live (`POKE=0x609d`). The room is a
+ROUND CHAMBER with four spell orbs on pedestals, which is how FF3 sells magic:
+you walk up to an ORB and buy that one spell, so there is no single counter to
+walk north to and `shop-probe.cjs`'s approach cannot reach a trigger that does
+not exist.
+
+Capturing it needs a different move — walk to each orb in turn and press A,
+reading one spell per orb. Note Ur's magic shop (map 3) DOES open with the
+north walk, so the two rooms are not the same interaction despite sharing an
+entrance coordinate and a marker position; do not assume from the ROM metadata
+that they behave alike.
+
 ## Canon (searched, for the dialogue)
 
 Kazus is cursed by the Djinn and its people are ghosts; **Cid** is a ghost in
