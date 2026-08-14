@@ -657,8 +657,13 @@ export const SASUNE_GUARD_E = sasuneNpc(1, {
 export const TOWN_NPCS = new Map([
   // --- Castle Sasune --- (two bundles; see the block above SASUNE_GUARD_W)
   [18, [
-    { key: 'sasune_guard_w', x: 8,  y: 19, spec: SASUNE_GUARD_W },
-    { key: 'sasune_guard_e', x: 22, y: 19, spec: SASUNE_GUARD_E },
+    // On the ENTRANCE PATH, at the ROM's own id48 / id59 coordinates. They were
+    // first placed on the id60 guard posts at (8,19) and (22,19) — reachable,
+    // but seven tiles either side of where the player walks in, so the castle
+    // read as deserted through the 9-tile viewport. The ROM puts two people
+    // right where you arrive; these are them.
+    { key: 'sasune_guard_w', x: 15, y: 20, spec: SASUNE_GUARD_W },
+    { key: 'sasune_guard_e', x: 16, y: 21, spec: SASUNE_GUARD_E },
   ]],
 
   // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)

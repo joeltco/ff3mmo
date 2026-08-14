@@ -644,6 +644,41 @@ function _checkExitPrev() {
  * own coordinate tables is a fidelity improvement to make separately, not
  * inside the change that first makes these maps exitable.
  */
+/**
+ * FIRE-ON-ATTEMPT exit. Walking INTO an exit-to-world tile leaves the map; the
+ * player never stands on one.
+ *
+ * This is how the ROM does it, and it is the fix `map-renderer.js` has been
+ * asking for in a comment for versions: type-1 tiles carry collision bit $80,
+ * so `isPassable` says no, and the step-on `checkTrigger` can therefore never
+ * see them. Maps 18 (Castle Sasune), 124 and 167 had NO WAY OUT — you walked
+ * in and were stuck.
+ *
+ * ⛔ The fix is NOT to make type 1 passable. That comment says why: the player
+ * would then stand inside the doorway. The trigger fires on the attempt and the
+ * move is refused, which is both correct and what the ROM does.
+ *
+ * Returns true when it consumed the attempt.
+ */
+export function tryExitToWorldAt(tileX, tileY) {
+  if (mapSt.onWorldMap || !mapSt.mapData || !mapSt.mapRenderer) return false;
+  if (!isExitToWorldTile(mapSt.mapData, tileX, tileY)) return false;
+  return _checkExitToWorld();
+}
+
+/**
+ * Is this an exit-to-world tile? Pure, so a gate can test it without standing
+ * up the whole map/transition machinery — the action half is asserted
+ * separately by checking movement.js actually calls tryExitToWorldAt.
+ */
+export function isExitToWorldTile(mapData, tileX, tileY) {
+  if (!mapData || tileX < 0 || tileY < 0 || tileX >= 32 || tileY >= 32) return false;
+  const raw = mapData.tilemap[tileY * 32 + tileX];
+  if (raw === undefined) return false;
+  const m = raw < 128 ? raw : raw & 0x7F;
+  return (((mapData.collisionByte2[m] || 0) >> 4) & 0x0F) === 1;
+}
+
 function _checkExitToWorld() {
   if (topBoxSt.isTown && topBoxSt.nameBytes) {
     topBoxSt.state = 'fade-out'; topBoxSt.timer = 0; topBoxSt.fadeStep = 0;

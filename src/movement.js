@@ -22,7 +22,7 @@ import { saveSlotsToDB } from './save-state.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
          handleRockPuzzle, handlePondHeal, triggerWipe,
-         isHiddenTreasureTile, handleHiddenTreasure } from './map-triggers.js';
+         isHiddenTreasureTile, handleHiddenTreasure , tryExitToWorldAt } from './map-triggers.js';
 import { shopSt, openShop, handleShopInput } from './shop.js';
 import { bedSt, handleBedInput } from './bed.js';
 import { findShopAtCounter } from './data/shops.js';
@@ -95,6 +95,12 @@ export function startMove(dir, isNewPress = false) {
   if (renderer && !renderer.isPassable(tileX, tileY)) {
     sprite.setDirection(dir);
     sprite.resetFrame();
+    // Walking INTO an exit-to-world tile leaves the map. Those tiles carry
+    // collision $80 so `isPassable` refuses them, which means the step-on
+    // trigger can never fire — Castle Sasune (18), 124 and 167 had no way out
+    // at all. The ROM fires this on the ATTEMPT and refuses the move, which is
+    // why the player never ends up standing in the gateway.
+    if (tryExitToWorldAt(tileX, tileY)) return;
     // (81,54), the neck of the coastal peninsula, is physically blocked by a
     // boulder overlay (world-map-renderer.js) — no "Coming Soon!" popup
     // needed. v1.7.505 pattern, relocated off Ur's valley in v1.7.925 and
