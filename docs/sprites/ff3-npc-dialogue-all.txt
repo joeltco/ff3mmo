@@ -1,0 +1,541 @@
+FF3 NPCs — 179 total   (dialogue = npcId + 0x202)
+
+id   3  gfx 43 0x1EB10  0x205
+     maps 148,419
+     "Smells like chocobo!"
+id   4  gfx 63 0x1FF10  0x206
+     maps 148,412,443
+     "Press the B Button to use / an item. Try a Potion on / me."
+id   5  gfx 34 0x1E210  0x207
+     Ur(10,28)
+     "Where are you rugrats off / to, Saving the world, / Y'all okay,"
+id   6  gfx 35 0x1E310  0x208
+     Ur(17,28)
+     (silent — no string)
+id   7  gfx 31 0x1DF10  0x209
+     Ur(8,27)
+     "The elders are waiting / inside. Father Dahn sensed / something has awakened / within you."
+id   8  gfx 35 0x1E310  0x20a
+     Ur(28,28)
+     "Wow, great job getting / here.There's Potions in / the well."
+id   9  gfx 34 0x1E210  0x20b
+     Ur(21,15)
+     "It's good to have Cure. / There's some in the / storage ahead. Watch out / for monsters on the way."
+id  10  gfx 37 0x1E510  0x20c
+     Ur(29,10)
+     "I{f4} picking flowers."
+id  11  gfx 34 0x1E210  0x20d
+     Ur secret(6,26)
+     "Check the rightmost candle / to open a hidden path. On / the way back, look up."
+id  12  gfx 31 0x1DF10  0x20e
+     Ur tavern(23,3) Ur(16,25)
+     "Those with the Crystal's / light can regain their / health by drinking the / holy water in the temples."
+id  13  gfx 31 0x1DF10  0x20f
+     Ur(9,21)
+     "Kazus is a town south of / here. Since the earthquake, / monsters appeared, and no / one wants to leave town."
+id  14  gfx 32 0x1E010  0x210
+     Ur(15,22)
+     "The Parmeni Mountains that / surround these lands are / ruled by King Sasune, whose / castle is west of here."
+id  15  gfx 31 0x1DF10  0x211
+     Ur(21,17)
+     "That earthquake buried the / Crystal's altar. The world / is ending!"
+id  16  gfx 44 0x1EC10  0x212  «Dahn»
+     Ur elder1(11,14)
+     "Dahn:I sense what has / happened to you four! / The other Elders wish to / speak with you."
+id  17  gfx 32 0x1E010  0x213  «Nina»
+     Ur elder2(2,4)
+     "Nina, the adoptive mother / of the four orphans: / I{f4} very worried! / Please be careful."
+id  18  gfx 34 0x1E210  0x214  «Tomak»
+     Ur elder2(6,4)
+     "Tomak, a village Elder: / To use the skills granted / to you by the Crystal, you / need to hone Capacity."
+id  19  gfx 44 0x1EC10  0x215  «Topapa»
+     Ur elder2(4,3)
+     "Elder Topapa, the man who / raised the four orphans. / {c}:Father Topapa.We!"
+id  20  gfx 32 0x1E010  0x216  «Topapa»
+     Ur inn(3,14)
+     "Topapa:I know. I never / thought you four would be / chosen!{10}{2}, {11}{2}, / {12}{2}, and {13}{2}! / This was no coincidence. / It was the will of the / Crystal to choose you / four. / Your hearts have been / embedded with light. You / mustn{f0} abuse this power. / / Go forth, and seal the / darkness. /"
+id  21  gfx 34 0x1E210  0x217  «Topapa»
+     Ur inn(4,3) Ur inn(8,14)
+     "Topapa:Your journey / begins."
+id  23  gfx 26 0x1DA10  0x219
+     maps 254,260
+     "{c}:How's that,"
+id  24  gfx 32 0x1E010  0x21a
+     maps 254,256,335
+     "Let me guess each of your / skills. / ! / / {10} / / {11} / / {12} / / {13} / / Am I right, /"
+id  25  gfx 38 0x1E610  0x21b
+     Ur armor(3,4) Ur weapon(3,22) Ur tavern(28,8)
+     "Zz!"
+id  26  gfx 33 0x1E110  0x21c
+     Ur tavern(29,5)
+     (silent — no string)
+id  27  gfx 39 0x1E710  0x21d  «Sara»
+     Ur tavern(22,7)
+     "Princess Sara.You{f2}e safe."
+id  28  gfx 32 0x1E010  0x21e
+     Ur tavern(24,7)
+     "Going on a journey, / Bring Antidotes and / Eye Drops."
+id  30  gfx 31 0x1DF10  0x220
+     Kazus(3,28)
+     "I can{f0} return to Canaan / because of that giant rock / in the valley, so I{f4} stuck / here drinking!Hic."
+id  31  gfx 25 0x1D910  0x221
+     Kazus(17,21)
+     "Can you play the piano,"
+id  32  gfx 34 0x1E210  0x222
+     Kazus(18,27)
+     "Gya."
+id  33  gfx 31 0x1DF10  0x223
+     Kazus(15,20)
+     "Sorry, I thought you were / a ghost!I came here from / the west. / / This town is cursed. / There's ghosts haunting / the inn. /"
+id  34  gfx 32 0x1E010  0x224  «King»
+     Kazus(14,17)
+     "King:Princess Sara. / You{f2}e safe. / Sara:We haven{f0} finished / our task yet. / We{f2}e going to use my / ring to seal the Djinn. / King:I{f4} worried about / your safety! / Sara:I{ef}l be fine.{c} / and the others are coming / with me. /"
+id  35  gfx 31 0x1DF10  0x225  «Cid»
+     Kazus(22,12)
+     "Cid:Cross the lake with my / airship and you{ef}l reach / the Sealed Cave where the / Djinn awaits.Banish him. /"
+id  36  gfx 31 0x1DF10  0x226
+     Kazus(15,16)
+     "We{f2}e back to normal / thanks to you."
+id  37  gfx 45 0x1ED10  0x227
+     Kazus magic(4,4) Kazus weapon(3,24) Kazus armor(3,6)
+     "The path connecting the / Parmeni Mountains and Nelv / Valley has been blocked / since that earthquake!"
+id  38  gfx 31 0x1DF10  0x228
+     Kazus inn(9,25)
+     "Kazus developed around the / Mythril Mines. All weapons / and armor made of Mythril / are produced in this town."
+id  39  gfx 45 0x1ED10  0x229
+     Kazus inn(5,27)
+     "This cave is the / Mythril Mines."
+id  40  gfx 31 0x1DF10  0x22a
+     Kazus inn(14,25) Kazus weapon(3,22) Kazus armor(3,4)
+     "Takka is the finest / blacksmith around. / He lives here alone."
+id  41  gfx 45 0x1ED10  0x22b
+     Kazus inn(3,27)
+     "The Djinn's curse has / left me in this state!"
+id  42  gfx 36 0x1E410  0x22c
+     Kazus inn(9,26)
+     "Thanks, you{f3}e saved us."
+id  43  gfx 45 0x1ED10  0x22d
+     Kazus inn(8,28)
+     "The Djinn that we had / banished into the Sealed / Cave was released by the / earthquake."
+id  44  gfx 45 0x1ED10  0x22e
+     Kazus inn(6,23)
+     "Hey.You can{f0} come in / here."
+id  45  gfx 45 0x1ED10  0x22f
+     Kazus inn(3,25)
+     "A while ago, there was a / Mythril Ring made for / Princess Sara of Castle / Sasune. If only we had it!"
+id  46  gfx 32 0x1E010  0x230
+     Kazus inn(9,23)
+     "There's a hidden path / in the Mythril Mines.Try / the wall at the dead end, / three steps from the left."
+id  47  gfx 34 0x1E210  0x231
+     maps 14,421,422
+     "The Mythril Ring can seal / the Djinn. It's only made / in this town. That's why / the Djinn attacked us."
+id  48  gfx 46 0x1EE10  0x232  «Cid»
+     Castle Sasune(15,20)
+     "Cid:I{f4} Cid from Canaan. / Been stuck here since Nelv / Valley got blocked by that / giant rock. / I stayed in this hotel and / then THIS happened. Haha. / Say, if I lent you my / airship, do you think you / could undo this, My / airship's hidden in the / west desert. / / You learned the location / of Cid's airship in the / desert. /"
+id  49  gfx 45 0x1ED10  0x233
+     maps 29,497
+     "I miss my beautiful face!"
+id  50  gfx 46 0x1EE10  0x234  «Girl»
+     maps 29,267,421,422
+     "Girl:Now everyone can see / my beautiful face again. / {c}:,."
+id  51  gfx 45 0x1ED10  0x235  «Cid»
+     maps 29,393
+     "Cid:To bust that rock in / Nelv to return to Canaan, / we need a mythril ram on / the bow of my airship. / Think you can hack one / together, / Takka:Wait here, and I{ef}l / smith you one in no time."
+id  52  gfx 46 0x1EE10  0x236  «Takka»
+     maps 29,393
+     "Takka:Done.Don{f0} thank me, / you guys saved the town. / Now be careful, okay, / / Takka attached a mythril / ram to the bow of the / airship. / Cid:Let's crush that rock."
+id  53  gfx 45 0x1ED10  0x237  «Takka»
+     maps 25,26,27,187,188,189
+     "Takka:Good luck."
+id  54  gfx 46 0x1EE10  0x238
+     maps 25,26,27,29,187,188
+     "The Djinn has cursed / everyone in this castle / into a ghost! / / I only escaped the curse / because I was out running / errands. / / Only a Mythril Ring can / reseal the Djinn, but it / seems that Kazus has also / been cursed!What to do,"
+id  55  gfx 45 0x1ED10  0x239
+     maps 29
+     "Thanks to you guys, the / Djinn's curse has been / lifted.Please speak to / the king at once. / His Majesty wishes to / present you with a magical / folding canoe. /"
+id  56  gfx 47 0x1EF10  0x23a
+     maps 29
+     "The Wightslayer, bane of / undead, is stored atop the / western tower. Only Red / Mages may wield it."
+id  57  gfx 24 0x1D810  0x23b
+     maps 178,269
+     "The Sealed Cave is guarded / by undead monsters. They / may be defeated by casting / Cure!"
+id  58  gfx 34 0x1E210  0x23c
+     maps 178,269
+     "There's a hidden path to / the treasure room in / this castle."
+id  59  gfx 32 0x1E010  0x23d
+     Castle Sasune(16,21)
+     "The Djinn's curse has left / me in this wretched state. / How am I supposed to live / like this,"
+id  60  gfx 46 0x1EE10  0x23e
+     Castle Sasune(8,19) Castle Sasune(22,19) Castle Sasune(7,17) Castle Sasune(23,18)
+     "Thank you, warriors."
+id  61  gfx 24 0x1D810  0x23f  «King»
+     maps 104,105,265,268,269,270
+     "King:I{f4} King Sasune. The / Djinn cursed everyone! / To lift the curse, the / Djinn must be resealed. / {c}:Where's the Djinn, / King:In the Sealed Cave / up north. We need a Mythril / Ring to seal him. / {c}:But Princess Sara / has one!, / King:Oh.A Mythril Ring / from Kazus was made for / her.But where is she now, / Did the Djinn take her, / Oh no! / / {c}:We{ef}l go to the cave / and find her. / King:Such Warriors, you / are.There's a secret path / in the Sealed Cave. / Find the skeleton key. / Seal the Djinn, and save / us all."
+id  65  gfx 24 0x1D810  0x243  «Sara»
+     maps 104,105,106,182,253,255
+     "Princess Sara wanted to / see you guys.Her room is / at the top of the east / tower."
+id  67  gfx 25 0x1D910  0x245  «Sara»
+     maps 33,34,269
+     "Sara:I{f4} Sara!King / Sasune's daughter. / {10}{2}:Princess Sara. / Why are you here, / Sara:My Mythril Ring saved / me from the Djinn's curse. / I came to seal the Djinn / and save my people, but / the monsters are getting / in the way! / / / {12}{2}:Here is dangerous. / Return to the castle. / Sara:No.I{ef}l be fine. / I got this."
+id  68  gfx 35 0x1E310  0x246
+     maps 33,34,254,273
+     "{13}{2}:She's gonna get / hurt! / / / Sara:Then let's go / together.You can{f0} seal / the Djinn without my ring. / / {c}:Guess we have no / choice! / / / Princess Sara has joined / the party. /"
+id  70  gfx 31 0x1DF10  0x248  «Cid»
+     maps 31,288,297,300
+     "Cid:Thank you again.You{f3}e / helped me twice already. / ! / Oh, I just remembered. / Push that candle on the / wall. It{ef}l open the way / to the hangar where I used / to park the airship. / There might be something / useful in there. /"
+id  71  gfx 31 0x1DF10  0x249
+     maps 31,273
+     "The Crystal silently emits / its light! / / / Light Warriors! / Free the light from the / darkness!Bring hope / back to this world!"
+id  72  gfx 34 0x1E210  0x24a
+     maps 31,273
+     "Cough."
+id  73  gfx 32 0x1E010  0x24b
+     maps 42,273
+     "I{ef}l give you a prize if / you run around the edge / of the continent on a / chocobo."
+id  75  gfx 35 0x1E310  0x24d
+     maps 31,273
+     "{c}:Can I place the horn / right here, / Dwarf:Yes, please do so."
+id  76  gfx 32 0x1E010  0x24e
+     maps 31,273
+     "I heard that a traveling / mage hid a magical healing / solution somewhere in this / town a long time ago."
+id  79  gfx 26 0x1DA10  0x251
+     maps 94,274
+     "Desch, Salina has fallen / madly in love with that / punk! / / Desch left saying there's / a task he promised to do. / Salina's been crying ever / since!"
+id  80  gfx 23 0x1D710  0x252  «Salina»
+     maps 43,164,332
+     "Salina:Oh, Desch! Why did / you leave me, Sob! / / / He went to the mountains / in the south, where a / dragon is said to be! /"
+id  81  gfx 23 0x1D710  0x253
+     maps 43,164,304
+     "Aero is a white magic / spell that attacks with / wind. Flying monsters don{f0} / like it."
+id  82  gfx 29 0x1DD10  0x254
+     maps 33,34,134,178,304
+     "A traveler named Desch / visited this town, but he / didn{f0} stay for long."
+id  83  gfx 23 0x1D710  0x255
+     maps 43,164,304
+     "Huh,"
+id  84  gfx 23 0x1D710  0x256
+     maps 43,164,272,288,291,298
+     "Gyah."
+id  85  gfx 23 0x1D710  0x257
+     maps 43,164,288,300
+     "Rustle!"
+id  86  gfx 23 0x1D710  0x258
+     maps 44,45,122,179,288
+     ",,,:Didn{f0} expect to see / anyone else here.You got / captured too, / / {c}:Umm!Who{f2}e you, / ,,,:Huh, Oh. I{f4} Desch. / {c}:I{f4} {c}. / / Desch:To be honest, I can{f0} / remember anything except / my name! / / But, I know that there's / something I{f3}e got to do. / But I{f4} not sure what! /"
+id  87  gfx 23 0x1D710  0x259  «Desch»
+     maps 43,46,49,164,297,410
+     "Desch:The dragon is back. / Hide."
+id  88  gfx 23 0x1D710  0x25a
+     maps 50,297
+     "The dragon attacks. / / Desch:You{f2}e no match. / Run.Just run."
+id  89  gfx 23 0x1D710  0x25b
+     maps 50,292
+     "Salina's mom:Desch, / Desch:You{f3}e mistaken me / for someone else!"
+id  91  gfx 36 0x1E410  0x25d
+     maps 60,288
+     "There's something / different about you guys!"
+id  92  gfx 49 0x1F110  0x25e
+     maps 51,160,288,300
+     "Miralka Basin, home of the / vikings, is at the far end / of the tunnel that goes / through the Miranos Range."
+id  93  gfx 49 0x1F110  0x25f
+     maps 51,160,288,300
+     "Thanks, warriors. You can / rest here for a little / while. Sara also wanted to / see you."
+id  94  gfx 49 0x1F110  0x260
+     maps 51,160,332
+     "I{f4} a gnome. / This is my home."
+id  96  gfx 49 0x1F110  0x262
+     maps 51,160
+     "Dr. Shelco's fallen ill. / He's the only doctor in / this town. How can we cure / him!"
+id  97  gfx 49 0x1F110  0x263
+     maps 52,161,282
+     (silent — no string)
+id  98  gfx 49 0x1F110  0x264
+     maps 52,161
+     "Smells weird!Sniff."
+id  99  gfx 33 0x1E110  0x265  «Shelco»
+     maps 52,161,278,282,300
+     "Shelco:Ungh!Antidote! / Please!"
+id 100  gfx 33 0x1E110  0x266
+     maps 52,161,278
+     "{c}:This energy. / / HP and MP restored."
+id 101  gfx 49 0x1F110  0x267
+     maps 52,161,282
+     (silent — no string)
+id 102  gfx 34 0x1E210  0x268  «Shelco»
+     maps 53,162,283
+     "Shelco:Thanks for helping / me.The stairs at the end / of that passage to leads / to Miralka Basin."
+id 103  gfx 51 0x1F310  0x269
+     maps 91,283
+     "Dr. Shelco knows where the / tunnel that leads to / Miralka Basin is."
+id 107  gfx 34 0x1E210  0x26d
+     maps 55,285,286,290
+     "Congrats on circling the / continent on a chocobo. / You get a prize. / / Obtained GnomeBread. /"
+id 108  gfx 34 0x1E210  0x26e
+     maps 55,284,287
+     "Yar.Vikings, we are.The / kings of the seas. / !Or we used to be. / / The earthquake woke a / great sea dragon from its / sleep, and it sunk our / ships. / The Enterprise survived, / but we can{f0} fight the / dragon with one ship. /"
+id 109  gfx 34 0x1E210  0x26f
+     maps 55,278
+     (silent — no string)
+id 110  gfx 31 0x1DF10  0x270
+     maps 55,292
+     "Even Pops don{f0} know what / to do!No one's a match / for that sea dragon!"
+id 111  gfx 36 0x1E410  0x271
+     maps 55,292
+     "Y'all have guts.Thanks."
+id 112  gfx 34 0x1E210  0x272
+     maps 55,292,297,300
+     "What can I do but drink, / What's a viking without / his ship!"
+id 113  gfx 34 0x1E210  0x273
+     maps 55,300
+     (silent — no string)
+id 114  gfx 32 0x1E010  0x274
+     maps 58,59,317
+     "I wanna sleep!"
+id 115  gfx 36 0x1E410  0x275
+     maps 58,59,321
+     "Now I can sleep!"
+id 116  gfx 31 0x1DF10  0x276
+     maps 58,59,334
+     "You{ef}l find the Nepto / Temple at the end of the / cape. Pops knows everything / about that place."
+id 117  gfx 32 0x1E010  0x277
+     maps 56,57,334
+     (silent — no string)
+id 118  gfx 34 0x1E210  0x278
+     maps 56,57,334
+     "The Enterprise survived, / but no one wants to ride / it. We{f1} just get killed by / the sea dragon."
+id 119  gfx 35 0x1E310  0x279
+     maps 56,57,334
+     (silent — no string)
+id 128  gfx 50 0x1F210  0x282
+     maps 67,314
+     "I{f4} the oldest of the / vikings. The Nepto Temple / is where the Nepto Dragon / used to sleep. / That earthquake sure / disturbed the dragon. / It's been acting violently / ever since."
+id 129  gfx 50 0x1F210  0x283
+     maps 67,314
+     "Thank you, young ones. / The Nepto Dragon has / finally calmed down."
+id 130  gfx 50 0x1F210  0x284
+     maps 67,315
+     "I hope our treasure's / useful, lali."
+id 131  gfx 50 0x1F210  0x285
+     maps 67,315
+     (silent — no string)
+id 132  gfx 50 0x1F210  0x286
+     maps 67,315
+     "It's a statue of the / Nepto Dragon. One of its / eyes are missing, and a / hole is in its place. / {c}:We could get in there / if we go Mini. /"
+id 133  gfx 50 0x1F210  0x287
+     maps 68,318
+     "The dwarves' horn was / stolen.Lali-lali-ho."
+id 134  gfx 50 0x1F210  0x288
+     maps 180,264,318,420,436
+     "Both of our horns have / now been stolen. / Lali-lali-ho-lali."
+id 135  gfx 50 0x1F210  0x289
+     maps 67,318
+     "Our treasure's yours. / Follow me, and behold the / dwarven moonwalk. / Lali-lali."
+id 136  gfx 50 0x1F210  0x28a
+     maps 67,318
+     "The Nepto Dragon rests in / a deep slumber."
+id 137  gfx 50 0x1F210  0x28b
+     maps 67,264,420
+     "It's a giant rat. / Giant Rat:Squeek. / Don{f0} take shiny, squeek."
+id 138  gfx 44 0x1EC10  0x28c
+     maps 60,61,62,475
+     "Obtained Nepto Eye."
+id 139  gfx 44 0x1EC10  0x28d
+     maps 60,279
+     "Go away. / I have nothing you want."
+id 140  gfx 44 0x1EC10  0x28e
+     maps 60,279
+     "You{f3}e saved us. / Thank you."
+id 142  gfx 44 0x1EC10  0x290
+     maps 60,305,309,310,312
+     (silent — no string)
+id 143  gfx 32 0x1E010  0x291
+     maps 60,305
+     "There be a demon in the / sands to the west!It's / a giant tree that moves."
+id 146  gfx 26 0x1DA10  0x294
+     maps 134,255,305
+     "You{f2}e the ones who beat / Hein.That's cool."
+id 147  gfx 51 0x1F310  0x295
+     maps 85,88,89,307,418
+     "This was dropped by a / soldier during their / attack. The seal of Argus. / {c}:No way!King Argus,."
+id 148  gfx 51 0x1F310  0x296
+     maps 86,305
+     (silent — no string)
+id 149  gfx 51 0x1F310  0x297
+     maps 86,305
+     "Far west, past the desert, / is a town of people who / claim to be descendants / of Ancients."
+id 150  gfx 31 0x1DF10  0x298
+     maps 85,403,418
+     (silent — no string)
+id 151  gfx 51 0x1F310  0x299
+     maps 86,498
+     "Please spare my child. / My only child."
+id 152  gfx 51 0x1F310  0x29a
+     maps 86,87,330,331
+     "Y-you!You{f2}e not one of / them!I{f4} sorry. I thought / those soldiers came back / again! / Th-they took my husband to / the desert to the west. / They wore the seal of / Argus!"
+id 153  gfx 51 0x1F310  0x29b
+     maps 86,475
+     "My husband!I hope he's / okay!"
+id 154  gfx 51 0x1F310  0x29c
+     maps 86,493,506
+     "My husband is alive. / Thanks so much."
+id 155  gfx 52 0x1F410  0x29d  «Salina»
+     maps 119,494,507
+     "Salina:Desch!in the / Tower of Owen!, / In flames!, / / {c}:I{f4} sure he's fine! / Salina:Oh, Desch!Please, / be safe! /"
+id 157  gfx 51 0x1F310  0x29f
+     maps 86,496,508
+     "Thanks to you, I escaped / Hein's castle and returned / to the village."
+id 158  gfx 52 0x1F410  0x2a0
+     maps 86,496,508
+     "This is the abode of the / Elder of Tokkul. You must / speak with him."
+id 160  gfx 52 0x1F410  0x2a2
+     maps 149,288
+     "I{f4} Tokkul's Elder. The / soldiers pillaged our / town, stealing our food / and young ones! / They came from the desert / to the west after that big / earthquake. Look at what / they did to this village!"
+id 162  gfx 31 0x1DF10  0x2a4
+     maps 69,459
+     "There's a hidden stairway / in the fireplace. We{f3}e / stored weapons in the / basement, but none of us / are strong enough to use / them. Take the weapons, and / save our town. /"
+id 163  gfx 41 0x1E910  0x2a5
+     maps 69,459,460,510,511
+     (silent — no string)
+id 164  gfx 32 0x1E010  0x2a6
+     maps 69,262
+     "We{f2}e faeries of the / the woods."
+id 165  gfx 34 0x1E210  0x2a7
+     maps 70,72,74,459,460,510
+     "The wizard who took the / elder can alter his / weakness. You{ef}l need to / find a way to counter it."
+id 166  gfx 37 0x1E510  0x2a8
+     maps 72,459,460,510,511
+     "These woods are blessed / with life."
+id 167  gfx 31 0x1DF10  0x2a9
+     maps 69,459,460,510,511
+     "The trees weep for the / missing Elder Tree, a tree / that has lived for ten / thousand years. / A wizard came and put a / curse on the it, then took / it away! /"
+id 168  gfx 37 0x1E510  0x2aa
+     maps 72,459,460,510,511
+     "If the Elder Tree doesn{f0} / return, these woods will / die!"
+id 170  gfx 53 0x1F510  0x2ac
+     maps 135,139,460,510
+     "The wizard Hein, of Castle / Argus, cursed the Elder / Tree."
+id 171  gfx 46 0x1EE10  0x2ad
+     maps 135,139,460,510
+     "Hein alters his weak point / when using Barrier Shift."
+id 172  gfx 46 0x1EE10  0x2ae
+     maps 135,460,510
+     "This is Gulgan Gulch. / Gulgans are born blind. / But, we can see the future."
+id 173  gfx 46 0x1EE10  0x2af
+     maps 135,460,510
+     "The Crystal that gave you / light is the Wind Crystal. / Find the other three:Fire, / Water, and Earth."
+id 174  gfx 46 0x1EE10  0x2b0
+     maps 135,460,510
+     "The Earth Crystal sealed / the light of the other / three!and its own!,"
+id 175  gfx 46 0x1EE10  0x2b1
+     maps 135,460,510
+     "The earthquake was just / the beginning. The tremors / that swallowed the / Crystals, the light of our / world, and let demons crawl / to the surface, are nothing / compared to the flood of / darkness that is to come."
+id 176  gfx 46 0x1EE10  0x2b2
+     maps 135,476
+     "I sense the power of fire / from the island of the / dwarves!"
+id 180  gfx 63 0x1FF10  0x2b6
+     maps 149,473,476,477,478,479
+     "We live hidden in this / gulch. Seeing the future / is dangerous."
+id 181  gfx 31 0x1DF10  0x2b7
+     maps 135,139,473
+     "I see both light and dark / in the future!But it's / not certain!"
+id 182  gfx 36 0x1E410  0x2b8
+     maps 135,139,288
+     "The weeping trees in the / Living Woods are calling / for you!"
+id 183  gfx 53 0x1F510  0x2b9
+     maps 81,281,283,315,497
+     "We{f2}e the descendants of / the Ancients!We live as / our Rule commands."
+id 184  gfx 46 0x1EE10  0x2ba
+     maps 81,292,328
+     "The flood of light! / The disaster caused by / the Ancients long ago. / / With the Crystals, they / abused the power of light, / and it overflowed and / destroyed the world. / Four warriors from the / dark world came to / vanquish the light, / but it was too late. / The Ancients were wiped / out. The survivors settled / in this land. /"
+id 185  gfx 46 0x1EE10  0x2bb
+     maps 81
+     "This continent is floating / in the air. Don{f0} believe / me, The Ancients designed / it. / The Tower of Owen keeps / this land aloft. /"
+id 186  gfx 46 0x1EE10  0x2bc
+     maps 81,279,322
+     "Our Rule commands us to / let ourselves be guided / by the Great Will. We do / not rely on machinery."
+id 187  gfx 46 0x1EE10  0x2bd
+     maps 81,260,261,267,272,274
+     "Light and dark have their / own will. They will choose / four mortals and bless / them with their power. / The four dark warriors / that stopped the flood of / light and saved the world / were chosen by darkness! / And now, you four have been / chosen by the light. You / musn{f0} abuse that power. /"
+id 188  gfx 46 0x1EE10  0x2be
+     maps 78,82,83,84,171,172
+     "Chocobo live in a forest / east of here."
+id 189  gfx  3 0x1C310  0x2bf
+     maps 79,80,346,354,355
+     "In the name of Lord Xande, / I, Medusa, will drop this / continent out of the sky. / Now, die."
+id 192  gfx 25 0x1D910  0x2c2  «Desch»
+     maps 33,34,263,266,289,308
+     "Desch:The damage is / extensive!but it's not / too late. I need go inside / and stabilize the reactor, / or else this continent / will lose power and fall / out of the sky. I guess / this is goodbye. / Thank you for everything. /"
+id 195  gfx 34 0x1E210  0x2c5
+     maps 14,377
+     "{c}:Desch.."
+id 196  gfx 46 0x1EE10  0x2c6
+     maps 81,377
+     "The flame burns violently. / {c}:Desch. / ! / {c}:Did he!die,"
+id 197  gfx 40 0x1E810  0x2c7
+     maps 93
+     "Lali-ho."
+id 198  gfx 62 0x1FE10  0x2c8
+     maps 148,149
+     "The two horns made of ice, / our treasure.One of them / was stolen."
+id 205  gfx 22 0x1D610  0x2cf
+     maps 124,157,285,286,290
+     "Thanks for returning the / horn.Now return it to its / place."
+id 208  gfx 31 0x1DF10  0x2d2
+     Kazus(3,28)
+     "We{f2}e off."
+id 209  gfx 36 0x1E410  0x2d3
+     maps 58,59,478
+     "Ouch."
+id 210  gfx 32 0x1E010  0x2d4
+     maps 58,59,479
+     "The horn is mine.Die."
+id 211  gfx 36 0x1E410  0x2d5
+     maps 58,59,377
+     "Obtained Dwarf Horn."
+id 213  gfx 40 0x1E810  0x2d7
+     maps 70,267,272,276,298,302
+     "Out to sea, far to the / east, is a peninsula with / a village called Gysahl."
+id 214  gfx 46 0x1EE10  0x2d8
+     maps 55,509
+     "Visitors.It's been years / since we{f3}e had people / visit us."
+id 215  gfx 32 0x1E010  0x2d9
+     maps 69,278,279
+     (silent — no string)
+id 216  gfx 41 0x1E910  0x2da
+     maps 69,279
+     "I take care of the sheep."
+id 217  gfx 25 0x1D910  0x2db
+     maps 33,34,254,284,287
+     "No.Not that way."
+id 219  gfx 44 0x1EC10  0x2dd  «Kate»
+     maps 60,410
+     "Kate:I{f4} Kate.I write / letters.You should write / letters, too. / / Square Development Team /"
+id 220  gfx 50 0x1F210  0x2de
+     maps 67,411
+     (silent — no string)
+id 221  gfx 23 0x1D710  0x2df
+     maps 185
+     "Fat Chocobo can store / items in its belly. / That's weird."
+id 234  gfx  5 0x1C510  0x2ec
+     maps 49,54,163,464
+     "Gutsco escaped to the / north cave.He's stolen / both horns."
+id 243  gfx  4 0x1C410  0x2f5
+     Ur magic(4,4)
+     "Thieves have the ability / to open locked doors / without using a key."
+id 244  gfx  4 0x1C410  0x2f6
+     Kazus magic(4,4)
+     "The rightmost of the four / candelabras is the switch / for the hidden passage."
+id 245  gfx  4 0x1C410  0x2f7
+     maps 37,38,465,498
+     "Thanks for saving Castle / Argus, Light Warriors."
+id 246  gfx 23 0x1D710  0x2f8
+     maps 47,48,299,311,498
+     "We{f2}e trying to recreate / the formula for Elixir. / We{f3}e made two so far. / Try them. / Obtained 2 Elixirs. /"
+id 247  gfx  4 0x1C410  0x2f9
+     maps 63,65,314,498
+     "It's a bonfire."
+id 248  gfx  3 0x1C310  0x2fa
+     maps 75,76,497
+     "It's a Dwarf Horn."
+
+25 of 179 name themselves: Dahn(id 16), Nina(id 17), Tomak(id 18), Topapa(id 19), Topapa(id 20), Topapa(id 21), Sara(id 27), King(id 34), Cid(id 35), Cid(id 48), Girl(id 50), Cid(id 51), Takka(id 52), Takka(id 53), King(id 61), Sara(id 65), Sara(id 67), Cid(id 70), Salina(id 80), Desch(id 87), Shelco(id 99), Shelco(id 102), Salina(id 155), Desch(id 192), Kate(id 219)

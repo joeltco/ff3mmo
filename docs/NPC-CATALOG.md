@@ -102,6 +102,102 @@ live town is a content decision, not a cataloguing one.
 
 ---
 
+## FF3 — the dialogue table, decoded
+
+Every NPC's line is its id, offset into the global string table:
+
+```
+stringId = npcId + 0x202
+```
+
+**Measured, not inferred.** Ur's elder house (map 7) holds exactly three NPCs at
+known ROM coordinates. Warping there, walking to each and reading the message
+box off the PPU **nametable** gave:
+
+| NPC | ROM position | line read off the screen | string |
+|---|---|---|---|
+| id 19 | (4,3) centre | "Elder Topapa, the man who raised the four orphans" | `0x215` |
+| id 17 | (2,4) left | "Nina, the adoptive mother of the four orphans" | `0x213` |
+| id 18 | (6,4) right | "Tomak, a village Elder" | `0x214` |
+
+Three for three, with left/centre/right matching the ROM's own coordinates. A
+fourth confirmation came from Kazus's inn (map 12): the NPC at (8,28) is id 43,
+and the game displayed *"The Djinn that we had banished into the Sealed Cave was
+released by the earthquake"* — string `0x22d` = 43 + 0x202.
+
+### Reading the nametable is the trick
+
+By the time the game draws a box it has already expanded the text compression,
+so the BG tiles **are** the decoded text (tile index == character code). That
+sidesteps the decoder entirely for verification.
+
+> ⛔ Read **all four** nametables and diff against a post-warp baseline. FF3 does
+> not draw the box into `$2000`, and the previous screen's tiles linger — an
+> absolute read of one nametable returns the *stale battle screen* while the
+> screenshot plainly shows a town interior. Also: the `inBattle()` heuristic
+> (>12 OAM sprites) **false-positives in town interiors**, where three NPCs at 4
+> sprites each plus the player clears the threshold. It reported "still in
+> battle" while standing in Ur's elder house.
+
+### The text format
+
+- **String pointer table** at `0x30010`, 2 bytes per id, bank packed in the top
+  3 bits of the high byte: `bank = 0x18 + (hi >> 5 & 7)`. (This scheme was
+  already in `tools/text-decode.js` for item/monster names; it works unchanged
+  for dialogue.)
+- **Dialogue is string ids `0x000`–`0x3FF`**; `0x400`+ are item/spell/monster/job
+  names.
+- **DTE compression**: bytes `0x29`–`0x5C` are one byte, two characters. The
+  table is at `0x75FA1` and is stored as **two parallel 52-byte arrays** — all
+  the first characters, then all the second characters. Searching for the pairs
+  as *adjacent* bytes ("ed", "it") finds nothing, which cost several attempts.
+  A duplicate copy sits at `0x7F4F1`.
+
+Decoded, the script reads cleanly:
+
+> *"The Parmeni Mountains that surround these lands are ruled by King Sasune,
+> whose castle is west of here."*
+> *"That earthquake buried the Crystal's altar. The world is ending!"*
+
+### The named cast
+
+The dialogue names people directly. In the towns we ship:
+
+| name | id | where |
+|---|---|---|
+| **Topapa** — the elder who raised the four orphans | 19 | Ur elder house |
+| **Nina** — their adoptive mother | 17 | Ur elder house |
+| **Tomak** — a village elder | 18 | Ur elder house |
+| **Dahn** — Father Dahn, elder | 16 | Ur elder house |
+| **Cid** — of Canaan | 48 | (his line) |
+| **Takka** — the blacksmith | 52 | Kazus |
+| **Sara** — King Sasune's daughter | 67 | — |
+| **Desch** | 192 | — |
+
+Full rosters: `docs/sprites/ff3-npc-dialogue.txt` (the 44 NPCs in shipped towns)
+and `ff3-npc-dialogue-all.txt` (every id). Regenerate with
+`node tools/npc-dialogue.mjs`.
+
+> ⛔ Names are taken **only** where a character identifies itself — a `"Name:"`
+> speaker prefix or a `"Name, the …:"` label. *"Takka is the finest blacksmith
+> around. He lives here alone"* is somebody talking **about** Takka; that NPC is
+> not Takka. Third-person mentions are deliberately not matched, because naming
+> from them invents characters.
+
+### A third correction to shipped data
+
+`town-npcs.js` bans **`0x1D910` as "Cid"**. The dialogue says otherwise: the four
+NPC ids wearing that sprite are **Sara** (id 67), **Desch** (id 192), and two
+unnamed. One sprite cannot be both Sara and Desch, so it is a shared townsfolk
+sprite, not Cid's. Combined with `0x1ED10` (the generic ghost, above), **both**
+entries in `STORY_SPRITE_BUNDLES` are labelled wrong.
+
+The ghost identification is now doubly confirmed: all ten ids wearing gfx 45 are
+Kazus's cursed cast, and their own lines say so — *"The Djinn's curse has left me
+in this state!"* — plus the sprite renders as a translucent outline on screen.
+
+---
+
 ## FF1 and FF2 — same engine, same layout
 
 Both were read off a **running PPU**, not guessed. Four wrong sheets came out of
@@ -154,7 +250,11 @@ never will.
 |---|---|
 | `src/data/npc-gfx.js` | the FF3 resolution (Node-clean; tools and gates import it) |
 | `tools/npc-catalog.mjs` | renders all three catalogs + `--json` |
-| `tools/check-npc-gfx.mjs` | the gate — 11 reverts tested, all fail |
+| `tools/check-npc-gfx.mjs` | sprite gate — 11 reverts tested, all fail |
+| `tools/lib/ff3-text.mjs` | the script decoder (string table + DTE) |
+| `tools/npc-dialogue.mjs` | every NPC with its sprite and its line |
+| `tools/check-npc-dialogue.mjs` | dialogue gate — 6 reverts tested, all fail |
+| `docs/sprites/ff3-npc-dialogue*.txt` | the named rosters |
 | `docs/sprites/ff3-npc-catalog.png` | 88 FF3 sprites, labelled |
 | `docs/sprites/ff1-npc-catalog.png` | 48 FF1 entries |
 | `docs/sprites/ff2-npc-catalog.png` | 47 FF2 entries |

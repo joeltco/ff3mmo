@@ -182,6 +182,7 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 |---|---|
 | `check-npc-room` / `check-npc-placement` | every placed NPC is in the room the player walks into, and on a sprite bundle that map loads |
 | `check-npc-gfx` | the NPC id → sprite lookup stays decoded — the table at ROM `0x1410`, the people/object arrays, and the drawn/undrawn split. See `docs/NPC-CATALOG.md`; sprite sheets in `docs/sprites/` |
+| `check-npc-dialogue` | FF3's script stays decoded — the DTE table at `0x75FA1`, the string pointer table, and `stringId = npcId + 0x202`, pinned against lines read off a running game |
 | `check-dialogue-fit` | every page wraps to ≤2 lines through the REAL wrapper |
 | `check-msgbox-typing` | the type-out finishes, Z fills it in, and `message-box.js` calls NO audio |
 | `check-msg-highlight` | Key Terms render red, runs stay aligned, nothing darker than the box blue |

@@ -85,6 +85,74 @@ they are left **unlabelled**.
 Also fixed a `no-regex-spaces` lint error in `check-map-exits.mjs` (from
 v1.8.22); that gate still passes and still fails on revert.
 
+## 1.8.24 — 2026-08-14
+
+### FF3's dialogue table, decoded — every NPC now has its line
+
+An NPC's dialogue is simply its id, offset into the global string table:
+
+```
+stringId = npcId + 0x202
+```
+
+**Measured, not inferred.** Ur's elder house (map 7) holds exactly three NPCs at
+known ROM coordinates. Warping there, walking to each and reading the message box
+off the PPU **nametable** produced *"Elder Topapa, the man who raised the four
+orphans"* (id 19, centre), *"Nina, the adoptive mother of the four orphans"*
+(id 17, left) and *"Tomak, a village Elder"* (id 18, right) — string ids
+`0x215` / `0x213` / `0x214`, three for three, with the positions matching the
+ROM's own coordinates. A fourth confirmation came from Kazus's inn: the NPC at
+(8,28) is id 43, and the game displayed the Sealed-Cave line, string `0x22d`.
+
+Reading the **nametable** is what made this cheap: by the time the game draws a
+box it has already expanded the text compression, so the BG tiles *are* the
+decoded text (tile index == character code).
+
+### The text format
+
+- **String pointer table** at `0x30010`, bank packed into the top 3 bits of the
+  high byte. Dialogue is string ids `0x000`–`0x3FF`; `0x400`+ are item / spell /
+  monster / job names.
+- **DTE**: bytes `0x29`–`0x5C` are one byte, two characters. The table is at
+  `0x75FA1`, stored as **two parallel 52-byte arrays** — all the first
+  characters, then all the second characters. Searching for the pairs as
+  *adjacent* bytes finds nothing, which cost several attempts.
+
+Decoded: *"The Parmeni Mountains that surround these lands are ruled by King
+Sasune, whose castle is west of here."*
+
+### The cast is named
+
+**Topapa**, **Nina**, **Tomak** and **Dahn** in Ur; **Takka** the blacksmith and
+**Cid** around Kazus; **Sara** and **Desch** elsewhere. Names are taken only
+where a character identifies *itself* — *"Takka is the finest blacksmith around"*
+is somebody talking **about** Takka, so that NPC is not named Takka.
+
+### A third correction to shipped data
+
+`STORY_SPRITE_BUNDLES` bans `0x1D910` as **"Cid"**. The dialogue says otherwise:
+the four ids wearing that sprite are **Sara** (id 67), **Desch** (id 192) and two
+unnamed. One sprite cannot be both, so it is a shared townsfolk sprite. Together
+with `0x1ED10` (the generic ghost, v1.8.23), **both** entries in that map are
+labelled wrong. Bans left in place — lifting them changes who stands in a live
+town. The ghost is now doubly confirmed: all ten ids wearing gfx 45 are Kazus's
+cursed cast and their own lines say so.
+
+### Two more harness traps recorded
+
+- FF3 does **not** draw the message box into `$2000`, and the previous screen's
+  tiles linger — reading one nametable returns the *stale battle screen*.
+- The `inBattle()` heuristic (>12 OAM sprites) **false-positives in town
+  interiors**: three NPCs at 4 sprites each plus the player clears the
+  threshold. It reported "still in battle" while standing in Ur's elder house.
+
+### New
+
+- `tools/lib/ff3-text.mjs` — the script decoder (string table + DTE)
+- `tools/npc-dialogue.mjs` — every NPC with its sprite and its line, `--json`
+- `tools/check-npc-dialogue.mjs` — **6 reverts tested, all fail** — in `deploy.sh`
+- `docs/sprites/ff3-npc-dialogue{,-all}.txt` — the named rosters
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware

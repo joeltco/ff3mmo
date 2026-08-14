@@ -151,11 +151,21 @@ const KAZUS_TOWN_BUNDLES = [
 // a content call — but it is a ban on the wrong grounds, and it currently stops
 // Kazus's cursed interiors using the sprite the ROM itself puts there.
 //
-// 0x01D910 really is Cid. Map 10 loads it for id 31 at (17,21) — re-measured
-// on hardware, where 0x01ED10 is ABSENT from Kazus entirely.
+// ⚠ AND 0x01D910 IS NOT CID EITHER. Decoding the dialogue table settled it:
+// the four NPC ids wearing that sprite are SARA (id 67, "I'm Sara! King
+// Sasune's daughter"), DESCH (id 192), and two unnamed. One sprite cannot be
+// both Sara and Desch, so it is a shared townsfolk sprite, not Cid's.
+//
+// Map 10 does load it for id 31 at (17,21) — that part was re-measured on
+// hardware — but id 31 says "Can you play the piano?", and Cid's own lines
+// belong to ids 48 and 51.
+//
+// BOTH entries below are therefore bans on the wrong grounds. They are kept
+// because lifting them changes who stands in a live town, which is a content
+// call, not a cataloguing one. See docs/NPC-CATALOG.md.
 export const STORY_SPRITE_BUNDLES = new Map([
-  [0x01D910, 'Cid'],
-  [0x01ED10, 'ghost (was labelled "Cid (ghost form)" — wrong, see NPC-CATALOG.md)'],
+  [0x01D910, 'shared townsfolk sprite (was labelled "Cid" — wrong, see NPC-CATALOG.md)'],
+  [0x01ED10, 'generic ghost (was labelled "Cid (ghost form)" — wrong, see NPC-CATALOG.md)'],
 ]);
 
 /**

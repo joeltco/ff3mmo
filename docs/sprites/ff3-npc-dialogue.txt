@@ -1,0 +1,136 @@
+FF3 NPCs — 44 in the towns we ship   (dialogue = npcId + 0x202)
+
+id   5  gfx 34 0x1E210  0x207
+     Ur(10,28)
+     "Where are you rugrats off / to, Saving the world, / Y'all okay,"
+id   6  gfx 35 0x1E310  0x208
+     Ur(17,28)
+     (silent — no string)
+id   7  gfx 31 0x1DF10  0x209
+     Ur(8,27)
+     "The elders are waiting / inside. Father Dahn sensed / something has awakened / within you."
+id   8  gfx 35 0x1E310  0x20a
+     Ur(28,28)
+     "Wow, great job getting / here.There's Potions in / the well."
+id   9  gfx 34 0x1E210  0x20b
+     Ur(21,15)
+     "It's good to have Cure. / There's some in the / storage ahead. Watch out / for monsters on the way."
+id  10  gfx 37 0x1E510  0x20c
+     Ur(29,10)
+     "I{f4} picking flowers."
+id  11  gfx 34 0x1E210  0x20d
+     Ur secret(6,26)
+     "Check the rightmost candle / to open a hidden path. On / the way back, look up."
+id  12  gfx 31 0x1DF10  0x20e
+     Ur tavern(23,3) Ur(16,25)
+     "Those with the Crystal's / light can regain their / health by drinking the / holy water in the temples."
+id  13  gfx 31 0x1DF10  0x20f
+     Ur(9,21)
+     "Kazus is a town south of / here. Since the earthquake, / monsters appeared, and no / one wants to leave town."
+id  14  gfx 32 0x1E010  0x210
+     Ur(15,22)
+     "The Parmeni Mountains that / surround these lands are / ruled by King Sasune, whose / castle is west of here."
+id  15  gfx 31 0x1DF10  0x211
+     Ur(21,17)
+     "That earthquake buried the / Crystal's altar. The world / is ending!"
+id  16  gfx 44 0x1EC10  0x212  «Dahn»
+     Ur elder1(11,14)
+     "Dahn:I sense what has / happened to you four! / The other Elders wish to / speak with you."
+id  17  gfx 32 0x1E010  0x213  «Nina»
+     Ur elder2(2,4)
+     "Nina, the adoptive mother / of the four orphans: / I{f4} very worried! / Please be careful."
+id  18  gfx 34 0x1E210  0x214  «Tomak»
+     Ur elder2(6,4)
+     "Tomak, a village Elder: / To use the skills granted / to you by the Crystal, you / need to hone Capacity."
+id  19  gfx 44 0x1EC10  0x215  «Topapa»
+     Ur elder2(4,3)
+     "Elder Topapa, the man who / raised the four orphans. / {c}:Father Topapa.We!"
+id  20  gfx 32 0x1E010  0x216  «Topapa»
+     Ur inn(3,14)
+     "Topapa:I know. I never / thought you four would be / chosen!{10}{2}, {11}{2}, / {12}{2}, and {13}{2}! / This was no coincidence. / It was the will of the / Crystal to choose you / four. / Your hearts have been / embedded with light. You / mustn{f0} abuse this power. / / Go forth, and seal the / darkness. /"
+id  21  gfx 34 0x1E210  0x217  «Topapa»
+     Ur inn(4,3) Ur inn(8,14)
+     "Topapa:Your journey / begins."
+id  25  gfx 38 0x1E610  0x21b
+     Ur armor(3,4) Ur weapon(3,22) Ur tavern(28,8)
+     "Zz!"
+id  26  gfx 33 0x1E110  0x21c
+     Ur tavern(29,5)
+     (silent — no string)
+id  27  gfx 39 0x1E710  0x21d  «Sara»
+     Ur tavern(22,7)
+     "Princess Sara.You{f2}e safe."
+id  28  gfx 32 0x1E010  0x21e
+     Ur tavern(24,7)
+     "Going on a journey, / Bring Antidotes and / Eye Drops."
+id  30  gfx 31 0x1DF10  0x220
+     Kazus(3,28)
+     "I can{f0} return to Canaan / because of that giant rock / in the valley, so I{f4} stuck / here drinking!Hic."
+id  31  gfx 25 0x1D910  0x221
+     Kazus(17,21)
+     "Can you play the piano,"
+id  32  gfx 34 0x1E210  0x222
+     Kazus(18,27)
+     "Gya."
+id  33  gfx 31 0x1DF10  0x223
+     Kazus(15,20)
+     "Sorry, I thought you were / a ghost!I came here from / the west. / / This town is cursed. / There's ghosts haunting / the inn. /"
+id  34  gfx 32 0x1E010  0x224  «King»
+     Kazus(14,17)
+     "King:Princess Sara. / You{f2}e safe. / Sara:We haven{f0} finished / our task yet. / We{f2}e going to use my / ring to seal the Djinn. / King:I{f4} worried about / your safety! / Sara:I{ef}l be fine.{c} / and the others are coming / with me. /"
+id  35  gfx 31 0x1DF10  0x225  «Cid»
+     Kazus(22,12)
+     "Cid:Cross the lake with my / airship and you{ef}l reach / the Sealed Cave where the / Djinn awaits.Banish him. /"
+id  36  gfx 31 0x1DF10  0x226
+     Kazus(15,16)
+     "We{f2}e back to normal / thanks to you."
+id  37  gfx 45 0x1ED10  0x227
+     Kazus magic(4,4) Kazus weapon(3,24) Kazus armor(3,6)
+     "The path connecting the / Parmeni Mountains and Nelv / Valley has been blocked / since that earthquake!"
+id  38  gfx 31 0x1DF10  0x228
+     Kazus inn(9,25)
+     "Kazus developed around the / Mythril Mines. All weapons / and armor made of Mythril / are produced in this town."
+id  39  gfx 45 0x1ED10  0x229
+     Kazus inn(5,27)
+     "This cave is the / Mythril Mines."
+id  40  gfx 31 0x1DF10  0x22a
+     Kazus inn(14,25) Kazus weapon(3,22) Kazus armor(3,4)
+     "Takka is the finest / blacksmith around. / He lives here alone."
+id  41  gfx 45 0x1ED10  0x22b
+     Kazus inn(3,27)
+     "The Djinn's curse has / left me in this state!"
+id  42  gfx 36 0x1E410  0x22c
+     Kazus inn(9,26)
+     "Thanks, you{f3}e saved us."
+id  43  gfx 45 0x1ED10  0x22d
+     Kazus inn(8,28)
+     "The Djinn that we had / banished into the Sealed / Cave was released by the / earthquake."
+id  44  gfx 45 0x1ED10  0x22e
+     Kazus inn(6,23)
+     "Hey.You can{f0} come in / here."
+id  45  gfx 45 0x1ED10  0x22f
+     Kazus inn(3,25)
+     "A while ago, there was a / Mythril Ring made for / Princess Sara of Castle / Sasune. If only we had it!"
+id  46  gfx 32 0x1E010  0x230
+     Kazus inn(9,23)
+     "There's a hidden path / in the Mythril Mines.Try / the wall at the dead end, / three steps from the left."
+id  48  gfx 46 0x1EE10  0x232  «Cid»
+     Castle Sasune(15,20)
+     "Cid:I{f4} Cid from Canaan. / Been stuck here since Nelv / Valley got blocked by that / giant rock. / I stayed in this hotel and / then THIS happened. Haha. / Say, if I lent you my / airship, do you think you / could undo this, My / airship's hidden in the / west desert. / / You learned the location / of Cid's airship in the / desert. /"
+id  59  gfx 32 0x1E010  0x23d
+     Castle Sasune(16,21)
+     "The Djinn's curse has left / me in this wretched state. / How am I supposed to live / like this,"
+id  60  gfx 46 0x1EE10  0x23e
+     Castle Sasune(8,19) Castle Sasune(22,19) Castle Sasune(7,17) Castle Sasune(23,18)
+     "Thank you, warriors."
+id 208  gfx 31 0x1DF10  0x2d2
+     Kazus(3,28)
+     "We{f2}e off."
+id 243  gfx  4 0x1C410  0x2f5
+     Ur magic(4,4)
+     "Thieves have the ability / to open locked doors / without using a key."
+id 244  gfx  4 0x1C410  0x2f6
+     Kazus magic(4,4)
+     "The rightmost of the four / candelabras is the switch / for the hidden passage."
+
+10 of 44 name themselves: Dahn(id 16), Nina(id 17), Tomak(id 18), Topapa(id 19), Topapa(id 20), Topapa(id 21), Sara(id 27), King(id 34), Cid(id 35), Cid(id 48)
