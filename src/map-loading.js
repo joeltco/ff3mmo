@@ -273,6 +273,11 @@ function _loadRegularMap(mapId, returnX, returnY) {
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
   clearNpcs();
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
+  // Kazus's magic shop, same mechanism. The keeper stands ON the counter tile
+  // and carries the shopId, which is what `talkToNpc` reads to open the menu —
+  // a plain TOWN_NPCS villager next to the counter has neither, which is how
+  // v1.8.12 shipped a magic shop that only said a line.
+  if (mapId === 15) addBlackMageShopkeeper(4, 4, 'kazus_magic');
   if (mapId === 7) placeOpeningScene();
   // Ur (114) has a dark-tile patch in the town that spawns wild
   // grasslands encounters (Werewolves + Bees). Flood-fill from the seed

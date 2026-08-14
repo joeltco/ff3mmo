@@ -130,11 +130,23 @@ const NPC_BUNDLES = [
 // Bundle 0x01ED10 is deliberately NOT here — it is CID, a story character.
 // See the note above the Kazus shop keepers.
 const KAZUS_TOWN_BUNDLES = [
-  0x01D910,
   0x01DF10,
   0x01E010,
   0x01E210,
 ];
+
+// ⛔ NAMED STORY CHARACTERS. Never put one of these on an ordinary NPC.
+//
+// They are in the walk-bundle range and a map loads them like any other, so
+// they look available on the sprite-catalog sheet. They are not. Twice now one
+// has been placed as furniture: 0x01ED10 on all three Kazus shop keepers
+// (v1.8.12) and then as an inn "ghost" (v1.8.13), and 0x01D910 as a Kazus
+// townsman who wandered the streets as Cid (v1.8.17). check-npc-placement
+// fails on any placed NPC using one.
+export const STORY_SPRITE_BUNDLES = new Map([
+  [0x01D910, 'Cid'],
+  [0x01ED10, 'Cid (ghost form)'],
+]);
 
 /**
  * One townsperson, for ANY town. `bundles` is that town's PPU-verified walk-
@@ -533,7 +545,6 @@ export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [
 // 16-char/2-line box so check-dialogue-fit stays honest meanwhile.
 
 // Town (map 10) — WANDERING, through the shared townNpc helper, exactly as Ur.
-export const KAZUS_TOWN_A = kazusNpc(0, { dialogue: ['Kazus keeps to itself.', 'You will see why.'] });
 // The man at the CAMPFIRE in the south-west corner. Not a fifth NPC: map 10
 // loads only four walk bundles and the ROM draws this person on 0x01DF10 —
 // slot 1, the one this spec already had — measured by reading OAM beside the
@@ -543,13 +554,13 @@ export const KAZUS_TOWN_A = kazusNpc(0, { dialogue: ['Kazus keeps to itself.', '
 // `wander: false` — a man at a fire stays at his fire. It also keeps him off
 // the >= 3-open-neighbour rule that wanderers need, and (3,28) is walled to the
 // west. DIR_RIGHT faces the flame at (4,28).
-export const KAZUS_TOWN_B = kazusNpc(1, {
+export const KAZUS_TOWN_B = kazusNpc(0, {
   wander: false,          // `animate` comes from townNpc — he marches in place
   dir: DIR_RIGHT,
   dialogue: ['The mines gave out.', 'The fire still catches.'],
 });
-export const KAZUS_TOWN_C = kazusNpc(2, { dialogue: ['Mythril still comes up.', 'Little else does.'] });
-export const KAZUS_TOWN_D = kazusNpc(3, { dialogue: ['Travelers are rare here.', 'Rest before you go on.'] });
+export const KAZUS_TOWN_C = kazusNpc(1, { dialogue: ['Mythril still comes up.', 'Little else does.'] });
+export const KAZUS_TOWN_D = kazusNpc(2, { dialogue: ['Travelers are rare here.', 'Rest before you go on.'] });
 
 // Inn (map 12) — indoors, so `interior()`: no wandering, idle-march in place.
 export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
@@ -588,10 +599,15 @@ export const KAZUS_ARMOR_KEEPER = interior(0x01DF10, DIR_DOWN, [
   'Mythril plate.',
   'Dear, but it turns a blade.',
 ]);
-export const KAZUS_MAGIC_KEEPER = interior(0x01C410, DIR_DOWN, [
-  'Scrolls, if you can read.',
-  'Take your time.',
-]);
+// ⛔ NO KAZUS_MAGIC_KEEPER SPEC. A magic shop's keeper is placed by
+// `map-loading.js` via `addBlackMageShopkeeper(x, y, shopId)` — ON the counter
+// tile, carrying the shopId that `talkToNpc` uses to open the menu. Ur's does
+// exactly that (map-loading.js: `if (mapId === 3) addBlackMageShopkeeper(4, 4,
+// 'ur_magic')`), and TOWN_NPCS for map 3 is empty.
+//
+// v1.8.12 put a plain TOWN_NPCS keeper at (4,3) instead: one tile behind the
+// counter, with no shopId, so he stood in the wrong place AND the shop had no
+// menu — he just said a line.
 
 export const TOWN_NPCS = new Map([
   // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)
@@ -600,7 +616,6 @@ export const TOWN_NPCS = new Map([
     // never legally move (npc.js only steps onto tiles with >= 3 open
     // neighbours), so it stood in the inn's door permanently. Gated now by
     // check-npc-placement.
-    { key: 'kazus_town_a', x: 11, y: 18, spec: KAZUS_TOWN_A },
     { key: 'kazus_town_b', x: 3, y: 28, spec: KAZUS_TOWN_B },   // beside the campfire
     { key: 'kazus_town_c', x: 15, y: 20, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
@@ -615,7 +630,6 @@ export const TOWN_NPCS = new Map([
   ]],
   [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 14, spec: KAZUS_WEAPON_KEEPER }]],
   [17, [{ key: 'kazus_armor_keeper',  x: 3, y: 4,  spec: KAZUS_ARMOR_KEEPER }]],
-  [15, [{ key: 'kazus_magic_keeper',  x: 4, y: 3,  spec: KAZUS_MAGIC_KEEPER }]],
 
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },

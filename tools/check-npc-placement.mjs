@@ -155,6 +155,26 @@ const LOADED_BUNDLES = new Map([
   // doorway (1 neighbour) is stuck there for the life of the save — which is
   // exactly what shipped in v1.8.13, a townsman standing in the inn's door.
   // Uses the game's OWN predicate, never a copy.
+  // No NAMED STORY CHARACTER is placed as an ordinary NPC. Their bundles sit in
+  // the walk range and maps load them like any other, so they look available on
+  // the sprite-catalog sheet — Cid has been placed as a shop keeper, as an inn
+  // ghost, and as a wandering townsman across three versions.
+  {
+    const { STORY_SPRITE_BUNDLES } = await import('../src/data/town-npcs.js');
+    let story = 0;
+    for (const [mapId, list] of TOWN_NPCS) {
+      for (const e of list) {
+        const who = e.spec && STORY_SPRITE_BUNDLES.get(e.spec.romOffset);
+        if (!who) continue;
+        console.error(`  ✗ map ${mapId}: ${e.key} uses 0x${e.spec.romOffset.toString(16).toUpperCase()}, ` +
+          `which is ${who} — a named story character, not a villager`);
+        story++;
+      }
+    }
+    if (story) failed += story;
+    else console.log('  ✓ no named story character is placed as an ordinary NPC');
+  }
+
   // Nobody is FROZEN. `npc.js#addSceneNpc` resolves
   //   mode = wander ? 'pause' : (animate ? 'idle-march' : 'static')
   // so a spec with wandering off and animation unset is a statue of a person.
