@@ -90,10 +90,39 @@ the Djinn is beaten, and canon says the shops only trade once the curse lifts.
 Tried and ruled out: `STEPS=6` (walks past), `STEPS=4` (stands at the counter,
 still nothing). The blocker is story state, not geometry.
 
-To capture them, the emulated game has to be put PAST the curse — find the
-progress flag (RAM-diff a state before/after, or patch it) and warp in with it
-set, the same way the spell-capture arc patched spell records to reach states
-the game refused. Until then Kazus catalogs are unread.
+### The curse flag is `$609D`
+
+Found with `tools/monscan/shop-flag.cjs`, not guessed. Ur's weapon shop (map 5)
+and Kazus's (map 16) are the same room with the same counter position and one
+opens while the other does not, so: hook every CPU read in both and the
+addresses read ONLY in Kazus are where the extra check lives.
+
+**Set `$609D` before the map loads and Kazus is a living town** — the ghost
+behind the counter is gone and the shop opens. `$609D` sits in the save-data
+region (`$6000-$60BF`), which is where story progress lives.
+
+    POKE=0x609d node tools/monscan/shop-probe.cjs 16
+
+⛔ **It must be set BEFORE the warp and held across the load.** A cursed town
+decides ghosts-or-people while the map loads; a value set once the player is
+standing in the room changes nothing, because the ghosts are already there.
+
+Three things made correct addresses look like dead ends, all worth knowing
+before running this on the next town:
+
+1. **A blue-fraction "is the shop open" test calls a MESSAGE BOX a shop.** The
+   ghost says *"The Djinn's curse has left me in this state..."* and the
+   detector scored it as an open shop. Measured discriminator: the strip
+   between the two top boxes is dark in a shop's two-box header (0.25) and blue
+   in a single wide message box (0.69).
+2. **Tracing the counter press finds nothing.** The check runs at MAP LOAD. A
+   counter-window trace returned six addresses, none of which did anything.
+3. **Poking after the warp finds nothing either** — same reason as the ⛔ above.
+
+The sweep verifies every poke reads back before believing a negative: a write
+that never landed is indistinguishable from "not the flag".
+
+Which BIT of `$609D` matters is not yet narrowed — 0xFF is what has been tested.
 
 ## Canon (searched, for the dialogue)
 

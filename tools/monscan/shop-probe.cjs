@@ -58,18 +58,64 @@ function bootToField(nes) {
   run(180, nes);
 }
 
+// POKE=0x609d[:value] holds a byte across the warp and the map load.
+//
+// $609D is the KAZUS CURSE FLAG, found by tracing which addresses the game
+// reads while LOADING a cursed map that it does not read loading Ur's
+// equivalent, then poking each (tools/monscan/shop-flag.cjs). Kazus's shops do
+// not open on a fresh game — a ghost stands behind every counter — and setting
+// this byte before the map loads makes the town live, so its stock can be read.
+//
+// It has to be held ACROSS the load: a cursed town decides ghosts-or-people
+// while the map loads, so a value set afterwards changes nothing.
+const POKE = (() => {
+  if (!process.env.POKE) return null;
+  const [a, v] = String(process.env.POKE).split(':');
+  return { addr: parseInt(a, 16), value: v ? parseInt(v, 16) : 0xFF };
+})();
+
 function warp(nes, mapId, holdFrames = 300) {
   const cpu = nes.nes.cpu;
+  if (POKE) {
+    cpu.mem[POKE.addr] = POKE.value;
+    if (cpu.load(POKE.addr) !== POKE.value) {
+      console.log(`  !! poke $${POKE.addr.toString(16)} did not land — result is meaningless`);
+    }
+  }
   for (let f = 0; f < holdFrames; f++) {
+    if (POKE) cpu.mem[POKE.addr] = POKE.value;
     cpu.mem[0x0700] = mapId & 0xFF;
     cpu.mem[0x00AB] = 0x80;
     nes.nes.frame();
-    if (cpu.mem[0x00AB] !== 0x80) return true;
+    if (cpu.mem[0x00AB] !== 0x80) {
+      for (let k = 0; k < 90; k++) { if (POKE) cpu.mem[POKE.addr] = POKE.value; nes.nes.frame(); }
+      return true;
+    }
   }
   return false;
 }
 
 const ramSnapshot = (nes) => Buffer.from(nes.nes.cpu.mem.slice(0, 0x800));
+
+// Is the SHOP open (as opposed to a dialogue box, which is also a big blue
+// panel)? MEASURED on known frames: the strip BETWEEN the two top boxes is dark
+// in a shop's two-box header and blue in a single wide message box.
+//   shop 0.43 top / 0.25 gap   message 0.46 / 0.69   map 0.00 / 0.00
+function shopIsOpen(nes) {
+  const fb = nes.nes.ppu.buffer;
+  if (!fb) return false;
+  const W = 256;
+  const frac = (x0, y0, x1, y1) => {
+    let n = 0, t = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const p = fb[y * W + x];
+      const r = p & 255, g = (p >> 8) & 255, b = (p >> 16) & 255;
+      t++; if (b > 100 && b > r + 50 && b > g + 40) n++;
+    }
+    return t ? n / t : 0;
+  };
+  return frac(0, 8, 256, 40) > 0.2 && frac(72, 16, 88, 32) < 0.45;
+}
 
 for (const mapId of MAPS) {
   const nes = new Nes(ROM_PATH);
@@ -85,27 +131,30 @@ for (const mapId of MAPS) {
   // Walk north to the counter, pressing A each step. Stepping onto a shop
   // counter is what opens FF3's shop, but talking works too — doing both means
   // the probe does not need to know which mechanism a given shop uses.
+  // ⛔ STOP as soon as the shop is up. Walking on and mashing A past that point
+  // drives the root menu — the cursor slides Buy -> Sell -> Exit and the stock
+  // list never opens, which is exactly what the first Kazus capture produced.
   const STEPS = parseInt(process.env.STEPS || '6', 10);
-  for (let i = 0; i < STEPS; i++) {
+  let opened = false;
+  for (let i = 0; i < STEPS && !opened; i++) {
     press(nes, 'up', 14, 26);
     press(nes, 'a', 8, 30);
     run(30, nes);
     nes.screenshot(`${SHOTS}/shop-${mapId}-step${i}.png`);
+    opened = shopIsOpen(nes);
   }
-  run(60, nes);
+  run(90, nes);
+  if (!opened && !shopIsOpen(nes)) {
+    console.log(`map ${mapId}: shop never opened after ${STEPS} steps — nothing to read`);
+  }
   nes.screenshot(`${SHOTS}/shop-${mapId}-open.png`);
 
   // The root menu is Buy / Sell / Exit with the cursor already on Buy, so one A
   // opens the stock list — which is the thing this tool exists to read. Shoot
   // it, then page DOWN in case the list is longer than the window.
-  press(nes, 'a', 8, 40);
-  run(60, nes);
+  press(nes, 'a', 10, 90);
+  run(90, nes);
   nes.screenshot(`${SHOTS}/shop-${mapId}-buy.png`);
-  for (let p = 0; p < 3; p++) {
-    for (let d = 0; d < 4; d++) press(nes, 'down', 8, 14);
-    run(30, nes);
-    nes.screenshot(`${SHOTS}/shop-${mapId}-buy-p${p + 1}.png`);
-  }
 
   // Everything in zero page + stack + RAM that moved once the shop was open.
   const after = ramSnapshot(nes);
