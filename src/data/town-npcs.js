@@ -127,7 +127,8 @@ const NPC_BUNDLES = [
 // own roster lists seven townsfolk for them, so the extras stay unplaced rather
 // than shipping as twins.
 //
-// The ghost bundle 0x01ED10 is deliberately NOT here — see KAZUS_GHOST.
+// Bundle 0x01ED10 is deliberately NOT here — it is CID, a story character.
+// See the note above the Kazus shop keepers.
 const KAZUS_TOWN_BUNDLES = [
   0x01D910,
   0x01DF10,
@@ -541,19 +542,18 @@ export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
   'The castle still stands.',
 ]);
 
-// THE GHOST. 0x01ED10 is a real FF3 ghost sprite — a pale figure, identified on
-// the catalog sheet and confirmed by reading OAM in the cursed town
-// (`tools/monscan/ghost-sprite.cjs`: the cursed shopkeeper is built from tiles
-// 72-75 of this bundle). It is NOT a recoloured villager, which is what an
-// earlier pass claimed without measuring.
+// ⛔ 0x01ED10 IS CID. Do not place him as an ordinary NPC.
 //
-// Kazus is a LIVING town here — the curse is not implemented (decided
-// 2026-08-14) — so this is the one ghost left, in the inn, which is where canon
-// puts Cid. He is the quest hook.
-export const KAZUS_GHOST = interior(0x01ED10, DIR_DOWN, [
-  'You can see me?',
-  'Then you are not from here.',
-]);
+// v1.8.13 put this bundle in the inn as a generic "ghost" with idle filler
+// dialogue, and v1.8.12 had it on all three shop KEEPERS. It is a named story
+// character: he belongs on the scene path (`data/opening-scene.js` +
+// `npc.js#queueOpeningIntro`), which is how a scripted character with a scene
+// and a role is placed, NOT in TOWN_NPCS, which is the table for townsfolk who
+// stand around and repeat a line.
+//
+// Kept here as a NOTE rather than a spec so the next pass does not rediscover
+// the bundle on the catalog sheet and reuse it. The Kazus quest that needs him
+// comes with a scene, not with a wander spec.
 
 // Shop keepers — one tile above their counter facing DOWN, as Ur's keepers
 // stand. Bundles are the only non-ghost ones their maps load.
@@ -589,7 +589,6 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_inn_keep',    x: 3, y: 17, spec: KAZUS_INN_KEEP },
     { key: 'kazus_inn_guest_a', x: 5, y: 17, spec: KAZUS_INN_GUEST_A },
     { key: 'kazus_inn_guest_b', x: 3, y: 19, spec: KAZUS_INN_GUEST_B },
-    { key: 'kazus_ghost',       x: 6, y: 16, spec: KAZUS_GHOST },
   ]],
   [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 14, spec: KAZUS_WEAPON_KEEPER }]],
   [17, [{ key: 'kazus_armor_keeper',  x: 3, y: 4,  spec: KAZUS_ARMOR_KEEPER }]],
