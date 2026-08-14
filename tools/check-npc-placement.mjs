@@ -77,10 +77,23 @@ if (!checked) { console.error('check-npc-placement: no NPCs found — has TOWN_N
 // puts a sprite in the town that the real game never loads there — v1.7.973
 // dressed Ur in seven bundles from other towns' casts.
 //
-// The verified sets below come from the PPU itself:
-//   node tools/nes-run.mjs --warp <id> --chrmap --bundles
-// which traces live sprite memory back to ROM offsets and groups them into
-// 16-tile bundles. Re-run it if a map's cast changes; do not edit by hand.
+// The verified sets below come from the PPU itself. RE-VERIFIED 2026-08-14
+// against live sprite memory on all seven Ur maps — every entry confirmed, no
+// edits needed:
+//   MAPS=4,5,6,7,8,9,114 node tools/monscan/map-bundles.cjs
+//
+// ⛔ Use that tool, NOT `nes-run.mjs --newgame --warp`, which produced this
+// table originally and can no longer reach a map: its name-entry heuristic
+// sticks at blueness 0.354 forever, so the warp fires from the title screen and
+// reports whatever the boot logo left in the PPU. The monscan boot reaches the
+// field reliably, but two things must happen before the warp or the result is
+// garbage — leave the battle it lands in (warping out of one runs the CPU into
+// an invalid opcode at $9a59), and clear the post-battle dialogue (the engine
+// rewrites $AB every frame a box is open, eating the flag).
+//
+// Offsets here are header-INCLUSIVE (romRaw keeps the 16-byte iNES header); the
+// PPU tool reports file offsets, so 0x1E000 there is 0x01E010 here.
+// Re-run if a map's cast changes; do not edit by hand.
 const LOADED_BUNDLES = new Map([
   [114, new Set([0x01DF10, 0x01E010, 0x01E210, 0x01E310, 0x01E510])],  // town
   [9,   new Set([0x01DF10, 0x01E010, 0x01E110, 0x01E610, 0x01E710])],  // tavern

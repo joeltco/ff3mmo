@@ -18,6 +18,51 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.11 — 2026-08-14
+
+### Every Ur NPC sprite swept, and the bundle table re-verified on hardware
+
+Follow-up to the elder-house palette fix. All 18 placed NPCs across all seven Ur
+maps (4 armor, 5 weapon, 6/7 elder, 8 inn, 9 tavern, 114 town), on every axis a
+sprite can be wrong:
+
+- **Palette** — 5 were wrong (both elder floors + the armor keeper), fixed in
+  v1.8.10. The other 13 already matched. Gated.
+- **Bundle** — all 18 correct, and now confirmed against **live sprite memory**
+  rather than against a table someone wrote down. Every bundle
+  `check-npc-placement` allows is present in the PPU on that map, and every
+  NPC's bundle is one of them. 18/18.
+- **Duplicates** — no two NPCs on a map share a bundle. Already gated.
+- **Facing** — keepers face their counters, tavern drinkers face their tables,
+  the elder's kin face each other. Nothing faces a wall by accident.
+
+**A false alarm worth recording:** our bundle offsets match none of the ROM's
+own NPC entries at the same coordinates (`0x1C010 + id*256`). That is not a
+mismatch — FF3 is CHR-RAM, so the ROM's NPC id indexes a table while the sprite
+that actually reaches the screen is decompressed into PPU memory from a
+different address. Two address spaces, not a bug. The PPU is the only thing that
+can answer this, which is why the check below is a warp-and-read, not a table
+comparison.
+
+### New: `tools/monscan/map-bundles.cjs`
+
+The tool that produced `LOADED_BUNDLES` (`nes-run.mjs --newgame --warp`) can no
+longer reach a map — its name-entry heuristic sticks at blueness 0.354 forever,
+so the warp fires from the title screen and reports whatever the boot logo left
+in the PPU. The table had therefore been unverifiable, which is the same as
+unverified.
+
+The replacement boots through the monscan choreography and reads sprite memory
+back to ROM offsets. Two things had to be handled first, both found by looking
+at the screenshot instead of guessing:
+
+- it lands **in a battle** (that is what that choreography is for), and warping
+  out of one runs the CPU into an invalid opcode at `$9a59` — so it flees first;
+- the post-battle **dialogue box** is open, and the engine rewrites `$AB` every
+  frame a box is up, eating the warp flag — so it clears the box and steps once.
+
+All seven Ur maps now warp and read cleanly, 0 untraceable tiles.
+
 ## 1.8.10 — 2026-08-14
 
 ### The elder's house wore the inn's palette
