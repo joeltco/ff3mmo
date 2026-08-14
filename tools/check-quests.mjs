@@ -17,6 +17,11 @@ globalThis.document = { createElement: (t) => (t === 'canvas' ? createCanvas(1, 
 
 const { ps } = await import('../src/player-stats.js');
 const { QUESTS } = await import('../src/data/quests.js');
+// The REAL zone table. An objective's zonePrefix has to match a zone the game
+// actually produces — feeding the prefix straight back into noteEncounterVictory
+// (which the first cut of the generic walk did) makes every prefix pass by
+// construction, including 'nowhere_at_all'.
+const { ENCOUNTERS } = await import('../src/data/encounters.js');
 const q = await import('../src/quests.js');
 
 let failed = 0;
@@ -133,6 +138,70 @@ else bad(`server did not clamp a forged entry to ${quest.objective.count}: ${JSO
 const vUnknown = _testValidateSaveData({ quests: { not_a_quest: { s: 'done', n: 3 } } });
 if (vUnknown.ok && vUnknown.data.quests && !vUnknown.data.quests.not_a_quest) ok('server drops an unknown quest id, same as the client');
 else bad('server kept an unknown quest id the client would have dropped');
+
+// ── EVERY quest walks, not just the one this file was written around ──────
+// The detailed walk above is hand-written against ur_missing_brother. A second
+// quest landed in v1.8.9 and nothing here touched it, which is how a broken
+// giver / unteachable start word / unreachable objective ships. This is the
+// generic loop: offer -> accept -> meet the objective -> hand in -> finished,
+// driven from the table, for every quest defined.
+console.log('\n── every quest, generically ──');
+for (const [id, qq] of Object.entries(QUESTS)) {
+  const g = qq.giver;
+  const tag = `${id}`;
+  ps.quests = {};
+  let paid = null;
+
+  // Word-gated quests must NOT open on plain talk; ungated ones must.
+  const plain = q.talkQuest(g.mapId, g.npcKey, () => { bad(`${tag}: paid on plain talk`); });
+  if (qq.startWord) {
+    if (plain !== null) bad(`${tag}: word-gated but plain talk returned pages`);
+    const offer = q.askQuestWord(g.mapId, g.npcKey, qq.startWord);
+    if (!offer) { bad(`${tag}: asking the giver about "${qq.startWord}" opened nothing`); continue; }
+    if (!q.acceptQuest(id)) { bad(`${tag}: ACCEPT did not start it`); continue; }
+  } else if (!ps.quests[id]) {
+    bad(`${tag}: ungated quest did not start on talk`); continue;
+  }
+  if (!ps.quests[id] || ps.quests[id].s !== 'active') { bad(`${tag}: not active after accept`); continue; }
+
+  // Meet the objective through the real counter, using a zone key that starts
+  // with the prefix — an objective whose zone nothing produces is unfinishable.
+  const obj = qq.objective;
+  if (obj.kind !== 'defeat') { bad(`${tag}: unknown objective kind "${obj.kind}"`); continue; }
+  // Does any zone the game can actually roll match this prefix? A prefix that
+  // matches nothing is an objective no player can ever finish.
+  const zones = [...ENCOUNTERS.keys()].filter(z => String(z).startsWith(obj.zonePrefix));
+  if (!zones.length) {
+    bad(`${tag}: objective zonePrefix "${obj.zonePrefix}" matches NO zone in encounters.js ` +
+        `(${[...ENCOUNTERS.keys()].join(', ')}) — unfinishable`);
+    continue;
+  }
+  if (obj.count <= 0) { bad(`${tag}: objective count is ${obj.count}`); continue; }
+  q.noteEncounterVictory('zzz_not_this_zone');
+  if (ps.quests[id].n !== 0) bad(`${tag}: a win in another zone counted`);
+  // Count through a REAL zone key, not the prefix itself.
+  for (let i = 0; i < obj.count; i++) q.noteEncounterVictory(zones[i % zones.length]);
+  if (ps.quests[id].n !== obj.count) { bad(`${tag}: count stuck at ${ps.quests[id].n}/${obj.count}`); continue; }
+
+  const done = q.talkQuest(g.mapId, g.npcKey, (r) => { paid = r; });
+  if (!done || !done.length) bad(`${tag}: hand-in returned no pages`);
+  if (!paid) bad(`${tag}: hand-in paid nothing`);
+  else {
+    if ((paid.gil | 0) !== (qq.reward.gil | 0)) bad(`${tag}: paid ${paid.gil} gil, table says ${qq.reward.gil}`);
+    if ((paid.item | 0) !== (qq.reward.item | 0)) bad(`${tag}: paid item ${paid.item}, table says ${qq.reward.item}`);
+  }
+  if (ps.quests[id].s !== 'done') bad(`${tag}: not marked done after hand-in`);
+  let again = null;
+  q.talkQuest(g.mapId, g.npcKey, (r) => { again = r; });
+  if (again) bad(`${tag}: paid TWICE`);
+  // Every stage renders without leaking a progress token.
+  for (const stage of ['offer', 'accepted', 'denied', 'active', 'complete', 'done']) {
+    if (!Array.isArray(qq[stage]) || !qq[stage].length) { bad(`${tag}: missing ${stage} pages`); continue; }
+  }
+  ok(`${tag}: offer -> accept -> ${obj.count}x ${zones.join('/')} -> paid ${qq.reward.gil}g` +
+     (qq.reward.item ? ` + item 0x${(qq.reward.item).toString(16)}` : '') + ' -> done, once');
+}
+ps.quests = {};
 
 if (failed) { console.error(`\ncheck-quests: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-quests: OK');

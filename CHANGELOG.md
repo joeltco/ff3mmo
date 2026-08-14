@@ -18,6 +18,49 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.9 — 2026-08-14
+
+### The Lost Riders — Ur's second quest, and RIDERS' payoff
+
+RIDERS was the one term with four authored answers and nothing at the end of
+them: the tavern keeper, both elder kin and `ur_npc_0c` all talk about knights
+who rode north and never came back. Now something comes of it.
+
+- **Giver: `ur_tavern_drinker_d`** (Ur tavern, map 9) — the man who poured for
+  them. Deliberately not `ur_npc_05`: a giver can hold several quests since the
+  v1.8.6 ranking fix, but one each reads better and puts the two errands in
+  different buildings.
+- **Teacher and giver are different people**, which is the point of the word
+  gate. Learn RIDERS from `ur_elder_kin_a` on the elder's UPPER floor, carry it
+  across town to the tavern. A giver who teaches their own start word is a
+  chain with no walk in it.
+- **Objective: 4 wins in `grasslands_valley`** — the goblin corridor within
+  radius 8 of Ur, which `battle-encounter.js` picks by DISTANCE (v1.7.945
+  replaced the old x=93..96 box). The Altar Cave mouth is 7 tiles out, so the
+  zone is exactly the stretch of road between the town and the cave. NOT the
+  bare `grasslands` prefix, which would also match `grasslands_wild` — that is
+  everything past the radius plus Ur's own dark-tile patch, and clearing the
+  north road without walking it is not the errand.
+- **Reward: 250 gil, 60 exp, Longsword (0x24).** One for each rider. A real
+  upgrade on the starting Knife without outrunning Ur's own weapon shop, and a
+  knight's weapon is what a knight leaves behind.
+- No new dialogue was written for the NPCs — the quest reuses the RIDERS thread
+  already in their answers.
+
+### check-quests walks EVERY quest now
+
+The detailed walk in `check-quests.mjs` was hand-written against
+`ur_missing_brother` and touched nothing else, so this quest would have shipped
+with no gate on it at all. Added a generic loop over `QUESTS`: word gate holds,
+offer → accept → objective → hand in → paid once → finished, for every quest
+defined. Both quests pass.
+
+It also validates the objective's `zonePrefix` against the REAL zone table in
+`encounters.js`. The first cut fed the prefix straight back into
+`noteEncounterVictory`, so every prefix passed by construction — including
+`nowhere_at_all`, an objective no player could ever finish. Counting now runs
+through actual zone keys.
+
 ## 1.8.8 — 2026-08-14
 
 ### Word Memory — one word gates another, and LEARN takes one word

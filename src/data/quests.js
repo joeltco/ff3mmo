@@ -83,6 +83,68 @@ export const QUESTS = {
       'But it is quieter.',
     ],
   },
+
+  // Ur's second quest, and the payoff RIDERS never had — four NPCs already
+  // talked about the knights who rode north and never came back, and nothing
+  // came of it. v1.8.9.
+  //
+  // Deliberately NOT on ur_npc_05: a giver can hold several quests since the
+  // v1.8.6 ranking fix, but one each reads better and puts the two errands in
+  // different buildings. The teacher and the giver are also different people,
+  // which is the point of the word gate — learn RIDERS from ur_elder_kin_a on
+  // the elder's UPPER floor, then carry it across town to the tavern. A giver
+  // who teaches their own start word is a chain with no walk in it.
+  ur_lost_riders: {
+    id: 'ur_lost_riders',
+    giver: { mapId: 9, npcKey: 'ur_tavern_drinker_d' },   // Ur tavern
+
+    // He already answers RIDERS — "They took the north road. I poured for
+    // them." The offer replaces that answer once the quest is live.
+    startWord: 'riders',
+
+    // The road they rode, not the cave. `grasslands_valley` is the goblin
+    // corridor within radius 8 of Ur — `battle-encounter.js` picks it by
+    // DISTANCE, not the old x=93..96 box (v1.7.945 replaced that), and the
+    // Altar Cave mouth sits 7 tiles out, so the zone is exactly the stretch of
+    // road between the town and the cave. NOT the bare `grasslands` prefix:
+    // that also matches `grasslands_wild`, which is everything past the radius
+    // plus Ur's own dark-tile patch, and clearing the north road without
+    // walking it is not the errand.
+    objective: { kind: 'defeat', zonePrefix: 'grasslands_valley', count: 4 },
+
+    // One for each rider. Longsword (0x24, atk 10, 100 gil in Ur's own weapon
+    // shop) — a real upgrade on the starting Knife without outrunning the
+    // shop, and a knight's weapon is what a knight leaves behind.
+    reward: { gil: 250, exp: 60, item: 0x24 },
+
+    offer: [
+      'Four rode north.',
+      'I poured for them.',
+      'The road took them.',
+      'Clear it. For me.',
+    ],
+    accepted: [
+      'Aye. The north road.',
+      'One for each rider.',
+    ],
+    denied: [
+      'No shame in it.',
+      'The road keeps.',
+    ],
+    active: [
+      'The road, warrior?',
+      '{n} of {count} down.',
+      '{left} still hold it.',
+    ],
+    complete: [
+      'The road is walked again.',
+      'One of them left this.',
+    ],
+    done: [
+      'They will not ride back.',
+      'But the road is ours.',
+    ],
+  },
 };
 
 // `questsForMap` lived here unused from the day it was written — removed
