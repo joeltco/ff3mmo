@@ -132,6 +132,9 @@ for (const mapId of MAPS) {
   try { took = warp(nes, mapId); }
   catch (e) { console.log(`map ${mapId}: warp CRASHED the machine (${e.message})`); continue; }
   run(120, nes);
+  // The post-warp frame is the visual confirmation that the warp landed where
+  // it claims — a bundle list from the wrong map looks perfectly plausible.
+  if (process.env.SHOT) nes.screenshot(process.env.SHOT + `/map-${mapId}.png`);
   const { hits, blank, unknown } = bundlesInPpu(nes);
   const complete = [...hits].filter(([, c]) => c >= 16).map(([b]) => b).sort((a, b) => a - b);
   const partial = [...hits].filter(([, c]) => c >= 8 && c < 16).sort((a, b) => b[1] - a[1]);
