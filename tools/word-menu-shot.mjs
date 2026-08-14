@@ -84,6 +84,12 @@ const rows = mode === 'ask'
   ? [{ label: 'BROTHER', act: 'say', term: true, has: true },
      { label: 'CAVE',    act: 'say', term: true, has: true },
      { label: 'RIDERS',  act: 'say', term: true, has: false }]
+  : mode === 'learn'
+  // v1.8.8: a teacher who knows two words opens a CHOICE instead of handing
+  // both over. This is that list — ur_npc_09, "Mind the cave north. It took my
+  // brother." Both rows are Key Terms, so both read red.
+  ? [{ label: 'CAVE',    act: 'learn-one', term: true, has: true },
+     { label: 'BROTHER', act: 'learn-one', term: true, has: true }]
   : mode === 'scroll'
   ? [{ label: 'BROTHER', act: 'say', term: true, has: true },
      { label: 'CAVE',    act: 'say', term: true, has: true },

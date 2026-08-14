@@ -297,7 +297,11 @@ The quest system IS the word system; there is no separate quest UI and **no over
 - ⛔ **An NPC with `shopId` never reaches the verb menu** — `talkToNpc` opens the shop and returns. `addSceneNpc` deliberately does not forward `spec.shopId`, and the gate asserts it stays that way. The TOWN_NPCS keepers are NOT this case: their shop opens from the counter tile, so `answers` on them works normally.
 - **`hasWord` is module-private**; `check-word-flow.mjs` asserts through `knownWords()`, the call `_askRows` actually makes.
 
-**OPEN, by decision — the vocabulary is flat.** This section says an answer can hand over the next term. It cannot: an answer is `pages[]`, and `learnableFrom` reads the NPC's static `teaches`. Every term is learnable from an empty vocabulary and the only gate in the system is BROTHER opening the quest offer. One LEARN press also takes every word an NPC has. The audit prints both as `[OPEN — design]` every run without failing the deploy. Closing them means an answer shape that can teach (`answers: { cave: { pages, teaches: 'vein' } }`) plus re-authoring who in Ur knows what.
+**The chain, v1.8.8.** An answer takes an optional longer form — `answers: { cave: { pages: [...], teaches: 'vein' } }` — and that is the ONLY way one word gates another; `learnableFrom` reads the NPC's static `teaches`, which is what an NPC volunteers and can never depend on what was asked. Bare `pages[]` stays legal and is what most answers are.
+
+- **VEIN is the one earned term.** Nobody teaches it. Bring `ur_tavern_drinker_b` the word CAVE (free from `ur_npc_09` / `ur_npc_0d`) and his existing line, *"The vein and the cave are the same dark."*, hands it over. Putting `vein` back in his `teaches` makes it free again and `audit-words` fails.
+- **`check-words` walks the reachability closure** out from the freely-taught terms — a chain with no free start, or a cycle (A gates B gates A), locks terms out of every save with no error anywhere, so it is a gate. It also applies LEARN's honesty rule to the chain: the handed-over word must appear IN the answer's own text.
+- **LEARN takes ONE word.** A teacher who knows more than one opens a choice (`mode: 'learn'`, rows are `act: 'learn-one'`); with one word left it is taken directly, since skipping a one-option menu is not a choice. `ur_npc_09` (CAVE + BROTHER) is the only NPC this affects today.
 
 ### Quest audit (v1.8.6)
 

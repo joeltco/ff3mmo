@@ -45,11 +45,27 @@ if (!/playWordLearnedJingle\s*\(/.test(WM)) {
 // The cue must be GUARDED by "something was actually learned". An unguarded
 // call fires on "Nothing new to learn." too, which teaches the player that the
 // reward sound means nothing.
-const learnBlock = WM.slice(WM.indexOf("row.act === 'learn'"), WM.indexOf("row.act === 'ask'"));
-if (!learnBlock) fail('could not find the learn branch in word-menu.js');
-else if (!/if\s*\(\s*names\.length\s*\)\s*playWordLearnedJingle/.test(learnBlock)) {
-  fail('playWordLearnedJingle is not guarded by names.length — it would fire on "Nothing new to learn."');
-} else ok('guarded by names.length (silent when nothing was learned)');
+//
+// Checked as the INVARIANT, not as one expression: this used to pin
+// `if (names.length) playWordLearnedJingle` verbatim and failed on correct code
+// the moment v1.8.8 split LEARN into `_learnOne` (guard `if (got)`). There are
+// two call sites now — LEARN, and an answer that hands over the next term — and
+// every one of them must sit behind a conditional downstream of a real
+// learnWord() call.
+{
+  const code = WM.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const sites = [...code.matchAll(/playWordLearnedJingle\s*\(/g)];
+  if (!sites.length) fail('no playWordLearnedJingle call sites found in the stripped source');
+  for (const m of sites) {
+    const before = code.slice(Math.max(0, m.index - 240), m.index);
+    const guarded = /if\s*\(/.test(before) && /learnWord\s*\(/.test(before);
+    if (!guarded) {
+      fail(`a playWordLearnedJingle call is not guarded by an actual learn — it would fire when ` +
+           `nothing was learned. Context: ...${before.slice(-90).replace(/\s+/g, ' ')}`);
+    }
+  }
+  if (sites.length) ok(`${sites.length} jingle call site(s), each behind a learnWord() guard`);
+}
 
 // ── audible through the real decoder ─────────────────────────────────────
 console.log('\nplayback');

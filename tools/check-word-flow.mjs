@@ -66,15 +66,50 @@ ps.words = {};
 ps.quests = {};
 mapSt.currentMapId = 114;
 
-// ── 1. LEARN off the man who says it ──────────────────────────────────────
+// ── 1. LEARN off the man who says it, ONE WORD AT A TIME ─────────────────
+// v1.8.8: a teacher who knows two words opens a choice instead of handing both
+// over. ur_npc_09 says "Mind the cave north. It took my brother." — two terms,
+// and the player takes them one at a time.
 const teacher = npcOf(114, 'ur_npc_09');   // "It took my brother."
 msgState.state = 'hold'; msgState.bytes = new Uint8Array([0]);
 if (!wm.openWordMenu(teacher, () => {})) err('ur_npc_09 offers no menu at all');
 if (!labels().includes('LEARN')) err(`ur_npc_09 has no LEARN row — saw [${labels().join(', ')}]`);
 pick('LEARN');
-if (!hasWord('brother')) err('LEARN did not store BROTHER');
-if (!hasWord('cave'))    err('LEARN did not store CAVE');
-if (labels().includes('LEARN')) err('LEARN row survived being taken — it would teach forever');
+if (!labels().includes('BROTHER') || !labels().includes('CAVE')) {
+  err(`LEARN did not offer the two words to choose from — saw [${labels().join(', ')}]`);
+}
+if (hasWord('brother') || hasWord('cave')) err('opening the LEARN list already took a word');
+pick('BROTHER');
+if (!hasWord('brother')) err('picking BROTHER did not store it');
+if (hasWord('cave')) err('picking BROTHER also took CAVE — LEARN must take one word');
+// The row is still there for the word not yet taken.
+if (!labels().includes('LEARN')) err('LEARN vanished with a word still unlearned');
+// With ONE word left there is no choice to make, so LEARN takes it directly
+// rather than opening a one-row menu. (Flipping word-menu.js to always-list
+// would make this a two-step; the assertion below is the behaviour we ship.)
+pick('LEARN');
+if (!hasWord('cave')) err('the last LEARN did not store CAVE');
+if (labels().includes('LEARN')) err('LEARN row survived being emptied — it would teach forever');
+wm.closeWordMenu();
+
+// ── 1b. A word EARNED by asking, not volunteered ─────────────────────────
+// The one real chain in Ur (v1.8.8): nobody teaches VEIN. The tavern miner
+// hands it over when asked about CAVE — "The vein and the cave are the same
+// dark." — and only then does it appear in the ASK list.
+msgState.state = 'hold'; msgState.bytes = new Uint8Array([0]);
+const miner = npcOf(9, 'ur_tavern_drinker_b');
+wm.openWordMenu(miner, () => {});
+if (labels().includes('LEARN')) err('the miner volunteers a word — VEIN must be earned by asking');
+if (hasWord('vein')) err('VEIN was known before anyone was asked about the cave');
+pick('ASK');
+pick('CAVE');
+settle();
+if (!hasWord('vein')) err('asking the miner about CAVE did not hand over VEIN');
+wm.closeWordMenu();
+msgState.state = 'hold'; msgState.bytes = new Uint8Array([0]);
+wm.openWordMenu(miner, () => {});
+pick('ASK');
+if (!labels().includes('VEIN')) err(`VEIN is not in the ASK list after being earned — saw [${labels().join(', ')}]`);
 wm.closeWordMenu();
 
 // ── 2. ASK the wrong person: listed, greyed, answered with a shrug ────────
@@ -82,8 +117,11 @@ msgState.state = 'hold'; msgState.bytes = new Uint8Array([0]);
 const bystander = npcOf(114, 'ur_npc_0d');
 wm.openWordMenu(bystander, () => {});
 pick('ASK');
-// VEIN is taught in the tavern and hasn't been learned — it must not be listed.
-if (wm.wordMenuSt.rows.find(r => r.id === 'vein')) err('VEIN is listed without having been learned');
+// VEIN has been earned by now (step 1b), so it IS listed — and ur_npc_0d has
+// no answer for it, which is the greying case checked below.
+const veinRow = wm.wordMenuSt.rows.find(r => r.id === 'vein');
+if (!veinRow) err('VEIN is missing from the ASK list after being earned');
+else if (veinRow.has !== false) err('ur_npc_0d cannot answer VEIN; the row should be greyed');
 const caveRow = wm.wordMenuSt.rows.find(r => r.id === 'cave');
 if (!caveRow || caveRow.has !== true) err('ur_npc_0d answers CAVE but the row is not marked answerable');
 const brotherRow = wm.wordMenuSt.rows.find(r => r.id === 'brother');

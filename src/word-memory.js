@@ -47,11 +47,41 @@ export function learnableFrom(npcSpec) {
   return teaches.filter(id => KEYWORDS[id] && !hasWord(id));
 }
 
+// An answer is authored either as bare pages, or as `{ pages, teaches }` when
+// asking about that term is what hands over the NEXT one (v1.8.8). Both forms
+// stay legal: most answers are just something the NPC knows, and only the ones
+// carrying the chain need the longer shape.
+//
+//   answers: {
+//     riders: ['They took the north road.', 'I poured for them.'],
+//     cave:   { pages: ['The vein and the cave', 'are the same dark.'],
+//               teaches: 'vein' },
+//   }
+function _answerEntry(npcSpec, id) {
+  const a = npcSpec && npcSpec.answers && npcSpec.answers[id];
+  if (Array.isArray(a)) return a.length ? { pages: a, teaches: null } : null;
+  if (a && typeof a === 'object' && Array.isArray(a.pages) && a.pages.length) {
+    return { pages: a.pages, teaches: a.teaches || null };
+  }
+  return null;
+}
+
 /** This NPC's reply to a term, or null if they have nothing to say about it. */
 export function answerFor(npcSpec, id) {
-  const answers = npcSpec && npcSpec.answers;
-  const a = answers && answers[id];
-  return Array.isArray(a) && a.length ? a : null;
+  const e = _answerEntry(npcSpec, id);
+  return e ? e.pages : null;
+}
+
+/**
+ * The term the player GAINS by asking this NPC about `id`, or null. This is the
+ * only way one word gates another: `learnableFrom` reads the NPC's static
+ * `teaches` list, which is what an NPC volunteers, and can never depend on what
+ * was asked. Without this the vocabulary is a set of independent pickups and
+ * the "chain" is a claim in a comment.
+ */
+export function answerTeaches(npcSpec, id) {
+  const e = _answerEntry(npcSpec, id);
+  return e && e.teaches && KEYWORDS[e.teaches] ? e.teaches : null;
 }
 
 /** Sanitise a `words` blob from a save or a server push. */

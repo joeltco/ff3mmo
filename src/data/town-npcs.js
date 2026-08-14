@@ -325,16 +325,27 @@ export const UR_TAVERN_DRINKER_B = interior(0x01E110, DIR_LEFT, [
   'I hauled ore here.',
   'Then the vein went black.',
 ], {
-  teaches: ['vein'],
+  // ⛔ He does NOT volunteer VEIN. It is the one term in the game you have to
+  // EARN with another term: bring him CAVE (free, from ur_npc_09 or ur_npc_0d)
+  // and his answer hands VEIN over — the word is already sitting in the reply,
+  // "The vein and the cave are the same dark." That is FF2's actual structure,
+  // word -> person -> word, and before v1.8.8 the data shape could not express
+  // it: every term was an independent pickup and the "chain" was a claim in a
+  // comment. Moving `vein` out of `teaches` is what makes it a chain; putting
+  // it back makes the term free again and `audit-words` fails.
+  teaches: [],
   answers: {
     vein: [
       'Black to the rock.',
       'It started below.',
     ],
-    cave: [
-      'The vein and the cave',
-      'are the same dark.',
-    ],
+    cave: {
+      pages: [
+        'The vein and the cave',
+        'are the same dark.',
+      ],
+      teaches: 'vein',
+    },
   },
 });
 export const UR_TAVERN_DRINKER_C = interior(0x01E610, DIR_UP, [

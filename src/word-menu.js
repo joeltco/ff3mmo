@@ -27,7 +27,7 @@ const ROW_TERM_DIM  = [0x02, 0x02, 0x02, 0x10];   // grey — a term this NPC ca
 import { _nameToBytes } from './text-utils.js';
 import { playFF2Sfx, playWordLearnedJingle, FF2_SFX_NAMES } from './music.js';
 import { keywordText } from './data/keywords.js';
-import { knownWords, learnableFrom, answerFor, learnWord } from './word-memory.js';
+import { knownWords, learnableFrom, answerFor, answerTeaches, learnWord } from './word-memory.js';
 import { showMsgBoxPages, dismissMsgBox, msgState } from './message-box.js';
 import { mapSt } from './map-state.js';
 import { askQuestWord, acceptQuest } from './quests.js';
@@ -58,7 +58,7 @@ const MAX_VISIBLE = 4;
 
 export const wordMenuSt = {
   open:   false,
-  mode:   'verbs',   // 'verbs' | 'ask'
+  mode:   'verbs',   // 'verbs' | 'ask' | 'learn'
   rows:   [],        // [{ label, act, ... }]
   index:  0,
   scroll: 0,
@@ -184,29 +184,51 @@ export function handleWordMenuInput(keys) {
   }
   if (keys['x'] || keys['X'] || keys['Escape']) {
     keys['x'] = false; keys['X'] = false; keys['Escape'] = false;
-    if (wordMenuSt.mode === 'ask') { playFF2Sfx(FF2_SFX_NAMES.CURSOR); _backToVerbs(); }
+    if (wordMenuSt.mode === 'ask' || wordMenuSt.mode === 'learn') { playFF2Sfx(FF2_SFX_NAMES.CURSOR); _backToVerbs(); }
     else closeWordMenu();
     return true;
   }
   return true;   // menu is modal even on keys it ignores
 }
 
+// Learn exactly one term, with FF2's own keyword-learned jingle — but ONLY
+// when something was actually learned. "Nothing new to learn." keeps the plain
+// confirm blip: a reward cue that fires when nothing happened teaches the
+// player it means nothing. The jingle rides its own emulator, so the map music
+// is untouched.
+function _learnOne(id) {
+  const got = !!id && learnWord(id);
+  if (got) playWordLearnedJingle();
+  const page = got ? `Learned the word ${keywordText(id)}.` : 'Nothing new to learn.';
+  showMsgBoxPages([_nameToBytes(page)], _backToVerbs, null, { keepOpen: true });
+}
+
 function _choose(row) {
   if (!row) { closeWordMenu(); return; }
   playFF2Sfx(FF2_SFX_NAMES.CONFIRM);
 
+  // ONE word per LEARN (v1.8.8). Pre-fix a single press took everything the
+  // NPC had — ur_npc_09 handed over CAVE and BROTHER together — which is the
+  // opposite of FF2, where you pick the word out of what was just said.
+  // The list only opens when there is a choice to make; skipping a menu with
+  // one option is not an inconsistency, and every teacher in Ur but one
+  // teaches exactly one word. Flip this to always-list by dropping the
+  // length check.
   if (row.act === 'learn') {
-    const names = row.ids.filter(id => learnWord(id)).map(id => keywordText(id)).filter(Boolean);
-    // FF2's own keyword-learned jingle, but ONLY when something was actually
-    // learned. "Nothing new to learn." keeps the plain confirm blip — a reward
-    // cue that fires when nothing happened teaches the player it means nothing.
-    // The jingle rides its own emulator, so the map music is untouched.
-    if (names.length) playWordLearnedJingle();
-    const pages = names.length ? names.map(n => `Learned the word ${n}.`)
-                               : ['Nothing new to learn.'];
-    showMsgBoxPages(pages.map(p => _nameToBytes(p)), _backToVerbs, null, { keepOpen: true });
+    const ids = row.ids || [];
+    if (ids.length > 1) {
+      wordMenuSt.mode = 'learn';
+      _setRows(ids.map(id => ({
+        label: keywordText(id) || id.toUpperCase(),
+        act: 'learn-one', id, term: true, has: true,
+      })));
+      return;
+    }
+    _learnOne(ids[0]);
     return;
   }
+
+  if (row.act === 'learn-one') { _learnOne(row.id); return; }
 
   if (row.act === 'ask') {
     const rows = _askRows(wordMenuSt.npc);
@@ -228,10 +250,23 @@ function _choose(row) {
       ]), null, { keepOpen: true });
       return;
     }
-    const reply = answerFor(_spec(npc), row.id) || ['I know nothing', 'about that.'];
-    // An answer can hand over the next term — that's the FF2 chain, and it's
-    // why the verb list is rebuilt (not restored) when the reply closes.
-    showMsgBoxPages(reply.map(p => _nameToBytes(p)), _backToVerbs, null, { keepOpen: true });
+    const spec  = _spec(npc);
+    const reply = answerFor(spec, row.id) || ['I know nothing', 'about that.'];
+    // An answer can hand over the next term — the FF2 chain, and as of v1.8.8
+    // actually wired: `answers: { cave: { pages, teaches: 'vein' } }`. The
+    // gained word lands AFTER the reply has been read, with the same jingle
+    // LEARN uses, and the verb list is rebuilt (not restored) so ASK picks the
+    // new term up immediately.
+    const gained = answerTeaches(spec, row.id);
+    showMsgBoxPages(reply.map(p => _nameToBytes(p)), () => {
+      if (gained && learnWord(gained)) {
+        playWordLearnedJingle();
+        showMsgBoxPages([_nameToBytes(`Learned the word ${keywordText(gained)}.`)],
+          _backToVerbs, null, { keepOpen: true });
+        return;
+      }
+      _backToVerbs();
+    }, null, { keepOpen: true });
     return;
   }
 

@@ -18,6 +18,48 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.8 — 2026-08-14
+
+### Word Memory — one word gates another, and LEARN takes one word
+
+The v1.8.7 audit left two items open as design decisions rather than defects.
+Both are closed now, and both are gates: `tools/audit-words.mjs` reports 0 holes
+and 0 open items, each proven by reverting the fix.
+
+- **An answer can hand over the next term.** `word-menu.js` claimed this and
+  could not do it: an answer was `pages[]`, and `learnableFrom` reads the NPC's
+  static `teaches`, which can never depend on what was asked. Answers now take
+  an optional longer form — `{ pages, teaches: 'vein' }` — and the term lands
+  after the reply is read, with the same jingle LEARN uses. Bare `pages[]` is
+  still legal and is what most answers stay.
+- **VEIN is earned, not volunteered.** It came out of `ur_tavern_drinker_b`'s
+  `teaches` and onto his CAVE answer: bring him CAVE (free, from `ur_npc_09` or
+  `ur_npc_0d`) and *"The vein and the cave are the same dark."* hands VEIN over.
+  The word was already sitting in the line — no new dialogue was written. That
+  is FF2's actual structure, word → person → word, and it is the first time the
+  game has had one. `check-words` walks the closure out from the freely-taught
+  terms and fails on a term nothing reaches, so a chain with no free start (or a
+  cycle) cannot ship.
+- **LEARN takes ONE word.** A single press used to take everything an NPC had —
+  `ur_npc_09` handed over CAVE and BROTHER together, which is the opposite of
+  FF2, where you pick the word out of what was just said. A teacher who knows
+  more than one now opens a choice; with one word left there is no choice to
+  make, so it is taken directly. Rendered (`tools/word-menu-shot.mjs --rows
+  learn`): both terms red under a sentence that highlights both.
+
+### Gates
+
+- `check-words` understands the two answer shapes, counts a term earned by
+  asking as learnable, applies the same honesty rule LEARN has (the handed-over
+  word must appear IN the answer text), and proves every term is reachable.
+- `check-word-flow` walks the new LEARN choice and the CAVE → VEIN chain
+  end to end.
+- `check-word-learn-sfx` asserted `if (names.length) playWordLearnedJingle`
+  verbatim and **failed on correct code** the moment LEARN was split into
+  `_learnOne`. It now checks the invariant — every jingle call site sits behind
+  a conditional downstream of a real `learnWord()` — which covers both call
+  sites, LEARN and the chain.
+
 ## 1.8.7 — 2026-08-14
 
 ### Word Memory audit — the mechanical half

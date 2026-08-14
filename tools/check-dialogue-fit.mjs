@@ -38,8 +38,12 @@ for (const [mapId, list] of TOWN_NPCS) {
   for (const e of list) {
     for (const page of e.spec.dialogue || []) check(`map ${mapId} ${e.key}`, page);
     // ASK replies go through the same box.
-    for (const [term, pages] of Object.entries(e.spec.answers || {}))
+    // An answer is bare pages, or `{ pages, teaches }` when asking about it
+    // hands over the next term (v1.8.8). Both render through the same box.
+    for (const [term, a] of Object.entries(e.spec.answers || {})) {
+      const pages = Array.isArray(a) ? a : (a && a.pages) || [];
       for (const page of pages) check(`map ${mapId} ${e.key} answers.${term}`, page);
+    }
   }
 }
 // Quest pages carry {n} / {count} / {left} progress tokens (v1.8.6), filled in

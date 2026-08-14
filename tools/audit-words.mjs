@@ -76,46 +76,93 @@ console.log('\n── 1. does LEARN survive the tab closing?');
 }
 
 // ── 2. is the vocabulary a CHAIN, or four loose words? ────────────────────
-// word-menu.js says: "An answer can hand over the next term — that's the FF2
-// chain, and it's why the verb list is rebuilt (not restored) when the reply
-// closes." That is the claim. FF2's whole structure is word -> person -> word.
+// word-menu.js used to say "an answer can hand over the next term — that's the
+// FF2 chain" while the data shape could not express it: an answer was pages[]
+// and `learnableFrom` reads the NPC's static `teaches`, never what was asked.
+// v1.8.8 added `answers: { cave: { pages, teaches: 'vein' } }` and wired
+// CAVE -> VEIN. These two checks keep it wired.
 console.log('\n── 2. does any word gate any other word?');
 {
-  // A term is GATED if it cannot be obtained with an empty vocabulary — i.e.
-  // reaching it requires having asked something first.
   ps.words = {};
   const freeFromTheStart = [];
   for (const term of Object.keys(KEYWORDS)) {
     for (const p of placed) {
-      // learnableFrom is the only thing that puts a LEARN row on screen, and it
-      // reads the NPC's static `teaches` — never what the player asked.
       if (wm.learnableFrom(p.spec).includes(term)) { freeFromTheStart.push(term); break; }
     }
   }
-  const answersCanTeach = placed.some(p => Object.values(p.spec.answers || {})
-    .some(a => !Array.isArray(a)));          // a richer shape than pages[] would be needed
   const gated = Object.keys(KEYWORDS).filter(t => !freeFromTheStart.includes(t));
-  if (gated.length || answersCanTeach) {
-    okay(`${gated.length} term(s) are gated behind asking: ${gated.join(', ') || '(shape supports it)'}`);
-  } else {
-    pending('no word gates any other word — the "chain" does not exist',
-      `all ${freeFromTheStart.length} terms (${freeFromTheStart.join(', ')}) are learnable from an empty ` +
-      `vocabulary by walking up to the right person and pressing LEARN. An answer is authored as ` +
-      `pages[] and nothing else, so there is no way to author "asking X about Y teaches you Z" — ` +
-      `the shape word-menu.js's own comment describes cannot be expressed. What is left is a lookup ` +
-      `table: the ONLY thing any term unlocks is ${Object.values(QUESTS).filter(q => q.startWord).length} quest offer.`);
-  }
-
-  // Second half of the same problem: one LEARN press empties the NPC.
-  const multi = placed.filter(p => (p.spec.teaches || []).length > 1);
-  if (multi.length) {
-    const code = src('src/word-menu.js');
-    if (/row\.ids\.filter\(id => learnWord\(id\)\)/.test(code)) {
-      pending('one LEARN press takes every word an NPC has',
-        multi.map(p => `${p.key} teaches ${(p.spec.teaches || []).join(' + ')}`).join('; ') +
-        '. FF2 makes you pick the word out of the sentence; here the single LEARN row hands over ' +
-        'the whole set, which is the same flattening as above seen from the other side.');
+  // Reproduce the chain rather than trusting the table: hold nothing, confirm
+  // the term is unobtainable, then hold its gating term and watch it appear.
+  const chains = [];
+  for (const p of placed) {
+    for (const [askTerm] of Object.entries(p.spec.answers || {})) {
+      const gain = wm.answerTeaches(p.spec, askTerm);
+      if (gain) chains.push({ who: p.key, askTerm, gain });
     }
+  }
+  if (!gated.length || !chains.length) {
+    hole('no word gates any other word — the "chain" does not exist',
+      `all ${freeFromTheStart.length} terms are learnable from an empty vocabulary by walking up to ` +
+      `the right person and pressing LEARN, and ${chains.length} answers hand a term over. The only ` +
+      `gate left in the system would be the quest offer.`);
+  } else {
+    for (const c of chains) {
+      ps.words = {};
+      const spec = placed.find(p => p.key === c.who).spec;
+      // Nobody volunteers it...
+      const volunteered = placed.some(p => (p.spec.teaches || []).includes(c.gain));
+      // ...and asking is what hands it over.
+      const handed = wm.answerTeaches(spec, c.askTerm) === c.gain;
+      if (volunteered) {
+        hole(`${c.gain.toUpperCase()} is gated AND volunteered — the gate does nothing`,
+          `${c.who} hands it over for asking about ${c.askTerm}, but somebody also teaches it outright, ` +
+          `so the player never has to make the connection.`);
+      } else if (!handed) {
+        hole(`the ${c.askTerm} -> ${c.gain} chain is broken`, `answerTeaches did not return it`);
+      } else {
+        okay(`chain: ${c.askTerm.toUpperCase()} -> ask ${c.who} -> gain ${c.gain.toUpperCase()} (nobody volunteers it)`);
+      }
+    }
+  }
+  ps.words = {};
+}
+
+// ── 2b. LEARN takes ONE word ──────────────────────────────────────────────
+// Behavioural: drive the real menu with the real key handler on the one NPC
+// who knows two words, and count what the player walked away with. A source
+// grep would pass on a leftover branch.
+console.log('\n── 2b. does one LEARN press take everything?');
+{
+  const menu = await import('../src/word-menu.js');
+  const mb = await import('../src/message-box.js');
+  const twoWords = placed.filter(p => (p.spec.teaches || []).length > 1);
+  if (!twoWords.length) okay('no placed NPC teaches more than one word — nothing to over-take');
+  else {
+    const p = twoWords[0];
+    ps.words = {};
+    const npc = { key: p.key, scene: p.spec };
+    const opened = menu.openWordMenu(npc, () => {});
+    mb.msgState.state = 'hold'; mb.msgState.onAdvance = null;
+    const learnRow = menu.wordMenuSt.rows.findIndex(r => r.act === 'learn');
+    menu.wordMenuSt.index = learnRow;
+    let threw = null;
+    try { menu.handleWordMenuInput({ z: true }); } catch (e) { threw = e; }
+    const after = wm.knownWords();
+    if (!opened || learnRow < 0) {
+      hole('the verb menu did not offer LEARN to a two-word teacher', `${p.key}: opened=${opened}`);
+    } else if (after.length > 1) {
+      hole('one LEARN press takes every word an NPC has',
+        `${p.key} teaches ${(p.spec.teaches || []).join(' + ')} and a single press took ` +
+        `[${after.join(', ')}]. FF2 makes you pick the word out of the sentence.`);
+    } else if (after.length === 0 && menu.wordMenuSt.mode !== 'learn') {
+      hole('LEARN neither learned a word nor opened a choice',
+        `mode=${menu.wordMenuSt.mode}${threw ? ' threw ' + threw.message : ''}`);
+    } else {
+      okay(`LEARN on ${p.key} (${(p.spec.teaches || []).join(' + ')}) opened a ` +
+           `${menu.wordMenuSt.rows.length}-word choice instead of taking both`);
+    }
+    menu.wordMenuSt.open = false;
+    ps.words = {};
   }
 }
 
@@ -196,8 +243,17 @@ console.log('\n── 5. is every authored answer reachable?');
   } else okay('shop keepers reach the verb menu');
 
   // And the inverse: an answer nobody can ask, because the term has no teacher.
+  // "Holdable" is volunteered OR earned by asking (v1.8.8) — counting only
+  // `teaches` reported every answer about VEIN as unaskable the moment the
+  // chain landed.
   const teachable = new Set();
-  for (const p of placed) for (const t of p.spec.teaches || []) teachable.add(t);
+  for (const p of placed) {
+    for (const t of p.spec.teaches || []) teachable.add(t);
+    for (const askTerm of Object.keys(p.spec.answers || {})) {
+      const gain = wm.answerTeaches(p.spec, askTerm);
+      if (gain) teachable.add(gain);
+    }
+  }
   const unaskable = [];
   for (const p of placed) for (const t of Object.keys(p.spec.answers || {})) {
     if (!teachable.has(t)) unaskable.push(`${p.key}.${t}`);
