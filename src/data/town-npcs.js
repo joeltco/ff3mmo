@@ -153,6 +153,16 @@ function townNpc(bundles, slot, extra = {}) {
     palBtm: UR_SP2,
     dir: DIR_DOWN,
     wander: true,
+    // ⛔ ALWAYS animate. `addSceneNpc` resolves
+    //   mode = wander ? 'pause' : (animate ? 'idle-march' : 'static')
+    // so a spec that turns wandering OFF without turning animation ON is
+    // FROZEN — a statue of a person, in a game where everyone else breathes.
+    // That is a property of the helper's defaults, not something each caller
+    // should have to remember: the campfire man shipped frozen in v1.8.17
+    // because `wander: false` was passed and nothing set `animate`.
+    // Ur's static quest giver had to say `animate: true` by hand for the same
+    // reason; now he does not have to.
+    animate: true,
     // Start on the declared tile and roam from there.
     fixedSpawn: true,
     leash: 3,
@@ -534,7 +544,7 @@ export const KAZUS_TOWN_A = kazusNpc(0, { dialogue: ['Kazus keeps to itself.', '
 // the >= 3-open-neighbour rule that wanderers need, and (3,28) is walled to the
 // west. DIR_RIGHT faces the flame at (4,28).
 export const KAZUS_TOWN_B = kazusNpc(1, {
-  wander: false,
+  wander: false,          // `animate` comes from townNpc — he marches in place
   dir: DIR_RIGHT,
   dialogue: ['The mines gave out.', 'The fire still catches.'],
 });

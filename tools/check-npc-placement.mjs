@@ -155,6 +155,25 @@ const LOADED_BUNDLES = new Map([
   // doorway (1 neighbour) is stuck there for the life of the save — which is
   // exactly what shipped in v1.8.13, a townsman standing in the inn's door.
   // Uses the game's OWN predicate, never a copy.
+  // Nobody is FROZEN. `npc.js#addSceneNpc` resolves
+  //   mode = wander ? 'pause' : (animate ? 'idle-march' : 'static')
+  // so a spec with wandering off and animation unset is a statue of a person.
+  // The campfire man shipped that way in v1.8.17 — `wander: false` was passed
+  // and nothing set `animate`, which is why townNpc now defaults it on.
+  // An intentional statue can opt out with `frozen: true`.
+  let frozen = 0;
+  for (const [mapId, list] of TOWN_NPCS) {
+    for (const e of list) {
+      if (!e.spec || e.spec.frozen) continue;
+      if (e.spec.wander || e.spec.animate) continue;
+      console.error(`  ✗ map ${mapId}: ${e.key} neither wanders nor animates — it stands ` +
+        'perfectly still while every other NPC breathes (set animate, or frozen: true if deliberate)');
+      frozen++;
+    }
+  }
+  if (frozen) failed += frozen;
+  else console.log('  ✓ no NPC is frozen — everyone wanders or marches in place');
+
   const { isOpenAreaTile, MIN_OPEN_NEIGHBOURS } = await import('../src/data/npc-walk-area.js');
   let stuck = 0;
   for (const [mapId, list] of TOWN_NPCS) {
