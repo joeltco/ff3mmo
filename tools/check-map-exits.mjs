@@ -36,6 +36,13 @@ const LIVE = [
   [5, 'Ur weapon'], [6, 'Ur elder1'], [7, 'Ur elder2'], [8, 'Ur inn'], [9, 'Ur tavern'],
   [10, 'Kazus'], [12, 'Kazus inn'], [15, 'Kazus magic'], [16, 'Kazus weapon'], [17, 'Kazus armor'],
   [18, 'Castle Sasune'],
+  // Not reachable on foot yet — both sit past the choke boulder — but they
+  // carry the SAME defect Sasune did (exit tiles with collision $80, refused by
+  // isPassable) and are fixed by the same fire-on-attempt change. Listed now so
+  // opening the world later cannot quietly re-introduce a map with no way out;
+  // that is exactly how Sasune shipped.
+  [124, 'map 124 (world entrance 63,32)'],
+  [167, 'map 167 (world entrance 88,66)'],
 ];
 
 let failed = 0;
@@ -53,6 +60,11 @@ for (const [mapId, name] of LIVE) {
     for (let x = 0; x < 32; x++) {
       const raw = md.tilemap[y * 32 + x];
       const m = raw < 128 ? raw : raw & 0x7F;
+      // ⛔ The VOID metatile decodes as trigger-type 0 ("exit to previous"), so
+      // every map shows a row of phantom exits along y=0. They are unreachable
+      // today, but a map with reachable void at the edge would satisfy this
+      // gate on an exit that does not exist. Skip the fill tile.
+      if (m === (md.fillTile < 128 ? md.fillTile : md.fillTile & 0x7F)) continue;
       const t = ((md.collisionByte2[m] || 0) >> 4) & 0x0F;
       if (t === 0 || t === 1 || t === 4 || t === 5) exits.push({ x, y, t });
     }
