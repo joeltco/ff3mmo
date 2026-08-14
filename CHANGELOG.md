@@ -274,6 +274,59 @@ and FF3's — some codes are single dakuten kana (`0x49` = で, `0x4B` = ば,
 - `check-ff12-text` grew FF2 object-table + insert assertions (**15 reverts
   tested, all fail**)
 
+## 1.8.27 — 2026-08-14
+
+### FF2 has no dictionary — the sub-0x8A codes are characters
+
+The thing I had been calling FF2's "dictionary" does not exist. Those bytes are
+**more characters**: dakuten and handakuten kana in four contiguous blocks.
+
+| range | contents |
+|---|---|
+| `0x3C`–`0x4F` | hiragana dakuten が…ぼ |
+| `0x50`–`0x63` | katakana dakuten ガ…ボ |
+| `0x64`–`0x68` | hiragana handakuten ぱ…ぽ |
+| `0x69`–`0x6D` | katakana handakuten パ…ポ |
+
+Seven values had been derived from context *before* the layout was known —
+`0x3D`=ぎ, `0x3E`=ぐ, `0x49`=で, `0x4B`=ば, `0x5A`=ダ, `0x5D`=デ, `0x69`=パ —
+and the layout reproduces **all seven**.
+
+Small kana and punctuation fill the gaps, each derived from the script:
+`0x7C`=っ ("かかっている"), `0x7D`=ゃ ("じゃくてん"), `0x7E`=ゅ ("きゅうに"),
+`0x7F`=ょ ("もんしょう"), `0x7B`=を, `0xBC`=ッ ("スコット"), `0xBD`=ャ
+("ジャイアントビーバー"), `0xBE`=ュ ("カシュオーン"), `0xB8`=ィ ("ミシディア").
+Digits are at `0x80`–`0x89`, the same slot as FF1 and FF3 — "しろの**1**かい".
+
+**This is why every DTE-table search failed.** FF1 and FF3 really do compress;
+FF2 does not. The give-away was that the codes were *contiguous* and expanded to
+*single* characters.
+
+### Result
+
+**Coverage 78% → 94.7% mean literal; 397 of 397 strings above 60%.** Names
+render in full, which was the point:
+
+> ヨーゼフ「ありがとう。 むすめがかえってきた。 ボーゲンに おどされて
+> うそをついて いたんだ。 むすめのことが しんぱいで…… すまなかった!」
+
+15 distinct speakers: ヒルダ, ヨーゼフ, レイラ, ミンウ, ゴードン, シド, ポール,
+ネリー, フィンおう, ダークナイト, ジャイアントビーバー + 4 descriptive labels.
+
+Keyword table reads exactly now: ヒルダ, ゴードン, ダークナイト, パラメキア,
+ミシディア, ミスリル, だいせんかん, めがみのベル, りゅうきし, ジェイド.
+
+Fixed a double-bracket artifact: `decodeLine` was wrapping inserts in 【 】 while
+the script already supplies its own at `0x78`/`0x79`. The gate caught it.
+
+What is left as `{xx}` is **control codes, not text** — the low bytes drive
+party-name inserts and formatting (FF3 shows the same `{10}{2}` shape).
+
+### Gate
+
+`check-ff12-text` grew dakuten-block, full-name and coverage assertions —
+**7 more reverts tested, all fail** (each block base, っ, ャ, the insert code).
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware

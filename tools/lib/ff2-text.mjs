@@ -45,9 +45,43 @@ export const INSERT_CODE = 0x18;
 export const HIRAGANA = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん';
 export const KATAKANA = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン';
 
-const SYM = { 0xC1: '。', 0xC0: '、', 0x01: '\n' };
+// ── the sub-0x8A codes are NOT a dictionary ───────────────────────────────
+// They are more CHARACTERS: dakuten and handakuten kana, in four contiguous
+// blocks. Seven values had already been derived from context independently
+// (0x3D=ぎ, 0x3E=ぐ, 0x49=で, 0x4B=ば, 0x5A=ダ, 0x5D=デ, 0x69=パ) and this
+// layout reproduces all seven.
+const BLOCKS = [
+  [0x3C, 'がぎぐげござじずぜぞだぢづでどばびぶべぼ'],   // hiragana dakuten
+  [0x50, 'ガギグゲゴザジズゼゾダヂヅデドバビブベボ'],   // katakana dakuten
+  [0x64, 'ぱぴぷぺぽ'],                                  // hiragana handakuten
+  [0x69, 'パピプペポ'],                                  // katakana handakuten
+];
+
+// Small kana and punctuation, each derived from context in the script:
+//   っ  "かぎが かかっている"      ゃ  "じゃくてん"     ゅ  "きゅうに"
+//   ょ  "もんしょう"               を  "…のを みた"
+//   ッ  "スコット"                 ュ  "カシュオーン"   ィ  "ミシディア"
+//   「  always follows a speaker-name insert, and the screen shows it
+const SYM = {
+  0x7B: 'を', 0x7C: 'っ', 0x7D: 'ゃ', 0x7E: 'ゅ', 0x7F: 'ょ',
+  0xB7: 'ァ', 0xB8: 'ィ', 0xBA: 'ェ', 0xBB: 'ォ',
+  0xBC: 'ッ', 0xBD: 'ャ', 0xBE: 'ュ', 0xBF: 'ョ',   // ャ from ジャイアントビーバー
+  0xB9: '「', 0xC1: '。', 0xC2: 'ー', 0xC3: '…', 0xC4: '!', 0xC5: '?',
+  0x78: '【', 0x79: '】',
+  0x01: '\n',
+};
+
+// Digits, same slot as FF1 and FF3. "しろの{81}かい" is a floor number.
+for (let i = 0; i <= 9; i++) SYM[0x80 + i] = String.fromCharCode(48 + i);
+
+const DAKUTEN = (() => {
+  const m = {};
+  for (const [base, run] of BLOCKS) [...run].forEach((c, i) => { m[base + i] = c; });
+  return m;
+})();
 
 export function glyph(b) {
+  if (DAKUTEN[b] !== undefined) return DAKUTEN[b];
   if (b >= 0x8A && b < 0x8A + HIRAGANA.length) return HIRAGANA[b - 0x8A];
   if (b >= 0xCA && b < 0xCA + KATAKANA.length) return KATAKANA[b - 0xCA];
   if (b === 0xFF) return ' ';
@@ -103,6 +137,14 @@ export function rawString(rom, T, id, max = 220) {
   return out;
 }
 
+/** A string with every known glyph resolved (unknown codes dropped). */
+export function plainString(rom, T, id) {
+  const b = rawString(rom, T, id) || [];
+  let s = '';
+  for (const x of b) { const c = glyph(x); if (c !== null) s += c; }
+  return s;
+}
+
 /** Literal kana of a string, codes dropped — used for matching against screen text. */
 export function skeleton(rom, T, id) {
   const b = rawString(rom, T, id) || [];
@@ -118,8 +160,10 @@ export function decodeLine(rom, id, { table = DIALOGUE_TABLE, nl = ' / ' } = {})
   let s = '';
   for (let i = 0; i < b.length; i++) {
     if (b[i] === INSERT_CODE && i + 1 < b.length) {
-      const ins = skeleton(rom, PTR_TABLE, 0x100 | b[i + 1]);
-      s += '【' + ins + '】'; i++; continue;
+      // Insert the name PLAIN. The script supplies its own 【 】 (0x78/0x79)
+      // around keyword inserts; speaker-name inserts have none. Adding a pair
+      // here double-bracketed every keyword.
+      s += plainString(rom, PTR_TABLE, 0x100 | b[i + 1]); i++; continue;
     }
     if (b[i] === 0x01) { s += nl; continue; }
     const c = glyph(b[i]);

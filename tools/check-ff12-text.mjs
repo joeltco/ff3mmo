@@ -158,12 +158,51 @@ const ok = (m) => console.log('  ✓ ' + m);
   // 5. the 0x18 N name/keyword insert
   {
     const line = F2.decodeLine(rom, 1);
-    if (!/^【/.test(line)) bad('FF2 dialogue 1 does not begin with a name insert — 0x18 N is not expanding');
-    if (!/【のら】|【のばら】/.test(line)) bad('FF2 dialogue 1 lost its keyword insert (0x1F1, のばら)');
-    if (since()) ok('FF2 0x18 N expands to string 0x100+N (ヒルダ and のばら both insert)');
+    // Inserts render PLAIN — the script supplies its own 【 】 (0x78/0x79)
+    // around keywords, so wrapping them here double-bracketed every one.
+    if (!/^ヒルダ「/.test(line)) {
+      bad(`FF2 dialogue 1 starts "${line.slice(0, 16)}" — expected the ヒルダ name insert`);
+    }
+    if (!/のばら/.test(line)) bad('FF2 dialogue 1 lost its keyword insert (0x1F1, のばら)');
+    if (since()) ok('FF2 0x18 N expands to string 0x100+N (ヒルダ speaks, のばら inserts)');
   }
 
-  // 6. specific ids carry specific text.
+  // 6. the dakuten blocks — there is NO dictionary, these are characters
+  //
+  // Seven of these were derived from context independently, before the layout
+  // was known (0x3D=ぎ, 0x3E=ぐ, 0x49=で, 0x4B=ば, 0x5A=ダ, 0x5D=デ, 0x69=パ);
+  // the four-block layout reproduces all seven. If a block base drifts, the
+  // whole script starts printing the wrong kana.
+  {
+    const WANT = { 0x3D: 'ぎ', 0x3E: 'ぐ', 0x49: 'で', 0x4B: 'ば',
+                   0x5A: 'ダ', 0x5D: 'デ', 0x69: 'パ', 0xBD: 'ャ', 0x7C: 'っ' };
+    for (const [b, c] of Object.entries(WANT)) {
+      if (F2.glyph(+b) !== c) bad(`FF2 0x${(+b).toString(16)} decodes as "${F2.glyph(+b)}", expected "${c}"`);
+    }
+    if (since()) ok('FF2 dakuten/handakuten blocks decode (9 context-derived codes)');
+  }
+
+  // 7. names render in FULL — this is what the dakuten buy
+  {
+    const NAMES = [[0x1EF, 'ヒルダ'], [0x1EE, 'ダークナイト'], [0x1F4, 'パラメキア'],
+                   [0x1EB, 'ゴードン'], [0x1F8, 'ミシディア'], [0x1F2, 'ミスリル']];
+    for (const [id, want] of NAMES) {
+      const got = F2.decodeString(rom, id);
+      if (got !== want) bad(`FF2 keyword 0x${id.toString(16)} is "${got}", expected "${want}"`);
+    }
+    if (since()) ok('FF2 names render in full: ヒルダ, ダークナイト, パラメキア, ゴードン, ミシディア');
+  }
+
+  // 8. coverage — the dakuten took this from 78% to ~95%
+  {
+    let lit = 0, n = 0;
+    for (let id = 0; id < 600; id++) { const r = F2.literalRatio(rom, id); if (r > 0) { lit += r; n++; } }
+    const pct = 100 * lit / n;
+    if (pct < 90) bad(`FF2 mean literal coverage is ${pct.toFixed(1)}%, expected ~95% — the tables have drifted`);
+    else ok(`FF2 mean literal coverage ${pct.toFixed(1)}% over ${n} strings`);
+  }
+
+  // 9. specific ids carry specific text.
   // ⛔ "some string somewhere contains アルテア" is SHIFT-INVARIANT — moving the
   // pointer table by one entry still satisfies it, and that revert passed. Pin
   // the id, so a shifted table fails.

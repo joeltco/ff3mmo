@@ -20,11 +20,10 @@ const NAMES_ONLY = process.argv.includes('--names');
  * Only a name in the opening-quote position counts.
  */
 export function speaker(line) {
-  let m = /^【([^】]+)】\{b9\}/.exec(line);
-  if (m) return m[1];
-  m = /^([゠-ヿ぀-ゟ{}0-9a-f]{2,12}?)\{b9\}/.exec(line);
-  if (m) return m[1].replace(/\{[0-9a-f]{1,2}\}/g, '');
-  return null;
+  const m = /^([^「\n]{1,14})「/.exec(line);
+  if (!m) return null;
+  const n = m[1].replace(/\{[0-9a-f]{1,2}\}/g, '').trim();
+  return n.length >= 2 ? n : null;
 }
 
 const rows = [];

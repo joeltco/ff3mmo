@@ -366,13 +366,48 @@ writes a speaker as `NAME「…」` (`0xB9` is the opening quote).
 (Minwu) come through exactly. Rosters: `docs/sprites/ff2-npc-dialogue.txt` and
 `ff2-npc-names.txt`.
 
-### Still not decoded
+### There is no dictionary
 
-The sub-`0x8A` dictionary. It is **not** a uniform two-character DTE like FF1's
-and FF3's — some codes are single dakuten kana (`0x49` = で, `0x3D` = ぎ,
-`0x4B` = ば, `0x69` = パ, derived from context) — and no table has been located.
-The practical cost: **dakuten go missing inside names**, so ヒルダ prints as
-ヒル and ヨーゼフ as ヨフ. Codes are printed as `{xx}`, never guessed.
+The sub-`0x8A` codes are **not compression at all — they are more characters.**
+Dakuten and handakuten kana sit in four contiguous blocks:
+
+| range | contents |
+|---|---|
+| `0x3C`–`0x4F` | hiragana dakuten が…ぼ |
+| `0x50`–`0x63` | katakana dakuten ガ…ボ |
+| `0x64`–`0x68` | hiragana handakuten ぱ…ぽ |
+| `0x69`–`0x6D` | katakana handakuten パ…ポ |
+
+Seven values had already been derived from context *before* the layout was
+known — `0x3D`=ぎ, `0x3E`=ぐ, `0x49`=で, `0x4B`=ば, `0x5A`=ダ, `0x5D`=デ,
+`0x69`=パ — and this layout reproduces **all seven**.
+
+Small kana and punctuation fill the gaps, each derived from context in the
+script: `0x7B`=を, `0x7C`=っ ("かかっている"), `0x7D`=ゃ ("じゃくてん"),
+`0x7E`=ゅ ("きゅうに"), `0x7F`=ょ ("もんしょう"), `0xBC`=ッ ("スコット"),
+`0xBD`=ャ ("ジャイアントビーバー"), `0xBE`=ュ ("カシュオーン"), `0xB8`=ィ
+("ミシディア"), plus `0xB9`=「, `0xC1`=。, `0xC2`=ー, `0xC3`=…, `0xC4`=!,
+`0xC5`=?. Digits are at `0x80`–`0x89`, the same slot as FF1 and FF3 —
+"しろの**1**かい" is a floor number.
+
+> ⛔ **This is why every DTE-table search failed.** FF1 and FF3 really do
+> compress; FF2 does not. Hunting for a table that does not exist cost several
+> passes — the give-away was that the "dictionary" codes were *contiguous* and
+> mapped to *single* characters.
+
+**Coverage went from 78% to 94.7% mean literal, 397 of 397 strings above 60%.**
+What remains as `{xx}` is **control codes, not text**: the low bytes (`0x02`,
+`0x04`, `0x07`–`0x17`, `0x2F`, `0x3B`) drive party-name inserts and formatting —
+FF3 shows the same shape as `{10}{2}` — and they are printed, never guessed.
+
+Names now render in full, which is the whole point:
+
+> ヨーゼフ「ありがとう。 むすめがかえってきた。 ボーゲンに おどされて
+> うそをついて いたんだ。 むすめのことが しんぱいで…… すまなかった!」
+
+**15 distinct speakers**: ヒルダ, ヨーゼフ, レイラ, ミンウ, ゴードン, シド,
+ポール, ネリー, フィンおう, ダークナイト, ジャイアントビーバー, and four
+descriptive labels (みはり, まどうし, ははおや, どれい).
 
 ---
 
