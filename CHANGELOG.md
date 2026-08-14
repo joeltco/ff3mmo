@@ -18,6 +18,46 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.2 — 2026-08-14
+
+### 0x14 fixed — all 8 summons verified, nothing in the catalogue left unmeasured
+
+- v1.8.1 left `0x14` (118) as the one UNVERIFIED value in the whole spell table:
+  the single-spell probe could not drive its menu row, 5 attempts, battle command
+  menu still open at f600. **That was a PROBE limit, not a silent spell.**
+- Captured first try with the sweep's own **CALL-school path** — the harness
+  actually built for summons, because their animations draw from sprite slots
+  `$0F-$48` rather than the `$49-$60` every other effect uses, so the window has
+  to be widened or the sweep sees no animation at all:
+
+      SLOT_LO=0x0F SLOT_HI=0x48 FRAMES=2200 node tools/monscan/spell-sweep.cjs call
+
+- **8 of 8 reproduce exactly:** Baham 125 @f652, Levia 115 @f686,
+  **Odin 118 @f607**, Titan 131 @f608, Ifrit 130 @f714, Ramuh 132 @f629,
+  Shiva 67 @f591, Chocb 75 @f597.
+- The gate now pins all eight (it pinned seven and a "do not move 0x14" rule),
+  proven by reverting Odin off 118.
+
+### Two probe bugs fixed on the way
+
+- The kick loop counted its OWN menu blips (`$98` cursor, `$85` confirm) as "the
+  round started", so it stopped before the round was committed and the battle
+  idled at the command menu — which reads exactly like a silent spell.
+- Character 2 was commanded with `down`+`a`, the SECOND row of
+  Attack/Guard/Run/Item. One stray cursor step puts that on **Run**: the party
+  flees and the round ends before the spell resolves. Now `a`,`a` (Attack +
+  target), which cannot wander.
+- `SHOT_EVERY` / `SHOT_UNTIL` dump a frame series so an animation can be watched
+  instead of inferred from four fixed samples. That is how "1xHit" was spotted
+  where a summon should have been.
+
+### The lesson recorded in the data file
+
+When a harness cannot reach something, say so and reach for the harness built
+for it — do not record the non-observation as a property of the spell. `$9f`
+(track 96) also fires at exactly f270 in every single-probe summon run,
+INCLUDING one where nothing cast: it belongs to the round, never to a summon.
+
 ## 1.8.1 — 2026-08-14
 
 ### The 8 summons — the last unmeasured corner, re-verified

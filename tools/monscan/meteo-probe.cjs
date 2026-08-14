@@ -30,6 +30,10 @@ const ROW = parseInt(process.env.ROW || '0', 10);       // 0 = level 8
 const COL = parseInt(process.env.COL || '2', 10);       // Meteo
 const SHOTS = process.env.SHOTS || '/tmp/claude-1000/-home-joeltco/72d75d82-4b24-4ec2-9ca9-88978d5cb2d3/scratchpad/meteo';
 const FRAMES = parseInt(process.env.FRAMES || '1200', 10);
+// SHOT_EVERY=n dumps a frame every n frames up to SHOT_UNTIL, so an animation
+// can be watched instead of inferred from four fixed samples.
+const SHOT_EVERY = parseInt(process.env.SHOT_EVERY || '0', 10);
+const SHOT_UNTIL = parseInt(process.env.SHOT_UNTIL || '600', 10);
 
 mkdirSync(SHOTS, { recursive: true });
 
@@ -107,7 +111,11 @@ n.press('a', 8, 30);              // target select
 // finished animating; pressing straight through left the round un-committed and
 // the capture window recorded a battle that never took its turn.
 n.run(120);
-n.press('down', 8, 30); n.press('a', 8, 30);   // char 2 guards
+// Character 2 ATTACKS rather than guards. `down`+`a` was picking the SECOND row
+// of Attack/Guard/Run/Item, and one stray cursor step puts that on RUN — the
+// party flees, the round ends before the spell resolves, and the spell reads as
+// silent. `a`,`a` is Attack + target and cannot wander.
+n.press('a', 8, 30); n.press('a', 8, 30);
 n.run(60);
 
 // Do not assume the round started. With characters 3 and 4 killed the engine
@@ -127,12 +135,19 @@ let kicks = 0;
   // entrance cue and impact are seconds apart and have to be told apart.
   frame = 0;
   const tick = (k) => { for (let i = 0; i < k; i++) { frame++; n.nes.frame(); } };
+  // "Something is happening" must NOT count the kick loop's OWN menu blips.
+  // Pressing down+a fires $98 (cursor) and $85 (confirm), and treating those as
+  // progress made the loop stop before the round was committed — the battle then
+  // idled at the command menu and the spell read as SILENT. $40/$00 are the
+  // driver's own bookkeeping and are equally not progress.
+  const MENU_NOISE = new Set([0x98, 0x85, 0x40, 0x00, 0x86]);
+  const realSound = (from) => sfx.slice(from).some((w) => !MENU_NOISE.has(w.val));
   const before = sfx.length;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 12; attempt++) {
     const mark = sfx.length;
     tick(90);
-    if (sfx.length > mark) break;            // something is happening
-    n.press('down', 8, 20); n.press('a', 8, 20);
+    if (realSound(mark)) break;              // a NON-menu sound = the round is live
+    n.press('a', 8, 20); n.press('a', 8, 20);   // Attack + target; never Run
     kicks++;
   }
   if (sfx.length === before && kicks >= 10) console.log('WARNING: round never started');
@@ -145,7 +160,8 @@ const _base = frame;
 for (let f = 0; f < FRAMES; f++) {
   frame = _base + f;
   n.nes.frame();
-  if (f === 120 || f === 300 || f === 600 || f === 900) n.screenshot(join(SHOTS, `6-cast-f${f}.png`));
+  if (SHOT_EVERY && f % SHOT_EVERY === 0 && f <= SHOT_UNTIL) n.screenshot(join(SHOTS, `6-cast-f${String(f).padStart(4, '0')}.png`));
+  else if (!SHOT_EVERY && (f === 120 || f === 300 || f === 600 || f === 900)) n.screenshot(join(SHOTS, `6-cast-f${f}.png`));
 }
 
 const own = sfx.slice(start), ownSongs = songs.slice(songStart);

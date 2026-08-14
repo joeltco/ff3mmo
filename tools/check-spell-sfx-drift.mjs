@@ -64,19 +64,19 @@ for (const id of [0x00, 0x01, 0x02]) {
 }
 
 // ── summons ──────────────────────────────────────────────────────────────
-// Re-cast one at a time as Sage against the unkillable goblin (v1.8.1). Pinned
-// literally so a regenerated table cannot quietly move them. 0x14 is absent on
-// purpose: its cast would not complete in 5 attempts, so its shipped 118 is
-// UNVERIFIED and is neither pinned nor "corrected" on a non-observation.
-console.log('\nsummons (re-cast individually, 7 of 8 verified)');
+// ALL EIGHT verified (v1.8.2) by the call-school sweep:
+//   SLOT_LO=0x0F SLOT_HI=0x48 FRAMES=2200 node tools/monscan/spell-sweep.cjs call
+// Pinned literally so a regenerated table cannot quietly move them.
+console.log('\nsummons (all 8 verified via the call-school sweep)');
 const SUMMONS = new Map([
-  [0x06, 125],   // Baham  @f377
-  [0x0d, 115],   // Levia  @f411
-  [0x1b, 131],   // Titan  @f360
-  [0x22, 130],   // Ifrit  @f440
-  [0x29, 132],   // Ramuh  @f360
-  [0x30,  67],   // Shiva  @f360
-  [0x37,  75],   // Chocb  @f360
+  [0x06, 125],   // Baham  @f652
+  [0x0d, 115],   // Levia  @f686
+  [0x14, 118],   // Odin   @f607
+  [0x1b, 131],   // Titan  @f608
+  [0x22, 130],   // Ifrit  @f714
+  [0x29, 132],   // Ramuh  @f629
+  [0x30,  67],   // Shiva  @f591
+  [0x37,  75],   // Chocb  @f597
 ]);
 for (const [id, want] of SUMMONS) {
   const got = CAPTURED_SPELL_SFX.get(id);
@@ -92,9 +92,13 @@ for (const [id] of SUMMONS) {
     fail(`summon 0x${id.toString(16)} is recorded as track 96, which is the round's own f270 sound, not an impact`);
   }
 }
+// 0x14 was the last unverified value in the whole catalogue. It is now measured
+// (118 @f607) by the call-school sweep — the harness built for summons, with the
+// wider $0F-$48 sprite-slot window they draw from. The single-spell probe could
+// never drive its menu row; that was a PROBE limit, not a silent spell.
 if (CAPTURED_SPELL_SFX.get(0x14) !== 118) {
-  fail('0x14 moved from 118 — it is UNVERIFIED (its cast never completed), so it must not be changed without a real capture');
-} else ok('0x14 left at its unverified 118 (documented, not silently "fixed")');
+  fail('0x14 moved from its measured 118');
+}
 
 console.log(fails ? `\ncheck-spell-sfx-drift: ${fails} FAILED` : '\ncheck-spell-sfx-drift: all checks passed');
 process.exit(fails ? 1 : 0);

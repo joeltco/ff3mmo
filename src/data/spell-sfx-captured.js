@@ -84,10 +84,18 @@
 // spell below, which is why value-matching alone could not have told drift
 // from truth. 0x04 Life2 is a revive and stayed silent with no dead target.
 //
-// ── SUMMONS RE-VERIFIED, v1.8.1 ─────────────────────────────────────────
-// The 8 summons came from a separate run and were the last unmeasured corner.
-// Re-cast one at a time as Sage (job 20, mask 0x40 — the call school renders as
-// a SINGLE column of eight) against the unkillable goblin.
+// ── SUMMONS RE-VERIFIED — ALL 8, v1.8.2 ────────────────────────────────
+// The 8 summons were the last unmeasured corner. Re-captured with the sweep's
+// own CALL-school path, which is the harness built for them: the summon
+// animations draw from sprite slots $0F-$48, not the $49-$60 every other effect
+// uses, so the window has to be widened or the sweep sees no animation at all.
+//
+//   SLOT_LO=0x0F SLOT_HI=0x48 FRAMES=2200 node tools/monscan/spell-sweep.cjs call
+//
+// 8 of 8 reproduce their shipped value exactly:
+//   0x06 Baham 125 @f652   0x0d Levia 115 @f686   0x14 Odin  118 @f607
+//   0x1b Titan 131 @f608   0x22 Ifrit 130 @f714   0x29 Ramuh 132 @f629
+//   0x30 Shiva  67 @f591   0x37 Chocb  75 @f597
 //
 // They are NOT exposed to the level-8 cursor drift: every summon record carries
 // byte 7 = 0x3f (the call-school marker, the same for all eight regardless of
@@ -95,29 +103,21 @@
 // Checked rather than assumed, because one-per-level is exactly the shape that
 // drifted for black and white magic.
 //
-//   7 of 8 reproduce their shipped value exactly:
-//     0x06 Baham 125 @f377   0x0d Levia 115 @f411   0x1b Titan 131 @f360
-//     0x22 Ifrit 130 @f440   0x29 Ramuh 132 @f360   0x30 Shiva  67 @f360
-//     0x37 Chocb  75 @f360
+// ⚠ 0x14 spent a version listed as UNVERIFIED because the single-spell probe
+// (tools/monscan/meteo-probe.cjs) could not drive its menu row — 5 attempts,
+// the battle command menu still open at f600. That was a PROBE limit, not a
+// silent spell: the call-school sweep captures it first try. When a harness
+// cannot reach something, say so and reach for the harness built for it; do not
+// record the non-observation as a property of the spell.
 //
-// ⚠ 0x14 (shipped 118) is UNVERIFIED. Its cast would not complete in 5 attempts
-// — the screenshots show the battle command menu still open at f600, so the
-// round never ran. That is a HARNESS failure, not evidence that the spell is
-// silent, and 118 is left alone rather than "corrected" on a non-observation.
-// The ROM menu lists it as "Catastro" where SPELL_NAMES_SHRINES says "Odin"
-// (row 3 is "Hyper" vs our "Titan"); the shrines names are a secondary source
-// and are left as they are.
-//
-// $9f (96) fires at EXACTLY f270 in all eight runs, including the one where the
-// summon never cast — so it belongs to the round, not to any summon. Do not
-// record it as a summon cue.
+// ⛔ $9f (96) fires at EXACTLY f270 in every single-probe summon run, including
+// one where the summon never cast at all — it belongs to the ROUND, not to any
+// summon. Same trap class as the $b6 enemy-turn sound.
 //
 // To re-verify:
 //   node tools/monscan/build-capture-rom.cjs /tmp/cap.nes --unlock 0x02
 //   ROM=/tmp/cap.nes JOB=4 MASK=0x07 ROW=0 COL=2 node tools/monscan/meteo-probe.cjs
-//   node tools/monscan/build-capture-rom.cjs /tmp/sum.nes           # summons
-//   ROM=/tmp/sum.nes JOB=20 MASK=0x40 ROW=<0-7> COL=0 FRAMES=2400 \
-//     node tools/monscan/meteo-probe.cjs
+//   SLOT_LO=0x0F SLOT_HI=0x48 FRAMES=2200 node tools/monscan/spell-sweep.cjs call
 //   AFFLICT=1 node tools/monscan/spell-sweep.cjs both        # levels 1-7
 //   AFFLICT=1 AFFLICT_MASK=4 node tools/monscan/spell-sweep.cjs wm
 

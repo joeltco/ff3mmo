@@ -1,4 +1,4 @@
-# SFX / music audit — v1.7.997-1.8.1
+# SFX / music audit — v1.7.997-1.8.2
 
 Joel: *"lots of sfx are wrong. meteo sfx, the ff2 learn sfx, and im sure many
 others. kazus and the castle arent playing the right music... pull them all and
@@ -205,23 +205,20 @@ libgme refuses it and the blip is silent), proven by undercounting the header.
   Wired as `FF2_TRACKS.WORD_LEARNED` + `playWordLearnedJingle()`, fired from
   `word-menu.js` **only when a word was actually learned**. Gate:
   `check-word-learn-sfx.mjs`, proven by three reverts.
-- ~~The 8 summons~~ — **RE-VERIFIED (v1.8.1). 7 of 8 reproduce exactly.**
-  Re-cast one at a time as Sage (job 20, mask `0x40` — the call school renders as
-  a single column of eight) against the unkillable goblin:
-  Baham 125, Levia 115, Titan 131, Ifrit 130, Ramuh 132, Shiva 67, Chocb 75.
-  They are **not** exposed to the level-8 drift: every summon record carries
-  byte 7 = `0x3f` (the call-school marker, identical for all eight regardless of
-  level) and the level-8 pick returns `$85` CONFIRM, not the `$86` refusal —
-  checked rather than assumed, because one-per-level is exactly the shape that
-  drifted for black and white magic.
-  **`0x14` (shipped 118) is UNVERIFIED**: its cast would not complete in 5
-  attempts — the battle command menu is still open at f600, so the round never
-  ran. That is a harness failure, not evidence of silence, and 118 is left alone
-  rather than "corrected" on a non-observation. The ROM menu also names it
-  *Catastro* where our shrines table says *Odin*.
-  `$9f` (track 96) fires at **exactly f270 in all eight runs, including the one
-  where nothing cast** — it belongs to the round, not to any summon. The gate
-  fails if a summon is ever recorded as 96.
+- ~~The 8 summons~~ — **ALL 8 VERIFIED (v1.8.2).** Captured with the sweep's own
+  CALL-school path, the harness built for them (summon animations draw from
+  sprite slots `$0F-$48`, not the `$49-$60` everything else uses):
+  `SLOT_LO=0x0F SLOT_HI=0x48 FRAMES=2200 node tools/monscan/spell-sweep.cjs call`.
+  Baham 125 @f652, Levia 115 @f686, **Odin 118 @f607**, Titan 131 @f608,
+  Ifrit 130 @f714, Ramuh 132 @f629, Shiva 67 @f591, Chocb 75 @f597.
+  Not exposed to the level-8 drift — every summon record carries byte 7 = `0x3f`
+  (call-school marker, identical for all eight) and the level-8 pick returns
+  `$85` CONFIRM, not the `$86` refusal.
+  `0x14` spent a version marked UNVERIFIED because the single-spell probe could
+  not drive its menu row (5 attempts, command menu still open at f600). That was
+  a **probe limit, not a silent spell** — the right harness got it first try.
+  `$9f` (96) fires at exactly f270 in every single-probe run, including one where
+  nothing cast: it belongs to the round, never to a summon.
 - **Altar Cave floors 2–4** measure song 29 in the ROM; our generated dungeon
   plays the cave theme (2) on every floor. Left alone deliberately — our dungeon
   is not the ROM's, and Joel did not report it.
