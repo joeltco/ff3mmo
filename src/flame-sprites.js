@@ -12,6 +12,16 @@ import { _makeCanvas16, _makeCanvas16ctx } from './canvas-utils.js';
 const FLAME_NPC_DEFS = [
   { id: 193, offset: 0x14010 },  // large torch flame
   { id: 194, offset: 0x14090 },  // small candle flame
+  // Kazus's CAMPFIRE. Map 10 places object id 190 at (4,28) — the town's
+  // south-west corner, where the tilemap is bare grass because the fire is a
+  // sprite, not a tile. It draws the SAME graphics as the large torch:
+  // MEASURED by standing next to it in the real game and reading OAM
+  // (`WALK=left,left,left,up,up node tools/monscan/ghost-sprite.cjs 10`), whose
+  // tiles trace to 0x14010/20/30/40 — frame 1 of id 193.
+  //
+  // Registered under its OWN id so `_renderFlameFrames` picks up id 190's
+  // palette selector from the map rather than the torch's.
+  { id: 190, offset: 0x14010 },  // campfire (Kazus SW corner)
 ];
 
 let _flameRawTiles = null; // Map<npcId, [[tl,tr,bl,br], [tl,tr,bl,br]]> — raw decoded pixels
@@ -130,20 +140,44 @@ export function rebuildFlameSprites(mapData, mapRenderer, TILE_SIZE) {
   _flameSprites = [];
   if (!mapData || !_flameRawTiles) return;
   _renderFlameFrames(mapData);
-  const flameMap = mapData.tileset === 5 ? FLAME_TILE_MAP_TS5 : null;
-  if (!flameMap) return;
   const rc = mapRenderer && mapRenderer.hasRoomClip() ? mapRenderer.getRoomClip() : null;
-  const { tilemap } = mapData;
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      const mid = tilemap[y * 32 + x];
-      const npcId = flameMap.get(mid);
-      if (npcId === undefined) continue;
-      const px = x * TILE_SIZE;
-      const py = y * TILE_SIZE;
-      if (rc && (px < rc.x || px >= rc.x + rc.w || py < rc.y || py >= rc.y + rc.h)) continue;
-      _flameSprites.push({ npcId, px, py });
+  const clipped = (px, py) =>
+    rc && (px < rc.x || px >= rc.x + rc.w || py < rc.y || py >= rc.y + rc.h);
+
+  // 1. Wall-mounted flames, from BACKGROUND TILES. Interiors only (tileset 5):
+  //    a candle wall or torch mount is part of the room's art.
+  const flameMap = mapData.tileset === 5 ? FLAME_TILE_MAP_TS5 : null;
+  if (flameMap) {
+    const { tilemap } = mapData;
+    for (let y = 0; y < 32; y++) {
+      for (let x = 0; x < 32; x++) {
+        const npcId = flameMap.get(tilemap[y * 32 + x]);
+        if (npcId === undefined) continue;
+        const px = x * TILE_SIZE, py = y * TILE_SIZE;
+        if (clipped(px, py)) continue;
+        _flameSprites.push({ npcId, px, py });
+      }
     }
+  }
+
+  // 2. Free-standing flames, from the map's OWN OBJECT TABLE. A town's fire is
+  //    not a tile — Kazus's south-west corner is bare grass — it is an entry in
+  //    the map's NPC list with a high id. This loop did not exist, which is the
+  //    whole reason that campfire was missing: the function returned early for
+  //    any map that was not tileset 5, so no town ever placed one.
+  //
+  //    Runs for EVERY tileset, and only for ids we have actually decoded, so an
+  //    unknown object is skipped rather than drawn as garbage.
+  //    ⛔ Deduped against pass 1. Ur's inn lists id 194 in its object table AT
+  //    THE SAME TILES as its candle-wall background tiles, so placing both drew
+  //    two flames on one candle — brighter and subtly wrong, the kind of thing
+  //    that never gets reported.
+  for (const n of mapData.npcs || []) {
+    if (!_flameRawTiles.has(n.id)) continue;
+    const px = n.x * TILE_SIZE, py = n.y * TILE_SIZE;
+    if (clipped(px, py)) continue;
+    if (_flameSprites.some(f => f.px === px && f.py === py)) continue;
+    _flameSprites.push({ npcId: n.id, px, py });
   }
 }
 

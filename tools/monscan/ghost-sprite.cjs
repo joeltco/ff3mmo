@@ -92,10 +92,13 @@ bootToField(nes);
 if (inBattle(nes)) { console.error('stuck in a battle'); process.exit(1); }
 if (!warp(nes, MAP)) { console.error('warp not accepted'); process.exit(1); }
 run(150, nes);
-// Walk toward the counter so the shopkeeper (ghost or not) is on screen.
-for (let i = 0; i < 4; i++) { press(nes, 'up', 14, 26); run(20, nes); }
+// WALK=left,left,up drives the party to whatever is being looked at. The
+// default walks north to a shop counter; Kazus's campfire needs a different
+// path, and hard-coding "4 x up" made this tool single-purpose.
+const WALK = (process.env.WALK || 'up,up,up,up').split(',').map(s => s.trim()).filter(Boolean);
+for (const step of WALK) { press(nes, step, 14, 26); run(20, nes); }
 run(60, nes);
-const tag = POKE ? 'living' : 'cursed';
+const tag = (process.env.TAG || (POKE ? 'living' : 'cursed'));
 nes.screenshot(`${SHOTS}/ghost-${MAP}-${tag}.png`);
 
 const ppu = nes.nes.ppu;
@@ -119,7 +122,7 @@ for (const r of rows) {
   const tiles = near.map(o => o.tile);
   const origins = [...new Set(tiles.map(t => {
     const o = tileOrigin(nes, t);
-    return o ? '0x' + (o[0] & ~0xFF).toString(16).toUpperCase() : '?';
+    return o ? '0x' + o[0].toString(16).toUpperCase() : '?';
   }))];
   console.log(`  cluster @(${r.x},${r.y})  pal ${near[0].pal}  tiles ${tiles.join(',')}  -> bundle(s) ${origins.join(' ')}`);
 }
