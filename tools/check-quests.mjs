@@ -42,7 +42,8 @@ is(q.talkQuest(mapId, npcKey, () => { bad('accepted on plain talk!'); }), null,
 is(ps.quests[QID] === undefined, true, 'plain talk does NOT start the quest');
 
 const offer = q.askQuestWord(mapId, npcKey, quest.startWord);
-is(offer && offer.pages === quest.offer, true, 'asking about the start word returns the OFFER pages');
+// Pages come back token-FILLED (v1.8.6), so compare content, never identity.
+is(offer && offer.pages.join('|'), quest.offer.join('|'), 'asking about the start word returns the OFFER pages');
 is(ps.quests[QID] === undefined, true, 'the offer alone does not start the quest');
 is(q.acceptQuest(QID), true, 'ACCEPT starts it');
 is(ps.quests[QID].s, 'active', 'quest is now active');
@@ -60,7 +61,8 @@ q.noteEncounterVictory('altar_cave_f2');
 is(ps.quests[QID].n, 2, 'two Altar Cave wins counted');
 
 const pagesMid = q.talkQuest(mapId, npcKey, () => { bad('rewarded early!'); });
-is(pagesMid === quest.active, true, 'talking mid-quest returns the ACTIVE nag, not the reward');
+is(pagesMid.length, quest.active.length, 'talking mid-quest returns the ACTIVE nag, not the reward');
+is(/\b2 of 3\b/.test(pagesMid.join(' ')), true, 'the ACTIVE nag reads the progress count out');
 
 q.noteEncounterVictory('altar_cave_boss');
 is(ps.quests[QID].n, 3, 'third win counted');
@@ -69,13 +71,14 @@ q.noteEncounterVictory('altar_cave_f1');
 is(ps.quests[QID].n, 3, 'count does not overshoot the objective');
 
 const pages2 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
-is(pages2 === quest.complete, true, 'handing in returns the COMPLETE pages');
+is(pages2.join('|'), quest.complete.join('|'), 'handing in returns the COMPLETE pages');
 is(rewarded && rewarded.gil, quest.reward.gil, 'reward gil paid out');
+is(rewarded && rewarded.item, quest.reward.item, 'reward ITEM handed over — the line promises an object');
 is(ps.quests[QID].s, 'done', 'quest is done');
 
 rewarded = null;
 const pages3 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
-is(pages3 === quest.done, true, 'talking again returns the DONE pages');
+is(pages3.join('|'), quest.done.join('|'), 'talking again returns the DONE pages');
 is(rewarded, null, 'reward is NOT paid twice');
 
 // ── persistence ───────────────────────────────────────────────────────────
@@ -120,10 +123,16 @@ if (v && v.ok && v.data && v.data.quests && v.data.quests[QID]) {
 } else {
   bad('server whitelist DROPPED quests — progress would reset on login');
 }
+// v1.8.6 — the server clamps against the REAL objective, not a shape-only
+// 0..9999 bound, so both halves of a save agree on what is legal. This gate
+// used to assert the 9999 and so pinned the divergence in place.
 const vBad = _testValidateSaveData({ quests: { [QID]: { s: 'hax', n: 999999 } } });
 const e = vBad && vBad.ok && vBad.data.quests && vBad.data.quests[QID];
-if (e && e.s === 'active' && e.n === 9999) ok('server clamps a forged quest entry');
-else bad(`server did not clamp a forged entry: ${JSON.stringify(e)}`);
+if (e && e.s === 'active' && e.n === quest.objective.count) ok('server clamps a forged count to the objective');
+else bad(`server did not clamp a forged entry to ${quest.objective.count}: ${JSON.stringify(e)}`);
+const vUnknown = _testValidateSaveData({ quests: { not_a_quest: { s: 'done', n: 3 } } });
+if (vUnknown.ok && vUnknown.data.quests && !vUnknown.data.quests.not_a_quest) ok('server drops an unknown quest id, same as the client');
+else bad('server kept an unknown quest id the client would have dropped');
 
 if (failed) { console.error(`\ncheck-quests: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-quests: OK');

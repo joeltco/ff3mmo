@@ -18,6 +18,69 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.6 — 2026-08-14
+
+### Quest system audit — seven holes, all closed
+
+`tools/check-quests.mjs` walked the one happy path and passed while every one
+of these sat under it. New `tools/audit-quests.mjs` reproduces each rather than
+asserting it, and is now a deploy gate; every check was proven by reverting its
+fix. (Two of its own checks were rewritten after a revert failed to trip them:
+one matched the symbol name in a COMMENT above the deleted code, the other
+compared page arrays by identity after pages became token-filled copies.)
+
+- **A hand-in was replayable for unlimited gil.** The reward was durable the
+  instant it was granted — `_grantQuestReward` pushed a `gil-delta` that
+  `mirrorApplyInvEvent` wrote straight to SQLite — while `ps.quests[id].s =
+  'done'` sat in memory until the next `saveSlotsToDB`, and NOTHING on the
+  completion path called one. Hand in, close the tab, reload, hand in again:
+  the harness pulled 900 gil out of one save. No modding; on iOS
+  `beforeunload` (the only save on exit) never fires, so a swipe was the whole
+  exploit. Every state transition in `src/quests.js` now persists.
+- **The server had no idea what a quest was.** New `quest-claim` wire +
+  `quest_claims` table: the client sends only WHICH quest, and
+  `economy-arbiter.js#validateQuestClaim` looks the reward up in the server's
+  own copy of `data/quests.js` and pays it at most once per
+  `(user, slot, quest)`. `questClaimMark` is `INSERT OR IGNORE` and its
+  `changes` result gates the payout, so two sockets racing one account cannot
+  both be paid. ⛔ It does NOT verify the objective — the server counts no
+  kills, so "I finished it" is still the client's word (same posture as the
+  accepted dungeon-chest replay). What is closed is being paid twice.
+  `src/data/quests.js` is now imported by the server and must stay
+  IMPORT-FREE.
+- **A rejected claim now reaches the player.** `npc.js` registers
+  `setNetQuestResultHandler`: `already-claimed` keeps the quest finished and
+  resyncs gil from the mirror; anything else calls the new
+  `revertQuestHandIn` so the hand-in can be retried, and stashes a notice
+  shown on the next talk — the reject lands while the "Take this" pages are
+  still up, so it must not stamp over an open box.
+- **The hand-in text handed over an object the reward could not contain.**
+  "Take this. It was his." paid pure gil; `_grantQuestReward` had no `item`
+  branch at all, though `data/items.js` already models quest items. `reward`
+  now carries `item: 0x58` (Leather Shield — the cheapest thing in Ur's armor
+  shop, wearable by nearly every job) and it is granted FIRST: a full bag
+  rejects the whole claim rather than paying the gil and dropping the
+  heirloom, which the ledger would make permanent.
+- **A giver could only ever hold one quest.** `talkQuest` returned on the
+  FIRST matching giver, so a finished quest answered forever and a second
+  quest from the same NPC was unreachable. It now ranks candidates:
+  hand-in > active > offer > done.
+- **Nothing showed quest progress.** `n` was counted, clamped, saved and
+  server-validated, and never read out. The design note rules out a journal
+  screen, so the GIVER says it: `{n}` / `{count}` / `{left}` tokens filled in
+  by `talkQuest`. `check-dialogue-fit` now wraps every expansion, not just the
+  raw page, and new `tools/quest-shot.mjs` draws what he actually says.
+- **Client and server clamped saved counts differently** — server shape-only
+  `0..9999`, client to the objective — and `check-quests.mjs` asserted the
+  9999, pinning the divergence. `api.js` now validates against the real quest
+  table: unknown ids dropped, `n` clamped to that quest's objective.
+- `questsForMap` was dead from the day it was written; removed. The audit's
+  export check is generalised, so the next unused export fails the deploy.
+- New wire-sim test (154/154): a hand-in pays once, the replay is rejected
+  `already-claimed` with the mirror unmoved, and an invented quest id is
+  refused. Proving it required removing BOTH locks — the arbiter check and the
+  ledger insert independently catch the replay.
+
 ## 1.8.5 — 2026-08-14
 
 ### FF3 world + battle SFX — the last five constants attributed

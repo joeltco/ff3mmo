@@ -57,6 +57,7 @@ let _onPveCancel = null;         // ({reason}) → void
 let _onShopResult = null;        // ({txnId, status, ...}) → void — v1.7.776 P-9
 let _onChestResult = null;       // v1.7.777 P-10
 let _onVaseResult = null;
+let _onQuestResult = null;      // ({txnId, questId, status, reason?}) → void — v1.8.6
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
 let _onPartyMemberLeft = null;  // ({memberUserId, memberName}) → void — a member of OUR party disconnected/left
@@ -303,6 +304,16 @@ function _handleMessage(data) {
       if (_onVaseResult) {
         try { _onVaseResult(msg); }
         catch (e) { console.warn('[net] vase-result handler error', e); }
+      }
+      return;
+    case 'quest-result':
+      // v1.8.6 — the server's hand-in verdict. This one MUST keep an ear:
+      // a rejected claim means the player was not paid, and without a branch
+      // here they would watch the giver hand over an heirloom that never
+      // arrived. npc.js registers the handler.
+      if (_onQuestResult) {
+        try { _onQuestResult(msg); }
+        catch (e) { console.warn('[net] quest-result handler error', e); }
       }
       return;
     case 'party-invite-incoming':
@@ -876,6 +887,11 @@ export function sendNetVaseSearch({ txnId, mapId, x, y, claim }) {
   return _send({ type: 'vase-search', txnId: txnId | 0, mapId: mapId | 0,
     x: x | 0, y: y | 0, claim: claim || null });
 }
+export function sendNetQuestClaim({ txnId, questId }) {
+  if (!_helloed) return false;
+  return _send({ type: 'quest-claim', txnId: txnId | 0, questId: String(questId || '') });
+}
+export function setNetQuestResultHandler(fn) { _onQuestResult = typeof fn === 'function' ? fn : null; }
 export function setNetChestResultHandler(fn) { _onChestResult = typeof fn === 'function' ? fn : null; }
 export function setNetVaseResultHandler(fn)  { _onVaseResult  = typeof fn === 'function' ? fn : null; }
 

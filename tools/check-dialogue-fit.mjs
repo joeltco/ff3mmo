@@ -42,9 +42,25 @@ for (const [mapId, list] of TOWN_NPCS) {
       for (const page of pages) check(`map ${mapId} ${e.key} answers.${term}`, page);
   }
 }
+// Quest pages carry {n} / {count} / {left} progress tokens (v1.8.6), filled in
+// by quests.js#talkQuest. Check the RAW page and every expansion: raw happens
+// to be the wider string for a single-digit objective, and relying on that
+// silently stops being true the day a quest wants 12 of something.
+const _expansions = (page, q) => {
+  const total = q.objective ? (q.objective.count | 0) : 0;
+  const out = [page];
+  for (let n = 0; n <= total; n++) {
+    out.push(String(page).replace(/\{n\}/g, String(n))
+                         .replace(/\{count\}/g, String(total))
+                         .replace(/\{left\}/g, String(total - n)));
+  }
+  return out;
+};
 for (const q of Object.values(QUESTS)) {
   for (const stage of ['offer', 'accepted', 'denied', 'active', 'complete', 'done']) {
-    for (const page of q[stage] || []) check(`quest ${q.id}.${stage}`, page);
+    for (const page of q[stage] || []) {
+      for (const variant of _expansions(page, q)) check(`quest ${q.id}.${stage}`, variant);
+    }
   }
 }
 

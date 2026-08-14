@@ -49,6 +49,7 @@ import {
   mirrorReadWireState,                          // v1.7.796 wire-managed-only snapshot
   mirrorReadEquippedBroadcast,                  // v1.7.746 Phase 5
   consumedTileMark, consumedTilesReap,          // v1.7.787 chest/vase replay block
+  questClaimMark,                               // v1.8.6 quest reward ledger
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS, isQuestItem } from './src/data/items.js';
@@ -69,7 +70,7 @@ import {
   endPveBattle, cancelPveBattle,
 } from './pve-arbiter.js';
 // v1.7.776 P-8/P-9 — server economy validator. Shops first; chests/vases/inn follow.
-import { validateShopTransaction, validateChestOpen, validateVaseSearch } from './economy-arbiter.js';
+import { validateShopTransaction, validateChestOpen, validateVaseSearch, validateQuestClaim } from './economy-arbiter.js';
 
 // ── Build / update announcements (v1.7.941) ────────────────────────────────
 // Players were told to report bugs with /bug, which is only useful if they are
@@ -611,6 +612,11 @@ export const PER_KIND_RATES = {
   // battle wires are once-per-encounter / once-per-turn legitimately.
   // Trade-offer matches the existing party-invite cap.
   'chest-open':                { cap: 8,  refill: 4 },
+  // v1.8.6 — a hand-in is once per quest for the life of the save; the
+  // quest_claims ledger already makes the second one a no-op. The cap is
+  // here so a client replaying a rejected claim in a loop costs a token
+  // per attempt instead of a SELECT per attempt.
+  'quest-claim':               { cap: 4,  refill: 1 },
   'vase-search':               { cap: 8,  refill: 4 },
   'shop-transaction':          { cap: 6,  refill: 2 },
   'pve-encounter-request':     { cap: 4,  refill: 1 },
@@ -1504,6 +1510,52 @@ function _handleMessage(entry, msg) {
         status: 'ok',
         gilAfter: fresh.gil | 0,
       });
+      return;
+    }
+    case 'quest-claim': {
+      // v1.8.6 — quest hand-in. The client says WHICH quest; the server looks
+      // the reward up in its own copy of data/quests.js and pays it at most
+      // once per (user, slot, quest).
+      //
+      // Pre-fix the client just emitted `gil-delta` with an amount it chose
+      // and a source string nothing read. That made a hand-in replayable for
+      // as long as the player was willing to reload — the audit pulled 900 gil
+      // out of one save. `mark` BEFORE `apply`: the ledger insert is the lock,
+      // so if it loses a race the payout must not happen.
+      if (!entry.helloed) return;
+      if (!SERVER_ECONOMY) {
+        _send(entry.ws, { type: 'quest-result', txnId: parsed.txnId | 0,
+          status: 'rejected', reason: 'economy-disabled' });
+        return;
+      }
+      const slot = (entry.slot | 0);
+      const r = validateQuestClaim(entry.userId, slot, parsed);
+      if (!r.ok) {
+        console.log('[quest] reject user=' + entry.userId + ' quest=' +
+          (parsed.questId || '?') + ' reason=' + r.reason);
+        _send(entry.ws, { type: 'quest-result', txnId: parsed.txnId | 0,
+          questId: String(parsed.questId || ''), status: 'rejected', reason: r.reason });
+        return;
+      }
+      if (!questClaimMark(entry.userId, slot, r.questId, r.gil, r.itemId)) {
+        // Lost the insert race — another socket on this account already paid.
+        console.log('[quest] reject user=' + entry.userId + ' quest=' + r.questId +
+          ' reason=already-claimed-race');
+        _send(entry.ws, { type: 'quest-result', txnId: parsed.txnId | 0,
+          questId: r.questId, status: 'rejected', reason: 'already-claimed' });
+        return;
+      }
+      for (const ev of r.events) mirrorApplyInvEvent(entry.userId, slot, ev);
+      const freshQ = mirrorReadFullState(entry.userId, slot);
+      _send(entry.ws, {
+        type: 'quest-result',
+        txnId: parsed.txnId | 0,
+        questId: r.questId,
+        status: 'ok',
+        gilAfter: freshQ.gil | 0,
+      });
+      console.log('[quest] paid user=' + entry.userId + ' quest=' + r.questId +
+        ' gil=' + r.gil + (r.itemId ? ' item=0x' + r.itemId.toString(16) : ''));
       return;
     }
     case 'inv-event': {

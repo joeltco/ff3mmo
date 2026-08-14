@@ -26,6 +26,7 @@ import {
   STATUS, addStatus, hasStatus, createStatusState,
   tryInflictStatus, processTurnStart,
 } from '../src/status-effects.js';
+import { QUESTS } from '../src/data/quests.js';
 import { generateAllyStats } from '../src/data/players.js';
 import { createRng } from '../src/rng.js';
 import { _testGetBattleRng as pvpArbGetBattleRng } from '../pvp-arbiter.js';
@@ -57,6 +58,7 @@ import { _testEnsureUser, handleAPI, _testValidateSaveData,
          _testSetMirrorAuthoritative, _testGetMirrorAuthoritative,
          _testSeedSave,
          _testConsumedTilesClear,
+         _testQuestClaimsClear,
          consumedTileMark, consumedTileConsumedAt, consumedTilesReap,
          mirrorApplyInvEvent,
        } from '../api.js';
@@ -3236,6 +3238,50 @@ async function suiteWire() {
     const second = await once(ws, m => m.type === 'chest-result' && m.txnId === 2, 1000);
     assertEqual(second.status, 'rejected', 'replay accepted — exploit open');
     assertEqual(second.reason, 'already-opened', 'wrong reject reason: ' + second.reason);
+    ws.close();
+    _testHooks.setServerEconomy(false);
+  });
+
+  await asyncTest('Quest hand-in pays once; the replay is rejected (v1.8.6)', async () => {
+    // The exploit this closes: the reward used to be a bare `gil-delta` the
+    // client named the amount of, and `s: 'done'` only persisted on the next
+    // saveSlotsToDB. Hand in, kill the tab before a save (on iOS `beforeunload`
+    // never fires), reload, hand in again — 300 gil a lap, no modding. The
+    // quest_claims ledger makes the second claim a no-op regardless of what
+    // the client's save says.
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3026);
+    _testQuestClaimsClear(3026, 0);
+    const ws = await connectClient(port, 3026, { name: 'QuestCl', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+
+    // _testMirrorRead returns raw rows: { econ, eq, inv, sp, jl }.
+    const gilOf = (m) => (m.econ ? (m.econ.gil | 0) : 0);
+    const before = _testMirrorRead(3026, 0);
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 1, questId: 'ur_missing_brother' }));
+    const first = await once(ws, m => m.type === 'quest-result' && m.txnId === 1, 1000);
+    assertEqual(first.status, 'ok', 'first hand-in rejected: ' + first.reason);
+    const paid = _testMirrorRead(3026, 0);
+    assertEqual(gilOf(paid) - gilOf(before), QUESTS.ur_missing_brother.reward.gil,
+      'server paid the wrong gil');
+    assertEqual(paid.inv.some(r => r.item_id === QUESTS.ur_missing_brother.reward.item && r.qty > 0), true,
+      'the reward item never reached the mirror — the hand-in line promises an object');
+
+    // The replay. Same socket, same quest: rejected, and NOTHING moves.
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 2, questId: 'ur_missing_brother' }));
+    const second = await once(ws, m => m.type === 'quest-result' && m.txnId === 2, 1000);
+    assertEqual(second.status, 'rejected', 'quest replay accepted — the gil dupe is open');
+    assertEqual(second.reason, 'already-claimed', 'wrong reject reason: ' + second.reason);
+    const after = _testMirrorRead(3026, 0);
+    assertEqual(gilOf(after), gilOf(paid), 'a rejected claim still moved gil');
+
+    // The client does not get to name its own reward, or invent a quest.
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 3, questId: 'not_a_quest' }));
+    const bogus = await once(ws, m => m.type === 'quest-result' && m.txnId === 3, 1000);
+    assertEqual(bogus.status, 'rejected', 'an invented quest id was paid');
+    assertEqual(bogus.reason, 'unknown-quest', 'wrong reject reason: ' + bogus.reason);
     ws.close();
     _testHooks.setServerEconomy(false);
   });

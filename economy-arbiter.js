@@ -10,7 +10,8 @@
 
 import { SHOPS, getShopType } from './src/data/shops.js';
 import { ITEMS, isQuestItem } from './src/data/items.js';
-import { mirrorReadFullState, consumedTileConsumedAt } from './api.js';
+import { mirrorReadFullState, consumedTileConsumedAt, questClaimedAt } from './api.js';
+import { QUESTS } from './src/data/quests.js';
 import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.js';
 
 const INV_CAP = 16;       // mirrors src/inventory.js#INV_CAP
@@ -224,6 +225,53 @@ export function validateVaseSearch(userId, slot, payload) {
   }
 
   return { ok: false, reason: 'bad-claim-type' };
+}
+
+// Validate a quest hand-in. v1.8.6.
+//
+// The client asks to be paid for finishing a quest; the server decides what
+// that is worth and whether it has already paid. Two rules, and the second is
+// the one that matters:
+//
+//   1. The reward comes from the SERVER's copy of data/quests.js, never from
+//      the payload — the client says only which quest. Before this, the reward
+//      was a raw `gil-delta` the client chose the amount of.
+//   2. One payout per (user, slot, quest), enforced by the quest_claims
+//      primary key. A replayed hand-in is rejected, not re-paid.
+//
+// ⛔ WHAT THIS DOES NOT DO: verify the objective. The server does not count
+// which zones a player has cleared, so "I finished it" is still taken on the
+// client's word — same posture as the accepted dungeon-chest replay. What is
+// now impossible is being paid for it TWICE, which is where the actual gil was
+// coming from. Real objective validation needs per-zone kill tracking on the
+// PvE arbiter; deferred, and deliberately not pretended at here.
+export function validateQuestClaim(userId, slot, payload) {
+  if (!payload) return { ok: false, reason: 'no-payload' };
+  const questId = String(payload.questId || '');
+  const quest = QUESTS[questId];
+  if (!quest) return { ok: false, reason: 'unknown-quest' };
+
+  if (questClaimedAt(userId, slot, questId) != null) {
+    return { ok: false, reason: 'already-claimed' };
+  }
+
+  const reward = quest.reward || {};
+  const gil    = Math.max(0, reward.gil | 0);
+  const itemId = reward.item | 0;
+  const events = [];
+  if (gil > 0) events.push({ kind: 'gil-delta', qty: gil, source: 'quest' });
+  if (itemId > 0) {
+    if (!ITEMS.get(itemId)) return { ok: false, reason: 'bad-reward-item' };
+    // A full bag rejects the whole claim rather than paying the gil and
+    // dropping the item — the ledger marks the quest paid, so a partial
+    // payout would be permanent. Player empties a slot and talks again.
+    const mirror = mirrorReadFullState(userId, slot);
+    const inv = mirror.inventory || {};
+    const have = (inv[itemId] | 0) > 0;
+    if (!have && Object.keys(inv).length >= INV_CAP) return { ok: false, reason: 'inv-full' };
+    events.push({ kind: 'add', itemId, qty: 1, source: 'quest' });
+  }
+  return { ok: true, questId, gil, itemId, events };
 }
 
 // Resolve the chest pool for a mapId: union of all tier items + max gil +

@@ -5,9 +5,17 @@
 // static lives here so the save stays small and the server has a fixed table to
 // validate claims against.
 //
+// ⛔ THIS FILE MUST STAY IMPORT-FREE. `economy-arbiter.js` and `api.js` import
+// it directly so the SERVER validates quest claims and clamps saved counts
+// against the same table the client uses (v1.8.6). One browser-only import here
+// (a sprite, a canvas helper) takes the server process down at boot.
+//
 // There is no overhead marker. Quest stage lives in `ps.quests[id].s` and is
 // surfaced by what the giver SAYS, not by a sprite — removed in v1.7.990/991
-// because Word Memory (ASK/LEARN) is the signposting now.
+// because Word Memory (ASK/LEARN) is the signposting now. Progress is surfaced
+// the same way: pages carry `{n}` / `{count}` / `{left}` tokens that
+// `quests.js#talkQuest` fills in, so the giver tells you where you are instead
+// of a journal screen doing it. Adding a quest UI would undo the design.
 
 export const QUEST_ACTIVE = 'active';   // accepted, objective unfinished
 export const QUEST_DONE   = 'done';     // handed in, finished for good
@@ -32,7 +40,12 @@ export const QUESTS = {
     // `altar_cave_f1` / `altar_cave_boss`, so one prefix covers every floor.
     objective: { kind: 'defeat', zonePrefix: 'altar_cave', count: 3 },
 
-    reward: { gil: 300, exp: 80 },
+    // `item` is the brother's own gear — the hand-in line hands over an object,
+    // so one has to actually change hands. 0x58 Leather Shield: 40 gil, the
+    // cheapest thing in Ur's armor shop, wearable by nearly every job. Shipped
+    // v1.8.6; before that `complete` said "Take this. It was his." and paid
+    // pure gil, which is what an audit called a lazy seam.
+    reward: { gil: 300, exp: 80, item: 0x58 },
 
     // Message-box pages. The box wraps at 16 chars and fits 3 lines, so each
     // page must stay under ~48 characters — see data/town-npcs.js.
@@ -52,9 +65,13 @@ export const QUESTS = {
       'No. I understand.',
       'The word will keep.',
     ],
+    // `{n}` / `{count}` / `{left}` are filled in at talk time. This is the ONLY
+    // place quest progress is shown — see the header note. Keep the tokens on
+    // their own short line: check-dialogue-fit wraps the WIDEST expansion.
     active: [
       'Still down there?',
-      'Clear three. Please.',
+      '{n} of {count} cleared.',
+      '{left} more. Please.',
     ],
     complete: [
       'You went down. For him.',
@@ -68,7 +85,6 @@ export const QUESTS = {
   },
 };
 
-/** Every quest whose giver stands on this map. */
-export function questsForMap(mapId) {
-  return Object.values(QUESTS).filter(q => q.giver.mapId === mapId);
-}
+// `questsForMap` lived here unused from the day it was written — removed
+// v1.8.6. `talkQuest` resolves the giver by (mapId, npcKey) directly and no
+// caller ever wanted a per-map list.

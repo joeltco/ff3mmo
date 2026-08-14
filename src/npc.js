@@ -15,9 +15,11 @@ import { NPCS } from './data/npcs.js';
 import { romRaw } from './boot.js';
 import { mapSt } from './map-state.js';
 import { msgState, showMsgBoxPages, dismissMsgBox } from './message-box.js';
-import { sendNetInvEvent } from './net.js';
+import { sendNetInvEvent, SERVER_ECONOMY, sendNetQuestClaim, setNetQuestResultHandler,
+         sendNetInvStateRequest, nextChestTxnId } from './net.js';
 import { openWordMenu } from './word-menu.js';
-import { talkQuest } from './quests.js';
+import { talkQuest, revertQuestHandIn } from './quests.js';
+import { QUESTS } from './data/quests.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -30,6 +32,7 @@ import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
 import { ps, grantGil, grantExp } from './player-stats.js';
+import { addItem } from './inventory.js';
 import { playSFX, SFX } from './music.js';
 import { saveSlotsToDB } from './save-state.js';
 
@@ -627,20 +630,78 @@ function _walkPhase(npc) {
 // Quest reward payout. Routed through the same grantGil / grantExp the battle
 // rewards use, so the server's inventory mirror sees it the way it sees any
 // other gain rather than through a second, unvalidated path.
-function _grantQuestReward(reward) {
+function _grantQuestReward(reward, questId) {
   if (!reward) return;
-  if (reward.gil) {
-    grantGil(reward.gil);
-    // Gil is WIRE-MANAGED: the mirror in inv_economies is authoritative and the
-    // next inv-state push overwrites ps.gil. Without this the quest paid out on
-    // screen and the reward vanished at the next sync. Same channel battle loot
-    // and chests use. v1.7.994.
-    sendNetInvEvent('gil-delta', 0, reward.gil, 'quest');
+  // The item comes FIRST because a full bag is the one failure worth stopping
+  // for, and it is knowable right here — addItem returns 0 when the bag is
+  // full. The server applies a claim all-or-nothing (economy-arbiter.js
+  // #validateQuestClaim rejects on inv-full without marking the ledger), so
+  // paying the gil now and dropping the heirloom would put the two halves out
+  // of step on a reward that can only ever be handed over once.
+  if (reward.item) {
+    if (addItem(reward.item, 1) <= 0) {
+      revertQuestHandIn(questId);
+      _questNotice = { questId, pages: ['Your pack is full.', 'Come back for it.'] };
+      return;
+    }
   }
+  if (reward.gil) grantGil(reward.gil);
   // exp needs no event — main.js ignores exp from inv-state ("NOT wire-managed;
   // the mirror only snapshots it at /api/save time"), so the local value is
   // canonical until the save round-trip carries it.
   if (reward.exp) grantExp(reward.exp);
+
+  if (SERVER_ECONOMY) {
+    // v1.8.6 — the server looks the reward up in its own copy of the quest
+    // table and pays it at most once per (user, slot, quest). Replaced a bare
+    // `gil-delta` that named its own amount, which made a hand-in worth 300
+    // gil per page reload for as long as the player cared to keep reloading.
+    sendNetQuestClaim({ txnId: nextChestTxnId(), questId });
+  } else if (reward.gil) {
+    // Legacy path, flag off: gil is WIRE-MANAGED — the mirror in inv_economies
+    // is authoritative and the next inv-state push overwrites ps.gil. Without
+    // an emit the quest paid out on screen and the reward vanished at the next
+    // sync. v1.7.994.
+    sendNetInvEvent('gil-delta', 0, reward.gil, 'quest');
+    if (reward.item) sendNetInvEvent('add', reward.item, 1, 'quest');
+  }
+}
+
+// A rejected claim has to reach the PLAYER, not just pm2 — a server verdict
+// with no client branch is a silent failure. The reject lands ~100 ms after
+// the hand-in, while the giver's "Take this" pages are still up, so the notice
+// is stashed and shown the next time they are talked to rather than stamped
+// over an open box.
+let _questNotice = null;
+
+setNetQuestResultHandler((msg) => {
+  if (!msg || msg.status === 'ok') return;
+  const questId = String(msg.questId || '');
+  if (msg.reason === 'already-claimed') {
+    // The server had already paid this one — the local save was behind (an
+    // older client, or a hand-in that never made it to disk). Keep the quest
+    // finished and let the mirror correct the gil we just added on screen.
+    sendNetInvStateRequest();
+    console.warn('[quest] server had already paid ' + questId + ' — resyncing gil');
+    return;
+  }
+  // Anything else (economy-disabled, unknown-quest, bad-reward-item, a lost
+  // ledger race): nothing was paid server-side, so put the quest back to
+  // waiting-to-hand-in and let them try again.
+  revertQuestHandIn(questId);
+  sendNetInvStateRequest();
+  _questNotice = { questId, pages: ['He counts the coin.', 'Not yet, he says.', 'Ask again.'] };
+  console.warn('[quest] claim rejected for ' + questId + ' reason=' + (msg.reason || '?'));
+});
+
+// Does this NPC owe the player a notice from a rejected claim?
+function _takeQuestNotice(npc) {
+  if (!_questNotice || !npc || !npc.key) return null;
+  const quest = QUESTS[_questNotice.questId];
+  if (!quest || quest.giver.mapId !== mapSt.currentMapId || quest.giver.npcKey !== npc.key) return null;
+  const pages = _questNotice.pages;
+  _questNotice = null;
+  return pages;
 }
 
 export function drawNpcs(ctx, camX, camY, originX, originY, spriteY) {
@@ -720,9 +781,11 @@ export function talkToNpc(npc) {
     return;
   }
   // A quest giver says its quest line instead of its idle dialogue. Returns
-  // null when this NPC has no quest, so everyone else is unaffected.
+  // null when this NPC has no quest, so everyone else is unaffected. A pending
+  // reject notice outranks it — the player is owed an explanation before the
+  // hand-in is offered again.
   const qPages = npc.key
-    ? talkQuest(mapSt.currentMapId, npc.key, _grantQuestReward)
+    ? (_takeQuestNotice(npc) || talkQuest(mapSt.currentMapId, npc.key, _grantQuestReward))
     : null;
   if (qPages && qPages.length) {
     if (playerSprite) {

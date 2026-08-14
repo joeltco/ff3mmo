@@ -3,6 +3,10 @@ import { createRequire } from 'module';
 import { createHmac } from 'crypto';
 // Shared with the client — see src/data/limits.js for why these are not literals.
 import { MAX_LEVEL, INV_CAP } from './src/data/limits.js';
+// v1.8.6 — the save validator clamps quest counts against the REAL objective
+// instead of a shape-only 0..9999 bound. data/quests.js is import-free for
+// exactly this reason; see its header before adding an import there.
+import { QUESTS } from './src/data/quests.js';
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
@@ -244,17 +248,25 @@ function _validateSaveData(data) {
   if (typeof data.playTime === 'number')     out.playTime = Math.max(0, Math.min(data.playTime, 999999));  // seconds
   if (Array.isArray(data.knownSpells))       out.knownSpells = data.knownSpells.slice(0, 64).map(s => _clamp(s, 0, 255));
   // Quest progress: { questId: { s: 'active'|'done', n: <count> } }. Validated
-  // by SHAPE here rather than against the quest table — the server does not
-  // import client data modules — and bounded so a modded client cannot stuff
-  // the save. The reward itself is granted through grantGil / grantExp, which
-  // the inventory mirror already covers, so a forged `s: 'done'` buys nothing
-  // beyond hiding a marker on that player's own screen.
+  // against the REAL quest table (v1.8.6) — unknown ids dropped, count clamped
+  // to that quest's objective — so this agrees byte-for-byte with the client's
+  // `sanitizeQuests`. It used to be shape-only (any id, n up to 9999), which
+  // meant the two halves of the same save disagreed about what a legal save
+  // looked like and check-quests.mjs pinned the 9999 as correct.
+  //
+  // The payout does NOT ride on this field: a hand-in goes through the
+  // `quest-claim` wire, which the economy arbiter validates against a
+  // once-per-(user, slot) ledger. A forged `s: 'done'` buys nothing here and
+  // buys nothing there either.
   if (data.quests && typeof data.quests === 'object' && !Array.isArray(data.quests)) {
     const q = {};
     for (const [id, v] of Object.entries(data.quests).slice(0, 128)) {
       if (typeof id !== 'string' || id.length > 64) continue;
       if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
-      q[id] = { s: v.s === 'done' ? 'done' : 'active', n: _clamp(v.n | 0, 0, 9999) };
+      const quest = QUESTS[id];
+      if (!quest) continue;                                   // unknown id -> drop
+      const max = quest.objective ? (quest.objective.count | 0) : 0;
+      q[id] = { s: v.s === 'done' ? 'done' : 'active', n: _clamp(v.n | 0, 0, max) };
     }
     out.quests = q;
   }
@@ -461,6 +473,26 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
   CREATE INDEX IF NOT EXISTS idx_consumed_tiles_consumed_at ON consumed_tiles(consumed_at);
+
+  -- v1.8.6 — quest reward ledger. One row per (user, slot, quest) the instant
+  -- a hand-in is paid; the primary key IS the once-only rule. Never reaped:
+  -- unlike a chest tile a quest does not come back, and the row is what makes
+  -- the second hand-in a no-op no matter what the client's save says.
+  --
+  -- Before this table a reward was a bare client-asserted gil-delta. The audit
+  -- collected 300 gil three times from one save (hand in, close the tab, the
+  -- unsaved 'done' flag is gone, hand in again) and the server had no way to
+  -- know it had already paid.
+  CREATE TABLE IF NOT EXISTS quest_claims (
+    user_id    INTEGER NOT NULL,
+    slot       INTEGER NOT NULL,
+    quest_id   TEXT    NOT NULL,
+    claimed_at INTEGER NOT NULL,
+    gil        INTEGER NOT NULL DEFAULT 0,
+    item_id    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, slot, quest_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // v1.7.736 — hook for `/api/logout-all` so it can kick stale WS connections
@@ -1067,6 +1099,33 @@ export function consumedTilesReap(kind, beforeSec) {
   return _consumedTilesReapStmt.run(String(kind), beforeSec | 0).changes;
 }
 
+// ── quest reward ledger (v1.8.6) ─────────────────────────────────────────
+// Read by economy-arbiter.js#validateQuestClaim, written by ws-presence.js
+// after a successful mirror apply. Same read/mark split as consumed_tiles.
+const _questClaimGetStmt = db.prepare(
+  'SELECT claimed_at AS claimedAt FROM quest_claims WHERE user_id = ? AND slot = ? AND quest_id = ?'
+);
+const _questClaimMarkStmt = db.prepare(
+  'INSERT OR IGNORE INTO quest_claims (user_id, slot, quest_id, claimed_at, gil, item_id)' +
+  ' VALUES (?, ?, ?, ?, ?, ?)'
+);
+
+export function questClaimedAt(userId, slot, questId) {
+  const row = _questClaimGetStmt.get(userId | 0, slot | 0, String(questId));
+  return row ? (row.claimedAt | 0) : null;
+}
+/**
+ * Record a paid quest. INSERT OR IGNORE, so a race between two sockets on the
+ * same account cannot double-write; `changes === 0` means somebody got there
+ * first and the caller must NOT have paid.
+ */
+export function questClaimMark(userId, slot, questId, gil, itemId) {
+  return _questClaimMarkStmt.run(
+    userId | 0, slot | 0, String(questId),
+    Math.floor(Date.now() / 1000), gil | 0, itemId | 0,
+  ).changes > 0;
+}
+
 // Test helper — wipe every consumed_tiles row for a user/slot. NOT used
 // in production; lets pvp-wire-sim run repeatably without stale rows from
 // prior runs poisoning the chest/vase replay-block tests.
@@ -1075,6 +1134,15 @@ const _consumedTilesClearForSlotStmt = db.prepare(
 );
 export function _testConsumedTilesClear(userId, slot) {
   _consumedTilesClearForSlotStmt.run(userId | 0, slot | 0);
+}
+
+// quest_claims persists in SQLite across wire-sim runs; a once-per-quest
+// ledger would pre-block every re-run without this. Test-only.
+const _questClaimsClearForSlotStmt = db.prepare(
+  'DELETE FROM quest_claims WHERE user_id = ? AND slot = ?'
+);
+export function _testQuestClaimsClear(userId, slot) {
+  _questClaimsClearForSlotStmt.run(userId | 0, slot | 0);
 }
 
 function readBody(req) {

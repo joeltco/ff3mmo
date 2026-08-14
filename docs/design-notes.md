@@ -287,6 +287,19 @@ The quest system IS the word system; there is no separate quest UI and **no over
 - ⛔ **ASK/LEARN opens on ANY NPC with `teaches`/`answers`, and that is correct.** Ordinary villagers having the menu with no marker is the FF2 feel. Do not add a marker for them.
 - **Gates:** `check-words.mjs` (every term needs a teacher AND an answerer among NPCs actually PLACED, plus the persistence hops), `check-word-flow.mjs` (drives the real menu with real key objects), `check-msg-highlight.mjs` (renders and reads pixels).
 
+### Quest audit (v1.8.6)
+
+`check-quests.mjs` walked the one happy path and passed while seven holes sat under it. `tools/audit-quests.mjs` reproduces each and is now a deploy gate; every check was proven by reverting its fix.
+
+- **The hand-in used to be replayable for unlimited gil.** The reward was durable the instant it was granted (a `gil-delta` straight into the SQLite mirror) while `ps.quests[id].s = 'done'` waited for the next `saveSlotsToDB` — and nothing on the completion path called one. Hand in, close the tab (on iOS `beforeunload` never fires), reload, hand in again. **Every state transition in `src/quests.js` now persists**, and the server keeps its own ledger.
+- **`quest-claim` wire + `quest_claims` table.** The client sends only WHICH quest; `economy-arbiter.js#validateQuestClaim` looks the reward up in the server's own copy of `data/quests.js` and pays it at most once per `(user, slot, quest)`. The ledger insert is the lock — `questClaimMark` is `INSERT OR IGNORE` and its `changes` result gates the payout, so two sockets racing the same account cannot both be paid. ⛔ **It does NOT verify the objective** — the server does not count cleared zones, so "I finished it" is still the client's word, same posture as the accepted dungeon-chest replay. What is closed is being paid twice.
+- ⛔ **`src/data/quests.js` must stay IMPORT-FREE.** `api.js` and `economy-arbiter.js` import it directly; one browser-only import there takes the server down at boot.
+- **`reward.item`** is granted (`_grantQuestReward`, `addItem` first) because the hand-in line hands over an object. A full bag rejects the whole claim rather than paying the gil and dropping the heirloom — the ledger would mark a partial payout permanent.
+- **A rejected claim reaches the PLAYER.** `npc.js` registers `setNetQuestResultHandler`: `already-claimed` keeps the quest finished and resyncs gil; anything else calls `revertQuestHandIn` so the player can try again, and stashes a notice shown on the next talk (the reject lands while the "Take this" pages are still up, so it must not stamp over an open box).
+- **A giver can hold more than one quest.** `talkQuest` ranks candidates (hand-in > active > offer > done) instead of returning on the first match, which used to let a finished quest answer forever.
+- **Progress is surfaced by the GIVER, not a journal** — `{n}` / `{count}` / `{left}` tokens filled in by `talkQuest`. There is still no quest UI and there must not be one. `check-dialogue-fit` wraps every expansion, not just the raw page; `tools/quest-shot.mjs` draws what the giver says.
+- **Client and server clamp saved counts identically** (unknown ids dropped, `n` clamped to that quest's objective). The old server clamp was shape-only `0..9999` and `check-quests.mjs` asserted the 9999, pinning the divergence in place.
+
 ## Mirror integrity — which resource lives where (v1.7.993-995)
 
 Four server-side tables mirror player state, and they do NOT all work the same way. Getting this wrong means either a silent desync or double-counting.
