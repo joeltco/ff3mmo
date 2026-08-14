@@ -18,6 +18,73 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.23 — 2026-08-14
+
+### The NPC id → sprite lookup, decoded — and a catalog of all three games
+
+FF3's per-map NPC list gives each NPC an `id`. That id is **not** a sprite index;
+`town-npcs.js` carried a standing warning saying so, because using it as one
+(v1.7.968) dressed all of Ur in player job sprites. It also recorded three
+measured pairs nobody could explain — `$14->32`, `$15->34`, `$19->38`, "not a
+constant offset".
+
+They are a table lookup. Exactly **one** offset in the whole ROM satisfies all
+three: a 256-byte byte table at **`0x1410`**, sitting immediately after the
+parallel palette tables at `0x1110` / `0x1210` / `0x1310` — exactly where the
+next table in that series belongs.
+
+**Verified against the PPU on 18 maps, 18 matched, 0 misses.** Ur 5/5, Castle
+Sasune 2/2, Kazus 4/4, plus both flames: the Kazus campfire (id 190) and the
+large torch (id 193) resolve to the *same* index — which is what reading OAM
+next to that campfire had already measured — while the candle (id 194) resolves
+to a different one, and gfx 79 lands on the star `flame-sprites.js` already had
+at `0x14790` / `0x147D0`.
+
+The index space: `0..21` player job sprites (anchored on gfx 4 being the magic
+shop keeper in *both* Ur and Kazus, and job 4 being the Black Mage), `22..63`
+NPC people (16 tiles, four facings), `64..87` objects (8 tiles, two frames, a
+*different* array), `88+` invisible event markers. 1187 placements resolve:
+782 people/job, 174 object, 231 markers.
+
+### Two corrections to shipped data
+
+- **`0x1ED10` is not "Cid (ghost form)".** It is the generic **ghost**, worn by
+  10 different NPC ids across 22 maps including every Kazus interior. The
+  `STORY_SPRITE_BUNDLES` ban is left in place (lifting it changes who stands in
+  a live town — a content call) but it is a ban on the wrong grounds.
+- **Kazus really does load Cid** (`0x1D910`, id 31 at (17,21)). Re-measured on
+  hardware: `0x1ED10` is **absent** from map 10 entirely. The earlier note
+  claiming otherwise was a bad measurement.
+
+### FF1 and FF2 catalogued too
+
+Both read off a running PPU rather than guessed. A character is 4 consecutive
+tiles drawn TL, TR, BL, BR — **measured from OAM coordinates**, not assumed —
+and an entry is `0x100` bytes of four 16x16 frames at `0x9010 + n*0x100`,
+48 entries, ending where background tiles start at `0xC010`. FF1's six player
+classes are tied to entries 0-5 by building a party led by each class and
+tracing the leader's tile home; names come from the game's own class-select
+menu. Entries 6-11 look like the promoted classes but could not be verified, so
+they are left **unlabelled**.
+
+### Two broken tools found on the way
+
+- `tools/ff1-overworld-sweep.mjs` finds locations by poking `$027`/`$028` and
+  watching for a music change. It cannot work — **806 coordinates, 0 hits**.
+  FF1 only runs its entrance check on a real step.
+- `tools/monscan/map-bundles.cjs` writes the destination map as a single byte,
+  so any `MAPS=` value >= 256 silently loads `mapId & 0xFF`.
+
+### New
+
+- `src/data/npc-gfx.js` — the resolution, Node-clean so tools and gates import it
+- `tools/npc-catalog.mjs` — renders all three catalogs, `--json` for the data
+- `tools/check-npc-gfx.mjs` — **11 reverts tested, all fail** — wired into `deploy.sh`
+- `docs/NPC-CATALOG.md` + `docs/sprites/{ff1,ff2,ff3}-npc-catalog.png`
+
+Also fixed a `no-regex-spaces` lint error in `check-map-exits.mjs` (from
+v1.8.22); that gate still passes and still fails on revert.
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware

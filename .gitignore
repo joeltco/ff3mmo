@@ -36,3 +36,4 @@ tools/monscan/*.json
 !tools/monscan/package.json
 !tools/monscan/package-lock.json
 !tools/monscan/intro-sequence.json
+!docs/sprites/*.png

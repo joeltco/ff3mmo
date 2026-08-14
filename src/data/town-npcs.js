@@ -143,9 +143,19 @@ const KAZUS_TOWN_BUNDLES = [
 // (v1.8.12) and then as an inn "ghost" (v1.8.13), and 0x01D910 as a Kazus
 // townsman who wandered the streets as Cid (v1.8.17). check-npc-placement
 // fails on any placed NPC using one.
+//
+// ⚠ 0x01ED10 IS MISLABELLED HERE — see docs/NPC-CATALOG.md. It is not Cid in
+// any form; it is the GENERIC GHOST, worn by 10 different NPC ids across 22
+// maps including every Kazus interior (inn, magic, weapon, armor). The ban is
+// left in place because lifting it changes who stands in a live town, which is
+// a content call — but it is a ban on the wrong grounds, and it currently stops
+// Kazus's cursed interiors using the sprite the ROM itself puts there.
+//
+// 0x01D910 really is Cid. Map 10 loads it for id 31 at (17,21) — re-measured
+// on hardware, where 0x01ED10 is ABSENT from Kazus entirely.
 export const STORY_SPRITE_BUNDLES = new Map([
   [0x01D910, 'Cid'],
-  [0x01ED10, 'Cid (ghost form)'],
+  [0x01ED10, 'ghost (was labelled "Cid (ghost form)" — wrong, see NPC-CATALOG.md)'],
 ]);
 
 /**

@@ -109,7 +109,7 @@ for (const [mapId, name] of LIVE) {
   // so the sentence describing the call cannot satisfy the check.
   const mv = fs.readFileSync(new URL('../src/movement.js', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-  const blocked = (mv.match(/!renderer\.isPassable\(tileX, tileY\)\)[\s\S]{0,400}?\n  \}/) || [''])[0];
+  const blocked = (mv.match(/!renderer\.isPassable\(tileX, tileY\)\)[\s\S]{0,400}?\n {2}\}/) || [''])[0];
   if (!/tryExitToWorldAt\(tileX, tileY\)/.test(blocked)) {
     bad('movement.js does not call tryExitToWorldAt when a move is refused — exit tiles carry ' +
         'collision $80, so the step-on trigger can never fire and the map has no way out');
