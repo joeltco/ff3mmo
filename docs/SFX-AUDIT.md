@@ -1,4 +1,4 @@
-# SFX / music audit — v1.7.997-999
+# SFX / music audit — v1.7.997-1.8.0
 
 Joel: *"lots of sfx are wrong. meteo sfx, the ff2 learn sfx, and im sure many
 others. kazus and the castle arent playing the right music... pull them all and
@@ -193,26 +193,18 @@ libgme refuses it and the blip is silent), proven by undercounting the header.
   lesson worth keeping: "48 of 48 reproduce" proved only that the harness was
   deterministic, not that it was correct. A reproduction that repeats the
   original's mistake is not evidence.
-- **FF2 learn SFX — NOT FIXED, and now bounded.** Reaching FF2 gameplay is
-  blocked at the kana name grid, and that is no longer a guess:
-  `tools/ff2-name-escape.mjs` brute-forced **all 36 single and two-button
-  combinations** with the name filled — **zero escape the grid**. A disassembly
-  of the live mapped bank shows the scene tests only the direction bits and A/B;
-  there is no `AND #$10` (START) anywhere in it. `B` advances between party
-  members (the memory said no button confirmed — B had never been tried), all
-  four names fill, then it cycles back to the first. The exit is not reachable
-  by input, so the next move is a ROM patch or a RAM poke into the post-intro
-  scene, not more button-pressing. Savestates parked at `ff2-name.state` /
-  `ff2-play.state`; `tools/ff2-name-trace.mjs` does RAM-diff and PC-trace.
-- **FF2 learn SFX — original question.** The word menu plays FF2's `confirm` blip for
-  every choice including LEARN, so learning a word sounds identical to moving
-  through a menu. Whether FF2 plays something distinct there is unverified:
-  reaching FF2 gameplay headlessly is still blocked. **Progress: `B` advances
-  between characters in the kana name grid** (the memory said no button
-  confirmed — A fills, START/SELECT do nothing; B was never tried). All four
-  names can now be filled, but after the fourth it cycles back to Firion and
-  nothing finalises. Savestates at
-  `scratchpad/ff2-name.state` / `ff2-play.state`.
+- ~~FF2 learn SFX~~ — **FOUND AND WIRED (v1.8.0).** It is **FF2 song 9**.
+  Getting there needed the name-entry ROM patch first (one byte, `0x3b59a`,
+  `CMP #$06` → `CMP #$05`), because FF2 gameplay was unreachable headlessly.
+  With that, `tools/ff2-learn-capture.mjs` logged every `$E0` request against
+  its frame: song 9 fires on the exact frame Hilda says
+  **ヒルダ「あいことばは【のばら】です。よく おぼえておくのよ。」** — FF2
+  teaching its first keyword — and never again across four re-conversations or
+  sixty wander-and-LEARN attempts. It plays over the map music and restores it
+  98 frames later (~1.6 s), matching track 9's measured 1536 ms.
+  Wired as `FF2_TRACKS.WORD_LEARNED` + `playWordLearnedJingle()`, fired from
+  `word-menu.js` **only when a word was actually learned**. Gate:
+  `check-word-learn-sfx.mjs`, proven by three reverts.
 - **The 8 summons** are captured, but from the earlier separate summon run —
   they were NOT part of tonight's 48/48 re-verification.
 - **Altar Cave floors 2–4** measure song 29 in the ROM; our generated dungeon

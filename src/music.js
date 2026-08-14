@@ -64,6 +64,11 @@ export const FF1_TRACKS = {
 export const FF2_TRACKS = {
   ELDER_HOUSE: 24,   // elder house theme — confirmed by ear via /ff2 24
   MENTION_CHIME: 8,  // short jingle played when someone @-mentions you in chat
+  // FF2's own "you learned a keyword" cue. MEASURED (v1.8.0): fires on the
+  // exact frame Hilda teaches the keyword 【のばら】 in the Altair intro, and
+  // never again across 4 re-conversations or 60 wander-and-LEARN attempts.
+  // See playWordLearnedJingle below and docs/SFX-AUDIT.md.
+  WORD_LEARNED: 9,
 };
 
 // FF2's own menu blips, ripped from the ROM and appended to the FF2 NSF as
@@ -553,12 +558,41 @@ export function stopFF2Music() {
 // music is playing untouched. Re-triggering restarts the jingle. Auto-stops
 // on track end or after CHIME_MS, whichever comes first. No-op until the FF2
 // ROM has been loaded (ff2NsfData built in initFF2Music).
-export function playMentionChime() {
+export function playMentionChime() { _playFF2Jingle(FF2_TRACKS.MENTION_CHIME); }
+
+/**
+ * The sound FF2 plays when you LEARN a keyword.
+ *
+ * MEASURED, not picked. Reaching FF2 gameplay headlessly was blocked by its
+ * name-entry screen until the one-byte ROM patch in
+ * `tools/ff2-build-playable-rom.mjs`; with that, `tools/ff2-learn-capture.mjs`
+ * drove the intro and logged every `$E0` request against the frame it happened
+ * on. Song 9 fires on the exact frame Hilda says
+ *
+ *     ヒルダ「あいことばは【のばら】です。よく おぼえておくのよ。」
+ *     (Hilda: "The password is 【のばら】. Remember it well.")
+ *
+ * — the moment FF2 teaches its first keyword — and it never fires again across
+ * four re-conversations with the same NPC or sixty wander-and-LEARN attempts.
+ * It plays over the map music and hands it back 98 frames later (~1.6 s), which
+ * matches the 1536 ms the sound catalogue measures for track 9.
+ */
+export function playWordLearnedJingle() { _playFF2Jingle(FF2_TRACKS.WORD_LEARNED); }
+
+/**
+ * Play a one-shot FF2 track on its own emulator, leaving whatever map music is
+ * playing untouched. Re-triggering restarts it. Auto-stops on track end or after
+ * CHIME_MS, whichever comes first. No-op until the FF2 ROM is loaded.
+ *
+ * One implementation for every FF2 jingle — the mention chime and the
+ * word-learned cue are the same machinery, and two copies of it would drift.
+ */
+function _playFF2Jingle(track) {
   if (!ff2NsfData) return;
   if (typeof Module === 'undefined' || !Module.ccall) return;
   if (!audioCtx) { audioCtx = new AudioContext(); }
   if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-  _stopChime();  // collapse a still-ringing chime so rapid pings re-trigger
+  _stopChime();  // collapse a still-ringing jingle so rapid triggers re-fire
 
   if (!chimeEmuRef) { chimeEmuRef = Module.allocate(1, 'i32', Module.ALLOC_STATIC); }
   const err = Module.ccall('gme_open_data', 'number',
@@ -568,7 +602,7 @@ export function playMentionChime() {
   chimeEmu = Module.getValue(chimeEmuRef, 'i32');
 
   Module.ccall('gme_ignore_silence', 'number', ['number'], [chimeEmu, 1]);
-  if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [chimeEmu, FF2_TRACKS.MENTION_CHIME]) !== 0) {
+  if (Module.ccall('gme_start_track', 'number', ['number', 'number'], [chimeEmu, track]) !== 0) {
     console.error('chime gme_start_track failed'); _stopChime(); return;
   }
 

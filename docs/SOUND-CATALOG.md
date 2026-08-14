@@ -253,7 +253,7 @@ Track = ROM song id for songs ($00-$40); SFX are ROM sfx id + $41. The engine re
 
 Song pointer table at $9E0D, bank $0D. MEASURED: ids 0-30 are real, ids 31/32/33/36/39 are $FFFF HOLES (they all render the same fallback audio - proven by PCM fingerprint, not by peak), and ids 34/35/37/38 are REAL songs the builder exposed for the first time in v1.7.999 (34 renders silent; 35/37/38 are three genuinely new pieces of music). Tracks 39+ are the pulse-2 blips ripped from fixed-bank ROM routines and appended by our builder.
 
-**42 tracks**: 32 looping music, 8 one-shot / jingle, 2 silent, 5 duplicate. **35 distinct sounds.** 5 referenced by ff3mmo.
+**42 tracks**: 32 looping music, 8 one-shot / jingle, 2 silent, 5 duplicate. **35 distinct sounds.** 6 referenced by ff3mmo.
 
 | track | kind | peak | rms | audible | used by |
 |---|---|---|---|---|---|
@@ -266,7 +266,7 @@ Song pointer table at $9E0D, bank $0D. MEASURED: ids 0-30 are real, ids 31/32/33
 | 6 ($06) | music (loops) | 16807 | 4788.4 | 4011ms | _same audio as track 4_ |
 | 7 ($07) | music (loops) | 20915 | 5345.6 | 3584ms |  |
 | 8 ($08) | jingle (ends) | 10647 | 1680.8 | 981ms | FF2_TRACKS.MENTION_CHIME |
-| 9 ($09) | jingle (ends) | 13594 | 2190.6 | 1536ms |  |
+| 9 ($09) | jingle (ends) | 13594 | 2190.6 | 1536ms | FF2_TRACKS.WORD_LEARNED |
 | 10 ($0a) | music (loops) | 19771 | 5572.1 | 4011ms |  |
 | 11 ($0b) | music (loops) | 18425 | 6140.5 | 4011ms |  |
 | 12 ($0c) | music (loops) | 19837 | 6146.5 | 4011ms |  |

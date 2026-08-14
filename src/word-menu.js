@@ -25,7 +25,7 @@ const ROW_PLAIN     = [0x02, 0x02, 0x02, 0x30];   // white — a verb
 const ROW_TERM      = [0x02, 0x02, 0x02, 0x16];   // red — a Key Term, as FF2 shows them
 const ROW_TERM_DIM  = [0x02, 0x02, 0x02, 0x10];   // grey — a term this NPC cannot answer
 import { _nameToBytes } from './text-utils.js';
-import { playFF2Sfx, FF2_SFX_NAMES } from './music.js';
+import { playFF2Sfx, playWordLearnedJingle, FF2_SFX_NAMES } from './music.js';
 import { keywordText } from './data/keywords.js';
 import { knownWords, learnableFrom, answerFor, learnWord } from './word-memory.js';
 import { showMsgBoxPages, dismissMsgBox, msgState } from './message-box.js';
@@ -197,6 +197,11 @@ function _choose(row) {
 
   if (row.act === 'learn') {
     const names = row.ids.filter(id => learnWord(id)).map(id => keywordText(id)).filter(Boolean);
+    // FF2's own keyword-learned jingle, but ONLY when something was actually
+    // learned. "Nothing new to learn." keeps the plain confirm blip — a reward
+    // cue that fires when nothing happened teaches the player it means nothing.
+    // The jingle rides its own emulator, so the map music is untouched.
+    if (names.length) playWordLearnedJingle();
     const pages = names.length ? names.map(n => `Learned the word ${n}.`)
                                : ['Nothing new to learn.'];
     showMsgBoxPages(pages.map(p => _nameToBytes(p)), _backToVerbs, null, { keepOpen: true });

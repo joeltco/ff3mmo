@@ -18,6 +18,46 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.0 — 2026-08-13
+
+### The FF2 LEARN sound — found, named, wired
+
+- **It is FF2 song 9.** `FF2_TRACKS.WORD_LEARNED`, played by
+  `playWordLearnedJingle()` from `word-menu.js` when a word is actually learned.
+  Before this, LEARN played the same plain confirm blip as every other menu
+  pick, so learning a Key Term sounded identical to moving the cursor.
+- **Getting it required hex-patching FF2 first.** Gameplay was unreachable
+  headlessly — the kana name grid has no confirm cell and nothing exits it (all
+  36 button combos, A on every bottom-row cell, B cascades, and a poke of every
+  byte in zero page / `$0200-$07FF` / `$6000-$7FFF`, 20480 pokes, all fail).
+  One byte at ROM `0x3b59a` (bank 14), `CMP #$06` -> `CMP #$05`, makes the
+  name-length gate reachable so the routine's only `RTS` can run.
+  `tools/ff2-build-playable-rom.mjs` builds it, locating the site by SIGNATURE.
+- **The attribution is measured, not picked.** `tools/ff2-learn-capture.mjs`
+  logs every `$E0` request against the frame it happened on. Song 9 fires on the
+  exact frame Hilda says
+  **ヒルダ「あいことばは【のばら】です。よく おぼえておくのよ。」**
+  — FF2 teaching its first keyword — and never again across four
+  re-conversations with the same NPC or sixty wander-and-LEARN attempts. It
+  plays over the map music and restores it 98 frames later (~1.6 s), matching
+  the 1536 ms the sound catalogue measures for track 9.
+- Fired **only when a word was actually learned**; "Nothing new to learn." keeps
+  the plain blip. A reward cue that fires when nothing happened teaches the
+  player that it means nothing.
+- `playMentionChime` and the new jingle now share one implementation
+  (`_playFF2Jingle`) instead of two copies of the same emulator plumbing.
+- Gate `tools/check-word-learn-sfx.mjs` pins the track, the wiring, the guard,
+  and that it renders audible PCM — proven by three reverts (drop the guard,
+  revert to the confirm blip, wrong track number).
+
+### Why it took a ROM patch and three bad patches to get here
+
+`jsnes`' `cpu.mem` / `mmap.load` return the byte at **ADDRESS-1** for this ROM,
+so every dump was shifted by one and decoded into garbage. Two patches
+(`0x3b62b`, `0x3b5bf`) were aimed at addresses derived from those bad decodes
+and did nothing. Alignment is now verified against an executed PC sequence
+before any patch, and this is recorded in the tools so it is not repeated.
+
 ## 1.7.999 — 2026-08-13
 
 ### Every sound in every ROM, pulled and catalogued
