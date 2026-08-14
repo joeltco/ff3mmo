@@ -31,49 +31,6 @@ export const SHOPS = new Map([
     items: [0xA6, 0xAE, 0xAF],
     // Potion, Eye Drops, Antidote
   }],
-  // --- Town of Kazus ---
-  //
-  // Catalogs CAPTURED from the running game, not chosen: `POKE=0x609d node
-  // tools/monscan/shop-probe.cjs 16` opens the real shop (Kazus is cursed and
-  // its shops stay shut until $609D is set — see docs/KAZUS.md) and the stock
-  // reads off the screen with prices. Item ids resolved by decoding the name
-  // bytes, which share a "Mythril" prefix, NOT by matching price alone.
-  //
-  // Counters mirror Ur's exactly. Kazus's shop rooms are byte-identical
-  // layouts: map 16's column x=3 matches map 5's tile for tile, counter tile
-  // $40 at y=15 included, and 17/15 match Ur's 4/3. Measured, not assumed —
-  // the ROM's shop-marker NPC sits at (3,23) on map 16, which is bare floor.
-  ['kazus_weapon', {
-    type: 'weapon',
-    mapId: 16, counter: { x: 3, y: 15 },
-    items: [0x09, 0x20, 0x27],
-    // MythrilRod 400, MythrilKnife 500, MythrilSwrd 500 — the captured stock,
-    // in the captured order. A clean tier above Ur, whose dearest is a 100 gil
-    // Longsword.
-  }],
-  ['kazus_armor', {
-    type: 'armor',
-    mapId: 17, counter: { x: 3, y: 5 },
-    items: [0x75, 0x5a, 0x64, 0x8d, 0x8e],
-    // MythrilArmor 350, MythrilShield 180, MythrilHelm 180, MythrilGlv 120,
-    // MythrilBrc 120. Note our ITEMS price for the helm (0x64) is 130 where
-    // the ROM shop asks 180; the catalog is the id list, prices come from
-    // ITEMS as they do everywhere else.
-  }],
-  ['kazus_magic', {
-    type: 'magic',
-    mapId: 15, counter: { x: 4, y: 4 },
-    items: [0xe0, 0xe1, 0xe6],
-    // ⚠ CHOSEN, not captured — the only Kazus catalog that is. Map 15 is a
-    // round chamber with spell orbs on pedestals rather than a counter room,
-    // which is how FF3 sells magic (walk to an ORB, buy that one spell), so
-    // shop-probe's walk-to-the-counter cannot reach a trigger that isn't
-    // there. Ur's magic shop DOES open that way despite identical entrance and
-    // marker metadata — see docs/KAZUS.md.
-    // Picked to sit one tier above Ur's lone Pure scroll: Fire, Bzzard, and
-    // Ice2 (700 gil) as the reach purchase. Replace with the real stock once
-    // the per-orb probe lands.
-  }],
   ['ur_magic', {
     type: 'magic',
     mapId: 3, counter: { x: 4, y: 4 },

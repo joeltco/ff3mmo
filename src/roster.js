@@ -79,24 +79,6 @@ const UR_ROOM_LOC = new Map([
   [147, 'ur-well'],     // well
 ]);
 
-// Kazus room → roster location. Same rule as Ur's: one key per room so players
-// group by where they actually stand. Map block confirmed by the game printing
-// its own "Kazus" banner (docs/KAZUS.md). Keys stay <= 16 chars — ws-presence
-// clamps the wire `loc` to 16.
-//
-// ⛔ Without these, every Kazus map fell through `rosterLocForMapId`'s default
-// and reported players as standing in **Ur** — the fallback is a real answer,
-// not an "unknown", so a new town is wrong until it is listed here.
-const KAZUS_ROOM_LOC = new Map([
-  [12, 'kazus-inn'],
-  [15, 'kazus-magic'],
-  [16, 'kazus-weapon'],
-  [17, 'kazus-armor'],
-  [11, 'kazus-house'],
-  [13, 'kazus-house2'],
-  [14, 'kazus-house3'],
-]);
-
 // Single source for "what roster location is this map?". getPlayerLocation()
 // delegates here so the live location and the transition-change check
 // (map-triggers.js) can never drift apart.
@@ -105,8 +87,7 @@ export function rosterLocForMapId(mapId) {
   if (mapId === 114) return 'ur';
   if (mapId === 1004) return 'crystal';
   if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
-  if (mapId === 10) return 'kazus';
-  return UR_ROOM_LOC.get(mapId) || KAZUS_ROOM_LOC.get(mapId) || 'ur';
+  return UR_ROOM_LOC.get(mapId) || 'ur';
 }
 
 export function getPlayerLocation() {

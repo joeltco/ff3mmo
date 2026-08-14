@@ -122,6 +122,43 @@ const NPC_BUNDLES = [
   0x01E510,
 ];
 
+// Kazus's town walk bundles — read out of the PPU exactly like Ur's, with
+// `MAPS=10 node tools/monscan/map-bundles.cjs`. Map 10 loads FOUR; the ROM's
+// own roster lists seven townsfolk for them, so the extras stay unplaced rather
+// than shipping as twins.
+//
+// The ghost bundle 0x01ED10 is deliberately NOT here — see KAZUS_GHOST.
+const KAZUS_TOWN_BUNDLES = [
+  0x01D910,
+  0x01DF10,
+  0x01E010,
+  0x01E210,
+];
+
+/**
+ * One townsperson, for ANY town. `bundles` is that town's PPU-verified walk-
+ * bundle set and `slot` indexes it.
+ *
+ * ⛔ Towns share this. Kazus shipped in v1.8.12 built on `interior()` instead —
+ * the INDOOR helper, which does not set `wander` — so an entire town stood
+ * still. A second hand-rolled path is how that happens; there is one path now.
+ */
+function townNpc(bundles, slot, extra = {}) {
+  return {
+    romOffset: bundles[slot % bundles.length],
+    // Indicative only: npc-palette.js repaints every spec with the palette of
+    // the map it is placed on (v1.8.10).
+    palTop: UR_SP3,
+    palBtm: UR_SP2,
+    dir: DIR_DOWN,
+    wander: true,
+    // Start on the declared tile and roam from there.
+    fixedSpawn: true,
+    leash: 3,
+    ...extra,
+  };
+}
+
 /** One Ur townsperson. `slot` picks a verified bundle, NOT the ROM gfx byte. */
 // Townsfolk WANDER. v1.7.970 pinned them to their ROM tiles to spread them out
 // and that killed the walking, which was never the ask — they should be spread
@@ -129,20 +166,12 @@ const NPC_BUNDLES = [
 // + a 3-tile leash), which is how they behaved before.
 //
 // The quest giver is the exception: he stays put so you can find him again.
-function urNpc(slot, extra = {}) {
-  return {
-    romOffset: NPC_BUNDLES[slot % NPC_BUNDLES.length],
-    palTop: UR_SP3,
-    palBtm: UR_SP2,
-    dir: DIR_DOWN,
-    wander: true,
-    // Start on the ROM's own tile and roam from there. Without this the random
-    // grass pool bunched nearly all ten into the south plaza by the entrance.
-    fixedSpawn: true,
-    leash: 3,
-    ...extra,
-  };
-}
+// `fixedSpawn` keeps them on the ROM's own tile: without it the random grass
+// pool bunched nearly all ten into the south plaza by the entrance.
+const urNpc = (slot, extra = {}) => townNpc(NPC_BUNDLES, slot, extra);
+
+/** One Kazus townsperson. Same helper, that town's bundles. */
+const kazusNpc = (slot, extra = {}) => townNpc(KAZUS_TOWN_BUNDLES, slot, extra);
 
 // The five below carry the dialogue that shipped with the old placements,
 // re-attached to whichever ROM entry sits nearest the spot it used to stand
@@ -469,44 +498,36 @@ export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [
 
 // ── Kazus ────────────────────────────────────────────────────────────────
 //
-// Second town. Map 10 (the game prints "Kazus" on entry — that is how the map
-// block was confirmed), inn/tavern 12, shops 15 magic / 16 weapon / 17 armor.
-// Full measurements in docs/KAZUS.md.
+// Second town: map 10 (the game prints "Kazus" on entry), inn 12, shops
+// 15 magic / 16 weapon / 17 armor. Measurements in docs/KAZUS.md.
 //
-// ⛔ ONE NPC PER LOADED BUNDLE. FF3 is CHR-RAM, so a map holds only the walk
-// bundles it decompresses and two NPCs sharing one render as the same person.
-// The sets below were read off the PPU (`MAPS=10,12,15,16,17 node
-// tools/monscan/map-bundles.cjs`), not guessed from the ROM's NPC table — which
-// lists 7 townsfolk on map 10 for 4 bundles. The extras stay unplaced.
+// ⛔ EVERY SPRITE BELOW WAS LOOKED AT before it was placed —
+// `node tools/npc-sprite-catalog.mjs` draws all 48 walk bundles with their
+// offsets. v1.8.12 picked them off "which bundles does this map load", which
+// says nothing about who they DEPICT, and gave all three shop keepers the
+// GHOST. Loaded is not the same as suitable.
 //
-//   map 10  0x1D910 0x1DF10 0x1E010 0x1E210
-//   map 12  0x1DF10 0x1E010 0x1E410 0x1ED10
-//   map 15  0x1C410 0x1ED10        16/17  0x1DF10 0x1ED10
+// The maps load very little, and that constrains the cast:
+//   map 10  0x1D910 0x1DF10 0x1E010 0x1E210      four townsfolk
+//   map 12  0x1DF10 0x1E010 0x1E410 + 0x1ED10    three guests + THE GHOST
+//   map 15  0x1C410 + 0x1ED10                    one keeper + ghost
+//   map 16  0x1DF10 + 0x1ED10                    one keeper + ghost
+//   map 17  0x1DF10 + 0x1ED10                    one keeper + ghost
 //
-// ⚠ DIALOGUE IS FILLER. Kazus, Sasune and Ur all get a dialogue + quest pass
-// once the three are structurally complete; nothing here is final text. Kept
-// short, in-world and inside the 16-char/2-line box so check-dialogue-fit
-// stays honest in the meantime.
+// So a non-ghost keeper on 16/17 can only be 0x1DF10, and on 15 only 0x1C410.
+// That is not a preference, it is the whole set the map has in memory.
+//
+// ⚠ DIALOGUE IS FILLER. Ur, Kazus and Sasune get one dialogue + quest pass
+// once all three are structurally complete. Kept short and inside the
+// 16-char/2-line box so check-dialogue-fit stays honest meanwhile.
 
-// Town — coordinates taken from the ROM's own roster for this map.
-export const KAZUS_TOWN_A = interior(0x01D910, DIR_DOWN, [
-  'Kazus keeps to itself.',
-  'You will see why.',
-]);
-export const KAZUS_TOWN_B = interior(0x01DF10, DIR_DOWN, [
-  'The mines gave out.',
-  'The town went with them.',
-]);
-export const KAZUS_TOWN_C = interior(0x01E010, DIR_DOWN, [
-  'Mythril still comes up.',
-  'Little else does.',
-]);
-export const KAZUS_TOWN_D = interior(0x01E210, DIR_DOWN, [
-  'Travelers are rare here.',
-  'Rest before you go on.',
-]);
+// Town (map 10) — WANDERING, through the shared townNpc helper, exactly as Ur.
+export const KAZUS_TOWN_A = kazusNpc(0, { dialogue: ['Kazus keeps to itself.', 'You will see why.'] });
+export const KAZUS_TOWN_B = kazusNpc(1, { dialogue: ['The mines gave out.', 'The town went with them.'] });
+export const KAZUS_TOWN_C = kazusNpc(2, { dialogue: ['Mythril still comes up.', 'Little else does.'] });
+export const KAZUS_TOWN_D = kazusNpc(3, { dialogue: ['Travelers are rare here.', 'Rest before you go on.'] });
 
-// Inn / tavern (map 12).
+// Inn (map 12) — indoors, so `interior()`: no wandering, idle-march in place.
 export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
   'Beds upstairs.',
   'Ale down here.',
@@ -516,48 +537,55 @@ export const KAZUS_INN_GUEST_A = interior(0x01E010, DIR_DOWN, [
   'I am still waiting.',
 ]);
 export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
-  'Quiet town.',
-  'Too quiet, some nights.',
-]);
-export const KAZUS_INN_GUEST_C = interior(0x01ED10, DIR_RIGHT, [
   'Sasune lies north.',
   'The castle still stands.',
 ]);
 
-// Shop keepers — one tile above their counter, facing DOWN, exactly as Ur's
-// keepers stand (design-notes#town-keepers). Counters mirror Ur's positions
-// because the rooms are byte-identical layouts.
-export const KAZUS_WEAPON_KEEPER = interior(0x01ED10, DIR_DOWN, [
+// THE GHOST. 0x01ED10 is a real FF3 ghost sprite — a pale figure, identified on
+// the catalog sheet and confirmed by reading OAM in the cursed town
+// (`tools/monscan/ghost-sprite.cjs`: the cursed shopkeeper is built from tiles
+// 72-75 of this bundle). It is NOT a recoloured villager, which is what an
+// earlier pass claimed without measuring.
+//
+// Kazus is a LIVING town here — the curse is not implemented (decided
+// 2026-08-14) — so this is the one ghost left, in the inn, which is where canon
+// puts Cid. He is the quest hook.
+export const KAZUS_GHOST = interior(0x01ED10, DIR_DOWN, [
+  'You can see me?',
+  'Then you are not from here.',
+]);
+
+// Shop keepers — one tile above their counter facing DOWN, as Ur's keepers
+// stand. Bundles are the only non-ghost ones their maps load.
+export const KAZUS_WEAPON_KEEPER = interior(0x01DF10, DIR_DOWN, [
   'Mythril holds an edge.',
   'It costs what it costs.',
 ]);
-export const KAZUS_ARMOR_KEEPER = interior(0x01ED10, DIR_DOWN, [
+export const KAZUS_ARMOR_KEEPER = interior(0x01DF10, DIR_DOWN, [
   'Mythril plate.',
   'Dear, but it turns a blade.',
 ]);
-export const KAZUS_MAGIC_KEEPER = interior(0x01ED10, DIR_DOWN, [
+export const KAZUS_MAGIC_KEEPER = interior(0x01C410, DIR_DOWN, [
   'Scrolls, if you can read.',
   'Take your time.',
 ]);
 
 export const TOWN_NPCS = new Map([
-  // --- Kazus --- (see the bundle note above KAZUS_TOWN_A)
+  // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)
   [10, [
     { key: 'kazus_town_a', x: 17, y: 21, spec: KAZUS_TOWN_A },
     { key: 'kazus_town_b', x: 18, y: 27, spec: KAZUS_TOWN_B },
     { key: 'kazus_town_c', x: 15, y: 20, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
   ]],
-  // Coordinates MEASURED, not taken from the ROM roster: map 12's own NPC
-  // coords land in sealed pockets (check-npc-placement caught all three), and
-  // the keeper's ROM tile at (5,27) is a 2-tile dead end. These come from the
-  // map's largest connected room (63 tiles, x2-6 / y16-20) picking spots with
-  // >=3 open neighbours.
+  // Coordinates MEASURED from the map's largest connected room (63 tiles,
+  // x2-6 / y16-20). Map 12's own ROM roster coords are sealed pockets —
+  // check-npc-placement refused all three guests on them.
   [12, [
     { key: 'kazus_inn_keep',    x: 3, y: 17, spec: KAZUS_INN_KEEP },
     { key: 'kazus_inn_guest_a', x: 5, y: 17, spec: KAZUS_INN_GUEST_A },
     { key: 'kazus_inn_guest_b', x: 3, y: 19, spec: KAZUS_INN_GUEST_B },
-    { key: 'kazus_inn_guest_c', x: 6, y: 16, spec: KAZUS_INN_GUEST_C },
+    { key: 'kazus_ghost',       x: 6, y: 16, spec: KAZUS_GHOST },
   ]],
   [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 14, spec: KAZUS_WEAPON_KEEPER }]],
   [17, [{ key: 'kazus_armor_keeper',  x: 3, y: 4,  spec: KAZUS_ARMOR_KEEPER }]],

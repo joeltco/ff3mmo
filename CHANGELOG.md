@@ -18,42 +18,6 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
-## 1.8.12 — 2026-08-14
-
-### Kazus: town, inn and three shops wired
-
-First drop of the second town. Living town — the curse is deliberately not
-implemented (decided 2026-08-14); one ghost NPC for a quest comes next.
-
-- **11 NPCs placed**, one per sprite bundle the map actually decompresses,
-  measured off the PPU (`tools/monscan/map-bundles.cjs`): 4 in town (map 10),
-  4 in the inn (12), and a keeper in each shop (15/16/17). The ROM lists 7
-  townsfolk on map 10 for 4 bundles; the extras stay unplaced rather than
-  shipping as twins, same rule as Ur.
-- **Three shops.** Weapon and armor catalogs are the REAL ones, captured from
-  the running game with the curse flag set (`POKE=0x609d`) and item ids
-  resolved by decoding the name bytes rather than matching prices:
-  Mythril Rod/Knife/Swrd, and Mythril Armor/Shield/Helm/Glv/Brc. A clean tier
-  above Ur, whose dearest item is a 100 gil Longsword. The magic catalog is
-  CHOSEN, not captured, and says so in the data.
-- **Dialogue is FILLER** and labelled as such — Ur, Kazus and Sasune all get a
-  dialogue + quest pass once the three are structurally complete.
-- **Roster locations for Kazus.** `rosterLocForMapId` defaults to `'ur'`, which
-  is a real answer rather than an "unknown", so every Kazus map reported
-  players as standing in Ur until the rooms were listed.
-
-### Two measurement errors caught before they shipped
-
-- **Maps are 32x32, not 64 wide.** Tile lookups written at W=64 read the wrong
-  rows entirely, which made the counter-tile check meaningless. Redone at
-  W=32: every Ur counter is tile `$1d`, and Kazus weapon (3,15) and armor
-  (3,5) are `$1d` too. The conclusion (mirror Ur's coordinates) survived, but
-  it was not actually verified until the second pass.
-- **The ROM's own NPC coordinates for map 12 are sealed pockets.**
-  `check-npc-placement` refused all three inn guests, and the keeper's ROM tile
-  is a 2-tile dead end. Replaced with spots measured from the map's largest
-  connected room (63 tiles) — the gate doing exactly what it exists for.
-
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware
