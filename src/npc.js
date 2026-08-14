@@ -28,6 +28,9 @@ import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT, OPENING_INTRO } from './data/opening-scene.js';
 import { transSt } from './transitions.js';
 import { TOWN_NPCS } from './data/town-npcs.js';
+// The map is the authority on how it colours people — see data/npc-palette.js.
+// Node-clean and shared with the gate so the rule lives in exactly one place.
+import { mapPalettesForSpec } from './data/npc-palette.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
@@ -336,7 +339,7 @@ export function placeTownNpcs(mapId) {
     if (pool && n.spec.wander && !n.spec.fixedSpawn && pi < pool.length) {
       [x, y] = pool[pi++];
     }
-    addSceneNpc(n.key, x, y, n.spec);
+    addSceneNpc(n.key, x, y, mapPalettesForSpec(n.spec, mapSt.mapData));
   }
 }
 

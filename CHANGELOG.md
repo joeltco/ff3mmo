@@ -18,6 +18,45 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.10 — 2026-08-14
+
+### The elder's house wore the inn's palette
+
+Reported as "the NPC sprites in the elder house are wrong". They were: FF3 gives
+an NPC's head and body tiles different sprite palettes and each map carries its
+own pair, but `data/town-npcs.js` builds every interior NPC through one
+`interior()` helper that hard-codes the inn's — under a comment asserting "each
+map's own SP2/SP3 are the same values for Ur's buildings".
+
+Measured against the ROM, that holds for the weapon shop, the inn and the
+tavern, and is false everywhere else:
+
+```
+map 4 armor   SP3 [0F,0F,26,36]  vs inn [0F,0F,15,36]   head wrong
+map 6 elder-  SP2 [0F,0F,15,30]  SP3 [0F,0F,27,30]      head AND body wrong
+map 7 elder+  SP3 [0F,0F,27,30]                          head wrong
+```
+
+On screen: the elder's attendant is a white-robed figure with a tan face in the
+ROM and rendered pink; the three elder kin came out pink-haired instead of
+blonde. The armor-shop keeper was wrong the same way — same root cause, same
+one-line fix, so it is fixed too.
+
+- **The map is the authority now.** `placeTownNpcs` runs every spec through
+  `mapPalettesForSpec` (`src/data/npc-palette.js`, Node-clean and import-free so
+  the gate and the shot tool share the REAL rule rather than restating it). A
+  new interior cannot go wrong by reusing the default pair, because the default
+  is overwritten by the map it is placed on.
+- **`check-npc-placement` had no colour check at all** — it proved rooms and
+  bundles. Now it asserts both halves: every placed NPC matches its map's
+  palettes, AND `placeTownNpcs` actually applies the repaint. The first cut only
+  had the data half, which ran the rule itself and so stayed green with the fix
+  reverted; the wiring assertion is what makes it a gate.
+- New `tools/npc-palette-shot.mjs` draws a map's cast as authored beside as
+  placed. Slot 0 is excluded from the comparison — it is the transparent index
+  the renderer never paints.
+- The comment that encoded the bug is replaced with the measured table.
+
 ## 1.8.9 — 2026-08-14
 
 ### The Lost Riders — Ur's second quest, and RIDERS' payoff

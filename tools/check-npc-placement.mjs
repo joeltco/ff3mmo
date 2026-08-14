@@ -126,6 +126,57 @@ const LOADED_BUNDLES = new Map([
   }
   if (twins) failed += twins;
   else console.log(`  ✓ no two NPCs on a map share a sprite bundle`);
+
+  // Every NPC wears the palette of the MAP THEY STAND ON. This gate proved
+  // rooms and bundles and said nothing about colour, which is how the elder's
+  // house shipped with the inn's palette on everyone in it — a white-robed
+  // attendant rendered pink, and the elder's kin pink-haired instead of blonde.
+  // `data/town-npcs.js` hard-codes one pair for every interior under a comment
+  // claiming Ur's buildings all share it; the ROM says maps 4, 6 and 7 do not.
+  //
+  // Compared through `npc.js#mapPalettesForSpec` — the function the game
+  // actually places with — never a copy of the rule. Slot 0 is the transparent
+  // index the renderer never paints, so only slots 1-3 are compared.
+  const { mapPalettesForSpec } = await import('../src/data/npc-palette.js');
+  // ⛔ The DATA check below runs the rule itself, so it passes whether or not
+  // the game applies it — reverting the fix left this gate green until this
+  // wiring assertion was added. `placeTownNpcs` must hand every spec through
+  // `mapPalettesForSpec` on its way to `addSceneNpc`; comments are stripped so
+  // the sentence describing the call cannot satisfy the check.
+  {
+    const npcSrc = fs.readFileSync(new URL('../src/npc.js', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const place = (npcSrc.match(/export function placeTownNpcs[\s\S]*?\n}/) || [''])[0];
+    if (!/addSceneNpc\([^)]*mapPalettesForSpec\(/.test(place)) {
+      console.error('  ✗ placeTownNpcs does not run specs through mapPalettesForSpec — ' +
+        'every interior NPC would wear the palette hard-coded in data/town-npcs.js ' +
+        "instead of its own map's");
+      failed++;
+    } else console.log('  ✓ placeTownNpcs repaints every spec with the map\'s palettes');
+  }
+  let wrongPal = 0;
+  for (const [mapId, list] of TOWN_NPCS) {
+    const md = loadMap(rom, mapId);
+    const pals = md && md.spritePalettes;
+    if (!pals || !pals[0] || !pals[1]) continue;
+    for (const e of list) {
+      if (!e.spec || !e.spec.palTop || !e.spec.palBtm) continue;
+      const placed = mapPalettesForSpec(e.spec, md);
+      const badTop = [1, 2, 3].some(i => placed.palTop[i] !== pals[1][i]);
+      const badBtm = [1, 2, 3].some(i => placed.palBtm[i] !== pals[0][i]);
+      if (badTop || badBtm) {
+        const hex = (a) => a.map(v => '0x' + (v | 0).toString(16).padStart(2, '0')).join(',');
+        console.error(`  ✗ map ${mapId}: ${e.key} is placed with ` +
+          `${badTop ? `head [${hex(placed.palTop)}] but the map says [${hex(pals[1])}]` : ''}` +
+          `${badTop && badBtm ? ' and ' : ''}` +
+          `${badBtm ? `body [${hex(placed.palBtm)}] but the map says [${hex(pals[0])}]` : ''}` +
+          ` — wrong colours on screen`);
+        wrongPal++;
+      }
+    }
+  }
+  if (wrongPal) failed += wrongPal;
+  else console.log(`  ✓ every NPC wears its own map's sprite palettes`);
 }
 
 if (failed) { console.error(`\ncheck-npc-placement: FAIL (${failed} of ${checked})`); process.exit(1); }

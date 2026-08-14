@@ -288,8 +288,24 @@ export const UR_NPC_0F = urNpc(9, {
 //   map 7 elder+ : 0x1E010 0x1E210 0x1EC10
 //   map 2 house  : 0x1E210
 
-// Interiors share one head/body palette pair; each map's own SP2/SP3 are the
-// same values for Ur's buildings.
+// ⛔ These are the INN's pair, and they are a DEFAULT, not the truth. The line
+// that used to sit here — "each map's own SP2/SP3 are the same values for Ur's
+// buildings" — is false, and it is why the elder's house shipped wrong: the
+// attendant is a white-robed figure with a tan face in the ROM and rendered in
+// the inn's pink, and the elder's kin came out pink-haired instead of blonde.
+// Measured from the ROM (tools/npc-palette-shot.mjs):
+//
+//   map 5 weapon  SP2 [0F,0F,12,36]  SP3 [0F,0F,15,36]   same as the inn
+//   map 8 inn     SP2 [0F,0F,12,36]  SP3 [0F,0F,15,36]
+//   map 9 tavern  SP2 [0F,0F,12,36]  SP3 [0F,0F,15,36]
+//   map 4 armor   SP2 [0F,0F,12,36]  SP3 [0F,0F,26,36]   <- differs
+//   map 6 elder-  SP2 [0F,0F,15,30]  SP3 [0F,0F,27,30]   <- differs, both
+//   map 7 elder+  SP2 [0F,0F,12,36]  SP3 [0F,0F,27,30]   <- differs
+//
+// Whatever is written here is overwritten at placement time by the palettes of
+// the map the NPC actually stands on (`data/npc-palette.js`), so a new interior
+// does not need its own pair and CANNOT go wrong by reusing this one.
+// check-npc-placement fails if that repaint is ever unwired. v1.8.10.
 const INN_SP2 = [0x1A, 0x0F, 0x12, 0x36];  // body
 const INN_SP3 = [0x1A, 0x0F, 0x15, 0x36];  // skin / hair
 
