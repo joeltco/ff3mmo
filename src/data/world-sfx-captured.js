@@ -105,6 +105,52 @@ export const CAPTURED_WORLD_SFX = new Map([
 ]);
 
 /**
+ * BATTLE sounds, attributed v1.8.5 by `tools/monscan/battle-sfx-capture.cjs`.
+ *
+ * These five lived only in prose comments since v1.7.873 — measured, but never
+ * written into a tier the gate could hold. Captured by running a REAL battle and
+ * screenshotting 25 frames after each $7F49 write, so each sound is tied to what
+ * the screen was actually doing.
+ *
+ * ⚠ Capturing the two HIT sounds needs two DIFFERENT encounters, which is why
+ * one of them had never been pinned:
+ *   - the party's hit lands in any ordinary fight;
+ *   - the monster's hit needs a goblin that survives AND still attacks. The
+ *     sweep's standard goblin is unkillable but HARMLESS (right for capturing a
+ *     spell's impact, since nothing else makes noise), so $b0 never fired once
+ *     in two full runs. `build-capture-rom.cjs --dangerous` keeps its attack.
+ *
+ * Value is the NSF track, i.e. exactly what `SFX.<NAME>` must equal.
+ */
+export const CAPTURED_BATTLE_SFX = new Map([
+  // Every menu pick in the battle command window: 59 occurrences across a run,
+  // one per confirm, and none on a row that does nothing.
+  ['CONFIRM', 70],
+  // A MONSTER hitting a PARTY MEMBER. The screenshot at the write reads
+  // "Goblin" (actor) over "FFFKKK" (target). It fired ZERO times in two runs
+  // where the party won untouched, and 4 times as soon as the goblin was armed
+  // — the presence/absence contrast is the measurement, not the value alone.
+  ['ATTACK_HIT', 113],
+  // A PARTY MEMBER hitting a MONSTER: the screenshot reads "PUUUUU" over
+  // "Goblin" with "1xHit" and the party undamaged.
+  //
+  // ⚠ NAME WARNING. FF3's split here is WHO IS HITTING WHOM, not what weapon is
+  // swung. `SFX.KNIFE_HIT` / `SFX.ATTACK_HIT` are used by ff3mmo as bladed vs
+  // blunt (src/battle-sfx.js#10) — that is OUR design choice, and both are real
+  // FF3 hit sounds, so it is a fine one. But the constant NAME implies a ROM
+  // meaning it does not have. Do not "correct" the usage; do not read the name
+  // as provenance.
+  ['KNIFE_HIT', 119],
+  // A monster dying: fires 64 frames after the killing hit, and the follow-up
+  // screenshot has one fewer goblin on screen than the frame before it.
+  ['MONSTER_DEATH', 114],
+  // The pre-animation cast cue. Present in ALL 48 spell traces from the spell
+  // sweep and immediately before every impact in the single-spell captures
+  // (Meteo, each summon) — it precedes the effect rather than accompanying it.
+  ['MAGIC_CAST', 98],
+]);
+
+/**
  * Songs, which do NOT come through $7F49 at all.
  *
  * FALL is a SONG (track 0x30), so `nsf - 0x3F` never applied to it and the SFX

@@ -58,12 +58,17 @@ const mo = ENCOUNTER_MON + list * 6;
 p[mo + 2] = 0x00; p[mo + 3] = 0xFF; p[mo + 4] = 0xFF; p[mo + 5] = 0xFF;
 const props = MONSTER_PROPS + 0x00 * 16;
 p[props + 1] = 0xFF; p[props + 2] = 0x7F;        // 32767 HP
-p[props + 9] = p[props + 9] & 0xC0;              // harmless attack set
+// --dangerous keeps the monster's attack set, so it can still HIT the party.
+// The default harmless goblin is right for capturing a spell's impact (nothing
+// else makes noise) but useless for capturing the sound of a monster hitting
+// you — the encounter has to be survivable AND armed.
+const DANGEROUS = args.includes('--dangerous');
+if (!DANGEROUS) p[props + 9] = p[props + 9] & 0xC0;   // harmless attack set
 p[props + 13] = 0x00;                            // no status resistance
 for (let sp = 0; sp < 88; sp++) p[SPELL_DATA + sp * 8 + 1] = 100;   // 100% hit
 p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
 for (const g of gob) { p[ENCOUNTER_SET + g * 2] = list; p[ENCOUNTER_SET + g * 2 + 1] &= 0xC0; }
-console.log('goblin patch: unkillable (32767 HP), harmless, 100% hit, single-target');
+console.log(`goblin patch: unkillable (32767 HP), ${DANGEROUS ? 'ARMED (still attacks)' : 'harmless'}, 100% hit, single-target`);
 
 // ── 2. spell unlocks ─────────────────────────────────────────────────────
 for (const id of unlocks) {

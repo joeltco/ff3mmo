@@ -1,4 +1,4 @@
-# SFX / music audit — v1.7.997-1.8.4
+# SFX / music audit — v1.7.997-1.8.5
 
 Joel: *"lots of sfx are wrong. meteo sfx, the ff2 learn sfx, and im sure many
 others. kazus and the castle arent playing the right music... pull them all and
@@ -154,6 +154,45 @@ no player can cast.
 Every SFX constant (26) and music track (9) renders audible PCM. Nothing is
 silent, nothing is a click. This is the check that did not exist before, and the
 one that would have caught the FF2 blips shipping silent.
+
+## 4b. FF3 world + battle SFX — the last five attributed (v1.8.5)
+
+The field sounds were already captured AND event-attributed in
+`world-sfx-captured.js` (12 of them, with `NOT_CAPTURED` and
+`OBSERVED_UNATTRIBUTED` both empty). Auditing every `SFX` constant against the
+tiers turned up the real gap: **five had no provenance record at all** — measured
+back in v1.7.873 but carried only in prose comments, where no gate could hold
+them.
+
+`tools/monscan/battle-sfx-capture.cjs` runs a real battle and screenshots 25
+frames after each `$7F49` write, so each sound is tied to what the screen was
+doing:
+
+| constant | track | FF3 event | evidence |
+|---|---|---|---|
+| CONFIRM | 70 | menu confirm | 59 in one run, one per pick |
+| **ATTACK_HIT** | 113 | **a MONSTER hitting a PARTY MEMBER** | screenshot reads "Goblin" over "FFFKKK" |
+| **KNIFE_HIT** | 119 | **a PARTY MEMBER hitting a MONSTER** | "PUUUUU" over "Goblin", "1xHit", party undamaged |
+| MONSTER_DEATH | 114 | a monster dying | 64f after the killing hit; one fewer goblin next frame |
+| MAGIC_CAST | 98 | pre-animation cast cue | precedes every impact, all 48 spell traces |
+
+**Capturing the two hit sounds needs two different encounters**, which is why one
+was never pinned. The party's hit lands in any fight, but the monster's hit needs
+a goblin that survives AND still attacks — the sweep's standard goblin is
+unkillable but **harmless**, and `$b0` fired **zero** times across two full runs
+with it, then 4 times once armed (`build-capture-rom.cjs --dangerous`). That
+presence/absence contrast is the measurement, not the value.
+
+⚠ **A name that misleads.** FF3 splits those two sounds by **who hits whom**, not
+by weapon. ff3mmo uses `KNIFE_HIT`/`ATTACK_HIT` as **bladed vs blunt**
+(`battle-sfx.js#10`) — a deliberate choice between two real FF3 hit sounds, and a
+fine one. But the constant names imply a ROM meaning they do not have, and
+earlier notes had `KNIFE_HIT` backwards as "the monster's hit". Documented rather
+than "fixed": the usage is ours to choose.
+
+`check-battle-sfx.mjs` pins the five, fails if the two hit sounds ever collapse
+to one, and fails if **any** SFX constant lacks a provenance record — the check
+that would have caught this gap. Proven by two reverts.
 
 ## 5. FF1 (v1.8.3-1.8.4)
 

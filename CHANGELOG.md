@@ -18,6 +18,46 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.5 — 2026-08-14
+
+### FF3 world + battle SFX — the last five constants attributed
+
+- The FIELD sounds were already captured and event-attributed (12 of them;
+  `NOT_CAPTURED` and `OBSERVED_UNATTRIBUTED` both empty). Auditing every `SFX`
+  constant against the tiers found the real gap: **five had no provenance record
+  at all** — measured in v1.7.873 but carried only in prose comments, where no
+  gate could hold them.
+- New `tools/monscan/battle-sfx-capture.cjs` runs a real battle and screenshots
+  25 frames after each `$7F49` write:
+  - **CONFIRM 70** — menu confirm, 59 in one run, one per pick
+  - **ATTACK_HIT 113** — a MONSTER hitting a PARTY MEMBER ("Goblin" over "FFFKKK")
+  - **KNIFE_HIT 119** — a PARTY MEMBER hitting a MONSTER ("PUUUUU" over "Goblin", "1xHit")
+  - **MONSTER_DEATH 114** — a monster dying, 64f after the killing hit, one
+    fewer goblin on the next frame
+  - **MAGIC_CAST 98** — the pre-animation cast cue, before every impact
+
+### The two hit sounds need two different encounters
+
+`$b0` fired **zero** times across two full runs and then 4 times once the goblin
+was armed. The sweep's standard goblin is unkillable but **harmless** — correct
+for capturing a spell's impact, since nothing else makes noise, but it can never
+hit you back, so the monster's hit sound was unreachable with it.
+`build-capture-rom.cjs --dangerous` keeps its attack. The presence/absence
+contrast is the measurement; the value alone would not be.
+
+### A name that misleads, documented rather than "fixed"
+
+FF3 splits those two sounds by **who hits whom**, not by weapon. ff3mmo uses
+`KNIFE_HIT`/`ATTACK_HIT` as **bladed vs blunt** (`battle-sfx.js#10`) — a
+deliberate choice between two real FF3 hit sounds. The constant NAMES imply a ROM
+meaning they do not have, and earlier notes had `KNIFE_HIT` backwards as "the
+monster's hit". The usage is ours to choose, so it stays; the comments now say
+what each sound actually is.
+
+`check-battle-sfx.mjs` pins the five, fails if the two hit sounds collapse to one
+track, and fails if ANY SFX constant lacks a provenance record — the check that
+would have caught this gap. Proven by two reverts.
+
 ## 1.8.4 — 2026-08-14
 
 ### Correction: the FF1 shop music was never in question
