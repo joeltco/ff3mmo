@@ -301,10 +301,42 @@ do **not** name the NPC saying them.
 
 Full roster: `docs/sprites/ff1-npc-dialogue.txt`.
 
-**Still open for FF1:** objType → sprite entry. The PPU allocates char slots per
-map object, but the slot order does not align 1:1 with the object table, and a
-delta-invariant search for the table found nothing. Every NPC has its line, its
-map and its position; it does not yet have its picture.
+### ⛔ objType → sprite entry: NOT SOLVED
+
+Every FF1 NPC has its line, its map and its position. It does **not** have its
+picture, and I could not make the link. Recording the dead ends so this is not
+re-walked:
+
+**What is measured and solid**
+- the sprite bank is 48 entries at `0x9010 + n*0x100` (PPU-verified)
+- Coneria Castle's entry room loads entries `{18, 19, 25, 26, 29}` plus the party
+- the two guards flanking that room **share entry 25** and stand **7 tiles
+  apart on the same row** (read off OAM, confirmed against a screenshot)
+
+**What is disproven**
+- **PPU slot order is NOT object-table order.** The engine allocates 16-tile
+  groups per *unique sprite*, not per object. Aligning group *i* to object *i*
+  forces the same objType to two different entries, which is impossible.
+- **No byte table maps the pairs.** A full-ROM exact search and a
+  delta-invariant search (immune to any constant offset in the stored values)
+  both return nothing, because the pairs being searched for are wrong — see
+  above.
+- **The map cannot be identified geometrically.** Candidates picked by the
+  7-apart signature (maps 27, 6, 8) all fail: map 27 is 14 identical objects,
+  map 6 is Crescent Lake (it holds Lukahn), map 8's cast is incoherent
+  (Bahamut + a submarine + Garland in one list).
+
+**The contradiction that blocks it**
+Talking in that room produced string 49, and **only map 0 contains objType 49** —
+but map 0 has **no** pair of objects 7 apart on the same row. Sweeping the table
+base across ±12 map-widths finds **no** alignment where any map has both. So
+either the on-screen guards are not the object-table entries I think they are,
+or the coordinate encoding is not `(x = byte & 0x3F, y)`.
+
+**What would crack it**: the RAM array where FF1 stores per-object sprite
+assignment (searching RAM for a map's type list verbatim finds nothing, so it is
+transformed), or disassembling the map-load routine. Both are a fresh start, not
+a continuation of the above.
 
 ---
 

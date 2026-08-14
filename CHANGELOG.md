@@ -327,6 +327,39 @@ party-name inserts and formatting (FF3 shows the same `{10}{2}` shape).
 `check-ff12-text` grew dakuten-block, full-name and coverage assertions —
 **7 more reverts tested, all fail** (each block base, っ, ャ, the insert code).
 
+## 1.8.28 — 2026-08-14
+
+### FF1 objType → sprite: NOT SOLVED, and why
+
+No functional change. This records a failed investigation so it is not
+re-walked. Every FF1 NPC has its line, map and position; it still has no picture.
+
+**Measured and solid**: the sprite bank is 48 entries at `0x9010 + n*0x100`;
+Coneria Castle's entry room loads `{18, 19, 25, 26, 29}` plus the party; the two
+guards flanking it share entry 25 and stand 7 tiles apart on the same row (OAM,
+confirmed against a screenshot).
+
+**Disproven**:
+- PPU slot order is **not** object-table order — the engine allocates 16-tile
+  groups per *unique sprite*. Aligning group *i* to object *i* forces one
+  objType to two different entries.
+- No byte table maps the pairs: a full-ROM exact search **and** a
+  delta-invariant search both return nothing — because the pairs being searched
+  for are wrong, per the above.
+- The map cannot be identified geometrically. Maps 27, 6 and 8 all matched the
+  7-apart signature and all are wrong (14 identical objects / Crescent Lake /
+  an incoherent cast).
+
+**The blocking contradiction**: talking in that room gave string 49, and only
+map 0 contains objType 49 — but map 0 has no pair 7 apart on the same row, and
+sweeping the table base ±12 map-widths finds no alignment where any map has
+both. Either the on-screen guards are not the entries I think, or the coordinate
+encoding is not `(x = byte & 0x3F, y)`.
+
+**What would crack it**: the RAM array holding per-object sprite assignment
+(RAM does not contain a map's type list verbatim, so it is transformed), or
+disassembling the map-load routine. Fresh start, not a continuation.
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware
