@@ -1,4 +1,4 @@
-# SFX / music audit — v1.7.997-1.8.0
+# SFX / music audit — v1.7.997-1.8.1
 
 Joel: *"lots of sfx are wrong. meteo sfx, the ff2 learn sfx, and im sure many
 others. kazus and the castle arent playing the right music... pull them all and
@@ -205,8 +205,23 @@ libgme refuses it and the blip is silent), proven by undercounting the header.
   Wired as `FF2_TRACKS.WORD_LEARNED` + `playWordLearnedJingle()`, fired from
   `word-menu.js` **only when a word was actually learned**. Gate:
   `check-word-learn-sfx.mjs`, proven by three reverts.
-- **The 8 summons** are captured, but from the earlier separate summon run —
-  they were NOT part of tonight's 48/48 re-verification.
+- ~~The 8 summons~~ — **RE-VERIFIED (v1.8.1). 7 of 8 reproduce exactly.**
+  Re-cast one at a time as Sage (job 20, mask `0x40` — the call school renders as
+  a single column of eight) against the unkillable goblin:
+  Baham 125, Levia 115, Titan 131, Ifrit 130, Ramuh 132, Shiva 67, Chocb 75.
+  They are **not** exposed to the level-8 drift: every summon record carries
+  byte 7 = `0x3f` (the call-school marker, identical for all eight regardless of
+  level) and the level-8 pick returns `$85` CONFIRM, not the `$86` refusal —
+  checked rather than assumed, because one-per-level is exactly the shape that
+  drifted for black and white magic.
+  **`0x14` (shipped 118) is UNVERIFIED**: its cast would not complete in 5
+  attempts — the battle command menu is still open at f600, so the round never
+  ran. That is a harness failure, not evidence of silence, and 118 is left alone
+  rather than "corrected" on a non-observation. The ROM menu also names it
+  *Catastro* where our shrines table says *Odin*.
+  `$9f` (track 96) fires at **exactly f270 in all eight runs, including the one
+  where nothing cast** — it belongs to the round, not to any summon. The gate
+  fails if a summon is ever recorded as 96.
 - **Altar Cave floors 2–4** measure song 29 in the ROM; our generated dungeon
   plays the cave theme (2) on every floor. Left alone deliberately — our dungeon
   is not the ROM's, and Joel did not report it.

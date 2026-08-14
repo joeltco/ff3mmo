@@ -121,10 +121,16 @@ n.run(60);
 const start = sfx.length, songStart = songs.length;
 let kicks = 0;
 {
+  // Count frames THROUGH the kick window too. It used to stay at -1 until the
+  // capture loop, so every sound that landed while the round was starting was
+  // stamped @f-1 — fine for a single impact, useless for a SUMMON, whose
+  // entrance cue and impact are seconds apart and have to be told apart.
+  frame = 0;
+  const tick = (k) => { for (let i = 0; i < k; i++) { frame++; n.nes.frame(); } };
   const before = sfx.length;
   for (let attempt = 0; attempt < 10; attempt++) {
     const mark = sfx.length;
-    n.run(90);
+    tick(90);
     if (sfx.length > mark) break;            // something is happening
     n.press('down', 8, 20); n.press('a', 8, 20);
     kicks++;
@@ -135,8 +141,9 @@ console.log('kicks needed to start the round: ' + kicks);
 n.screenshot(join(SHOTS, '5-committed.png'));
 
 // ── capture ───────────────────────────────────────────────────────────────
+const _base = frame;
 for (let f = 0; f < FRAMES; f++) {
-  frame = f;
+  frame = _base + f;
   n.nes.frame();
   if (f === 120 || f === 300 || f === 600 || f === 900) n.screenshot(join(SHOTS, `6-cast-f${f}.png`));
 }

@@ -63,5 +63,38 @@ for (const id of [0x00, 0x01, 0x02]) {
   else ok(`0x0${id} ${name.padEnd(8)} ${a} != ${bname} ${b}`);
 }
 
+// ── summons ──────────────────────────────────────────────────────────────
+// Re-cast one at a time as Sage against the unkillable goblin (v1.8.1). Pinned
+// literally so a regenerated table cannot quietly move them. 0x14 is absent on
+// purpose: its cast would not complete in 5 attempts, so its shipped 118 is
+// UNVERIFIED and is neither pinned nor "corrected" on a non-observation.
+console.log('\nsummons (re-cast individually, 7 of 8 verified)');
+const SUMMONS = new Map([
+  [0x06, 125],   // Baham  @f377
+  [0x0d, 115],   // Levia  @f411
+  [0x1b, 131],   // Titan  @f360
+  [0x22, 130],   // Ifrit  @f440
+  [0x29, 132],   // Ramuh  @f360
+  [0x30,  67],   // Shiva  @f360
+  [0x37,  75],   // Chocb  @f360
+]);
+for (const [id, want] of SUMMONS) {
+  const got = CAPTURED_SPELL_SFX.get(id);
+  const name = NAMES.get(id) || '?';
+  if (got !== want) fail(`summon 0x${id.toString(16).padStart(2, '0')} ${name}: sfx ${got}, measured ${want}`);
+  else ok(`0x${id.toString(16).padStart(2, '0')} ${name.padEnd(8)} -> ${want}`);
+}
+// $9f (96) fires at f270 in EVERY summon run, including one where the summon
+// never cast — it belongs to the round, not to a summon. If it ever shows up as
+// a summon's impact, the capture window was read wrong.
+for (const [id] of SUMMONS) {
+  if (CAPTURED_SPELL_SFX.get(id) === 96) {
+    fail(`summon 0x${id.toString(16)} is recorded as track 96, which is the round's own f270 sound, not an impact`);
+  }
+}
+if (CAPTURED_SPELL_SFX.get(0x14) !== 118) {
+  fail('0x14 moved from 118 — it is UNVERIFIED (its cast never completed), so it must not be changed without a real capture');
+} else ok('0x14 left at its unverified 118 (documented, not silently "fixed")');
+
 console.log(fails ? `\ncheck-spell-sfx-drift: ${fails} FAILED` : '\ncheck-spell-sfx-drift: all checks passed');
 process.exit(fails ? 1 : 0);

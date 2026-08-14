@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.1 — 2026-08-14
+
+### The 8 summons — the last unmeasured corner, re-verified
+
+- Re-cast **one at a time** as Sage (job 20, mask `0x40`; the call school renders
+  as a single column of eight) against the unkillable/harmless goblin, with the
+  probe's frame counter fixed to run through the round-start window so a
+  summon's slow entrance and its impact can be told apart.
+- **7 of 8 reproduce their shipped value exactly:** Baham 125 @f377, Levia 115
+  @f411, Titan 131 @f360, Ifrit 130 @f440, Ramuh 132 @f360, Shiva 67 @f360,
+  Chocb 75 @f360.
+- **Summons are NOT exposed to the level-8 cursor drift** that had Meteo playing
+  Drain's sound. Every summon record carries byte 7 = `0x3f` — the call-school
+  marker, identical for all eight regardless of level — and the level-8 pick
+  returns `$85` CONFIRM, not the `$86` refusal buzz. Checked rather than
+  assumed, because one-per-level is exactly the shape that drifted for black and
+  white magic.
+- **`0x14` (shipped 118) is UNVERIFIED and deliberately unchanged.** Its cast
+  would not complete in 5 attempts — the screenshots show the battle command
+  menu still open at f600, so the round never ran. That is a HARNESS failure,
+  not evidence the spell is silent, so 118 stays rather than being "corrected"
+  on a non-observation. (The ROM menu also lists it as *Catastro* where
+  `SPELL_NAMES_SHRINES` says *Odin*, and row 3 as *Hyper* vs our *Titan*; the
+  shrines names are a secondary source and are left alone.)
+- **`$9f` (track 96) is the ROUND's sound, not a summon's.** It fires at exactly
+  f270 in all eight runs — including the one where nothing ever cast. Recording
+  it as an impact would have been the same class of error as the `$b6`
+  enemy-turn trap this file already warns about.
+- `check-spell-sfx-drift.mjs` now pins the seven verified summons, fails if any
+  is recorded as track 96, and fails if `0x14` is moved off its unverified 118.
+  Proven by two reverts.
+
 ## 1.8.0 — 2026-08-13
 
 ### The FF2 LEARN sound — found, named, wired
