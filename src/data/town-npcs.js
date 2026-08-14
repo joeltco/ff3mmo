@@ -524,7 +524,20 @@ export const UR_HOUSEHOLDER = interior(0x01E210, DIR_DOWN, [
 
 // Town (map 10) — WANDERING, through the shared townNpc helper, exactly as Ur.
 export const KAZUS_TOWN_A = kazusNpc(0, { dialogue: ['Kazus keeps to itself.', 'You will see why.'] });
-export const KAZUS_TOWN_B = kazusNpc(1, { dialogue: ['The mines gave out.', 'The town went with them.'] });
+// The man at the CAMPFIRE in the south-west corner. Not a fifth NPC: map 10
+// loads only four walk bundles and the ROM draws this person on 0x01DF10 —
+// slot 1, the one this spec already had — measured by reading OAM beside the
+// fire (tiles trace to 0x1DF90/A0/B0/C0). So he sits where the ROM puts him,
+// on the coordinate the ROM uses, rather than being invented next to it.
+//
+// `wander: false` — a man at a fire stays at his fire. It also keeps him off
+// the >= 3-open-neighbour rule that wanderers need, and (3,28) is walled to the
+// west. DIR_RIGHT faces the flame at (4,28).
+export const KAZUS_TOWN_B = kazusNpc(1, {
+  wander: false,
+  dir: DIR_RIGHT,
+  dialogue: ['The mines gave out.', 'The fire still catches.'],
+});
 export const KAZUS_TOWN_C = kazusNpc(2, { dialogue: ['Mythril still comes up.', 'Little else does.'] });
 export const KAZUS_TOWN_D = kazusNpc(3, { dialogue: ['Travelers are rare here.', 'Rest before you go on.'] });
 
@@ -578,7 +591,7 @@ export const TOWN_NPCS = new Map([
     // neighbours), so it stood in the inn's door permanently. Gated now by
     // check-npc-placement.
     { key: 'kazus_town_a', x: 11, y: 18, spec: KAZUS_TOWN_A },
-    { key: 'kazus_town_b', x: 18, y: 27, spec: KAZUS_TOWN_B },
+    { key: 'kazus_town_b', x: 3, y: 28, spec: KAZUS_TOWN_B },   // beside the campfire
     { key: 'kazus_town_c', x: 15, y: 20, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
   ]],
