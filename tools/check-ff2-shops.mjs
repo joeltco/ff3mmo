@@ -163,5 +163,66 @@ console.log('\nmonster names, confirmed by the guards that summon them');
   }
 }
 
+// ── FF2 monster STATS ───────────────────────────────────────────────────────
+// ⛔ HP is not stored as a number anywhere. Record byte 0 is an INDEX into a
+// shared 16-bit pool, which is why searching the whole ROM at every stride for
+// "450" returns nothing. The gate pins the indirection, then proves it by
+// fighting the monster and reading the HP the battle actually loaded.
+console.log('\nmonster stats — an INDEX into a value pool, not a number');
+{
+  const MN = await import('./lib/ff2-monsters.mjs');
+  const b12 = (a2, want, what) => instr(bankOf(12, a2), want,
+    `$${a2.toString(16).toUpperCase()}  ${what} (bank 12)`);
+  b12(0x9962, [0xA5, 0x04, 0x69, 0xC3], 'LDA $04 / ADC #$C3 — record base $87C3');
+  b12(0x9972, [0x0A, 0x18, 0x69, 0xC3], 'ASL A / ADC #$C3   — idx*2 into the pool');
+  b12(0x997A, [0x69, 0x8C], 'ADC #$8C           — ...the pool is $8CC3');
+  b12(0x997E, [0xA0, 0x00, 0xB1, 0x78], 'LDY #$00 / LDA ($78),Y — the 16-bit value');
+  b12(0x99B4, [0x20, 0x07, 0xFD], 'JSR $FD07          — the NIBBLE split');
+  b12(0x9A3C, [0xE0, MN.ENEMY_RAM_STRIDE], 'CPX #$30           — 48 bytes per enemy');
+  eq('STAT_TABLE is $87C4 in bank 12', MN.STAT_TABLE, bankOf(12, 0x87C4));
+  eq('VALUE_POOL is $8CC3 in bank 12', MN.VALUE_POOL, bankOf(12, 0x8CC3));
+  eq('10 bytes per record', MN.STAT_STRIDE, 10);
+  eq('the Emperor has 10000 HP', MN.monsterHP(rom, 127), 10000);
+
+  // live: the boss the type-73 guard summons must load the HP the table predicts
+  const fightGuard = (patch, rounds = 0) => {
+    const p2 = Uint8Array.from(rom);
+    for (const [o, v] of Object.entries(patch)) p2[MN.STAT_TABLE + 11 * MN.STAT_STRIDE + Number(o)] = v;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(p2).toString('binary'));
+    n.fromJSON(JSON.parse(SNAP));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    const pr = (k, h = 6, a2 = 16) => { n.buttonDown(1, B[k]); r(h); n.buttonUp(1, B[k]); r(a2); };
+    r(8); pr('b'); pr('b'); r(30);
+    const mm = n.cpu.mem, px = mm[0x68], py = mm[0x69];
+    for (let sl = 1; sl < 12; sl++) mm[0x7500 + sl * 0x10] = 0;
+    mm[0x7500] = 73; mm[0x750A] = 73;
+    mm[0x7502] = px; mm[0x7504] = px; mm[0x7503] = py - 1; mm[0x7505] = py - 1;
+    r(10); pr('up'); pr('a', 6, 120);
+    for (let k = 0; k < 8; k++) pr('a', 6, 60);
+    const readHp = () => n.cpu.mem[MN.ENEMY_RAM + MN.RAM_HP_OFF] |
+                         (n.cpu.mem[MN.ENEMY_RAM + MN.RAM_HP_OFF + 1] << 8);
+    const atStart = readHp();
+    if (!rounds) return atStart;
+    for (let k = 0; k < rounds * 15; k++) {
+      n.buttonDown(1, Controller.BUTTON_A); r(6); n.buttonUp(1, Controller.BUTTON_A); r(20);
+    }
+    return { atStart, after: readHp() };
+  };
+  eq('the guard-73 boss loads the HP the pool predicts',
+     fightGuard({}), MN.monsterHP(rom, 11));
+  // ⛔ index through STAT_FIELDS.hp, never a literal 0 — otherwise moving the
+  // field constant would change nothing the gate looks at.
+  const altIdx = rom[MN.STAT_TABLE + 79 * MN.STAT_STRIDE];      // Red Soul's HP index
+  eq('repointing the HP INDEX changes the HP the battle loads',
+     fightGuard({ [MN.STAT_FIELDS.hp]: altIdx }), MN.monsterHP(rom, 79));
+  // ⛔ RAM_HP_OFF cannot be pinned by its VALUE: $7E48 holds the max-HP
+  // duplicate, so 0x14 and 0x18 read the same number in a fresh battle. Only
+  // hitting the monster separates current HP from max.
+  const hit = fightGuard({}, 14);
+  eq('the byte at RAM_HP_OFF goes DOWN when the monster is hit',
+     hit.after < hit.atStart, true);
+}
+
 console.log(`\n${checks - fails}/${checks} checks passed`);
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

@@ -18,6 +18,63 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.57 — 2026-08-15
+
+### FF2's monster stats — HP is an INDEX, which is why searching never finds it
+
+FF1's stat table fell to a direct search (patch a byte, watch the game). FF2's
+does not, and the reason is the interesting part.
+
+Diffing SRAM across three real boss battles put the enemy block at `$7E30` and
+current HP at `+0x14` — Adamantoise 450, Red Soul 540, Big Horn 1140, each
+counting down when the monster is hit. **Searching the entire ROM at every
+stride 1-32 for a 16-bit 450 returns nothing.** The loader says why:
+
+```
+12/$9962  LDA $04 / ADC #$C3       ; record base $87C3 + monster*10
+12/$9972  ASL A / ADC #$C3 / #$8C  ; -> a VALUE POOL at $8CC3, idx*2
+12/$997E  LDA ($78),Y -> $4E,$52   ; ...that is HP
+12/$998D  LDY #$02, same pool      ; record byte 1 -> MP
+12/$99B4  JSR $FD07                ; later bytes: a NIBBLE split into
+12/$99B8  LDA $8D03,Y / $8D13,X    ; 16-entry tables
+12/$9A3C  CPX #$30                 ; 48 bytes per enemy in RAM, x8
+```
+
+⭐ **Almost nothing in the record is a value — it is indexes.** Adamantoise's HP
+byte is `0x0E`; 450 lives in a pool shared with every other monster. Every byte
+past the first two packs TWO 4-bit indexes into 16-entry tables.
+
+| table | where | per entry |
+|---|---|---|
+| stat record | bank 12 `$87C4`, file `0x307D4` | 10 bytes |
+| value pool | bank 12 `$8CC3`, file `0x30CD3` | 2 bytes LE |
+
+HP for all 128 is in [`docs/FF2-MONSTERS.md`](docs/FF2-MONSTERS.md) — Leg Eater
+6, Adamantoise 450, Round Worm 2000, the Emperor 10000.
+
+⛔ **Only HP is behaviourally proven.** The pool value matches what the battle
+loads for four bosses, the RAM byte counts down when the monster is hit, and
+patching the index changes the HP that loads (`0x00` → 0, `0xFF` → 28282). MP is
+read from the same pool by the instruction immediately after HP's, but was not
+separately tested. Bytes 2-9 measurably affect combat — zeroing byte 5 tripled
+the damage the party dealt — but they are **left unnamed rather than guessed at**.
+
+### A gate check that could not work by value
+
+`RAM_HP_OFF` could not be pinned by reading it: `$7E48` holds the max-HP
+duplicate, so `0x14` and `0x18` return the same number in a fresh battle and the
+revert passed. The gate now fights the boss for fourteen rounds and asserts the
+byte goes DOWN, which is the only thing that separates current HP from max.
+
+### Changed
+
+- `tools/lib/ff2-monsters.mjs` — `STAT_TABLE`, `STAT_STRIDE`, `VALUE_POOL`,
+  `NIBBLE_TABLES`, `ENEMY_RAM`, `RAM_HP_OFF`, `monsterHP` / `monsterMP`.
+- `docs/FF2-MONSTERS.md` — HP, MP and the raw record for all 128.
+- `tools/check-ff2-shops.mjs` — pins the indirection and fights two real battles
+  to prove it. 62/62, **8 gate reverts tested, all fail** (one only after the
+  by-value check was replaced with a by-damage one).
+
 ## 1.8.56 — 2026-08-15
 
 ### FF1's monster stat fields — identified by changing them, not by looking them up
