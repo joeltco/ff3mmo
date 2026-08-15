@@ -62,6 +62,14 @@ export const SHOP_NPC_IDS = [
   240, 241, 242, 243, 245, 246, 247, 248, 249, 251,
 ];
 
+/**
+ * Ids whose name pointer lands on junk. MEASURED by `tools/item-verify.mjs
+ * --game 3 --batch 1`: stocking a shop with one of these draws no row at all,
+ * so they are not items. 0x00 is different in kind — it is the record's own
+ * terminator, so it can never be stocked either way.
+ */
+export const NON_ITEM_IDS = [0x00, 0x15, 0x47, 0x57, 0xA5, 0xC0, 0xC2, 0xC4];
+
 export const priceForItem = (rom, id) =>
   rom[PRICE_TABLE + id * 2] | (rom[PRICE_TABLE + id * 2 + 1] << 8);
 

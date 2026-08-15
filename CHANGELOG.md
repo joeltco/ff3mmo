@@ -18,6 +18,75 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.51 — 2026-08-15
+
+### Every item in all three games, checked against the game itself
+
+The shop work decoded each ROM's name and price tables, but a shop only ever
+proved the handful of ids it stocks. `tools/item-verify.mjs` (NEW) proves the
+rest: a shop draws whatever its record says, so **patch the record to stock any
+id you like**, open the shop, and read back the name and price the game itself
+draws. Sweep the record over the whole id space and every item gets checked.
+
+| game | result |
+|---|---|
+| FF1 | **500/500** names and prices match the running game |
+| FF2 | **255/255** names match |
+| FF3 | **504/504** names and prices match, plus 8 ids identified as not items |
+
+Catalogs: [`docs/FF1-ITEMS.md`](docs/FF1-ITEMS.md),
+[`docs/FF2-ITEMS.md`](docs/FF2-ITEMS.md) (with romaji),
+[`docs/FF3-ITEMS.md`](docs/FF3-ITEMS.md).
+
+⛔ FF1's is a general NAME table, not an item table — past the equipment it holds
+class names (`RedWiz`, `Wh.Wiz`) and stat labels (`HP`, `ST`, `PO`). 219 of the
+250 named ids carry a price; those are the goods.
+
+⛔ FF2 has **no global price table**. A price is a per-shop-entry code, so an item
+does not have "a price" — it has a price *in a given shop*. The catalog lists
+every shop that stocks it and for how much, which is the only truthful answer.
+
+⛔ FF3 ids `0x15 0x47 0x57 0xA5 0xC0 0xC2 0xC4` have name pointers that land on
+junk, and `0x00` is the record terminator. The game draws no row for any of
+them, so they are not items.
+
+⛔ The first FF3 sweep reported 32 mismatches that were **an artifact of the
+harness, not the ROM**: batching 8 ids into one record means an id the game
+refuses to draw shifts every later row up, and the comparison then reports a
+cascade of "wrong name" for items that are fine. `--batch 1` gives each id its
+own shop, so a blank row means exactly one thing.
+
+### FF1's monster names
+
+Found by teleporting the party to open overworld (`$27`/`$28` are pokeable),
+walking until an encounter fired, and watching what the battle read:
+
+```
+$FC77  LDA $6BE4,X          ; the monster id, out of battle RAM
+$FC7B  LDA #$0B / JSR $FE03 ; ...bank 11
+$FC83  LDA $94E0,X -> $94   ; the NAME POINTER, 2 bytes per id
+$FC94  LDY #$00 / LDA ($94),Y / BEQ
+```
+
+128 names, IMP through CHAOS: [`docs/FF1-MONSTERS.md`](docs/FF1-MONSTERS.md).
+
+⛔ **Verification status, stated rather than glossed:** the table ADDRESS is
+pinned by the instruction at `$FC83`. The CONTENTS are decoded but only index 0
+is confirmed on screen — a live battle read `$94E0` and drew `IMP`. Sweeping the
+rest needs the encounter FORMATION table so a chosen monster can be made to
+appear, and that is not decoded yet. A limit of the harness, not a doubt about
+the ROM.
+
+### Changed
+
+- `tools/item-verify.mjs`, `tools/item-catalog.mjs`,
+  `tools/ff1-monster-catalog.mjs`, `tools/lib/ff1-monsters.mjs` (NEW).
+- `docs/FF1-ITEMS.md`, `docs/FF2-ITEMS.md`, `docs/FF3-ITEMS.md`,
+  `docs/FF1-MONSTERS.md` (NEW).
+- `tools/lib/ff3-shops.mjs` — `NON_ITEM_IDS`, measured.
+- `tools/check-ff1-shops.mjs` — now also pins the monster name table to `$FC83`
+  and the one live confirmation. 55/55; **4 more gate reverts tested, all fail.**
+
 ## 1.8.50 — 2026-08-15
 
 ### FF3's shops — decoded from the ROM, not from ff3mmo's own catalog

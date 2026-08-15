@@ -180,5 +180,27 @@ console.log('\nthe INN reads its price out of the record, live');
   eq('...which is the price the table reports', S.shopAt(rom, 51).price, 30);
 }
 
+// ── FF1's monster NAME table, pinned to the instruction that reads it ───────
+// ⛔ Only index 0 is confirmed on screen (a live battle drew "IMP"); the rest
+// are decoded but not individually verified, because the encounter FORMATION
+// table is not decoded yet and a chosen monster cannot be made to appear.
+console.log('\nmonster names');
+{
+  const MN = await import('./lib/ff1-monsters.mjs');
+  fixed(0xFC77, [0xBD, 0xE4, 0x6B], 'LDA $6BE4,X      — the monster id in battle RAM');
+  eq('MONSTER_ID_RAM is $6BE4', MN.MONSTER_ID_RAM, 0x6BE4);
+  fixed(0xFC7B, [0xA9, 0x0B], 'LDA #$0B         — the name bank');
+  fixed(0xFC83, [0xBD, 0xE0, 0x94], 'LDA $94E0,X      — NAME_PTR_TABLE');
+  fixed(0xFC88, [0xBD, 0xE1, 0x94], 'LDA $94E1,X      — ...its high byte');
+  eq('NAME_PTR_TABLE is $94E0 in bank 11', MN.NAME_PTR_TABLE, 0x10 + 11 * 0x4000 + (0x94E0 - 0x8000));
+  fixed(0xFC94, [0xA0, 0x00, 0xB1, 0x94], 'LDY #$00 / LDA ($94),Y — 00-terminated');
+  eq(`id ${MN.CONFIRMED.id} is "${MN.CONFIRMED.name}" (the one read off a battle)`,
+     MN.monsterName(rom, MN.CONFIRMED.id, F1.glyph), MN.CONFIRMED.name);
+  eq('142 ids in 0..159 resolve to a name', MN.allMonsters(rom, F1.glyph, 160).length, 142);
+  eq('...128 of them in the id range the battle uses', MN.allMonsters(rom, F1.glyph, 128).length, 128);
+  eq('the last four are the fiends', MN.allMonsters(rom, F1.glyph, 128).slice(-4).map(m => m.name),
+     ['KRAKEN', 'TIAMAT', 'TIAMAT', 'CHAOS']);
+}
+
 console.log(`\n${checks - fails}/${checks} checks passed`);
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
