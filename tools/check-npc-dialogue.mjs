@@ -5,7 +5,7 @@
 // on the decoder agreeing with itself:
 //
 //   1. the DTE table at 0x75FA1 (two parallel 52-byte arrays) still expands
-//   2. stringId = npcId + 0x202
+//   2. stringId = npcId + 0x202 — for the NPCs where it has been MEASURED
 //   3. the specific lines read off the PPU nametable in a running game
 //
 // For (3): warping to Ur's elder house (map 7) and walking to each of its three
@@ -13,6 +13,26 @@
 // coordinates, and Kazus's inn (map 12) produced the Sealed-Cave line for the
 // NPC standing at (8,28). Those four readings are the ground truth; if the
 // decoder or the base drifts, they stop matching.
+//
+// ⛔ (2) IS A DESCRIPTION, NOT A DERIVATION — and it has a measured exception.
+//
+// `tools/ff3-talk-trace.mjs` followed the talk routine on the CPU:
+//   3B/B6BF  LDX $71          ; the NPC's slot
+//   3B/B6C1  LDA $0740,X      ; a PER-NPC dialogue byte held in RAM
+//   3B/B6C4  STA $76          ; -> the string id LOW byte
+//   3B/B6C6  LDA #$84         ; base $8400 -> string block 0x200
+//   3B/B6CA  BEQ ; else LDA #$86   ; ...or $8600 -> block 0x300 when $78 is set
+//   3F/EE9F  LDA $92 / ASL A / TAY / LDA ($94),Y   ; the pointer fetch
+//
+// The id is a RAM byte that the engine REWRITES (a talk queues its follow-on
+// lines into $0740), and there is a SECOND string block. So no constant offset
+// can be exact. `tools/ff3-talk-probe.mjs` measured 7 of 8 NPCs matching, with
+// one clear counterexample: Ur's NPC at (10,28) is npcId 5, so the rule says
+// string 0x207, but the running game displays 0x206 ("Press the B Button to use
+// an item") — and no Ur NPC has id 4, so nothing about the rule can produce it.
+//
+// The offset is kept because it is right for the towns we ship and it is what
+// the game's own content uses. It must NOT be described as universal.
 //
 //   node tools/check-npc-dialogue.mjs
 
@@ -65,6 +85,35 @@ const ok = (m) => console.log('  ✓ ' + m);
     }
   }
   if (!failed) ok(`all ${MEASURED.length} nametable-measured lines still resolve from npcId + 0x${BASE.toString(16)}`);
+
+  // ⛔ THE KNOWN EXCEPTION, kept so the rule is never re-described as universal.
+  // Ur's NPC at (10,28) is npcId 5. The rule says string 0x207 ("Where are you
+  // rugrats off to"). The RUNNING GAME displays 0x206 ("Press the B Button to
+  // use an item"), measured twice by tools/ff3-talk-probe.mjs. The id is a RAM
+  // byte the engine rewrites (see the header), so a constant offset cannot be
+  // exact. If either string ever stops decoding, this note has gone stale.
+  {
+    const rule = decodeString(rom, 5 + BASE);
+    const seen = decodeString(rom, 0x206);
+    if (!/rugrats/.test(rule)) {
+      bad(`FF3 0x${(5 + BASE).toString(16)} no longer reads as Ur npcId 5's rule-predicted line`);
+    }
+    if (!/B Button/.test(seen)) {
+      bad('FF3 0x206 no longer reads as the line Ur (10,28) actually displays');
+    }
+    if (rule === seen) bad('FF3 0x206 and 0x207 now decode the same — the counterexample is no longer observable');
+    // ⛔ Pin the PLACEMENT, not just "some map has no id 4" — every map lacks an
+    // id 4, so a bare absence check passes against the wrong map and proves
+    // nothing. The counterexample is specifically Ur's NPC at (10,28).
+    const ur = loadMap(rom, 114).npcs || [];
+    const talker = ur.find(n => n.x === 10 && n.y === 28);
+    if (!talker) bad('FF3 Ur no longer places an NPC at (10,28) — the counterexample has moved');
+    else if (talker.id !== 5) bad(`FF3 Ur (10,28) is now npcId ${talker.id}, not 5 — re-derive the counterexample`);
+    if (ur.some(n => n.id === 4)) {
+      bad('FF3 Ur now has an npcId 4 — the 0x206 counterexample needs re-deriving');
+    }
+    if (!failed) ok('FF3 npcId + 0x202 keeps its MEASURED counterexample (Ur 10,28 shows 0x206, not 0x207)');
+  }
 }
 
 // ── 3. the base is the base ───────────────────────────────────────────────

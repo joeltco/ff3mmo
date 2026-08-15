@@ -110,6 +110,33 @@ Every NPC's line is its id, offset into the global string table:
 stringId = npcId + 0x202
 ```
 
+> ⛔ **This is a DESCRIPTION of what the table contains, not a derivation — and
+> it has a measured exception.** `tools/ff3-talk-trace.mjs` followed the talk
+> routine on the CPU:
+>
+> ```
+> 3B/B6BF  LDX $71          ; the NPC's slot
+> 3B/B6C1  LDA $0740,X      ; a PER-NPC dialogue byte held in RAM
+> 3B/B6C4  STA $76          ; -> the string id LOW byte
+> 3B/B6C6  LDA #$84         ; base $8400 -> string block 0x200
+> 3B/B6CA  BEQ ; else LDA #$86   ; ...or $8600 -> block 0x300, when $78 is set
+> 3F/EE9F  LDA $92 / ASL A / TAY / LDA ($94),Y     ; the pointer fetch
+> ```
+>
+> The id is a RAM byte the engine **rewrites** — a talk queues its follow-on
+> lines into `$0740` (Topapa's conversation loads 0x215, 0x216, 0x217 in
+> sequence) — and there is a **second string block** at 0x300. No constant
+> offset can be exact.
+>
+> `tools/ff3-talk-probe.mjs` measured **7 of 8** NPCs matching. The
+> counterexample: **Ur's NPC at (10,28) is npcId 5**, so the rule says 0x207
+> ("Where are you rugrats off to"), but the running game shows **0x206** ("Press
+> the B Button to use an item") — and no Ur NPC has id 4, so the rule cannot
+> produce it there.
+>
+> The offset is kept (it is right for the towns we ship, and it is what our
+> content uses) but it is gated as approximate, with the counterexample pinned.
+
 **Measured, not inferred.** Ur's elder house (map 7) holds exactly three NPCs at
 known ROM coordinates. Warping there, walking to each and reading the message
 box off the PPU **nametable** gave:
@@ -316,7 +343,40 @@ Each type has a **four-byte record at CPU `$95D5` in bank 14 = file `0x395E5`**:
 A per-type handler picks between [1] and [2] on a flag, so there is no single
 "the" id — but **[1] is the first thing an NPC says**.
 
-**Measured**: the Coneria Castle guard displayed string 49, and type 32's record
+**Confirmed on the CPU** by `tools/ff1-talk-trace.mjs`:
+
+```
+$902B  LDA $6F00,X          ; the object TYPE (X = live object slot)
+$9034  ASL A / ROL $15      ; type * 2, SIXTEEN-BIT (the table spans pages)
+$9037  ASL A / ROL $15      ; type * 4
+$903A  ADC #$D5 / LDA #$95  ; + $95D5  =  file 0x395E5
+$9046  LDA ($14),Y ...      ; all FOUR record bytes -> $10 $11 $12 $13
+$906C  LDA $90D3,Y / JMP ($0016)     ; a per-type CODE HANDLER
+```
+
+⛔ **FF1 has the same architecture as FF2** — a record plus a per-type code
+handler — which nobody had noticed. The two handler shapes are what settle
+"byte 1 is the default":
+
+```
+$941B  LDY $10 / JSR $9091 / BCS -> LDA $12 ; else LDA $11   (flag-gated)
+$9492  LDA $11 / RTS                                          (unconditional)
+```
+
+So byte 0 is a story-flag id, byte 1 the default line and byte 2 the post-flag
+line — an NPC's line is **state-dependent**, and only the no-flags one can be
+resolved statically.
+
+**The independent check**: the handler jump table (`0x390E3`) and the record
+table (`0x395E5`) are separate data, yet every record's SHAPE matches what its
+handler actually reads — **76/76** unconditional types carry no flag and no
+after-line, **12/12** flag-gated ones carry both. Shift `DIALOGUE_TABLE` by one
+record and every type pairs with the wrong handler.
+
+**Measured on screen**: `tools/ff1-talk-probe.mjs` predicts the id in advance
+and checks the box — 4 readings across 2 maps and 3 types, including
+**objType 48 -> string 49**, which discriminates against the retracted rule.
+The Coneria Castle guard displayed string 49, and type 32's record
 is `(18, 49, 50, 0)`. Decoding [1] map-wide comes out location-coherent: map 8 is
 Coneria Castle (King / LUTE / Queen locked inside), map 2 is ElfLand (Save our
 Prince / Astos / Dark Elf), map 12 is the Temple of Fiends past.
@@ -553,6 +613,9 @@ fact about the *script*, not an assignment of names to sprites.
 | `tools/npc-dialogue-ff2.mjs` | every FF2 object: position, sprite, string id, handler, line |
 | `tools/ff2-talk-probe.mjs` | walks to an NPC, talks, and checks the rule's prediction against the screen |
 | `tools/ff2-talk-trace.mjs` | hooks every cartridge read/zero-page write to find the talk routine |
+| `tools/lib/nes-trace.mjs` | the shared read/write/PC tracer (and its three jsnes traps) |
+| `tools/ff1-talk-trace.mjs` / `ff1-talk-probe.mjs` | FF1: find the rule, then predict-vs-screen |
+| `tools/ff3-talk-trace.mjs` / `ff3-talk-probe.mjs` | FF3: find the rule, then predict-vs-screen |
 | `tools/npc-sheet-ff1.mjs` / `-ff2.mjs` | the rendered sprite sheets |
 | `tools/lib/romaji.mjs` | kana→Hepburn, a reading aid only (never a source of names) |
 | `tools/ff2-script-dump.mjs` | FF2 raw script dump |

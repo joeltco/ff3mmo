@@ -166,7 +166,44 @@ export function decodeString(rom, id, { nl = ' / ', max = 260 } = {}) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** The four-byte dialogue record for an object type. */
+// ── objType -> dialogue, confirmed off the CPU ────────────────────────────
+//
+// `tools/ff1-talk-trace.mjs` hooks every cartridge read and catches the talk
+// path in bank 14:
+//
+//   $902B  LDA $6F00,X          ; the object TYPE (X = live object slot)
+//   $9034  ASL A / ROL $15      ; type * 2, SIXTEEN-BIT (the table spans pages)
+//   $9037  ASL A / ROL $15      ; type * 4
+//   $903A  ADC #$D5 / LDA #$95  ; + $95D5  ->  file 0x395E5
+//   $9046  LDA ($14),Y ...      ; all FOUR record bytes -> $10 $11 $12 $13
+//   $9059  LDA $16 / ASL A / TAY
+//   $906C  LDA $90D3,Y / $90D4,Y / JMP ($0016)    ; a per-type CODE HANDLER
+//
+// ⛔ Like FF2, the id is data but WHICH byte gets used is code. The two common
+// handler shapes:
+//
+//   $941B  LDY $10 / JSR $9091      ; test the story flag in byte 0
+//          BCS -> LDA $12           ; flag set  -> the "after" line
+//          LDA $11 / RTS            ; flag clear -> byte 1   <- THE DEFAULT
+//   $9492  LDA $11 / RTS            ; unconditional: always byte 1
+//
+// So byte 1 is the DEFAULT line — what a fresh game shows — and byte 2 is the
+// post-flag line. Nothing static can resolve which one a mid-game player sees.
+
+/** $90D3 in bank 14: 2 bytes per objType -> that type's dialogue handler. */
+export const BANK14 = 0x38010;
+export const HANDLER_TABLE = BANK14 + (0x90D3 - 0x8000);
+/** Address of the per-type handler routine (for disassembly). */
+export const handlerForType = (rom, type) => {
+  const e = HANDLER_TABLE + type * 2;
+  return rom[e] | (rom[e + 1] << 8);
+};
+/** The unconditional handler — `LDA $11 / RTS`, ignores flag and after-line. */
+export const HANDLER_PLAIN = 0x9492;
+/** The flag-gated handler — byte 0 is a flag id, byte 2 the post-flag line. */
+export const HANDLER_FLAGGED = 0x941B;
+
+/** The four-byte dialogue record for an object type: [flag, default, after, x]. */
 export const dialogueRecordForType = (rom, type) =>
   [0, 1, 2, 3].map(k => rom[DIALOGUE_TABLE + type * 4 + k]);
 /** The string id an object type says by default (record byte 1). */

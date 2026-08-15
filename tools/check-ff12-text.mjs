@@ -119,7 +119,45 @@ const ok = (m) => console.log('  ✓ ' + m);
         bad(`FF1 map 8 type ${o.type} says string ${o.dialogueId}, outside the Coneria Castle block 49-66`);
       }
     }
-    if (since()) ok('FF1 objType -> dialogue: type 32 = string 49 as displayed; map 8 all within 49-66');
+    // MEASURED on screen by tools/ff1-talk-probe.mjs — the rule predicted each
+    // in advance and the box agreed. objType 48 is the discriminating case: the
+    // retracted rule would say string 48, the game shows 49.
+    const SCREEN = [[32, 49], [48, 49], [1, 1]];
+    for (const [type, id] of SCREEN) {
+      if (F1.dialogueForType(rom, type) !== id) {
+        bad(`FF1 objType ${type} -> string ${F1.dialogueForType(rom, type)}, the game displayed ${id}`);
+      }
+    }
+    if (since()) ok('FF1 objType -> dialogue: 3 screen-measured types (incl. 48->49, where id != type)');
+  }
+
+  // 5b. ⛔ THE INDEPENDENT CHECK — the handler jump table at 0x390E3 and the
+  // record table at 0x395E5 are SEPARATE data, yet every record's SHAPE matches
+  // what its handler actually reads:
+  //
+  //   $9492  LDA $11 / RTS                  never touches byte 0 or byte 2
+  //   $941B  LDY $10 ... BCS -> LDA $12     needs BOTH a flag and an after-line
+  //
+  // Nothing in the dialogue rule's derivation enforces that pairing, so it
+  // cannot be satisfied by construction. Shift DIALOGUE_TABLE by one record and
+  // every type pairs with the wrong handler.
+  {
+    const placed = new Set();
+    for (let m = 0; m < 64; m++) for (const o of F1.mapObjects(rom, m)) placed.add(o.type);
+    let plain = 0, plainBad = 0, flagged = 0, flaggedBad = 0, outside = 0;
+    for (const t of placed) {
+      const h = F1.handlerForType(rom, t);
+      if (h < 0x8000 || h > 0xBFFF) outside++;
+      const r = F1.dialogueRecordForType(rom, t);
+      if (h === F1.HANDLER_PLAIN) { plain++; if (r[0] !== 0 || r[2] !== 0) plainBad++; }
+      if (h === F1.HANDLER_FLAGGED) { flagged++; if (r[0] === 0 || r[2] === 0) flaggedBad++; }
+    }
+    if (outside) bad(`${outside} FF1 handler addresses fall outside $8000-$BFFF — the jump table has moved`);
+    if (plain < 60) bad(`only ${plain} FF1 placed types use the unconditional handler, expected ~76`);
+    if (plainBad) bad(`${plainBad}/${plain} FF1 unconditional-handler types carry a stray flag or after-line — records are paired with the wrong handlers`);
+    if (flagged < 8) bad(`only ${flagged} FF1 placed types use the flag-gated handler, expected ~12`);
+    if (flaggedBad) bad(`${flaggedBad}/${flagged} FF1 flag-gated types are missing a flag or after-line — records are paired with the wrong handlers`);
+    if (since()) ok(`FF1 record shape matches its handler: ${plain}/${plain} plain, ${flagged}/${flagged} flag-gated`);
   }
 
   // 6. named characters land on the RIGHT objects

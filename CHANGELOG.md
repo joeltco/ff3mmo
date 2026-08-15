@@ -18,6 +18,98 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.33 — 2026-08-14
+
+### FF1 and FF3 given the same treatment as FF2 — one rule confirmed, one demoted
+
+FF2's rule was found by disassembling the talk routine. FF1's and FF3's had
+never had that done to them: FF1's rested on ONE screen measurement, FF3's on
+four. Both are now traced on the CPU.
+
+**New shared tracer — `tools/lib/nes-trace.mjs`.** Hooks cartridge reads, writes
+and the instruction stream, with the three traps that cost a pass each written
+into it: `nes.fromJSON` replaces `nes.cpu` (a tracer built before it hooks a
+discarded CPU and never fires); a 65,536-entry PC ring covers under 7 frames at
+~9,900 instructions/frame; and jsnes' `REG_PC` reports the byte AFTER the
+instruction.
+
+### FF1 — CONFIRMED, and it has handlers too
+
+```
+$902B  LDA $6F00,X          ; the object TYPE (X = live slot)
+$9034  ASL A / ROL $15      ; type * 2, SIXTEEN-BIT (the table spans pages)
+$9037  ASL A / ROL $15      ; type * 4
+$903A  ADC #$D5 / LDA #$95  ; + $95D5  =  file 0x395E5   ✓ DIALOGUE_TABLE
+$9046  LDA ($14),Y ...      ; all FOUR record bytes -> $10 $11 $12 $13
+$906C  LDA $90D3,Y / JMP ($0016)     ; a per-type CODE HANDLER
+```
+
+So FF1 has the same architecture as FF2 — record plus per-type handler — which
+nobody had noticed. The two handler shapes settle "byte 1 is the default":
+
+```
+$941B  LDY $10 / JSR $9091 / BCS -> LDA $12 ; else LDA $11   (flag-gated)
+$9492  LDA $11 / RTS                                          (unconditional)
+```
+
+**Verified two ways.** `tools/ff1-talk-probe.mjs` walks to an NPC, talks, reads
+the box off the nametable and checks the id predicted in advance — 4 readings
+across 2 maps and 3 types, including **objType 48 → string 49**, which
+discriminates against the retracted `dialogueId == objType`.
+
+And an invariant the derivation cannot satisfy by construction: the handler jump
+table (`0x390E3`) and the record table (`0x395E5`) are separate data, yet every
+record's SHAPE matches what its handler reads — **76/76** unconditional-handler
+types have no flag and no after-line, **12/12** flag-gated ones have both.
+Shift `DIALOGUE_TABLE` by one record and every type pairs with the wrong handler.
+
+### FF3 — the rule is a DESCRIPTION, and it has a measured exception
+
+```
+3B/B6BF  LDX $71          ; the NPC's slot
+3B/B6C1  LDA $0740,X      ; a PER-NPC dialogue byte held in RAM
+3B/B6C4  STA $76          ; -> the string id LOW byte
+3B/B6C6  LDA #$84         ; base $8400 -> string block 0x200
+3B/B6CA  BEQ ; else LDA #$86   ; ...or $8600 -> block 0x300, when $78 is set
+3F/EE9F  LDA $92 / ASL A / TAY / LDA ($94),Y     ; the pointer fetch
+```
+
+**`stringId = npcId + 0x202` is not a derivation.** The id is a RAM byte the
+engine rewrites — a talk queues its follow-on lines into `$0740` (Topapa's
+conversation loads 0x215, 0x216, 0x217 in sequence) — and there is a **second
+string block** at 0x300 selected by `$78`. No constant offset can be exact.
+
+`tools/ff3-talk-probe.mjs` measured **7 of 8** NPCs matching, with one clear
+counterexample: **Ur's NPC at (10,28) is npcId 5**, so the rule says string
+0x207 ("Where are you rugrats off to"), but the running game displays **0x206**
+("Press the B Button to use an item") — and no Ur NPC has id 4, so nothing about
+the rule can produce it there.
+
+The offset is KEPT — it is right for the towns we ship and it is what the game's
+own content uses — but it is now documented and gated as approximate. The gate
+pins the counterexample so it can never be re-described as universal.
+
+### Changed
+
+- `tools/lib/nes-trace.mjs` (NEW) — the shared read/write/PC tracer.
+- `tools/ff1-talk-trace.mjs` / `tools/ff1-talk-probe.mjs` (NEW).
+- `tools/ff3-talk-trace.mjs` / `tools/ff3-talk-probe.mjs` (NEW).
+- `tools/lib/ff1-text.mjs` — `HANDLER_TABLE`, `handlerForType`, `HANDLER_PLAIN`,
+  `HANDLER_FLAGGED`, and the talk-path disassembly recorded in full.
+- `tools/check-ff12-text.mjs` — 3 screen-measured FF1 types plus the
+  record-shape-matches-handler invariant. **6 FF1 reverts tested, all fail.**
+- `tools/check-npc-dialogue.mjs` — FF3's mechanism documented; the measured
+  counterexample pinned to Ur's (10,28) placement. **4 reverts tested, all fail**
+  (the first attempt had a hole — "no map has an id 4" passed against the wrong
+  map, so it now pins the placement itself).
+
+### Measured, and the same in all three games
+
+`$68`/`$69` are the player's tile X/Y in FF1, FF2 **and** FF3 — one engine
+family. One step is a 6-frame hold in FF1, 16 in FF3. ⛔ FF3's `$0710`/`$0711`
+(what `nes-run --at` pokes) are NOT the live position: the poke sticks in RAM and
+the sprite does not move.
+
 ## 1.8.32 — 2026-08-14
 
 ### FF2's objType → dialogue, SOLVED — by disassembling the talk routine
