@@ -32,24 +32,25 @@ L.push('```');
 L.push('');
 L.push(`Table: bank 11 \`$94E0\`, file \`0x${MN.NAME_PTR_TABLE.toString(16)}\`, 2 bytes LE per id.`);
 L.push('');
-L.push('⛔ **Verification status.** The table ADDRESS is pinned by the instruction at');
-L.push('`$FC83`. The CONTENTS are decoded but only **index 0** is confirmed on screen —');
-L.push('a live battle read `$94E0` and drew `IMP`. Sweeping the rest needs the');
-L.push('encounter FORMATION table so a chosen monster can be made to appear, and that');
-L.push('is not decoded yet. That is a limit of the harness, not a doubt about the ROM.');
+L.push('⭐ **All 128 names have been made to appear in a real battle and read off');
+L.push('the screen — 128/128** (`tools/ff1-monster-verify.mjs`). The way in was the');
+L.push('formation record: byte 2 is the monster id, found by patching each of the 16');
+L.push('bytes in turn and seeing which one changed the name the game drew.');
 L.push('');
-L.push(`${list.length} ids resolve to a name.`);
+L.push(`Formations: bank 11 \`$8400\`, file \`0x${MN.FORMATION_TABLE.toString(16)}\`, ${MN.FORMATION_STRIDE} bytes each.  `);
+L.push(`Stats: bank 12 \`$8520\`, file \`0x${MN.STAT_TABLE.toString(16)}\`, ${MN.STAT_STRIDE} bytes each.`);
 L.push('');
-L.push('| id | name | | id | name | | id | name | | id | name |');
-L.push('|---|---|---|---|---|---|---|---|---|---|---|');
-const q = Math.ceil(list.length / 4);
-for (let i = 0; i < q; i++) {
-  const cells = [];
-  for (let c = 0; c < 4; c++) {
-    const m = list[i + c * q];
-    cells.push(m ? `\`${m.id}\` | ${m.name}` : ' | ');
-  }
-  L.push('| ' + cells.join(' | | ') + ' |');
+L.push('⛔ The stat FIELDS are not identified. The copy into RAM goes through a');
+L.push('scatter table at `$AFCB`, so the RAM record is a permutation of the ROM one');
+L.push('plus runtime state — neither a byte-for-byte nor a multiset search of the ROM');
+L.push('finds it. The raw records are below; naming a byte "HP" would be a guess.');
+L.push('');
+L.push(`${list.length} monsters.`);
+L.push('');
+L.push('| id | name | stat record (20 bytes) |');
+L.push('|---|---|---|');
+for (const m of list) {
+  L.push(`| ${m.id} | ${m.name} | \`${m.stats.map(v => v.toString(16).padStart(2, '0')).join(' ')}\` |`);
 }
 L.push('');
 fs.writeFileSync(OUT, L.join('\n'));

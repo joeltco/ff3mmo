@@ -18,6 +18,65 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.55 — 2026-08-15
+
+### The last hop — all 128 FF1 monsters made to appear, and read off the screen
+
+v1.8.51 shipped FF1's monster names with one witness (`IMP`) and an honest note
+that the other 127 were decoded but unseen. **128/128 now.**
+
+The chain was decoded a hop at a time, each by tracing writes into the battle's
+RAM block and disassembling whatever PC did the writing:
+
+```
+$C56B  LDA ($10),Y / STA $6A      ; a GROUP id, weighted, one of eight per map
+$F2A3  ASL A / ROL $9B (x4) / ADC #$84
+$F2BC  LDA ($9A),Y / STA $6D84,Y  ; 16 bytes from $8400 + idx*16, bank 11
+$A254  LDY $92 / LDA $6D84,Y / STA $6BB7,X
+$BBB9  LDA $6BB7,X / STA $6BC9,Y  ; the battle's monster slots
+$FBD4  LDA $6BC9,X                ; ...which the name printer reads
+```
+
+⭐ **Byte 2 of the 16-byte formation record is the monster id.** Found by
+patching each of the sixteen bytes in turn to a distinctive id and seeing which
+one changed the name the game drew — byte 2 drew `TIGER`, every other byte left
+`IMP`. (Byte 7 changes the party composition, adding a `GrIMP`, so it is a count
+or a second group.)
+
+With that lever, `tools/ff1-monster-verify.mjs` (NEW) fights one real battle per
+id: **128/128 names drew on a real battle screen.**
+
+### FF1's monster stat table
+
+Located by hooking the source read of the copy loop (`$AFB6 LDA ($9C),Y`):
+monster 0 reads from `$8520`, monster 58 from `$89A8` — exactly 58 × 20 further
+on. **Bank 12 `$8520`, file `0x30530`, 20 bytes per monster.** The raw records
+are in [`docs/FF1-MONSTERS.md`](docs/FF1-MONSTERS.md).
+
+⛔ The stat FIELDS are **not** identified, and I am not going to name one "HP" on
+a hunch. The copy at `$AFC1` goes through a scatter table at `$AFCB`, so the RAM
+record is a permutation of the ROM one plus runtime state — neither a
+byte-for-byte nor a multiset search of the ROM finds the RAM record, which is how
+that was established rather than assumed.
+
+### Two gate bugs this turn, both real
+
+- `FORMATION_MONSTER_OFF` — the whole finding — was **not caught** by any
+  byte-level check: every one of them passes with it set to 3. The gate now
+  fights an actual battle with the byte patched and asserts `TIGER` appears.
+  Caught on revert now; it wasn't before, and shipping it unpinned would have
+  been shipping the interesting part ungated.
+- `$AFB6` was being read out of the FIXED bank when it lives in the switchable
+  window with bank 12 mapped.
+
+### Changed
+
+- `tools/ff1-monster-verify.mjs` (NEW), `tools/states/ff1-world.state.gz`.
+- `tools/lib/ff1-monsters.mjs` — `FORMATION_TABLE` / `FORMATION_STRIDE` /
+  `FORMATION_MONSTER_OFF` / `STAT_TABLE` / `STAT_STRIDE` / `statRecord`.
+- `docs/FF1-MONSTERS.md` — now carries every stat record.
+- `tools/check-ff1-shops.mjs` — 77/77, **7 more gate reverts tested, all fail.**
+
 ## 1.8.54 — 2026-08-15
 
 ### Reaching any FF1 map at all

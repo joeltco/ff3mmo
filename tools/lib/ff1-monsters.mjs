@@ -16,36 +16,38 @@
 // So the table is `$94E0` in bank 11 — file 0x2D4F0 — and a name is a
 // 00-terminated string, also in bank 11.
 //
-// ⛔ VERIFICATION STATUS. The table ADDRESS is pinned by the instruction at
-// $FC83, which is as strong as it gets. The CONTENTS are decoded but only
-// index 0 is confirmed on screen: a live battle read `$94E0` (index 0) and drew
-// "IMP". Sweeping the rest needs the encounter FORMATION table so a chosen
-// monster can be made to appear, and that is not decoded yet — a harness fact,
-// not a claim that the other 138 names are unreliable.
+// ⭐ VERIFICATION. All 128 names have now been made to appear in a real battle
+// and read off the screen — 128/128 (`tools/ff1-monster-verify.mjs`). The table
+// ADDRESS is separately pinned to the instruction at $FC83.
 
-// WHERE THE ID COMES FROM (decoded, but not yet usable to sweep):
-//   $FBD0  SEC / SBC #$08 / TAX
-//   $FBD4  LDA $6BC9,X      ; the battle's monster slots live at RAM $6BC9
-//   $FBD7  CMP #$FF / BEQ   ; $FF = no monster in that slot
-//   $FBDB  JMP $FC7A        ; -> the printer, entered with the id ALREADY in A
-//
-// ⛔ That JMP lands AFTER the `LDA $6BE4,X` at $FC77, which is why a read hook
-// on $6BE4 never fired and cost a long detour. $6BE4 is not the id's home.
-//
-// ⛔ Holding a poked value at $6BC9 across the battle setup does NOT make a
-// chosen monster appear — the encounter simply does not draw. Making one appear
-// needs the FORMATION table, which is still undecoded. Stated so nobody repeats
-// the attempt expecting it to work.
+export const FORMATION_TABLE = 0x10 + 11 * 0x4000 + 0x400;   // CPU $8400, bank 11
+export const FORMATION_STRIDE = 16;      // $F2B8 LDX #$10
+export const FORMATION_MONSTER_OFF = 2;  // measured, see above
 
-export const MONSTER_SLOTS = 0x6BC9;            // $FBD4 LDA $6BC9,X
-export const EMPTY_SLOT = 0xFF;                 // $FBD7 CMP #$FF
+// The 20-byte STAT record per monster. Located by hooking the source read of the
+// copy loop ($AFB6 LDA ($9C),Y): monster 0 reads from $8520, monster 58 from
+// $89A8 — exactly 58 * 20 further on, in bank 12.
+//
+// ⛔ The FIELDS are NOT identified. The copy at $AFC1 goes through a scatter
+// table at $AFCB, so the RAM record is a PERMUTATION of the ROM one plus some
+// runtime state (the last four bytes are identical for every monster). Neither a
+// byte-for-byte nor a multiset search of the ROM finds the RAM record, which is
+// how that was established. The raw records are cataloged; naming a byte "HP"
+// would be a guess.
+export const MONSTER_SLOTS = 0x6BC9;   // $FBD4 LDA $6BC9,X
+export const EMPTY_SLOT = 0xFF;       // $FBD7 CMP #$FF
+
+export const STAT_TABLE = 0x10 + 12 * 0x4000 + (0x8520 - 0x8000);   // 0x30530
+export const STAT_STRIDE = 20;
 
 export const NAME_PTR_TABLE = 0x2D4F0;          // CPU $94E0, bank 11
 export const NAME_BANK_BASE = 0x10 + 11 * 0x4000;
 export const NAME_COUNT = 128;                  // ids that resolve to a real name
 
-/** The id whose name was read off a running battle. */
-export const CONFIRMED = { id: 0, name: 'IMP' };
+/** Every id was read off a running battle; these are the gate's spot checks. */
+export const CONFIRMED = [
+  { id: 0, name: 'IMP' }, { id: 58, name: 'TIGER' }, { id: 127, name: 'CHAOS' },
+];
 
 export function monsterName(rom, id, glyph) {
   const o = NAME_PTR_TABLE + id * 2;
@@ -60,11 +62,14 @@ export function monsterName(rom, id, glyph) {
   return s.trim();
 }
 
+export const statRecord = (rom, id) =>
+  [...rom.slice(STAT_TABLE + id * STAT_STRIDE, STAT_TABLE + (id + 1) * STAT_STRIDE)];
+
 export function allMonsters(rom, glyph, count = NAME_COUNT) {
   const out = [];
   for (let id = 0; id < count; id++) {
     const name = monsterName(rom, id, glyph);
-    if (name) out.push({ id, name });
+    if (name) out.push({ id, name, stats: statRecord(rom, id) });
   }
   return out;
 }

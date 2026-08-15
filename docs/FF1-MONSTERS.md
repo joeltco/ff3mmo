@@ -14,45 +14,148 @@ $FC94  LDY #$00 / LDA ($94),Y / BEQ   ; print until the 00
 
 Table: bank 11 `$94E0`, file `0x2d4f0`, 2 bytes LE per id.
 
-⛔ **Verification status.** The table ADDRESS is pinned by the instruction at
-`$FC83`. The CONTENTS are decoded but only **index 0** is confirmed on screen —
-a live battle read `$94E0` and drew `IMP`. Sweeping the rest needs the
-encounter FORMATION table so a chosen monster can be made to appear, and that
-is not decoded yet. That is a limit of the harness, not a doubt about the ROM.
+⭐ **All 128 names have been made to appear in a real battle and read off
+the screen — 128/128** (`tools/ff1-monster-verify.mjs`). The way in was the
+formation record: byte 2 is the monster id, found by patching each of the 16
+bytes in turn and seeing which one changed the name the game drew.
 
-128 ids resolve to a name.
+Formations: bank 11 `$8400`, file `0x2c410`, 16 bytes each.  
+Stats: bank 12 `$8520`, file `0x30530`, 20 bytes each.
 
-| id | name | | id | name | | id | name | | id | name |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `0` | IMP | | `32` | SeaSNAKE | | `64` | EARTH | | `96` | SENTRY |
-| `1` | GrIMP | | `33` | SCORPION | | `65` | FIRE | | `97` | WATER |
-| `2` | WOLF | | `34` | LOBSTER | | `66` | Frost D | | `98` | AIR |
-| `3` | GrWOLF | | `35` | BULL | | `67` | Red D | | `99` | NAGA |
-| `4` | WrWOLF | | `36` | ZomBULL | | `68` | ZombieD | | `100` | GrNAGA |
-| `5` | FrWOLF | | `37` | TROLL | | `69` | SCUM | | `101` | CHIMERA |
-| `6` | IGUANA | | `38` | SeaTROLL | | `70` | MUCK | | `102` | JIMERA |
-| `7` | AGAMA | | `39` | SHADOW | | `71` | OOZE | | `103` | WIZARD |
-| `8` | SAURIA | | `40` | IMAGE | | `72` | SLIME | | `104` | SORCERER |
-| `9` | GIANT | | `41` | WRAITH | | `73` | SPIDER | | `105` | GARLAND |
-| `10` | FrGIANT | | `42` | GHOST | | `74` | ARACHNID | | `106` | Gas D |
-| `11` | R.GIANT | | `43` | ZOMBIE | | `75` | MANTICOR | | `107` | Blue D |
-| `12` | SAHAG | | `44` | GHOUL | | `76` | SPHINX | | `108` | MudGOL |
-| `13` | R.SAHAG | | `45` | GEIST | | `77` | R.ANKYLO | | `109` | RockGOL |
-| `14` | WzSAHAG | | `46` | SPECTER | | `78` | ANKYLO | | `110` | IronGOL |
-| `15` | PIRATE | | `47` | WORM | | `79` | MUMMY | | `111` | BADMAN |
-| `16` | KYZOKU | | `48` | Sand W | | `80` | WzMUMMY | | `112` | EVILMAN |
-| `17` | SHARK | | `49` | Grey W | | `81` | COCTRICE | | `113` | ASTOS |
-| `18` | GrSHARK | | `50` | EYE | | `82` | PERILISK | | `114` | MAGE |
-| `19` | OddEYE | | `51` | PHANTOM | | `83` | WYVERN | | `115` | FIGHTER |
-| `20` | BigEYE | | `52` | MEDUSA | | `84` | WYRM | | `116` | MADPONY |
-| `21` | BONE | | `53` | GrMEDUSA | | `85` | TYRO | | `117` | NITEMARE |
-| `22` | R.BONE | | `54` | CATMAN | | `86` | T REX | | `118` | WarMECH |
-| `23` | CREEP | | `55` | MANCAT | | `87` | CARIBE | | `119` | LICH |
-| `24` | CRAWL | | `56` | PEDE | | `88` | R.CARIBE | | `120` | LICH |
-| `25` | HYENA | | `57` | GrPEDE | | `89` | GATOR | | `121` | KARY |
-| `26` | CEREBUS | | `58` | TIGER | | `90` | FrGATOR | | `122` | KARY |
-| `27` | OGRE | | `59` | Saber T | | `91` | OCHO | | `123` | KRAKEN |
-| `28` | GrOGRE | | `60` | VAMPIRE | | `92` | NAOCHO | | `124` | KRAKEN |
-| `29` | WzOGRE | | `61` | WzVAMP | | `93` | HYDRA | | `125` | TIAMAT |
-| `30` | ASP | | `62` | GARGOYLE | | `94` | R.HYDRA | | `126` | TIAMAT |
-| `31` | COBRA | | `63` | R.GOYLE | | `95` | GUARD | | `127` | CHAOS |
+⛔ The stat FIELDS are not identified. The copy into RAM goes through a
+scatter table at `$AFCB`, so the RAM record is a permutation of the ROM one
+plus runtime state — neither a byte-for-byte nor a multiset search of the ROM
+finds it. The raw records are below; naming a byte "HP" would be a guess.
+
+128 monsters.
+
+| id | name | stat record (20 bytes) |
+|---|---|---|
+| 0 | IMP | `06 00 06 00 08 00 6a ff 06 04 01 02 04 01 00 00 04 10 00 00` |
+| 1 | GrIMP | `12 00 12 00 10 00 78 ff 09 06 01 04 08 01 00 00 04 17 00 00` |
+| 2 | WOLF | `18 00 06 00 14 00 69 ff 24 00 01 05 08 01 00 00 00 1c 00 00` |
+| 3 | GrWOLF | `5d 00 16 00 48 00 6c ff 36 00 01 12 0e 01 00 00 00 2e 00 00` |
+| 4 | WrWOLF | `87 00 43 00 44 00 78 ff 2a 06 01 11 0e 01 02 04 91 2d 00 00` |
+| 5 | FrWOLF | `92 01 c8 00 5c 00 c8 00 36 00 01 17 19 01 00 00 00 37 10 20` |
+| 6 | IGUANA | `99 00 32 00 5c 00 86 ff 18 0c 01 17 12 0a 00 00 02 37 00 00` |
+| 7 | AGAMA | `a8 09 b0 04 28 01 c8 01 24 12 02 4a 1f 01 00 00 02 8f 20 10` |
+| 8 | SAURIA | `b9 07 92 02 c4 00 c8 02 18 14 01 36 1e 01 00 00 02 5b 00 00` |
+| 9 | GIANT | `6f 03 6f 03 f0 00 88 ff 30 0c 01 3c 26 01 00 00 04 78 00 00` |
+| 10 | FrGIANT | `d8 06 d8 06 50 01 c8 ff 30 10 01 4e 3c 01 00 00 04 96 10 20` |
+| 11 | R.GIANT | `e2 05 e2 05 2c 01 c8 ff 30 14 01 53 49 01 00 00 04 87 20 10` |
+| 12 | SAHAG | `1e 00 1e 00 1c 00 6e ff 48 04 01 07 0a 01 00 00 20 1c 40 90` |
+| 13 | R.SAHAG | `69 00 69 00 40 00 8e ff 4e 08 01 10 0f 01 00 00 20 2e 40 90` |
+| 14 | WzSAHAG | `72 03 72 03 cc 00 c8 ff 60 14 01 33 2f 01 00 00 20 65 40 90` |
+| 15 | PIRATE | `28 00 28 00 06 00 ff ff 0c 00 01 02 08 01 00 00 00 0f 00 00` |
+| 16 | KYZOKU | `3c 00 78 00 32 00 6a ff 18 06 01 0d 0e 01 00 00 00 25 00 80` |
+| 17 | SHARK | `0b 01 42 00 78 00 79 ff 48 00 01 1e 16 01 00 00 20 46 40 90` |
+| 18 | GrSHARK | `39 09 58 02 58 01 c8 ff 48 08 01 56 32 01 00 00 20 aa 40 90` |
+| 19 | OddEYE | `2a 00 0a 00 0a 00 6e 03 54 00 01 02 04 01 00 00 00 0e 40 90` |
+| 20 | BigEYE | `07 0e 07 0e 30 01 c8 04 18 10 02 4c 1e 01 00 00 20 9c 40 90` |
+| 21 | BONE | `09 00 03 00 0a 00 7c ff 0c 00 01 02 0a 01 00 00 08 11 10 2b` |
+| 22 | R.BONE | `7a 01 7a 01 90 00 9c ff 2a 0c 01 24 1a 01 00 00 08 4c 10 2b` |
+| 23 | CREEP | `3f 00 0f 00 38 00 68 ff 18 08 01 0e 11 01 00 00 00 28 10 00` |
+| 24 | CRAWL | `ba 00 c8 00 54 00 6a ff 2a 08 08 15 01 01 01 10 00 33 00 00` |
+| 25 | HYENA | `20 01 48 00 78 00 7a ff 30 04 01 1e 16 01 00 00 00 4c 00 00` |
+| 26 | CEREBUS | `9e 04 58 02 c0 00 92 05 30 08 01 30 1e 01 00 00 00 67 20 10` |
+| 27 | OGRE | `c3 00 c3 00 64 00 74 ff 12 0a 01 19 12 01 00 00 04 41 00 00` |
+| 28 | GrOGRE | `1a 01 2c 01 84 00 7e ff 1e 0e 01 21 17 01 00 00 04 47 00 00` |
+| 29 | WzOGRE | `d3 02 d3 02 90 00 86 06 36 0a 01 24 17 01 00 00 c4 50 00 80` |
+| 30 | ASP | `7b 00 32 00 38 00 6b ff 1e 06 01 0e 06 01 02 04 02 2e 00 00` |
+| 31 | COBRA | `a5 00 32 00 50 00 6e ff 24 0a 01 14 16 1f 00 00 02 38 00 00` |
+| 32 | SeaSNAKE | `bd 03 58 02 e0 00 c8 ff 30 0c 01 38 23 00 00 00 22 74 40 90` |
+| 33 | SCORPION | `e1 00 46 00 54 00 70 ff 36 0a 02 15 16 01 02 04 00 37 00 00` |
+| 34 | LOBSTER | `7f 02 2c 01 94 00 c8 ff 3c 12 03 25 23 01 02 04 20 55 40 90` |
+| 35 | BULL | `e9 01 e9 01 a4 00 7c ff 30 04 02 29 16 01 00 00 00 5f 00 00` |
+| 36 | ZomBULL | `1a 04 1a 04 e0 00 88 ff 24 0e 01 38 28 01 00 00 08 74 10 2b` |
+| 37 | TROLL | `6d 02 6d 02 b8 00 88 ff 30 0c 03 2e 18 01 00 00 80 64 10 00` |
+| 38 | SeaTROLL | `54 03 54 03 d8 00 c8 ff 30 14 01 36 28 01 00 00 a0 6e 40 80` |
+| 39 | SHADOW | `5a 00 2d 00 32 00 7c ff 24 00 01 0d 0a 01 01 08 09 25 10 ab` |
+| 40 | IMAGE | `e7 00 e7 00 56 00 a0 ff 5a 04 01 16 16 01 01 10 09 34 10 ab` |
+| 41 | WRAITH | `b0 01 b0 01 72 00 a0 ff 6c 0c 01 1d 28 01 01 10 09 43 10 ab` |
+| 42 | GHOST | `de 03 de 03 b4 00 b8 ff 24 1e 01 2d 5d 01 01 10 09 55 10 ab` |
+| 43 | ZOMBIE | `18 00 0c 00 14 00 78 ff 06 00 01 05 0a 01 00 00 08 19 10 ab` |
+| 44 | GHOUL | `5d 00 32 00 30 00 7c ff 0c 06 03 0c 08 01 01 10 08 24 10 2b` |
+| 45 | GEIST | `75 00 75 00 38 00 a0 ff 2e 0a 03 0e 08 01 01 10 08 28 10 2b` |
+| 46 | SPECTER | `96 00 96 00 34 00 a0 ff 2a 0c 01 0d 14 01 01 10 08 2d 10 2b` |
+| 47 | WORM | `f8 10 e8 03 c0 01 c8 ff 24 0a 01 70 41 0a 00 00 00 c8 00 80` |
+| 48 | Sand W | `7b 0a 84 03 c8 00 7c 07 3e 0e 01 32 2e 01 00 00 00 67 00 80` |
+| 49 | Grey W | `87 06 90 01 18 01 c8 ff 04 1f 01 46 32 01 00 00 00 8f 20 90` |
+| 50 | EYE | `99 0c 99 0c a2 00 c8 08 0c 1e 01 2a 1e 01 00 00 40 5c 00 80` |
+| 51 | PHANTOM | `01 00 01 00 68 01 c8 09 18 3c 01 96 78 28 01 10 89 a0 10 ab` |
+| 52 | MEDUSA | `bb 02 bb 02 44 00 96 02 24 0a 01 11 14 01 02 04 00 37 00 00` |
+| 53 | GrMEDUSA | `c2 04 c2 04 60 00 c8 02 48 0c 0a 18 0b 01 01 10 01 46 10 a0` |
+| 54 | CATMAN | `0c 03 0c 03 a0 00 94 ff 30 10 02 28 1e 01 02 04 91 5d 00 00` |
+| 55 | MANCAT | `5b 02 20 03 6e 00 96 0a 3c 1e 03 1c 14 01 00 00 40 3e 00 fb` |
+| 56 | PEDE | `aa 04 2c 01 de 00 6f ff 30 14 01 38 27 01 02 04 00 74 00 00` |
+| 57 | GrPEDE | `c4 08 e8 03 40 01 b0 ff 30 18 01 50 49 01 00 00 00 b9 00 30` |
+| 58 | TIGER | `b6 01 6c 00 84 00 74 ff 30 08 02 21 16 19 00 00 00 55 00 00` |
+| 59 | Saber T | `4b 03 f4 01 c8 00 b4 ff 2a 08 02 32 18 46 00 00 00 6a 00 00` |
+| 60 | VAMPIRE | `b0 04 d0 07 9c 00 c8 0b 48 18 01 27 4c 01 01 10 89 4b 10 ab` |
+| 61 | WzVAMP | `51 09 b8 0b 2c 01 c8 0c 48 1c 01 2a 5a 01 01 10 c9 54 10 ab` |
+| 62 | GARGOYLE | `84 00 50 00 50 00 84 ff 2d 08 04 14 0c 01 00 00 01 35 00 80` |
+| 63 | R.GOYLE | `83 01 83 01 5e 00 86 0d 48 20 04 18 0a 01 02 00 01 7f 00 b0` |
+| 64 | EARTH | `00 06 00 03 20 01 c8 ff 12 14 01 48 42 01 00 00 01 82 10 eb` |
+| 65 | FIRE | `54 06 20 03 14 01 c8 ff 2a 14 01 45 32 01 00 00 01 82 20 9b` |
+| 66 | Frost D | `a5 06 d0 07 c8 00 c8 0e 78 08 01 32 35 01 00 00 02 c4 50 a2` |
+| 67 | Red D | `58 0b a0 0f f8 00 c8 0f 60 1e 01 3e 4b 01 00 00 02 c8 22 90` |
+| 68 | ZombieD | `1b 09 e7 03 0c 01 c8 ff 18 1e 01 43 38 01 01 10 0a 87 10 ab` |
+| 69 | SCUM | `54 00 14 00 18 00 7c ff 00 ff 01 01 01 01 02 04 00 24 30 cb` |
+| 70 | MUCK | `ff 00 46 00 4c 00 98 ff 04 07 01 13 1e 01 00 00 00 37 40 bb` |
+| 71 | OOZE | `fc 00 46 00 4c 00 90 ff 06 06 01 13 20 01 00 00 00 37 30 cb` |
+| 72 | SLIME | `4d 04 84 03 9c 00 c8 ff 18 ff 01 27 31 01 02 04 00 55 10 eb` |
+| 73 | SPIDER | `1e 00 08 00 1c 00 6d ff 1e 00 01 07 0a 01 00 00 00 1c 00 00` |
+| 74 | ARACHNID | `8d 00 32 00 40 00 6f ff 18 0c 01 10 05 01 02 04 00 2e 00 00` |
+| 75 | MANTICOR | `25 05 8a 02 a4 00 96 21 48 08 02 29 16 01 00 00 00 5f 00 80` |
+| 76 | SPHINX | `88 04 88 04 e4 00 84 ff 78 0c 03 39 17 01 00 00 00 73 00 80` |
+| 77 | R.ANKYLO | `94 05 2c 01 00 01 92 ff 38 26 03 40 3c 01 00 00 00 82 00 00` |
+| 78 | ANKYLO | `32 0a 01 00 60 01 90 ff 30 30 01 58 62 01 00 00 00 9c 00 00` |
+| 79 | MUMMY | `2c 01 2c 01 50 00 ac ff 18 14 01 14 1e 01 01 20 08 3c 10 2b` |
+| 80 | WzMUMMY | `d8 03 e8 03 bc 00 94 ff 18 18 01 2f 2b 01 02 20 08 5f 10 2b` |
+| 81 | COCTRICE | `ba 00 c8 00 32 00 7c ff 48 04 01 0a 01 01 02 02 00 2f 00 80` |
+| 82 | PERILISK | `a7 01 f4 01 2c 00 7c 10 48 04 01 0b 14 01 00 00 00 2d 20 90` |
+| 83 | WYVERN | `95 04 32 00 d4 00 96 ff 60 0c 01 35 1e 01 02 04 02 73 00 80` |
+| 84 | WYRM | `c2 04 f6 01 04 01 96 ff 3c 16 01 41 28 01 00 00 02 83 00 80` |
+| 85 | TYRO | `3b 0d f6 01 e0 01 90 ff 3c 0a 01 85 41 01 00 00 02 c8 00 00` |
+| 86 | T REX | `20 1c 58 02 58 02 96 ff 3c 0a 01 90 73 1e 00 00 02 c8 00 00` |
+| 87 | CARIBE | `f0 00 14 00 5c 00 8a ff 48 00 01 17 16 01 00 00 00 44 40 90` |
+| 88 | R.CARIBE | `22 02 2e 00 ac 00 8e ff 48 14 01 2b 25 01 00 00 00 53 00 00` |
+| 89 | GATOR | `30 03 84 03 b8 00 8a ff 30 10 02 2e 2a 01 00 00 00 67 40 90` |
+| 90 | FrGATOR | `62 07 d0 07 20 01 8e ff 30 14 02 48 38 01 00 00 02 8f 40 90` |
+| 91 | OCHO | `c8 04 66 00 d0 00 b0 ff 18 18 03 34 14 01 02 04 00 74 40 90` |
+| 92 | NAOCHO | `75 0c f4 01 58 01 c8 ff 18 20 03 56 23 01 02 04 00 aa 00 00` |
+| 93 | HYDRA | `93 03 96 00 d4 00 8a ff 24 0e 03 35 1e 01 00 00 02 74 00 00` |
+| 94 | R.HYDRA | `bf 04 90 01 b6 00 98 11 24 0e 03 2e 14 01 00 00 02 67 20 10` |
+| 95 | GUARD | `c8 04 90 01 c8 00 c8 ff 48 28 02 32 19 01 01 10 00 6e 40 0b` |
+| 96 | SENTRY | `a0 0f d0 07 90 01 96 ff 60 30 01 5a 66 01 00 00 00 a0 40 bb` |
+| 97 | WATER | `aa 07 20 03 2c 01 c8 ff 48 14 01 44 45 01 00 00 01 82 20 9b` |
+| 98 | AIR | `4e 06 27 03 66 01 c8 ff 90 04 01 3e 35 01 00 00 01 82 00 8b` |
+| 99 | NAGA | `33 09 33 09 64 01 c8 12 48 08 01 47 09 01 02 04 60 74 40 90` |
+| 100 | GrNAGA | `a1 0d a0 0f a4 01 9a 13 30 10 01 58 07 01 02 04 40 8f 00 00` |
+| 101 | CHIMERA | `10 08 c4 09 2c 01 c8 14 48 14 04 3c 1e 01 00 00 02 82 20 90` |
+| 102 | JIMERA | `e8 11 88 13 5e 01 c8 15 3c 12 04 46 28 01 00 00 02 8f 20 90` |
+| 103 | WIZARD | `14 01 2c 01 54 00 7e ff 42 10 02 15 1e 01 00 00 21 62 00 33` |
+| 104 | SORCERER | `36 03 e7 03 70 00 82 16 30 0c 03 1c 01 01 00 01 00 bb 00 00` |
+| 105 | GARLAND | `82 00 fa 00 6a 00 ff ff 0c 0a 01 1b 0f 01 00 00 00 40 00 00` |
+| 106 | Gas D | `e4 0f 88 13 60 01 c8 17 60 10 01 44 48 01 00 00 02 c8 20 80` |
+| 107 | Blue D | `ca 0c d0 07 c6 01 c8 18 60 14 01 56 5c 01 00 00 02 c8 10 c0` |
+| 108 | MudGOL | `e9 04 20 03 b0 00 c8 19 1c 07 01 2c 40 01 02 04 41 5d 00 7b` |
+| 109 | RockGOL | `51 09 e8 03 c8 00 c8 1a 18 10 01 32 46 01 00 00 41 6e 00 fb` |
+| 110 | IronGOL | `3d 1a b8 0b 30 01 c8 1b 18 64 01 4c 5d 01 00 00 01 8f 00 bb` |
+| 111 | BADMAN | `ef 04 08 07 04 01 c8 ff 24 26 02 41 2c 01 00 00 00 87 00 00` |
+| 112 | EVILMAN | `8c 0a b8 0b be 00 c8 1c 2a 20 01 30 37 01 00 00 41 ad 00 0b` |
+| 113 | ASTOS | `ca 08 d0 07 a8 00 ff 2b 4e 28 01 2a 1a 01 00 00 00 aa 00 00` |
+| 114 | MAGE | `47 04 47 04 69 00 c8 1d 4e 28 01 1b 1a 01 00 00 40 aa 00 00` |
+| 115 | FIGHTER | `5c 0d 5c 0d c8 00 9e 1e 5a 26 01 2d 28 01 00 00 40 ba 00 00` |
+| 116 | MADPONY | `3f 00 0f 00 40 00 6a ff 16 02 02 10 0a 01 00 00 00 28 00 00` |
+| 117 | NITEMARE | `f8 04 bc 02 c8 00 c8 1f 84 18 03 32 1e 01 00 00 01 64 20 9b` |
+| 118 | WarMECH | `00 7d 00 7d e8 03 c8 20 60 50 02 c8 80 01 00 00 80 c8 00 fb` |
+| 119 | LICH | `98 08 b8 0b 90 01 ff 22 18 28 01 31 28 01 01 10 49 78 10 2b` |
+| 120 | LICH | `d0 07 01 00 f4 01 ff 23 30 32 01 40 32 01 01 10 49 8c 00 2b` |
+| 121 | KARY | `ab 09 b8 0b 58 02 ff 24 30 32 06 3f 28 01 00 00 41 b7 01 72` |
+| 122 | KARY | `d0 07 01 00 bc 02 ff 25 3c 3c 06 3f 3c 01 00 00 41 b7 00 72` |
+| 123 | KRAKEN | `95 10 88 13 20 03 ff 26 54 3c 08 5a 32 01 00 00 20 a0 40 90` |
+| 124 | KRAKEN | `d0 07 01 00 84 03 ff 27 62 46 08 72 46 01 00 00 20 c8 00 90` |
+| 125 | TIAMAT | `78 15 70 17 e8 03 ff 28 48 50 04 50 31 01 00 00 02 c8 02 f0` |
+| 126 | TIAMAT | `d0 07 01 00 4c 04 ff 29 5a 5a 04 55 4b 01 00 00 42 c8 00 f0` |
+| 127 | CHAOS | `00 00 00 00 d0 07 ff 2a 64 64 02 c8 64 01 01 10 00 c8 00 ff` |

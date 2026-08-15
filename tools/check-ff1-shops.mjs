@@ -208,12 +208,60 @@ console.log('\nmonster names');
   fixed(0xFC88, [0xBD, 0xE1, 0x94], 'LDA $94E1,X      — ...its high byte');
   eq('NAME_PTR_TABLE is $94E0 in bank 11', MN.NAME_PTR_TABLE, 0x10 + 11 * 0x4000 + (0x94E0 - 0x8000));
   fixed(0xFC94, [0xA0, 0x00, 0xB1, 0x94], 'LDY #$00 / LDA ($94),Y — 00-terminated');
-  eq(`id ${MN.CONFIRMED.id} is "${MN.CONFIRMED.name}" (the one read off a battle)`,
-     MN.monsterName(rom, MN.CONFIRMED.id, F1.glyph), MN.CONFIRMED.name);
+  // ⭐ the formation lever: byte 2 of a 16-byte record is the monster id
+  fixed(0xF2A3, [0x0A, 0x26, 0x9B], 'ASL A / ROL $9B  — index * 16');
+  fixed(0xF2B2, [0xA5, 0x9B, 0x69, 0x84], 'LDA $9B / ADC #$84 — the formation page');
+  fixed(0xF2B8, [0xA2, MN.FORMATION_STRIDE], 'LDX #$10         — FORMATION_STRIDE');
+  eq('FORMATION_TABLE is $8400 in bank 11', MN.FORMATION_TABLE, 0x10 + 11 * 0x4000 + 0x400);
+  // ⛔ $AFB6 is in the SWITCHABLE window with bank 12 mapped, not the fixed bank.
+  instr(bankOf(12, 0xAFB6), [0xB1, 0x9C], '$AFB6  LDA ($9C),Y — the stat record source (bank 12)');
+  eq('STAT_TABLE is $8520 in bank 12', MN.STAT_TABLE, 0x10 + 12 * 0x4000 + (0x8520 - 0x8000));
+  eq('20 bytes per stat record', MN.STAT_STRIDE, 20);
+  eq('id 58 sits exactly 58 records in',
+     MN.STAT_TABLE + 58 * MN.STAT_STRIDE, 0x10 + 12 * 0x4000 + (0x89A8 - 0x8000));
+  for (const c of MN.CONFIRMED) {
+    eq(`id ${c.id} is "${c.name}"`, MN.monsterName(rom, c.id, F1.glyph), c.name);
+  }
   eq('142 ids in 0..159 resolve to a name', MN.allMonsters(rom, F1.glyph, 160).length, 142);
   eq('...128 of them in the id range the battle uses', MN.allMonsters(rom, F1.glyph, 128).length, 128);
   eq('the last four are the fiends', MN.allMonsters(rom, F1.glyph, 128).slice(-4).map(m => m.name),
      ['KRAKEN', 'TIAMAT', 'TIAMAT', 'CHAOS']);
+
+  // ⛔ FORMATION_MONSTER_OFF is the whole finding and NOTHING above catches it —
+  // every byte-level check passes with it set to 3. The only thing that can tell
+  // byte 2 from byte 3 is making a monster appear, so the gate fights one.
+  const WORLD = zlib.gunzipSync(
+    fs.readFileSync(path.join(HERE, 'states', 'ff1-world.state.gz'))).toString('utf8');
+  const p2 = Uint8Array.from(rom);
+  p2[MN.FORMATION_TABLE + MN.FORMATION_MONSTER_OFF] = 58;      // TIGER
+  const nes2 = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  nes2.loadROM(Buffer.from(p2).toString('binary'));
+  nes2.fromJSON(JSON.parse(WORLD));
+  const run2 = (n) => { for (let i = 0; i < n; i++) nes2.frame(); };
+  run2(20);
+  nes2.cpu.mem[0x27] = 150; nes2.cpu.mem[0x28] = 170;    // $27/$28 ARE pokeable
+  run2(20);
+  const lines2 = () => {
+    const v = nes2.ppu.vramMem, out = [];
+    for (let r = 0; r < 30; r++) {
+      let str = '';
+      for (let c = 0; c < 32; c++) {
+        const g = F1.glyph(v[0x2000 + r * 32 + c]);
+        str += (g === null || g === '\n') ? ' ' : g;
+      }
+      if (str.trim()) out.push(str.trim());
+    }
+    return out;
+  };
+  let drew = null;
+  const DIRS = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT];
+  for (let step = 0; step < 300 && !drew; step++) {
+    const btn = DIRS[Math.floor(step / 6) % 2];
+    nes2.buttonDown(1, btn); run2(8); nes2.buttonUp(1, btn); run2(12);
+    if (lines2().some(l => /\bRUN\b/.test(l))) drew = lines2().join(' ');
+  }
+  eq('patching formation byte 2 puts TIGER in a real battle',
+     drew !== null && drew.includes('TIGER'), true);
 }
 
 console.log(`\n${checks - fails}/${checks} checks passed`);
