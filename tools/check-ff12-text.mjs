@@ -426,54 +426,70 @@ const ok = (m) => console.log('  ✓ ' + m);
 // tables hold only attribute bytes 02, 03 and 43 (= 3 + horizontal flip).
 //
 // FF1's palette pipeline, traced end to end:
-//   $CC49  LDA $48 / ASL x4        ; mapId * 16 into $10/$11
-//   $CC60  TXA / ADC $11 / ORA #$A0 ; -> a pointer in the $A000 window
+//   $CC49  LDA $48 / ASL A x4       ; $10/$11 = mapId * 16
+//   $CC55  LDX $11                  ; save the HIGH byte of mapId*16
+//   $CC57  ASL $10 / ROL $11        ; $10/$11 = mapId * 32
+//   $CC5C  ADC $10 / TXA / ADC $11  ; 16x + 32x = mapId * 48
+//   $CC63  ORA #$A0                 ; -> $A000 + mapId*48
 //   $CC69  LDA ($10),Y / STA $0780,Y  (0x30 bytes)
 //   $D8AD  LDA $0780,X / STA $03C0,X  (0x20 bytes)
 //   $D880  LDA $03C0,X / STA $2007    (every frame)
-// ⛔ Where X comes from is NOT decoded, so a map's palette cannot be resolved
-// offline the way FF3's can. What IS pinned: the set map 8 loads, byte for byte.
+//
+// ⛔ X is NOT a palette selector — it is the carry-high of mapId*16, held so the
+// 16x and 32x halves can be summed. The set index IS THE MAP ID.
+// CONFIRMED by capturing the pointer on two different map entries:
+// map 8 -> $A180 and map 24 -> $A480, both = $A000 + mapId*48.
 {
   const f1 = F1.loadRom(FF1);
   const hxs = (a) => a.map(v => v.toString(16).padStart(2, '0')).join(' ');
-  // map 8 loaded the 48-byte set at NES $A480 in bank 0 -> file 0x2490
-  const SET = 0x10 + (0xA480 - 0x8000);
-  const set = [...f1.slice(SET, SET + 0x30)];
-  // sprite palettes are bytes 16..31 of the set; NPC top = 24..27, bottom = 28..31
-  if (hxs(set.slice(24, 28)) !== '0f 0f 27 36') {
-    bad(`FF1 map 8 sprite palette 2 is ${hxs(set.slice(24, 28))}, the PPU measured 0f 0f 27 36`);
-  }
-  if (hxs(set.slice(28, 32)) !== '0f 0f 16 36') {
-    bad(`FF1 map 8 sprite palette 3 is ${hxs(set.slice(28, 32))}, the PPU measured 0f 0f 16 36`);
-  }
-  // the BG half of the same set was measured too — it pins the set's alignment
-  if (hxs(set.slice(8, 12)) !== '0f 12 1a 19') {
-    bad(`FF1 map 8 BG palette 2 is ${hxs(set.slice(8, 12))}, the PPU measured 0f 12 1a 19`);
-  }
   // ⛔ Pin the SET SIZE to the code that defines it. A 0x20 stride still lands
   // on plausible-looking palette data (the region is dense), so a structural
   // "are these valid sets" test alone cannot catch a wrong stride.
-  // $CC6F is `CPY #$30` — the copy length IS the set size.
-  const SET_SIZE = 0x30;
+  // ⛔ Use the LIBRARY's constants, not a local copy. An earlier version of this
+  // gate recomputed the base and stride here — so reverting ff1-text.mjs (what
+  // the sheet actually renders from) changed nothing and every revert passed.
+  const SET_SIZE = F1.PALETTE_SET_SIZE;
   const CPY_OFF = 0x10 + 15 * 0x4000 + (0xCC6F - 0xC000);
   if (f1[CPY_OFF] !== 0xC0 || f1[CPY_OFF + 1] !== SET_SIZE) {
     bad(`FF1 $CC6F is not \`CPY #$${SET_SIZE.toString(16)}\` ` +
         `(found ${f1[CPY_OFF].toString(16)} ${f1[CPY_OFF + 1].toString(16)}) — the palette set size has moved`);
   }
-  // ...and the table it sits in must still be a run of valid palette sets
-  const BASE = 0x10 + (0xA000 - 0x8000);
+  // ...and pin the instruction that makes X a carry-high rather than a selector
+  const LDX_OFF = 0x10 + 15 * 0x4000 + (0xCC55 - 0xC000);
+  if (f1[LDX_OFF] !== 0xA6 || f1[LDX_OFF + 1] !== 0x11) {
+    bad('FF1 $CC55 is not `LDX $11` — the mapId*48 derivation no longer holds');
+  }
+
+  if (F1.PALETTE_TABLE !== 0x10 + (0xA000 - 0x8000)) {
+    bad(`FF1 PALETTE_TABLE is 0x${F1.PALETTE_TABLE.toString(16)}, the captured pointers say $A000 (file 0x2010)`);
+  }
+  const setFor = (mapId) => F1.paletteSetForMap(f1, mapId);
+  // MEASURED off the PPU: both of these maps show the same palettes, and the
+  // POINTER captured on entry was $A180 / $A480 respectively.
+  const MEASURED = [
+    [8, '0f 0f 27 36', '0f 0f 16 36', '0f 12 1a 19'],
+    [24, '0f 0f 27 36', '0f 0f 16 36', '0f 12 1a 19'],
+  ];
+  for (const [mapId, want2, want3, wantBg] of MEASURED) {
+    const set = setFor(mapId);
+    // go through the SAME helper the sheet renders with
+    const np = F1.npcPalettesForMap(f1, mapId);
+    if (hxs(np.top) !== want2) bad(`FF1 map ${mapId} NPC top palette is ${hxs(np.top)}, the PPU measured ${want2}`);
+    if (hxs(np.btm) !== want3) bad(`FF1 map ${mapId} NPC bottom palette is ${hxs(np.btm)}, the PPU measured ${want3}`);
+    if (hxs(set.slice(8, 12)) !== wantBg) bad(`FF1 map ${mapId} BG palette 2 is ${hxs(set.slice(8, 12))}, the PPU measured ${wantBg}`);
+  }
+  // the table must still be a run of valid palette sets, with real variety
   let valid = 0;
   const pairs = new Set();
   for (let n = 0; n < 40; n++) {
-    const o = BASE + n * SET_SIZE;
-    const s2 = [...f1.slice(o, o + SET_SIZE)];
+    const s2 = setFor(n);
     if (s2.every(v => v <= 0x3F) && [0, 4, 8, 12, 16, 20, 24, 28].every(i => s2[i] === 0x0F)) {
       valid++; pairs.add(hxs(s2.slice(24, 32)));
     }
   }
   if (valid < 40) bad(`only ${valid}/40 FF1 palette sets from $A000 are valid — the table base has moved`);
   if (pairs.size < 20) bad(`only ${pairs.size} distinct FF1 NPC palette pairs, expected ~25`);
-  if (since()) ok(`FF1 palettes: map 8's set matches the PPU, ${valid} valid sets, ${pairs.size} distinct NPC pairs`);
+  if (since()) ok(`FF1 palettes: set = $A000 + mapId*48, maps 8 and 24 match the PPU, ${valid} sets, ${pairs.size} distinct NPC pairs`);
 }
 {
   const f2 = F2.loadRom(FF2);

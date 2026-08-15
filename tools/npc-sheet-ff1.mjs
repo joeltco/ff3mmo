@@ -25,7 +25,7 @@ globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false
 globalThis.document = { createElement: () => createCanvas(8, 8), getElementById: () => null, addEventListener() {} };
 
 const { decodeTile, NES_SYSTEM_PALETTE } = await import('../src/tile-decoder.js');
-const { loadRom, decodeString, mapObjects } = await import('./lib/ff1-text.mjs');
+const { loadRom, decodeString, mapObjects, npcPalettesForMap } = await import('./lib/ff1-text.mjs');
 
 const rom = loadRom();
 const NAMED_ONLY = process.argv.includes('--named');
@@ -44,7 +44,7 @@ for (let mapId = 0; mapId < 64; mapId++) {
       const text = decodeString(rom, o.dialogueId, { nl: ' ' });
       types.set(o.type, {
         type: o.type, sprite: o.sprite, off: o.spriteOffset,
-        dialogueId: o.dialogueId, text, name: selfName(text), maps: new Set(), n: 0,
+        dialogueId: o.dialogueId, text, name: selfName(text), palMap: mapId, maps: new Set(), n: 0,
       });
     }
     const e = types.get(o.type); e.maps.add(mapId); e.n++;
@@ -56,19 +56,21 @@ if (NAMED_ONLY) cells = cells.filter(c => c.name);
 // FF1 sprites are black outline + one colour + a pale fill, so they need a
 // light ground to read; on the usual dark sheet the outlines vanish.
 // MEASURED off the PPU (tools/nes12-npc-palette.mjs): an NPC's TOP half draws
-// on sprite palette 2 and its BOTTOM half on sprite palette 3 — confirmed in
-// code, not inferred. The player uses palettes 0/1, which is why a single flat
-// palette looked plausible for so long.
-// ⛔ These are the values measured in town/castle context. FF1's palette data is
-// per-map (pointer = $A000 + X*0x100 + mapId*16, 48 bytes -> RAM $0780 -> $03C0
-// -> PPU every frame) but where X comes from is NOT yet decoded, so these cannot
-// be resolved per map the way FF3's are.
-const PAL_TOP = [0x0F, 0x0F, 0x27, 0x36];    // sprite palette 2
-const PAL_BTM = [0x0F, 0x0F, 0x16, 0x36];    // sprite palette 3
+// on sprite palette 2 and its BOTTOM half on sprite palette 3 — confirmed by
+// y-coordinate and in code. The player uses palettes 0/1, which is why a single
+// flat palette looked plausible for so long.
+//
+// The colours are the MAP's: set = $A000 + mapId*48 (see ff1-text.mjs). A type
+// placed on several maps is drawn in the colours of the FIRST one.
+const palCache = new Map();
+function palettesForMap(mapId) {
+  if (!palCache.has(mapId)) palCache.set(mapId, npcPalettesForMap(rom, mapId));
+  return palCache.get(mapId);
+}
 const rgb = (v) => NES_SYSTEM_PALETTE[v & 0x3F] || [0, 0, 0];
 const SC = 3, FRAMES = 4;
 
-function drawFrame(g, ox, oy, base) {
+function drawFrame(g, ox, oy, base, pal) {
   // MEASURED from OAM: 4 consecutive tiles drawn TL, TR, BL, BR.
   [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([tx, ty], k) => {
     let px; try { px = decodeTile(rom, base + k * 16); } catch { return; }
@@ -78,7 +80,7 @@ function drawFrame(g, ox, oy, base) {
         const ci = px[Math.floor(y / SC) * 8 + Math.floor(x / SC)];
         const i = (y * 8 * SC + x) * 4;
         if (ci === 0) { img.data[i + 3] = 0; continue; }
-        const [r, gg, b] = rgb((ty === 0 ? PAL_TOP : PAL_BTM)[ci]);
+        const [r, gg, b] = rgb((ty === 0 ? pal.top : pal.btm)[ci]);
         img.data[i] = r; img.data[i + 1] = gg; img.data[i + 2] = b; img.data[i + 3] = 255;
       }
     }
@@ -101,12 +103,13 @@ g.font = 'bold 14px sans-serif';
 g.fillStyle = '#ffe9a8';
 g.fillText(`FF1 NPCs — ${cells.length} object types, sprite + the line each one gives`, 12, 12);
 g.font = '10px sans-serif'; g.fillStyle = '#c9cede';
-g.fillText('NPC colours: top half = sprite palette 2, bottom = palette 3 (measured). Per-map variation is NOT decoded for this game.', 12, 26);
+g.fillText('NPC colours are the MAP\'s: set = $A000 + mapId*48, top half = sprite palette 2, bottom = 3 (measured off the PPU)', 12, 26);
 
 cells.forEach((c, i) => {
   const cx = 12 + (i % COLS) * CW;
   const cy = 52 + Math.floor(i / COLS) * CH;
-  for (let f = 0; f < FRAMES; f++) drawFrame(g, cx + f * CELL, cy, c.off + f * 0x40);
+  const pal = palettesForMap(c.palMap);
+  for (let f = 0; f < FRAMES; f++) drawFrame(g, cx + f * CELL, cy, c.off + f * 0x40, pal);
 
   g.font = 'bold 11px sans-serif';
   g.fillStyle = c.name ? '#fff2c4' : '#20242e';

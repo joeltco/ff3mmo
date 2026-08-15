@@ -18,6 +18,65 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.37 — 2026-08-15
+
+### X found — and it was never a selector
+
+v1.8.36 left FF1's palette pointer as `$A000 + X*0x100 + mapId*16` with `X`
+unknown. Reading the gap in the disassembly settles it:
+
+```
+$CC49  LDA $48 / ASL A x4       ; $10/$11 = mapId * 16
+$CC55  LDX $11                  ; save the HIGH byte of mapId*16
+$CC57  ASL $10 / ROL $11        ; $10/$11 = mapId * 32
+$CC5C  ADC $10 / TXA / ADC $11  ; 16x + 32x  =  mapId * 48
+$CC63  ORA #$A0                 ; -> $A000 + mapId*48
+```
+
+`$CC55 LDX $11` is just holding the carry-high of `mapId*16` so the two halves
+can be summed into `mapId*48`. **The set index IS the map id**:
+
+```
+set = $A000 + mapId * 48      (bank 0, file 0x2010 + mapId*0x30)
+```
+
+**Confirmed on two entries** by capturing the live pointer: map 8 → `$A180`,
+map 24 → `$A480`. Both exactly `$A000 + mapId*48`.
+
+⛔ This also corrected a mislabel from v1.8.36: `$A480` is **map 24's** set, not
+map 8's — the pointer was captured *after* walking through the door. The values
+happened to be identical, so the assertion passed while naming the wrong map.
+The gate now pins both maps by id.
+
+### FF1's sheet is in real per-map colour
+
+Every NPC is drawn in its map's own palettes (a type placed on several maps
+wears the first one's). Pixel-verified: cell 0 (objType 1, first placed on map
+24) contains only `0F`, `16`, `27` and `36` — nothing outside that map's palette.
+The sheet now shows genuine variety: Bikke the Pirate in blue, a mage in purple,
+guards in green.
+
+### Changed
+
+- `tools/lib/ff1-text.mjs` — `PALETTE_TABLE`, `PALETTE_SET_SIZE`,
+  `paletteSetForMap`, `npcPalettesForMap`, with the derivation recorded.
+- `tools/npc-sheet-ff1.mjs` — per-map colours.
+- `tools/check-ff12-text.mjs` — pins `set = $A000 + mapId*48` for maps 8 and 24
+  (sprite AND BG halves), the 40-set table, and now the two instructions the
+  derivation rests on: `$CC6F CPY #$30` and `$CC55 LDX $11`.
+- `tools/nes12-npc-palette.mjs` — `--walk`, and it prints the predicted pointer
+  next to the captured one.
+
+⛔ **A second gate hole found and closed.** The first version of these
+assertions recomputed the table base and stride locally instead of importing
+them — so reverting `ff1-text.mjs`, which is what the sheet actually renders
+from, changed nothing and **all three reverts passed**. The gate now goes through
+`paletteSetForMap` / `npcPalettesForMap`; 4 reverts tested, all fail.
+
+⛔ **Still open: FF2's palette source.** Its NPCs are known to use palettes 2 and
+3, but where those colours come from has not been traced, so the FF2 sheet uses
+the measured throne-room values and says so on the image.
+
 ## 1.8.36 — 2026-08-15
 
 ### FF1 and FF2 NPC palettes — measured, and the sheets were wrong

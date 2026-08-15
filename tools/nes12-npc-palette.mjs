@@ -99,6 +99,17 @@ if (PALTRACE) {
 
 for (let i = 0; i < STEPS; i++) press(Controller.BUTTON_DOWN);
 
+// --walk "up:14,left:3" — crossing a door is what triggers a palette load
+const WALK = flag('walk', null);
+if (WALK) {
+  const D = { up: Controller.BUTTON_UP, down: Controller.BUTTON_DOWN,
+              left: Controller.BUTTON_LEFT, right: Controller.BUTTON_RIGHT };
+  for (const step of WALK.split(',')) {
+    const [d, n] = step.split(':');
+    for (let i = 0; i < parseInt(n || '1', 10); i++) press(D[d.trim()]);
+  }
+}
+
 // ⛔ $68/$69 is the live player tile in ALL THREE games — same engine family.
 const PX = 0x68, PY = 0x69;
 const at = () => [nes.cpu.mem[PX], nes.cpu.mem[PY]];
@@ -247,7 +258,18 @@ if (PALTRACE) {
                 })()}`);
     console.log(`      addrs ${addrs.slice(0, 16).map(a => a.toString(16)).join(' ')}${addrs.length > 16 ? ` … (${addrs.length})` : ''}`);
     const srcs = [...new Set(ws.map(w => w.src))].sort((a, b) => a - b);
-    console.log(`      ($10) pointed at ${srcs.slice(0, 5).map(v => hex(v)).join(' ')}${srcs.length > 5 ? ' …' : ''}`);
+      console.log(`      ($10) pointed at ${srcs.slice(0, 5).map(v => hex(v)).join(' ')}${srcs.length > 5 ? ' …' : ''}`);
+    if (G.mapId !== null) {
+      // ⛔ THE FORMULA: $CC49 LDA $48 / *16, saved high byte in X, *32, summed
+      // = mapId*48, then ORA #$A0. So set = $A000 + mapId*48 — X is NOT a
+      // selector, it is the carry-high of mapId*16.
+      const m = nes.cpu.mem[G.mapId];
+      for (const v of srcs) {
+        const predicted = 0xA000 + m * 48;
+        console.log(`      map ${m} now -> $A000 + ${m}*48 = ${hex(predicted)}` +
+                    `   ${v === predicted ? '✓ MATCHES the captured pointer' : `(captured ${hex(v)})`}`);
+      }
+    }
     const sprite = ws.filter(w => w.addr >= 0x03D8);
     if (sprite.length) console.log(`      NPC palette bytes ($03D8-$03DF): ` +
       sprite.slice(0, 8).map(w => `${w.addr.toString(16)}=${w.val.toString(16).padStart(2, '0')}`).join(' '));

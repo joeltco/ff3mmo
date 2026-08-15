@@ -659,28 +659,44 @@ bottom half = sprite palette 3      (the player draws on 0 and 1)
 y-coordinate off OAM (FF1 `(112,76)`=pal2 sits above `(112,84)`=pal3; FF2
 `(80,92)`=pal2 above `(80,100)`=pal3), and in code — FF2's sprite layout tables
 at `$B24F`/`$B25F` contain only attribute bytes `02`, `03` and `43` (= 3 plus
-the horizontal-flip bit). That is why a single flat palette looked plausible for
-so long: the player really does use one pair, and NPCs another.
+the horizontal-flip bit). That is why one flat palette looked plausible for so
+long: the player really does use one pair and NPCs another.
 
-FF1's palette pipeline, traced end to end:
+### FF1: the map's palette set
 
 ```
-$CC49  LDA $48 / ASL A x4        ; mapId * 16 -> $10/$11
-$CC60  TXA / ADC $11 / ORA #$A0  ; a pointer into the $A000 window
+set = $A000 + mapId * 48        (bank 0, file 0x2010 + mapId*0x30)
+sprite palettes = set bytes 16..31;  NPC top = 24..27, bottom = 28..31
+```
+
+Traced end to end:
+
+```
+$CC49  LDA $48 / ASL A x4       ; $10/$11 = mapId * 16
+$CC55  LDX $11                  ; save the HIGH byte of mapId*16
+$CC57  ASL $10 / ROL $11        ; $10/$11 = mapId * 32
+$CC5C  ADC $10 / TXA / ADC $11  ; 16x + 32x  =  mapId * 48
+$CC63  ORA #$A0                 ; -> $A000 + mapId*48
 $CC69  LDA ($10),Y / STA $0780,Y ; 0x30 bytes -> RAM
 $D8AD  LDA $0780,X / STA $03C0,X ; 0x20 bytes -> the PPU buffer
 $D880  LDA $03C0,X / STA $2007   ; re-uploaded EVERY FRAME
 ```
 
-Map 8 loads the set at `$A480`, and all eight of its palettes — BG and sprite —
-match the PPU byte for byte. The table at `$A000` holds **40 valid 48-byte sets
-with 25 distinct NPC palette pairs**.
+> ⛔ **`X` is not a palette selector.** It looked like one — the pointer reads as
+> `$A000 + X*0x100 + mapId*16` — but `$CC55 LDX $11` is just saving the carry-high
+> of `mapId*16` so the 16x and 32x halves can be summed. **The set index IS the
+> map id.** Confirmed by capturing the pointer on two entries: map 8 → `$A180`,
+> map 24 → `$A480`.
 
-> ⛔ **The per-map selector is NOT decoded.** The pointer is
-> `$A000 + X*0x100 + mapId*16`, and where `X` comes from is still unknown — maps
-> 8 and 24 reach the same record through different `X`. So FF1's and FF2's
-> sheets use the measured town/castle values rather than resolving each map, and
-> say so. FF3's *are* resolved per map. This is the one loose end.
+The table holds **40 valid 48-byte sets with 25 distinct NPC palette pairs**, and
+maps 8 and 24 match the PPU byte for byte across all eight palettes. The FF1
+sheet now draws every NPC in its map's real colours, pixel-verified: cell 0
+(objType 1, first placed on map 24) contains only `0F`, `16`, `27` and `36`.
+
+> ⛔ **FF2's palette source is still untraced.** Its NPCs are known to use
+> palettes 2 and 3, but where those colours come from has not been followed, so
+> the FF2 sheet uses the measured throne-room values and says so. That is the
+> remaining gap.
 
 ### A name the sheet caught
 

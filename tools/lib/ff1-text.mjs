@@ -238,3 +238,35 @@ export function mapObjects(rom, mapId) {
 
 export const loadRom = (p) =>
   new Uint8Array(fs.readFileSync(p || process.env.FF1_ROM || '/home/joeltco/roms/ff1-usa.nes'));
+
+// ── map -> palette set, decoded off the CPU ───────────────────────────────
+//
+//   $CC49  LDA $48 / ASL A x4       ; $10/$11 = mapId * 16
+//   $CC55  LDX $11                  ; save the HIGH byte of mapId*16
+//   $CC57  ASL $10 / ROL $11        ; $10/$11 = mapId * 32
+//   $CC5C  ADC $10 / TXA / ADC $11  ; 16x + 32x = mapId * 48
+//   $CC63  ORA #$A0                 ; -> $A000 + mapId*48   (bank 0)
+//   $CC69  LDA ($10),Y / STA $0780,Y  (0x30 bytes)
+//   $D8AD  LDA $0780,X / STA $03C0,X  (0x20)   $D880 -> $2007 every frame
+//
+// ⛔ X is NOT a palette selector — it is the carry-high of mapId*16, held so the
+// two halves can be summed. The set index IS THE MAP ID. Confirmed by capturing
+// the pointer on two entries: map 8 -> $A180, map 24 -> $A480.
+export const PALETTE_TABLE = 0x10 + (0xA000 - 0x8000);   // bank 0, file 0x2010
+export const PALETTE_SET_SIZE = 0x30;                    // $CC6F: CPY #$30
+
+/** The 48-byte palette set a map loads. */
+export const paletteSetForMap = (rom, mapId) =>
+  [...rom.slice(PALETTE_TABLE + mapId * PALETTE_SET_SIZE,
+                PALETTE_TABLE + (mapId + 1) * PALETTE_SET_SIZE)];
+
+/**
+ * The two palettes an NPC wears on a map, as `{top, btm}` of 4 NES colours.
+ *
+ * MEASURED off OAM: the top half draws on sprite palette 2 and the bottom on
+ * palette 3 (the player takes 0 and 1). Sprite palettes are set bytes 16..31.
+ */
+export function npcPalettesForMap(rom, mapId) {
+  const s = paletteSetForMap(rom, mapId);
+  return { top: s.slice(24, 28), btm: s.slice(28, 32) };
+}
