@@ -18,6 +18,53 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.44 — 2026-08-15
+
+### $0D is a pending-request byte — and the shop savestate could NOT be produced
+
+⛔ **The goal was a savestate inside a shop to test `$0D` bit 0. It was not
+achieved.** Both routes fail:
+
+- **Poking the player position does not work.** `$68`/`$69` are a DERIVED copy —
+  poking (7,16) held X but the engine restored Y on the next step (→ 7,36).
+- **The axis-walker cannot route through doors**, and on the overworld it barely
+  moves `$68`/`$69` at all, so it cannot reach a town either.
+
+Getting there needs real pathfinding over FF1's tilemap and collision, which this
+repo does not decode (it decodes FF3's). So `$0D` bit 0 has still only ever been
+observed as **0**.
+
+### What the attempt did establish
+
+`$0D` is a **multi-purpose engine byte**, not a layer flag:
+
+```
+$CEBB  LDA $0D / BEQ / BMI / AND #$07
+       CMP #$01 / CMP #$02 / CMP #$05   -> three handlers, then CLEARED
+```
+
+Its low three bits are dispatched as a small **enum** — a pending-request code —
+so "bit 0" is just odd-vs-even request. Every other bank-15 writer clears it
+(`$C20D`, `$C70E`, `$C903`), shifts it (`$CE67 ASL`), toggles bits 7 and 2
+(`$CE48 EOR #$84`), or restores it from the stack next to the map id (`$C998`).
+
+**No observed bank-15 path sets bit 0.** Forcing it to 1 for 90 frames changed
+nothing on screen — the engine simply set bit 7 as well, leaving `$0D = 0x81`.
+
+⛔ So bit-7 (`altLayer`) objects were **never observed to be processed**. Whether
+they are dead data or wait on a state that could not be reached is still open,
+and is recorded as open.
+
+### Changed
+
+- `tools/ff1-flag0d-probe.mjs` — the two failed routes to a shop state written
+  into the header, so the next attempt starts from what is already ruled out.
+- `tools/lib/ff1-text.mjs` — the `$0D` enum-dispatch finding recorded beside the
+  `altLayer` retraction.
+
+No gate change: nothing new is proven, and an assertion that `$0D` bit 0 is
+always 0 would pin an observation of MY reach, not a fact about the game.
+
 ## 1.8.43 — 2026-08-15
 
 ### `inRoom` retracted — the name was never derived from anything

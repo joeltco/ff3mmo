@@ -185,6 +185,24 @@ export const COORD_MASK = 0x3F;
 //
 // So the field is named for the MECHANISM: the object belongs to the alternate
 // layer selected by `$0D` bit 0. ⛔ What that layer IS remains UNDETERMINED.
+//
+// ── what $0D turned out to be (v1.8.44) ───────────────────────────────────
+// `$0D` is a MULTI-PURPOSE engine byte, not a layer flag:
+//   * $CEBB dispatches its LOW THREE BITS as a small enum —
+//       LDA $0D / BEQ (nothing) / BMI (nothing) / AND #$07 /
+//       CMP #$01 / CMP #$02 / CMP #$05 -> three handlers, then it is CLEARED.
+//     So it is a PENDING-REQUEST code, and "bit 0" is just odd-vs-even request.
+//   * every other bank-15 writer CLEARS it ($C20D, $C70E, $C903), shifts it
+//     ($CE67 ASL), toggles bits 7 and 2 ($CE48 EOR #$84), or restores it from
+//     the stack next to the map id ($C998 PLA).
+//   * NO observed bank-15 path SETS bit 0, and it measured 0 in every reachable
+//     state. Forcing it to 1 for 90 frames changed nothing on screen (the engine
+//     simply set bit 7 too, leaving $0D = 0x81).
+//
+// ⛔ So bit-7 objects were NEVER OBSERVED to be processed. Whether they are
+// dead data or wait on a state we could not reach is still open. Settling it
+// needs a savestate somewhere `$0D` bit 0 is genuinely 1 — see the note in
+// `tools/ff1-flag0d-probe.mjs` about why that could not be produced.
 /** objType -> sprite index; ROM offset = SPRITE_BASE + v * 0x100. */
 export const SPRITE_TABLE = 0x2E10;
 export const SPRITE_BASE = 0xA210;

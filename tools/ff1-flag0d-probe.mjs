@@ -15,6 +15,18 @@
 //   node tools/ff1-flag0d-probe.mjs --state ff1-castle.state --walk "up:14"
 //   node tools/ff1-flag0d-probe.mjs --state ff1-world.state --walk "up:14"
 //
+// ⛔ WHY THERE IS NO "INSIDE A SHOP" STATE TO TEST WITH
+// The obvious next step is a savestate standing in a shop, where `$0D` bit 0
+// might genuinely be 1. Two routes were tried and BOTH FAIL:
+//   * POKING the player position does not work. `$68`/`$69` are a DERIVED copy;
+//     poking (7,16) held X but the engine restored Y on the next step (-> 7,36).
+//   * The axis-walker used by the other probes cannot route through doors, and
+//     the overworld does not move the player in `$68`/`$69` the same way, so it
+//     cannot reach a town either.
+// Getting there needs real pathfinding over FF1's tilemap and collision, which
+// this repo does not decode (it decodes FF3's). Until then `$0D` bit 0 has only
+// ever been observed as 0.
+//
 // ⛔ Build the tracer AFTER `nes.fromJSON` — it replaces `nes.cpu`.
 // ⛔ Resolve a PC's bank AT WRITE TIME; banks switch and a post-hoc lookup
 // disassembles a different routine.
