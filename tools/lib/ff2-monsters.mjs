@@ -54,7 +54,25 @@ export const CONFIRMED = [
 export const STAT_TABLE = 0x10 + 12 * 0x4000 + (0x87C4 - 0x8000);   // 0x307D4
 export const STAT_STRIDE = 10;
 export const VALUE_POOL = 0x10 + 12 * 0x4000 + (0x8CC3 - 0x8000);   // 0x30CD3
+/**
+ * The four 16-entry tables a nibble resolves through. Dumping them says most of
+ * what they are without a single experiment:
+ *
+ *   $8D03  0 1 2 3 4 5 6 7 8 10 12 14 16 18 20 255   small COUNTS
+ *   $8D13  0 10 20 30 40 50 60 65 70 75 80 85 90 95 100 255   PERCENTAGES
+ *   $8D23  0 4 9 17 25 35 40 50 60 70 85 100 120 150 180 210  MAGNITUDES
+ *   $8D33  0 129 65 17 9 5 3 130 66 10 6 70 134 254 4 8       BIT MASKS
+ *
+ * and the loader pairs them: record byte 2 -> ($8D03, $8D13) = a count and a
+ * percentage; byte 3 -> ($8D23, $8D33) = a magnitude and a mask; and so on.
+ *
+ * ⛔ Which count is which is NOT established — no experiment isolated them, and
+ * the shapes above are suggestive, not proof. They are described, not named.
+ */
 export const NIBBLE_TABLES = [0x8D03, 0x8D13, 0x8D23, 0x8D33];      // 16 entries each
+export const nibbleTable = (rom, cpu) =>
+  [...rom.slice(0x10 + 12 * 0x4000 + (cpu - 0x8000),
+                0x10 + 12 * 0x4000 + (cpu - 0x8000) + 16)];
 export const ENEMY_RAM = 0x7E30, ENEMY_RAM_STRIDE = 0x30;           // $9A32 CPX #$30
 export const RAM_HP_OFF = 0x14;   // measured: it counts down when the monster is hit
 

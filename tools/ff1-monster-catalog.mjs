@@ -52,19 +52,29 @@ L.push('| 8 | evade | the damage the party lands falls to **zero** as it rises (
 L.push('| 9 | defense | damage falls too but **floors above zero** (0/32/128/255 → 59/9/9/9) — that floor is what separates a reduction from a miss chance |');
 L.push('| 12 | attack | zeroing it drops the damage the party TAKES from 35 to 1 |');
 L.push('');
-L.push('⛔ Bytes 10 and 13 also raise the damage the party takes but are not');
-L.push('required for it; 6 and 7 gate whether the monster attacks at all (7 is');
-L.push('`0xFF` for every monster and any other value stops it acting); 11 and 14-19');
-L.push('showed no effect in any test run. They are left **unnamed rather than');
-L.push('guessed at**.');
+L.push('| 7 | special | a special-attack id, `0xFF` = none. **46 of 128** carry one, ids `0x00`-`0x2B` with no gaps, ending CHAOS `0x2A` and ASTOS `0x2B` |');
+L.push('| 13 | crit | raising it makes the game print **"Critical hit!!"**; at 0 it never does. Natural range across all 128 is 0..70 |');
+L.push('| 10 | hits | `$A761 LDA $6871 / LDX $6870 / JSR $AE09` — a multiply, clamped to a minimum of 1 |');
+L.push('| 16, 18 | property masks | ANDed against two defender fields, `ORA / BEQ skip`, then **×40** damage |');
+L.push('| 15 | status | `$A85F LDA $6873 / BEQ skip` gates a path that immediately ANDs with byte 18\'s mask |');
+L.push('| 11 | (a second multiplier term) | `$A71F LDX $686F / JSR $AEDD`, the same routine the ×40 bonus uses |');
+L.push('');
+L.push('⛔ The MASK bytes could not be confirmed behaviourally — patching them moves');
+L.push('nothing measurable, because this party has no matching weakness bit so the');
+L.push('AND never fires. They are named from code and labelled as such.');
+L.push('');
+L.push('⛔ Bytes 14, 17 and 19 are never read during a battle and nothing moved them.');
+L.push('Byte 6 gates whether the monster attacks but was not isolated further. Those');
+L.push('four are left **unnamed rather than guessed at**.');
 L.push('');
 L.push(`${list.length} monsters.`);
 L.push('');
-L.push('| id | name | HP | atk | def | evade | exp | gil | raw record |');
-L.push('|---|---|---|---|---|---|---|---|---|');
+L.push('| id | name | HP | atk | def | evade | crit | special | exp | gil | raw record |');
+L.push('|---|---|---|---|---|---|---|---|---|---|---|');
 for (const m of list) {
   const v = (k) => MN.statValue(rom, m.id, k);
-  L.push(`| ${m.id} | ${m.name} | ${v('hp')} | ${v('attack')} | ${v('defense')} | ${v('evade')} | ${v('exp')} | ${v('gil')} | \`${m.stats.map(x => x.toString(16).padStart(2, '0')).join(' ')}\` |`);
+  const sp = v('special');
+  L.push(`| ${m.id} | ${m.name} | ${v('hp')} | ${v('attack')} | ${v('defense')} | ${v('evade')} | ${v('crit')} | ${sp === MN.NO_SPECIAL ? '—' : '`0x' + sp.toString(16).padStart(2, '0') + '`'} | ${v('exp')} | ${v('gil')} | \`${m.stats.map(x => x.toString(16).padStart(2, '0')).join(' ')}\` |`);
 }
 L.push('');
 fs.writeFileSync(OUT, L.join('\n'));

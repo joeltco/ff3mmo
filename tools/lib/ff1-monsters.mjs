@@ -67,14 +67,45 @@ export const STAT_STRIDE = 20;
  *   12   ATTACK zeroing it drops the damage the party TAKES from 7 to 1;
  *               raising it multiplies it (0/64/200 -> 1/35/35)
  *
- * ⛔ NOT identified, only bounded: 10 and 13 also raise the damage the party
- * takes but are not required for it (10 at 0 leaves the baseline). 6 and 7 gate
- * whether the monster attacks at all — 7 is 0xFF for every monster and any other
- * value stops it acting. 11 and 14-19 showed no effect in any test run here.
- * They are left unnamed rather than guessed at.
+ *   7    SPECIAL  a special-attack id; 0xFF means "none". $B2A6 LDY #$07 /
+ *               LDA ($9C),Y / CMP #$FF / BNE takes the special branch. 46 of the
+ *               128 monsters have one, ids 0x00-0x2B in sequence, ending
+ *               CHAOS 0x2A and ASTOS 0x2B.
+ *   13   CRIT   the critical-hit rate. Raising it makes the game print
+ *               "Critical hit!!"; at 0 and 1 the message never appears. Its
+ *               natural range across all 128 monsters is 0..70.
+ *   10   HITS   $A761 LDA $6871 / LDX $6870 / JSR $AE09 — a MULTIPLY, clamped to
+ *               a minimum of 1. Raising it raises the damage the party takes.
+ *   16,18 MASK  $A6C0 LDA $686D / AND $6876 and $A6C9 LDA $686E / AND $6877,
+ *               then ORA / BEQ skip / x40. Two attack-property masks ANDed
+ *               against two defender fields; a match adds a x40 damage term.
+ *   15   STATUS $A85F LDA $6873 / BEQ skip gates a path that immediately ANDs
+ *               with byte 18's mask — a status/effect attack, off when 0.
+ *   11   a second multiplier term ($A71F LDX $686F / JSR $AEDD, the same routine
+ *               the x40 weakness bonus goes through).
+ *
+ * ⛔ Bytes 14, 17 and 19 are never read during a battle and no test moved them.
+ * Byte 6 gates whether the monster attacks but was not isolated further. Those
+ * four stay unnamed.
+ *
+ * ⛔ The MASK bytes could not be confirmed behaviourally: patching them changes
+ * nothing measurable because this party has no matching weakness bit, so the
+ * AND never fires. The disassembly is unambiguous; the black-box test is simply
+ * blind to it, and that is why they are named from code and labelled as such.
  */
 export const STAT_FIELDS = {
   exp: [0, 1], gil: [2, 3], hp: [4, 5], evade: 8, defense: 9, attack: 12,
+  special: 7, crit: 13, hits: 10, status: 15, mask1: 16, mask2: 18,
+};
+/** 0xFF in the SPECIAL byte means the monster has no special attack. */
+export const NO_SPECIAL = 0xFF;
+export const specialsOf = (rom, count = NAME_COUNT) => {
+  const out = [];
+  for (let id = 0; id < count; id++) {
+    const v = rom[STAT_TABLE + id * STAT_STRIDE + STAT_FIELDS.special];
+    if (v !== NO_SPECIAL) out.push({ id, special: v });
+  }
+  return out;
 };
 export const statValue = (rom, id, field) => {
   const f = STAT_FIELDS[field];

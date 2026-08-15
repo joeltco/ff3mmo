@@ -18,6 +18,66 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.58 — 2026-08-15
+
+### Naming the rest of FF1's record — by finding what READS each byte
+
+Black-box probing had run out: several bytes moved nothing measurable. So
+instead of guessing, hook reads of the record DURING a battle and see which
+instruction consumes each offset. That turns the remaining bytes over at once.
+
+| byte | field | evidence |
+|---|---|---|
+| 7 | **special attack** | `$B2A6 LDY #$07 / LDA ($9C),Y / CMP #$FF / BNE` — non-`0xFF` takes a special branch. **46 of 128** carry one, ids `0x00`-`0x2B` **with no gaps**, ending CHAOS `0x2A`, ASTOS `0x2B` |
+| 13 | **critical rate** | raising it makes the game print **"Critical hit!!"**; at 0 it never does. Natural range across all 128 is 0..70 |
+| 10 | **hits** | `$A761 LDA $6871 / LDX $6870 / JSR $AE09` — a multiply, clamped to a minimum of 1 |
+| 16, 18 | **property masks** | `$A6C0 AND $6876` and `$A6C9 AND $6877`, then `ORA / BEQ skip` and `LDX #$28` — a match adds a **×40** damage term |
+| 15 | **status** | `$A85F LDA $6873 / BEQ skip` gates a path that immediately ANDs with byte 18's mask |
+| 11 | a second multiplier term | `$A71F LDX $686F / JSR $AEDD` — the same routine the ×40 bonus goes through |
+
+⛔ The MASK bytes could **not** be confirmed behaviourally. Patching them moves
+nothing, because this party has no matching weakness bit so the AND never fires.
+The disassembly is unambiguous; the black-box test is simply blind to it, and
+they are labelled as code-derived rather than quietly promoted.
+
+⛔ Bytes 14, 17 and 19 are never read during a battle and nothing moved them.
+Byte 6 gates whether the monster attacks but was not isolated. **Those four stay
+unnamed** — the point of doing this by measurement is being willing to stop.
+
+### FF2's nibble tables, described by their own shape
+
+The four 16-entry tables a nibble resolves through say most of what they are
+without an experiment:
+
+```
+$8D03  0 1 2 3 4 5 6 7 8 10 12 14 16 18 20 255        small COUNTS
+$8D13  0 10 20 30 40 50 60 65 70 75 80 85 90 95 100 255  PERCENTAGES
+$8D23  0 4 9 17 25 35 40 50 60 70 85 100 120 150 180 210  MAGNITUDES
+$8D33  0 129 65 17 9 5 3 130 66 10 6 70 134 254 4 8   BIT MASKS
+```
+
+and the loader pairs them — record byte 2 → (count, percentage), byte 3 →
+(magnitude, mask), and so on.
+
+⛔ Which count is which is **not** established. The shapes are suggestive, not
+proof, so they are described rather than named. The gate pins the ladders
+exactly, and pins that `$8D33` is *not* monotonic, which is what makes it a mask
+table rather than a fifth ladder.
+
+### Changed
+
+- `tools/lib/ff1-monsters.mjs` — `STAT_FIELDS` gains special / crit / hits /
+  status / mask1 / mask2; `NO_SPECIAL`, `specialsOf`.
+- `tools/lib/ff2-monsters.mjs` — `nibbleTable`, and the four tables written out.
+- `docs/FF1-MONSTERS.md` — crit and special columns for all 128.
+- `tools/check-ff1-shops.mjs` 100/100, `tools/check-ff2-shops.mjs` 66/66;
+  **4 more gate reverts tested, all fail.** The FF1 gate now makes the game
+  print "Critical hit" and asserts it stops at 0.
+
+⛔ Six checks failed on first run because they read bank-12 addresses out of the
+FIXED bank. Third time that exact slip has cost a run this session; the helper is
+now defined next to them.
+
 ## 1.8.57 — 2026-08-15
 
 ### FF2's monster stats — HP is an INDEX, which is why searching never finds it

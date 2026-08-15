@@ -350,6 +350,68 @@ console.log('\nmonster names');
   // ...while defense only floors it. This is the check that keeps the two apart.
   eq('maxing DEFENSE (byte 9) floors the party\'s damage ABOVE zero',
      statFight({ [MN.STAT_FIELDS.defense]: 255 }, 80).dealt > 0, true);
+
+  // ── the rest of the record ────────────────────────────────────────────────
+  // ⛔ these live in the SWITCHABLE window with bank 12 mapped, not the fixed bank
+  const b12 = (a2, w, what) => instr(bankOf(12, a2), w, `$${a2.toString(16).toUpperCase()}  ${what} (bank 12)`);
+  b12(0xA6C0, [0xAD, 0x6D, 0x68, 0x2D, 0x76, 0x68], 'LDA $686D / AND $6876 — mask 1 vs the defender');
+  b12(0xA6C9, [0xAD, 0x6E, 0x68, 0x2D, 0x77, 0x68], 'LDA $686E / AND $6877 — mask 2');
+  b12(0xA6D2, [0xAD, 0x5C, 0x68, 0x0D, 0x5E, 0x68, 0xF0], 'ORA / BEQ — either match takes the bonus');
+  b12(0xA6DC, [0xA2, 0x28], 'LDX #$28         — ...worth x40');
+  b12(0xA761, [0xAD, 0x71, 0x68, 0xAE, 0x70, 0x68, 0x20], 'LDA $6871 / LDX $6870 / JSR — the HITS multiply');
+  b12(0xA85F, [0xAD, 0x73, 0x68, 0xF0], 'LDA $6873 / BEQ  — the STATUS gate');
+  instr(bankOf(12, 0xB2A6), [0xA0, MN.STAT_FIELDS.special, 0xB1, 0x9C, 0xC9, MN.NO_SPECIAL],
+        '$B2A6  LDY #$07 / LDA ($9C),Y / CMP #$FF — the SPECIAL byte (bank 12)');
+  const sp = MN.specialsOf(rom);
+  eq('46 monsters carry a special attack', sp.length, 46);
+  eq('their ids run 0x00-0x2B with no gaps',
+     [Math.min(...sp.map(x => x.special)), Math.max(...sp.map(x => x.special)),
+      new Set(sp.map(x => x.special)).size], [0x00, 0x2B, 0x2C]);
+  eq('CHAOS and ASTOS hold the last two',
+     [MN.statValue(rom, 127, 'special'), MN.statValue(rom, 113, 'special')], [0x2A, 0x2B]);
+  const crits = [...Array(128).keys()].map(i => MN.statValue(rom, i, 'crit'));
+  eq('the CRIT byte reads like a rate, not a magnitude',
+     [Math.min(...crits), Math.max(...crits)], [0, 70]);
+
+  // ⛔ "Critical hit!!" is the only direct evidence the CRIT byte is a rate, so
+  // the gate goes and makes the game print it.
+  const critWords = (v) => {
+    const pp = Uint8Array.from(rom);
+    pp[MN.FORMATION_TABLE + MN.FORMATION_MONSTER_OFF] = 0;
+    pp[MN.FORMATION_TABLE + 6] = 0x21;
+    pp[MN.STAT_TABLE + 4] = 0xFF; pp[MN.STAT_TABLE + 5] = 0x0F;
+    pp[MN.STAT_TABLE + MN.STAT_FIELDS.crit] = v;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(pp).toString('binary'));
+    n.fromJSON(JSON.parse(WORLD));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    r(20); n.cpu.mem[0x27] = 150; n.cpu.mem[0x28] = 170; r(20);
+    const sc = () => {
+      const v2 = n.ppu.vramMem, o = [];
+      for (let row = 0; row < 30; row++) {
+        let x = '';
+        for (let c = 0; c < 32; c++) {
+          const g = F1.glyph(v2[0x2000 + row * 32 + c]);
+          x += (g === null || g === '\n') ? ' ' : g;
+        }
+        if (x.trim()) o.push(x.trim());
+      }
+      return o;
+    };
+    for (let k = 0; k < 300; k++) {
+      const b2 = DIRS[Math.floor(k / 6) % 2];
+      n.buttonDown(1, b2); r(8); n.buttonUp(1, b2); r(12);
+      if (sc().some(l => /\bRUN\b/.test(l))) break;
+    }
+    let saw = false;
+    for (let k = 0; k < 110; k++) {
+      n.buttonDown(1, Controller.BUTTON_A); r(6); n.buttonUp(1, Controller.BUTTON_A); r(20);
+      if (sc().some(l => /Critical/.test(l))) saw = true;
+    }
+    return saw;
+  };
+  eq('maxing the CRIT byte makes the game print "Critical hit"', critWords(255), true);
+  eq('...and at 0 it never does', critWords(0), false);
 }
 
 console.log(`\n${checks - fails}/${checks} checks passed`);

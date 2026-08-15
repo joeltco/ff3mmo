@@ -219,6 +219,18 @@ console.log('\nmonster stats — an INDEX into a value pool, not a number');
   // ⛔ RAM_HP_OFF cannot be pinned by its VALUE: $7E48 holds the max-HP
   // duplicate, so 0x14 and 0x18 read the same number in a fresh battle. Only
   // hitting the monster separates current HP from max.
+  // the four nibble tables: their SHAPE is the evidence for what they hold
+  const T = MN.NIBBLE_TABLES.map(t => MN.nibbleTable(rom, t));
+  eq('$8D13 is a percentage ladder 0..100 then 255', T[1],
+     [0, 10, 20, 30, 40, 50, 60, 65, 70, 75, 80, 85, 90, 95, 100, 255]);
+  eq('$8D03 is small counts', T[0], [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 255]);
+  eq('$8D23 is a magnitude curve', [T[2][0], T[2][15], T[2].every((v, i, a2) => i === 0 || v > a2[i - 1])],
+     [0, 210, true]);
+  // a mask table is not monotonic and is full of single-bit and paired-bit values
+  eq('$8D33 is bit masks, not a ladder',
+     [T[3][1], T[3][2], T[3][3], T[3].every((v, i, a2) => i === 0 || v > a2[i - 1])],
+     [129, 65, 17, false]);
+
   const hit = fightGuard({}, 14);
   eq('the byte at RAM_HP_OFF goes DOWN when the monster is hit',
      hit.after < hit.atStart, true);
