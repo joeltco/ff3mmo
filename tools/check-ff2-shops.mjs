@@ -275,6 +275,33 @@ console.log('\nmonster stats — an INDEX into a value pool, not a number');
   eq('zeroing the DEFENCE nibble multiplies the damage the party deals',
      combat({ [MN.STAT_FIELDS.defenceByte]: MN.loNibble(defByte) }, 200).dealt > 30, true);
 
+  // ⛔ EVASION and DEFENCE cannot be told apart by a byte check either — the
+  // signature is what separates them: evasion reaches ZERO, defence floors above
+  // it. Both are asserted so the pair cannot be swapped silently.
+  const evByte = rom[MN.STAT_TABLE + 11 * MN.STAT_STRIDE + MN.STAT_FIELDS.evadeByte];
+  eq('maxing the EVADE nibble drives the party\'s damage to zero',
+     combat({ [MN.STAT_FIELDS.evadeByte]: 0xF0 | MN.loNibble(evByte) }, 200).dealt, 0);
+  eq('...while maxing DEFENCE only floors it above zero',
+     combat({ [MN.STAT_FIELDS.defenceByte]: 0xF0 | MN.loNibble(defByte) }, 200).dealt > 0, true);
+  eq('the EVADE nibble is the HIGH one — the low one does nothing',
+     combat({ [MN.STAT_FIELDS.evadeByte]: (evByte & 0xF0) | 0x0F }, 200).dealt > 0, true);
+  // ⛔ Byte 2 ALSO zeroes the party's damage when maxed, so "maxing it reaches
+  // zero" cannot tell byte 4 from byte 2. What separates them: ZEROING byte 4
+  // leaves the fight completely normal, while zeroing byte 2 stops the monster
+  // acting at all. Without this the evadeByte constant could be moved to 2 and
+  // every other check still passed.
+  eq('zeroing the EVADE byte leaves the monster fighting normally',
+     combat({ [MN.STAT_FIELDS.evadeByte]: 0x00 }, 200).taken > 0, true);
+
+  // the bytes nothing consumes
+  eq('byte 9 is never read', MN.UNREAD_OFFSETS, [9]);
+  eq('byte 8 is loaded but its results go nowhere', MN.LOADED_BUT_UNUSED, [8]);
+  const distinct = (o) => new Set([...Array(128).keys()].map(i => MN.statRecord(rom, i)[o])).size;
+  // ⛔ "unused" must not be satisfiable by a table of zeroes
+  eq('...and neither is empty padding', [distinct(8), distinct(9)], [44, 58]);
+  eq('patching byte 9 changes nothing',
+     combat({ 9: 0xFF }, 200).dealt, combat({ 9: 0x00 }, 200).dealt);
+
   const hit = fightGuard({}, 14);
   eq('the byte at RAM_HP_OFF goes DOWN when the monster is hit',
      hit.after < hit.atStart, true);

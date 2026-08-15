@@ -110,12 +110,34 @@ export const RAM_HP_OFF = 0x0A;   // measured: it counts down when the monster i
  *   ATTACK  byte 3 high: 0x00 -> the party takes 0 damage; 0x70/0xF0 -> 96
  *   DEFENCE byte 5 high: 0x01 -> the party deals 56; 0x81/0xF1 -> 10
  *
+ *   byte 4 HIGH nibble -> +0x00 is EVASION. Isolating the nibbles separates it
+ *   cleanly: 0xF0 (high max) drives the party's damage to ZERO, 0x0F (low max)
+ *   changes nothing. That is the same signature that separates evasion from
+ *   defence in FF1 — evasion reaches zero, defence floors above it (byte 5 at
+ *   max still lets 10 through). ⛔ Its natural values are only 0, 1 and 2.
+ *
+ * ⛔ BYTE 9 IS NEVER READ. Hooking the record's address range across a full
+ * encounter — the monster acting through a long fight, and a fast kill that
+ * reaches the reward — shows bytes 0-8 each read once by the loader and byte 9
+ * not at all. Patching it to 0x00 or 0xFF changes nothing measurable. It is not
+ * empty: it takes 58 distinct values across 0x00-0xFF.
+ *
+ * ⛔ BYTE 8 is read at setup but goes nowhere: its destinations (+0x14 and
+ * +0x17) are never read during a battle, and patching it changes nothing. Read
+ * but unused is a different statement from never read, so both are recorded.
+ *
+ * ⛔ BYTE 2 gates whether the fight proceeds at all — every value tried except
+ * its natural one and 0xFF left both sides dealing zero — but it was not
+ * isolated to a single stat, so it stays DESCRIBED.
+ *
  * ⛔ The masks are named from the formula, not from behaviour — this party has
  * no matching weakness bit, so the AND never fires and no experiment can see it.
- * The same blindness applies in FF1. Bytes 2, 4 and 8 measurably move the fight
- * but were not isolated to a single stat, so they are DESCRIBED, not named.
  */
-export const STAT_FIELDS = { hp: 0, mp: 1, attackByte: 3, defenceByte: 5 };
+export const STAT_FIELDS = { hp: 0, mp: 1, attackByte: 3, defenceByte: 5, evadeByte: 4 };
+/** Read by the loader but whose results nothing consumes in battle. */
+export const LOADED_BUT_UNUSED = [8];
+/** Never read at all. */
+export const UNREAD_OFFSETS = [9];
 /** High nibble indexes the first table, low nibble the second. */
 export const hiNibble = (v) => (v >> 4) & 0x0F;
 export const loNibble = (v) => v & 0x0F;
@@ -127,6 +149,10 @@ export const WEAKNESS_BONUS = 0x14;    // $B0A5 ADC #$14
 export const monsterAttack = (rom, id) => {
   const b = rom[STAT_TABLE + id * STAT_STRIDE + STAT_FIELDS.attackByte];
   return nibbleTable(rom, 0x8D23)[hiNibble(b)];
+};
+export const monsterEvade = (rom, id) => {
+  const b = rom[STAT_TABLE + id * STAT_STRIDE + STAT_FIELDS.evadeByte];
+  return nibbleTable(rom, 0x8D03)[hiNibble(b)];
 };
 export const monsterDefence = (rom, id) => {
   const b = rom[STAT_TABLE + id * STAT_STRIDE + STAT_FIELDS.defenceByte];
@@ -162,6 +188,7 @@ export function allMonsters(rom, glyph, count = NAME_COUNT) {
     const name = monsterName(rom, id, glyph);
     if (name) out.push({ id, name, hp: monsterHP(rom, id), mp: monsterMP(rom, id),
                          attack: monsterAttack(rom, id), defence: monsterDefence(rom, id),
+                         evade: monsterEvade(rom, id),
                          stats: statRecord(rom, id) });
   }
   return out;

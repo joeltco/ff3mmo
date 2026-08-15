@@ -18,6 +18,56 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.62 — 2026-08-15
+
+### FF2's leftovers — one more field named, two proven inert
+
+**Byte 4's HIGH nibble is EVASION.** Isolating the nibbles separates it cleanly:
+
+| byte 4 | party's damage |
+|---|---|
+| `0x00` | 10 (baseline) |
+| `0x0F` — low nibble maxed | 10 (nothing) |
+| `0xF0` — high nibble maxed | **0** |
+
+Reaching **zero** is the evasion signature; defence only floors above it (byte 5
+maxed still lets 10 through). Exactly the distinction that separated the same two
+stats in FF1. ⛔ Its natural values are only 0, 1 and 2.
+
+**Byte 9 is never read.** Hooking the record across a full encounter — a long
+fight where the monster acts, and a fast kill that reaches the reward — shows
+bytes 0-8 each read once by the loader and byte 9 not at all. Patching it to
+`0x00` or `0xFF` changes nothing. Not empty: **58 distinct values**.
+
+**Byte 8 is loaded but goes nowhere.** It IS read at setup, but its destinations
+`+0x14` and `+0x17` are never read in battle and patching it changes nothing.
+*Read but unused* is a different claim from *never read*, so the module records
+both separately rather than lumping them.
+
+⛔ **Byte 2 stays unnamed.** It gates whether the fight proceeds at all — every
+value tried except its natural one and `0xFF` left both sides dealing zero — but
+it was not isolated to a single stat, so it is described, not named.
+
+### The gate hole that mattered
+
+`evadeByte` could be moved from 4 to **2** and every check still passed, because
+byte 2 *also* zeroes the party's damage when maxed. "Maxing it reaches zero"
+simply cannot tell them apart. What does: **zeroing byte 4 leaves the fight
+completely normal, while zeroing byte 2 stops the monster acting at all.** That
+check is in now, and the revert fails as it should.
+
+### Changed
+
+- `tools/lib/ff2-monsters.mjs` — `evadeByte`, `monsterEvade`, `UNREAD_OFFSETS`,
+  `LOADED_BUT_UNUSED`.
+- `docs/FF2-MONSTERS.md` — an evade column, and the accounting for 2, 8 and 9.
+- `tools/check-ff2-shops.mjs` — 83/83, **5 gate reverts tested, all fail** (one
+  only after the discriminator above was added). Gate is 96s.
+
+Both bestiary records are now fully accounted for: every byte in FF1's 20 and
+FF2's 10 either has a name proven by changing it, or a measured statement that
+nothing consumes it.
+
 ## 1.8.61 — 2026-08-15
 
 ### Byte 6 is MORALE — and the game says so out loud
