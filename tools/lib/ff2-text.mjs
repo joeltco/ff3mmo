@@ -18,28 +18,72 @@
 // Text lives in the same bank: file = 0x28010 + (addr - 0x8000).
 //
 // ── what is NOT decoded ───────────────────────────────────────────────────
-// Bytes below 0x8A are a dictionary and are left as {xx}. About 78% of the
-// script is literal kana without it. Some codes are single dakuten kana
-// (0x49 = で, 0x3D = ぎ, 0x3E = ぐ, 0x69 = パ, derived from context), so it is
-// NOT a uniform two-character DTE the way FF1's and FF3's are, and no table
-// has been located. Codes are printed as {xx} rather than guessed.
+// Sub-0x8A codes are NOT a dictionary — they are more characters (dakuten and
+// handakuten kana, see BLOCKS below). Mean literal coverage is ~95%; anything
+// still unresolved prints as {xx} rather than being guessed at.
 //
-// FF2's map-object table has NOT been found either — it is not at FF1's
-// 0x3410 (332 of 569 entries there decode to Y > 63, i.e. nonsense), so there
-// is no NPC -> dialogue link for FF2 yet.
+// ⛔ THE objType -> DIALOGUE LINK IS **UNSOLVED**. See RETRACTED below.
 
 import fs from 'node:fs';
 
 export const PTR_TABLE = 0x28010;
 export const TEXT_BANK = 0x28010;
 
-/** NPC dialogue lives in its own bank; 0x28010 holds names + keywords. */
+/**
+ * A table of NPC/story text. NOT indexed by object type — see below.
+ *
+ * ⛔ RETRACTED (v1.8.31). v1.8.26 shipped `dialogueId == objType` as verified.
+ * It is FALSE, and it failed the same way FF1's retracted rule did: one
+ * coincidence was mistaken for a rule. Hilda is object type 1 and does say
+ * string 1, so the very first thing anyone checks agrees.
+ *
+ * MEASURED with `tools/ff2-talk-probe.mjs`, which walks to a tile, talks, and
+ * reads the box off the nametable, then finds that text in the ROM:
+ *
+ *   Altair throne room (block 0x3510, map 4)
+ *     objType   1  (Hilda)  -> 0x18010[1]    id == type   (the coincidence)
+ *     objType   8  (Minwu)  -> 0x18010[49]   id != type   ⛔ DISPROOF
+ *     objType  97           -> 0x28010[2]    a DIFFERENT table entirely
+ *     objType  99           -> 0x28010[4]
+ *
+ * So there is not even one dialogue table: some objects read 0x18010 and
+ * others 0x28010. Two measured pairs are not enough to identify the mapping —
+ * a byte table with T[1]=1 and T[8]=49 still has 6 candidates at stride 1.
+ *
+ * The tell that the old rule was wrong all along: under it, 44 of the 175
+ * placed object types "spoke" lines whose opening name insert was a KEYWORD —
+ * ペンダント (pendant), めがみのベル (goddess bell), エギルのたいまつ (torch),
+ * ひくうせん (airship), ミスリル (mythril). Pendants do not talk.
+ *
+ * Use this to read a string BY ID. Do not use it to answer "what does this NPC
+ * say" — nothing here can answer that yet.
+ */
 export const DIALOGUE_TABLE = 0x18010;
 /** {type, x, y} x 12 per map. Two blocks — see the header. */
 export const MAPOBJ_BLOCKS = [{ base: 0x3510, maps: 17 }, { base: 0x3990, maps: 32 }];
 export const MAPOBJ_PER_MAP = 12;
 /** 0x18 N -> string (0x100 | N) from PTR_TABLE. */
 export const INSERT_CODE = 0x18;
+
+/**
+ * objType -> sprite.  ROM offset = SPRITE_BASE + SPRITE_TABLE[objType] * 0x100.
+ *
+ * MEASURED the same way as FF1's: patch every object on the Altair throne room
+ * (block 0x3510, map 4) to ONE type, boot in, and read which single sprite the
+ * PPU loads. Five clean probes (types 1, 8, 13, 97, 150 -> entries 20, 14, 16,
+ * 37, 30) leave exactly ONE table in the whole ROM that reproduces them.
+ *
+ * It then predicts that map's seven objects 7/7 against a PPU trace captured
+ * before any of this was known.
+ *
+ * ⛔ 0xD10 sits in a region of mostly-small bytes that an early structural scan
+ * dismissed as a trivial match. Structure did not find it; measurement did.
+ */
+export const SPRITE_TABLE = 0xD10;
+export const SPRITE_BASE = 0x9B10;
+export const spriteOffsetForType = (rom, type) => SPRITE_BASE + rom[SPRITE_TABLE + type] * 0x100;
+/** 0..47 index into the 0x9010 bank, for cross-checking a PPU trace. */
+export const spriteEntryForType = (rom, type) => rom[SPRITE_TABLE + type] + 11;
 
 /** 45 kana — no を; 0xB6 is ん. See the header. */
 export const HIRAGANA = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわん';
@@ -153,7 +197,11 @@ export function skeleton(rom, T, id) {
   return s;
 }
 
-/** Decode an NPC line, expanding 0x18 N name/keyword inserts as 【…】. */
+/**
+ * Decode the string at `id`, expanding 0x18 N name/keyword inserts.
+ *
+ * ⛔ `id` is a STRING id, not an object type — see DIALOGUE_TABLE.
+ */
 export function decodeLine(rom, id, { table = DIALOGUE_TABLE, nl = ' / ' } = {}) {
   const b = rawString(rom, table, id);
   if (!b) return '';
@@ -179,7 +227,11 @@ export function mapObjects(rom, base, mapIndex) {
   for (let i = 0; i < MAPOBJ_PER_MAP; i++) {
     const t = rom[o + i * 3];
     if (!t) break;                       // lists are packed: a zero ends them
-    out.push({ slot: i, type: t, x: rom[o + i * 3 + 1] & 0x3F, y: rom[o + i * 3 + 2] });
+    out.push({
+      slot: i, type: t, x: rom[o + i * 3 + 1] & 0x3F, y: rom[o + i * 3 + 2],
+      sprite: rom[SPRITE_TABLE + t] + 11,
+      spriteOffset: SPRITE_BASE + rom[SPRITE_TABLE + t] * 0x100,
+    });
   }
   return out;
 }

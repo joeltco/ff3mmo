@@ -18,6 +18,71 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.31 — 2026-08-14
+
+### ⛔ RETRACTED: FF2's `dialogueId == objType`, and the FF2 sprite sheet that caught it
+
+v1.8.26 shipped `dialogueId == objType` for FF2 **as verified**. It is false. It
+failed the same way FF1's retracted rule did in v1.8.29: one coincidence read as
+a rule. Hilda is object type 1 *and* says string 1, so the first thing anyone
+checks agrees.
+
+**Rendering the sheet is what caught it.** Labelled under the old rule, ten
+visibly different sprites — guards, ninjas, mages — all came out "Hilda", and 44
+of the 175 placed object types "spoke" lines whose opening name insert was a
+*keyword*: ペンダント (pendant), めがみのベル (goddess bell), エギルのたいまつ
+(Egil's torch), ひくうせん (airship), ミスリル (mythril). Pendants do not talk.
+
+**New tool — `tools/ff2-talk-probe.mjs`.** Boots a savestate, walks to a named
+tile, presses A, reads the box straight off the nametable (FF2 has already
+expanded the text by draw time, so tile index == character code), finds that text
+in the ROM, and reports which table entry points at it. Nothing about the rule is
+assumed anywhere in that chain. Against every object in the Altair throne room:
+
+| objType | who | resolves to | verdict |
+|---|---|---|---|
+| 1 | ヒルダ (Hilda) | `0x18010[1]` | id == type — the coincidence |
+| 8 | ミンウ (Minwu) | `0x18010[49]` | id ≠ type — **the disproof** |
+| 97 | — | `0x28010[2]` | a *different table* |
+| 99 | — | `0x28010[4]` | a *different table* |
+
+There is not even a single dialogue table to index. **The objType → dialogue link
+for FF2 is now openly UNSOLVED** — two measured pairs still leave 6 candidate
+byte tables. It stays unsolved in writing rather than quietly wrong.
+
+Three traps the probe had to clear, each recorded in the tool:
+- the PPU draws ゛ as its **own tile** over the base kana, so on-screen ヒル**タ**
+  never byte-matches the ROM's composed ヒル**ダ** — both sides need NFD
+  normalising
+- a displayed line is **not contiguous** in the ROM: `18 NN` inserts splice other
+  strings into it, so only the longest contiguous *fragment* can be searched
+- the message-box border decodes to kana, so the longest "kana run" on screen is
+  the frame — runs are ranked by character **variety**, not length
+
+### What was kept, because it was actually measured
+
+`objType → sprite` for FF2 stands and is now gated: `sprite ROM = 0x9B10 +
+table[objType] * 0x100`, table at file `0xD10`. Five ROM-patch probes leave
+exactly one table in the ROM, and it predicts the throne room 7/7 against a PPU
+trace captured before the table was known.
+
+### Changed
+
+- `tools/lib/ff2-text.mjs` — `DIALOGUE_TABLE` documents the retraction; `decodeLine`
+  is explicitly a string-id API. `SPRITE_TABLE` / `SPRITE_BASE` added.
+- `tools/check-ff12-text.mjs` — asserts the retraction stays retracted (string 49
+  is Minwu, string 8 is not) and pins the FF2 sprite table. **6 new reverts
+  tested, all fail**, including one that shifts the table so id 8 *would* be
+  Minwu again.
+- `tools/npc-dialogue-ff2.mjs` — no dialogue column; `--strings` dumps the script
+  by string id instead.
+- `tools/npc-sheet-ff2.mjs` — 175 object types with sprite, ROM offset and
+  placements. **No names**, deliberately.
+- `tools/npc-sheet-ff1.mjs` — FF1's sheet, 182 types, labelled from FF1's own
+  (correctly measured) dialogue record.
+- `tools/lib/romaji.mjs` (NEW) — kana → Hepburn, checked against 16 known
+  localisations. A reading aid; never a source of names.
+
 ## 1.8.23 — 2026-08-14
 
 ### The NPC id → sprite lookup, decoded — and a catalog of all three games

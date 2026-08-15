@@ -6,8 +6,9 @@
 //
 //   FF1 — a Coneria Castle guard displayed "The King is looking for the LIGHT
 //         WARRIORS. You do not happen to be them, do you?" That box IS
-//         string 49, and object type 49 is on map 0, which is what fixes
-//         `dialogueId == objType`.
+//         string 49, and the guard's object type is 32 — which is what fixes
+//         the four-byte record at 0x395E5, byte 1.
+//   FF2 — Minwu, object type 8 in the Altair throne room, displays string 49.
 //   FF2 — Altair's verb menu displayed たずねる / おぼえる / アイテム as tile
 //         indices 99 96 a1 b2 / 8e a7 8d b2 / ca cb dc ea, which fixes
 //         hiragana at 0x8A and katakana at 0xCA.
@@ -171,11 +172,14 @@ const ok = (m) => console.log('  ✓ ' + m);
     bad(`only ${good}/${total} FF2 strings are >=60% kana — the encoding has drifted`);
   } else ok(`FF2 script decodes: ${good}/${total} strings >=60% literal kana`);
 
-  // 4. the map object table + dialogueId == objType
+  // 4. the map object table.
   //
-  // MEASURED: standing in the throne room and talking produced
-  // 【ヒルダ】「あいことばは【のばら】です。よく おぼえておくのよ。」 — string 1
-  // of the 0x18010 table — and that map's object list starts with type 1.
+  // ⛔ This section used to also assert `dialogueId == objType`. That rule is
+  // RETRACTED (v1.8.31) — `tools/ff2-talk-probe.mjs` walked to Minwu in the
+  // Altair throne room (object type 8) and measured the string he displays as
+  // id 49, not 8. The object table itself is unaffected and still measured:
+  // the coordinates below were confirmed by WALKING to them in the emulator
+  // and finding an NPC there.
   {
     let objs = 0, maps = 0;
     for (const { base, maps: n } of F2.MAPOBJ_BLOCKS) {
@@ -199,16 +203,56 @@ const ok = (m) => console.log('  ✓ ' + m);
     } else if (!/ミスリル/.test(F2.decodeLine(rom, 62))) {
       bad('FF2 object 62 no longer mentions ミスリル — the second block has drifted');
     }
+    // string 1 IS the line the running game displayed when talking to Hilda —
+    // that measurement stands; only the id==type generalisation was wrong.
     const line = F2.decodeLine(rom, 1);
     if (!/あいこと/.test(line)) {
-      bad(`FF2 dialogue 1 is "${line.slice(0, 40)}…" — not the line the running game displayed`);
+      bad(`FF2 string 1 is "${line.slice(0, 40)}…" — not the line the running game displayed`);
+    }
+    // ⛔ and the RETRACTED rule must stay retracted. Minwu is object type 8 in
+    // the throne room and displays string 49 (measured by talking to him); if
+    // anything ever makes type 8 resolve to string 8 again, the coincidence
+    // has been re-adopted as a rule.
+    const minwu = F2.decodeLine(rom, 49);
+    if (!/ミンウ/.test(minwu)) {
+      bad(`FF2 string 49 is "${minwu.slice(0, 40)}…" — expected Minwu's line, as measured on screen`);
+    }
+    if (/ミンウ/.test(F2.decodeLine(rom, 8))) {
+      bad('FF2 string 8 now reads as Minwu — the retracted dialogueId==objType rule is back');
+    }
+    if (F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[0].base, 4).some(o => o.dialogueId !== undefined)) {
+      bad('FF2 mapObjects exposes a dialogueId again — there is no measured objType->dialogue link');
     }
     // ⛔ Pointer validity does NOT identify the bank: both blocks validate
     // "100%" against table 0x4010 too, which decodes them to garbage.
     // Content is the discriminator.
     const wrong = F2.decodeLine(rom, 1, { table: 0x4010 });
     if (/あいこと/.test(wrong)) bad('FF2 table 0x4010 also yields the Hilda line — the bank test is meaningless');
-    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps; type 1 is Hilda, matching the running game`);
+    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps; objType->dialogue stays RETRACTED`);
+  }
+
+  // 4b. objType -> sprite. MEASURED the same way as FF1's: patch every object
+  // on the Altair throne room to ONE type, boot in, read which single sprite
+  // the PPU loads. Five clean probes leave exactly one table in the ROM.
+  {
+    const PROBED = [[1, 20], [8, 14], [13, 16], [97, 37], [150, 30]];
+    for (const [t, e] of PROBED) {
+      const got = F2.spriteEntryForType(rom, t);
+      if (got !== e) bad(`FF2 objType ${t} resolves to sprite entry ${got}, the PPU measured ${e}`);
+    }
+    // ...and it must reproduce the unpatched throne room, in order — a trace
+    // captured BEFORE the table was known.
+    const M4 = [20, 14, 16, 37, 37, 41, 37];
+    const o4 = F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[0].base, 4);
+    for (let i = 0; i < M4.length; i++) {
+      if (o4[i]?.sprite !== M4[i]) bad(`FF2 map 4 slot ${i} predicts sprite ${o4[i]?.sprite}, the PPU showed ${M4[i]}`);
+    }
+    // the OFFSET too, not just the biased index, or SPRITE_BASE can drift
+    if (o4[0]?.spriteOffset !== 0x9B10 + 9 * 0x100) {
+      bad(`FF2 map 4 slot 0 resolves to 0x${o4[0]?.spriteOffset.toString(16)}, expected 0x${(0x9B10 + 9 * 0x100).toString(16)}`);
+    }
+    if (F2.SPRITE_TABLE !== 0xD10) bad(`FF2 SPRITE_TABLE is 0x${F2.SPRITE_TABLE.toString(16)}, measured 0xD10`);
+    if (since()) ok('FF2 objType -> sprite: 5 probes + throne room 7/7');
   }
 
   // 5. the 0x18 N name/keyword insert

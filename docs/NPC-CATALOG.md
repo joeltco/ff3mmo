@@ -354,24 +354,59 @@ FF2 does *not* use FF1's `0x3410` (332 of 569 entries there give Y > 63):
 | `0x3510` | 17 |
 | `0x3990` | 32 |
 
-**311 objects across 44 populated maps**, and the rule is the same as FF1 and
-FF3:
+**311 objects across 44 populated maps.** Coordinates confirmed by *walking to
+them* in the emulator and finding an NPC there.
+
+### objType → sprite
 
 ```
-dialogueId == objType        (into the table at 0x18010)
+sprite ROM offset = 0x9B10 + SPRITE_TABLE[objType] * 0x100   (table @ file 0xD10)
 ```
 
-**Measured**: standing in the throne room and talking produced
-**【ヒルダ】「あいことばは【のばら】です。よく おぼえておくのよ。」** — that is
-string **1** of the `0x18010` table, and that map's object list starts with
-**type 1**. Its neighbours corroborate: type 8 is the line about **シド (Cid)**
-building the airship, type 13 is about **ミンウ (Minwu)** healing her father.
+Measured exactly like FF1's: patch every object on the Altair throne room to one
+type, boot in, read which single sprite the PPU loads. Five clean probes
+(types 1, 8, 13, 97, 150 → entries 20, 14, 16, 37, 30) leave **exactly one**
+table in the whole ROM, and it then predicts that room's seven objects **7/7**
+against a PPU trace captured before any of it was known.
+
+> ⛔ `0xD10` sits in a region of mostly-small bytes that an early structural scan
+> dismissed as a trivial match. Structure did not find it; measurement did.
+
+### ⛔ objType → dialogue is UNSOLVED — and the old answer was wrong
+
+v1.8.26 shipped `dialogueId == objType` **as verified. It is false**, and it
+failed exactly the way FF1's retracted rule did: one coincidence read as a rule.
+
+`tools/ff2-talk-probe.mjs` walks to a tile, presses A, reads the box off the
+nametable, then finds that text in the ROM and reports which table entry points
+at it. Run against every object in the Altair throne room:
+
+| objType | who | resolves to | verdict |
+|---|---|---|---|
+| 1 | ヒルダ (Hilda) | `0x18010[1]` | id == type — **the coincidence** |
+| 8 | ミンウ (Minwu) | `0x18010[49]` | id ≠ type — **the disproof** |
+| 97 | — | `0x28010[2]` | a *different table* |
+| 99 | — | `0x28010[4]` | a *different table* |
+
+So there is not even a single dialogue table to be indexed. Hilda being object
+type 1 *and* string 1 is the first thing anyone checks, which is why it stood.
+
+**The tell it was wrong all along**: under that rule, 44 of the 175 placed object
+types "spoke" lines whose opening name insert was a *keyword* — ペンダント
+(pendant), めがみのベル (goddess bell), エギルのたいまつ (Egil's torch),
+ひくうせん (airship), ミスリル (mythril). Pendants do not talk. It also labelled
+ten visibly different sprites "Hilda", which is what made it visible at last:
+**rendering the sheet is what caught it.**
+
+Two measured pairs are not enough to identify the mapping — a byte table with
+`T[1]=1` and `T[8]=49` still leaves 6 candidates at stride 1. Finding it needs
+more probe points or a disassembly of FF2's talk routine, the way
+`tools/dis6502-ff1.mjs` cracked FF1's.
 
 > ⛔ FF2 has **eight** text pointer tables. Both object blocks validate "100%"
 > against `0x4010` as well — because almost any small id has *a* pointer there —
 > but `0x4010` decodes them to garbage. **Pointer validity does not identify the
-> bank; content does.** The gate asserts that `0x4010` does *not* yield the
-> Hilda line.
+> bank; content does.**
 
 ### Name and keyword inserts
 
@@ -382,16 +417,17 @@ table, which holds character names and the **ASK/LEARN keyword list**:
 0x18 0xEF -> string 0x1EF = ヒルダ        0x18 0xF1 -> string 0x1F1 = のばら
 ```
 
-That is why speakers appear at all — the name is never in the line itself. FF2
-writes a speaker as `NAME「…」` (`0xB9` is the opening quote).
+The name is never in the line itself. FF2 writes a speaker as `NAME「…」`
+(`0xB9` is the opening quote).
 
 > ⛔ 【…】 appearing **mid-line** are keywords, not speakers. *"【ヒルダ】さまに
 > はけんされてきた?"* is a guard talking **about** Hilda. Only a name in the
 > opening-quote position counts.
 
-**69 objects have a named speaker, 13 distinct.** レイラ (Leila) and ミンウ
-(Minwu) come through exactly. Rosters: `docs/sprites/ff2-npc-dialogue.txt` and
-`ff2-npc-names.txt`.
+> ⛔ A speaker names **whoever speaks that string** — it does *not* name the NPC
+> you are standing in front of, because the objType → string link is unsolved
+> (above). Counting speakers per *object* was how the retracted rule produced
+> ten different sprites all labelled "Hilda".
 
 ### There is no dictionary
 
@@ -432,9 +468,10 @@ Names now render in full, which is the whole point:
 > ヨーゼフ「ありがとう。 むすめがかえってきた。 ボーゲンに おどされて
 > うそをついて いたんだ。 むすめのことが しんぱいで…… すまなかった!」
 
-**15 distinct speakers**: ヒルダ, ヨーゼフ, レイラ, ミンウ, ゴードン, シド,
-ポール, ネリー, フィンおう, ダークナイト, ジャイアントビーバー, and four
-descriptive labels (みはり, まどうし, ははおや, どれい).
+**15 distinct speakers appear in the script**: ヒルダ, ヨーゼフ, レイラ, ミンウ,
+ゴードン, シド, ポール, ネリー, フィンおう, ダークナイト, ジャイアントビーバー,
+and four descriptive labels (みはり, まどうし, ははおや, どれい) — that is a
+fact about the *script*, not an assignment of names to sprites.
 
 ---
 
@@ -453,7 +490,11 @@ descriptive labels (みはり, まどうし, ははおや, どれい).
 | `tools/npc-dialogue-ff1.mjs` | FF1 objects: position + sprite (no dialogue — see above) |
 | `tools/ff1-script-dump.mjs` | FF1 script + self-naming characters |
 | `tools/dis6502-ff1.mjs` | 6502 disassembler for the MMC1 ROMs |
-| `tools/lib/ff2-text.mjs` / `tools/npc-dialogue-ff2.mjs` | FF2 decoder + named NPC roster |
+| `tools/lib/ff2-text.mjs` | FF2 kana decoder + map objects + objType→sprite |
+| `tools/npc-dialogue-ff2.mjs` | FF2 objects (no dialogue — see above); `--strings` dumps the script by id |
+| `tools/ff2-talk-probe.mjs` | walks to an NPC, talks, and reports which table entry it displayed |
+| `tools/npc-sheet-ff1.mjs` / `-ff2.mjs` | the rendered sprite sheets |
+| `tools/lib/romaji.mjs` | kana→Hepburn, a reading aid only (never a source of names) |
 | `tools/ff2-script-dump.mjs` | FF2 raw script dump |
 | `tools/check-ff12-text.mjs` | FF1/FF2 gate — 11 reverts tested, all fail |
 | `docs/sprites/ff3-npc-catalog.png` | 88 FF3 sprites, labelled |
