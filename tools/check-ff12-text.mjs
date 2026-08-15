@@ -203,32 +203,93 @@ const ok = (m) => console.log('  ✓ ' + m);
     } else if (!/ミスリル/.test(F2.decodeLine(rom, 62))) {
       bad('FF2 object 62 no longer mentions ミスリル — the second block has drifted');
     }
-    // string 1 IS the line the running game displayed when talking to Hilda —
-    // that measurement stands; only the id==type generalisation was wrong.
+    // string 1 IS the line the running game displayed when talking to Hilda.
     const line = F2.decodeLine(rom, 1);
     if (!/あいこと/.test(line)) {
       bad(`FF2 string 1 is "${line.slice(0, 40)}…" — not the line the running game displayed`);
     }
-    // ⛔ and the RETRACTED rule must stay retracted. Minwu is object type 8 in
-    // the throne room and displays string 49 (measured by talking to him); if
-    // anything ever makes type 8 resolve to string 8 again, the coincidence
-    // has been re-adopted as a rule.
-    const minwu = F2.decodeLine(rom, 49);
-    if (!/ミンウ/.test(minwu)) {
-      bad(`FF2 string 49 is "${minwu.slice(0, 40)}…" — expected Minwu's line, as measured on screen`);
+    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps`);
+  }
+
+  // 4a. objType -> dialogue. SOLVED by disassembling the talk routine
+  // (tools/ff2-talk-trace.mjs): $9794 in bank 14 reads the object type from
+  // RAM $7500,X, picks bank 6 or 10 on CMP #$60, indexes a record pointer at
+  // $8200 + type*2, and the record's byte 0 is the string id.
+  //
+  // ⛔ These four pairs were READ OFF THE SCREEN by talking to each NPC in the
+  // Altair throne room BEFORE the rule was known. Type 8 is the one that
+  // matters: the retracted rule said string 8, the game shows string 49.
+  {
+    const MEASURED = [
+      [1, 1, F2.DIALOGUE_TABLE],       // Hilda   — id == type, the coincidence
+      [8, 49, F2.DIALOGUE_TABLE],      // Minwu   — id != type, the disproof
+      [97, 2, F2.DIALOGUE_TABLE_HI],   // a different TABLE, not just a different id
+      [99, 4, F2.DIALOGUE_TABLE_HI],
+    ];
+    for (const [type, id, table] of MEASURED) {
+      const got = F2.stringIdForType(rom, type);
+      if (!got) { bad(`FF2 objType ${type} resolves to no string; the game displayed ${id}`); continue; }
+      if (got.id !== id) bad(`FF2 objType ${type} -> string ${got.id}, the game displayed ${id}`);
+      if (got.table !== table) {
+        bad(`FF2 objType ${type} reads table 0x${got.table.toString(16)}, measured 0x${table.toString(16)}`);
+      }
     }
-    if (/ミンウ/.test(F2.decodeLine(rom, 8))) {
-      bad('FF2 string 8 now reads as Minwu — the retracted dialogueId==objType rule is back');
+    // ⛔ and the retracted rule must stay dead: type 8 must NOT be string 8
+    if (F2.stringIdForType(rom, 8)?.id === 8) bad('FF2 dialogue resolves as objType again — the retracted rule is back');
+    // Minwu's line must actually name him — that is what was on screen
+    const m = F2.lineForType(rom, 8);
+    if (!/ミンウ/.test(m)) bad(`FF2 objType 8 says "${m.slice(0, 30)}…" — expected Minwu's line`);
+    // the constants the rule rides on, pinned
+    if (F2.RECORD_PTR_TABLE !== 0x38210) bad(`FF2 RECORD_PTR_TABLE is 0x${F2.RECORD_PTR_TABLE.toString(16)}, disassembly says 0x38210`);
+    if (F2.HANDLER_TABLE !== 0x39933) bad(`FF2 HANDLER_TABLE is 0x${F2.HANDLER_TABLE.toString(16)}, disassembly says 0x39933`);
+    if (F2.HI_TABLE_FIRST !== 0x60) bad('FF2 HI_TABLE_FIRST != 0x60 (CMP #$60)');
+    if (F2.NO_HANDLER_FIRST !== 0xC0) bad('FF2 NO_HANDLER_FIRST != 0xC0 (CMP #$C0)');
+    // every handler address must land inside bank 14's window, or the jump
+    // table has drifted off its base
+    let bogus = 0;
+    for (let t = 0; t < F2.NO_HANDLER_FIRST; t++) {
+      const h = F2.handlerForType(rom, t);
+      if (h < 0x8000 || h > 0xBFFF) bogus++;
     }
-    if (F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[0].base, 4).some(o => o.dialogueId !== undefined)) {
-      bad('FF2 mapObjects exposes a dialogueId again — there is no measured objType->dialogue link');
+    if (bogus) bad(`${bogus} FF2 handler addresses fall outside $8000-$BFFF — the jump table has moved`);
+    // ⛔ the distribution check that CAUGHT the old rule: under it, 44 of 175
+    // placed types opened with a keyword insert (a pendant "speaking"). The
+    // real rule must stay far below that.
+    const placed = new Set();
+    for (const { base, maps: n } of F2.MAPOBJ_BLOCKS) {
+      for (let mi = 0; mi < n; mi++) for (const o of F2.mapObjects(rom, base, mi)) placed.add(o.type);
     }
-    // ⛔ Pointer validity does NOT identify the bank: both blocks validate
-    // "100%" against table 0x4010 too, which decodes them to garbage.
-    // Content is the discriminator.
-    const wrong = F2.decodeLine(rom, 1, { table: 0x4010 });
-    if (/あいこと/.test(wrong)) bad('FF2 table 0x4010 also yields the Hilda line — the bank test is meaningless');
-    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps; objType->dialogue stays RETRACTED`);
+    let insertLed = 0;
+    for (const t of placed) {
+      const sid = F2.stringIdForType(rom, t);
+      if (!sid) continue;
+      const raw = F2.rawString(rom, sid.table, sid.id) || [];
+      if (raw[0] === F2.INSERT_CODE) insertLed++;
+    }
+    if (insertLed > 25) bad(`${insertLed} FF2 placed types open with a name insert — the old rule gave 44; this looks like it is back`);
+    // ⛔ THE INDEPENDENT CHECK. A named speaker must wear ONE sprite across
+    // every object type that speaks as them — Hilda cannot be a guard AND a
+    // ninja AND a mage. The retracted rule failed this outright: it put ヒルダ
+    // on ten different sprites. Nothing in the rule's derivation involves
+    // sprites, so this cannot be satisfied by construction.
+    const byName = new Map();
+    for (const t of placed) {
+      const sid = F2.stringIdForType(rom, t);
+      if (!sid) continue;
+      // ⛔ use the SHARED detector: FF2 writes a speaker name as a 0x18 insert
+      // (Hilda) OR as literal kana (Minwu). A local insert-only copy drops half.
+      const nm = F2.speakerForType(rom, t);
+      if (!nm) continue;
+      if (!byName.has(nm)) byName.set(nm, new Set());
+      byName.get(nm).add(F2.spriteEntryForType(rom, t));
+    }
+    if (!byName.size) bad('FF2: no named speakers resolve at all — the insert or the rule has broken');
+    for (const [nm, sprites] of byName) {
+      if (sprites.size > 1) {
+        bad(`FF2 speaker ${nm} wears ${sprites.size} different sprites (${[...sprites].join(',')}) — one character, one sprite`);
+      }
+    }
+    if (since()) ok(`FF2 objType -> dialogue: 4 screen-measured pairs across BOTH tables, ${insertLed} insert-led types`);
   }
 
   // 4b. objType -> sprite. MEASURED the same way as FF1's: patch every object

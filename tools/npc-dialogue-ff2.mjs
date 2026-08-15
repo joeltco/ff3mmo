@@ -1,43 +1,34 @@
 #!/usr/bin/env node
-// npc-dialogue-ff2.mjs — FF2's map objects, and (separately) FF2's script.
+// npc-dialogue-ff2.mjs — every FF2 map object, where it stands, and what it says.
 //
-// ⛔ THESE TWO THINGS ARE NOT LINKED YET, and this tool will not pretend they
-// are. Earlier versions printed a line under every object using
-// `dialogueId == objType`. That rule is RETRACTED (v1.8.31):
+// The objType -> dialogue link was found by disassembling the talk routine
+// (`tools/ff2-talk-trace.mjs`); `tools/lib/ff2-text.mjs#stringIdForType`
+// documents it. In short:
 //
-//   `tools/ff2-talk-probe.mjs` walked to each NPC in the Altair throne room,
-//   talked, and read the box off the nametable:
-//     objType  1 (Hilda) -> string 1    id == type   <- the lone coincidence
-//     objType  8 (Minwu) -> string 49   id != type   <- the disproof
-//     objType 97, 99     -> table 0x28010, not 0x18010 at all
+//   record  = bank 14, pointer at 0x38210 + objType*2   (24 bytes)
+//   id      = record[0]
+//   table   = objType < 0x60 ? 0x18010 : 0x28010        (>= 0xC0: no handler)
 //
-// So: objects here, strings there, and no arrow between them.
+// ⛔ THE DEFAULT LINE ONLY. Each object type runs its own code handler (jump
+// table at 0x39933) that swaps in a different byte of the record once story
+// flags are set, so a late-game player sees something else. `record[0]` is what
+// a fresh game shows and is all a static tool can report.
 //
-//   node tools/npc-dialogue-ff2.mjs             # the object table
-//   node tools/npc-dialogue-ff2.mjs --strings   # the script, by string id
+// ⛔ v1.8.26-1.8.30 used `dialogueId == objType`, RETRACTED in v1.8.31.
+//
+//   node tools/npc-dialogue-ff2.mjs             # every object
+//   node tools/npc-dialogue-ff2.mjs --names     # only ones that name a speaker
 //   node tools/npc-dialogue-ff2.mjs --json
 
-import { loadRom, decodeLine, mapObjects, MAPOBJ_BLOCKS, DIALOGUE_TABLE,
-         literalRatio, spriteEntryForType } from './lib/ff2-text.mjs';
+import {
+  loadRom, decodeLine, mapObjects, MAPOBJ_BLOCKS, INSERT_CODE, PTR_TABLE,
+  stringIdForType, lineForType, handlerForType, speakerForType,
+} from './lib/ff2-text.mjs';
 import { romaji } from './lib/romaji.mjs';
 
 const rom = loadRom();
-const STRINGS = process.argv.includes('--strings');
+const NAMES_ONLY = process.argv.includes('--names');
 const JSON_OUT = process.argv.includes('--json');
-
-if (STRINGS) {
-  // The script, addressed the only way we can currently address it: by id.
-  console.log(`FF2 script — table 0x${DIALOGUE_TABLE.toString(16)}, by STRING ID\n`);
-  console.log('⛔ a string id is NOT an object type — see the header\n');
-  for (let id = 0; id < 512; id++) {
-    if (literalRatio(rom, id) <= 0) continue;
-    const text = decodeLine(rom, id, { nl: ' / ' });
-    if (!text) continue;
-    console.log(`  ${String(id).padStart(3)}  ${text.slice(0, 120)}`);
-    console.log(`       ${romaji(text).slice(0, 120)}`);
-  }
-  process.exit(0);
-}
 
 const rows = [];
 for (const { base, maps } of MAPOBJ_BLOCKS) {
@@ -47,6 +38,11 @@ for (const { base, maps } of MAPOBJ_BLOCKS) {
         block: '0x' + base.toString(16), mapIndex: m, slot: o.slot,
         objType: o.type, x: o.x, y: o.y,
         sprite: o.sprite, spriteOffset: '0x' + o.spriteOffset.toString(16),
+        stringId: o.stringId,
+        stringTable: o.stringTable === null ? null : '0x' + o.stringTable.toString(16),
+        handler: o.stringId === null ? null : '$' + handlerForType(rom, o.type).toString(16),
+        speaker: speakerForType(rom, o.type),
+        text: lineForType(rom, o.type),
       });
     }
   }
@@ -54,23 +50,35 @@ for (const { base, maps } of MAPOBJ_BLOCKS) {
 
 if (JSON_OUT) {
   console.log(JSON.stringify({
-    note: 'objType -> dialogue is UNSOLVED; no line is attached to any object',
-    spriteRule: 'sprite ROM = 0x9B10 + table[objType] * 0x100, table @ 0xD10',
+    rule: 'id = record[0], record ptr @ 0x38210 + objType*2 (bank 14); ' +
+          'table = objType < 0x60 ? 0x18010 : 0x28010; objType >= 0xC0 has no handler',
+    caveat: 'DEFAULT line only — the per-type handler swaps in other record bytes as story flags set',
     objects: rows,
   }, null, 2));
+} else if (NAMES_ONLY) {
+  const named = rows.filter(r => r.speaker);
+  console.log(`FF2 — ${named.length} objects whose default line names a speaker\n`);
+  for (const r of named) {
+    console.log(`${r.block} map ${String(r.mapIndex).padStart(2)} type ${String(r.objType).padStart(3)} ` +
+                `(${r.x},${r.y}) spr ${r.sprite}  «${r.speaker}»  ${r.stringTable}[${r.stringId}]`);
+    console.log(`     ${r.text.slice(0, 140)}`);
+  }
+  const uniq = [...new Set(named.map(r => r.speaker))];
+  console.log(`\ndistinct speakers (${uniq.length}): ${uniq.join(', ')}`);
 } else {
   const maps = MAPOBJ_BLOCKS.reduce((a, b) => a + b.maps, 0);
-  console.log(`FF2 map objects — ${rows.length} across ${maps} maps\n`);
-  console.log('⛔ no dialogue column: the objType -> dialogue link is unsolved.\n' +
-              '   `--strings` dumps the script by string id instead.\n');
+  console.log(`FF2 map objects — ${rows.length} across ${maps} maps\n` +
+              `   id = record[0] via 0x38210 + objType*2; DEFAULT line only\n`);
   let last = null;
   for (const r of rows) {
     const key = r.block + '/' + r.mapIndex;
     if (key !== last) { console.log(`── ${r.block} map ${r.mapIndex} ──`); last = key; }
-    console.log(`  slot ${r.slot}  type ${String(r.objType).padStart(3)}` +
-                `  at (${r.x},${r.y})  sprite ${String(r.sprite).padStart(2)} @${r.spriteOffset}`);
+    console.log(`  type ${String(r.objType).padStart(3)} (${r.x},${r.y}) spr ${String(r.sprite).padStart(2)}` +
+                `${r.stringId === null ? '  (no handler)' : `  ${r.stringTable}[${r.stringId}] ${r.handler}`}` +
+                `${r.speaker ? '  «' + r.speaker + '»' : ''}`);
+    if (r.text) {
+      console.log(`     ${r.text.slice(0, 150)}`);
+      console.log(`     ${romaji(r.text).slice(0, 150)}`);
+    }
   }
-  const types = new Set(rows.map(r => r.objType));
-  console.log(`\n${types.size} distinct object types placed; ` +
-              `${new Set([...types].map(t => spriteEntryForType(rom, t))).size} distinct sprites`);
 }

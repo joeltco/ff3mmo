@@ -18,14 +18,21 @@
 //   4. find that text in the ROM, walk back to the string's start
 //   5. find which table holds a pointer to it, and at which index
 //
-// Step 5 produces the id. Comparing it to the object type placed on that tile
-// is the whole experiment.
+// Step 5 produces the id, which is compared against what `stringIdForType`
+// PREDICTS for that object type — the rule stated in advance, then checked
+// against the screen. That is the test the retracted rule never had.
+//
+// The rule itself was found by disassembly (`tools/ff2-talk-trace.mjs`), not
+// here; this tool is what confirms it against the running game. Exits non-zero
+// on any mismatch, so it can be run as a check.
 //
 //   node tools/ff2-talk-probe.mjs --state ff2-town.state --talk 7,19
 //   node tools/ff2-talk-probe.mjs --state ff2-town.state --map 0x3510,4 --all
 //
-// ⛔ jsnes' mmap.load returns the byte at ADDR-1 for this ROM. Everything here
-// reads `nes.ppu.vramMem`, `nes.cpu.mem` and the raw ROM file, never mmap.load.
+// Reads `nes.ppu.vramMem`, `nes.cpu.mem` and the raw ROM file. (jsnes'
+// Mapper1.load returns `cpu.mem[address]` for $8000-$FFFF, so the mapped PRG is
+// readable directly and unshifted — an older note claiming an ADDR-1 skew does
+// not apply to this build; verified against every PRG bank.)
 
 import fs from 'node:fs';
 import { NES, Controller } from 'jsnes';
@@ -224,16 +231,22 @@ for (const t of targets) {
   const r = resolveId(loc.hits[0]);
   const ids = r.ids.map(i => `0x${i.base.toString(16)}[${i.id}]`).join(', ') || '(no known table)';
   console.log(`    string @0x${r.start.toString(16)}  ->  ${ids}`);
-  const hit = r.ids.find(i => i.base === 0x18010);
-  if (hit) console.log(`    ${hit.id === t.type ? '✓ id == objType' : `✗ id ${hit.id} != objType ${t.type}`}`);
+
+  // The rule stated IN ADVANCE, then compared against the screen. This is the
+  // check the retracted rule never had: a case that could have disagreed.
+  const pred = F2.stringIdForType(rom, t.type);
+  if (!pred) { console.log(`    predicted: no handler (objType >= 0xC0)\n`); results.push({ ...t, ok: null }); continue; }
+  const ok = r.ids.some(i => i.base === pred.table && i.id === pred.id);
+  console.log(`    predicted 0x${pred.table.toString(16)}[${pred.id}]  ${ok ? '✓ MATCHES the screen' : '✗ MISMATCH'}`);
   console.log('');
-  results.push({ ...t, id: hit?.id ?? null });
+  results.push({ ...t, ok });
 }
 
-const checkable = results.filter(r => r.id !== null && r.type !== undefined);
+const checkable = results.filter(r => r.ok !== null && r.ok !== undefined);
 if (checkable.length) {
-  const same = checkable.filter(r => r.id === r.type).length;
-  console.log(`── ${same}/${checkable.length} objects have dialogue id == objType ──`);
+  const good = checkable.filter(r => r.ok).length;
+  console.log(`── stringIdForType predicted ${good}/${checkable.length} talked-to objects correctly ──`);
+  if (good !== checkable.length) process.exitCode = 1;
 }
 
 if (SHOT) {

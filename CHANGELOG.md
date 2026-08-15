@@ -18,6 +18,101 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.32 — 2026-08-14
+
+### FF2's objType → dialogue, SOLVED — by disassembling the talk routine
+
+v1.8.31 retracted `dialogueId == objType` and left the real link openly
+unsolved: two measured pairs still allowed six candidate byte tables. Guessing a
+seventh was the wrong move. This ships the answer, taken off the CPU.
+
+```
+record  = bank 14, pointer at file 0x38210 + objType*2      (24 bytes)
+id      = record[0]
+table   = objType < 0x60 ? 0x18010 (bank 6) : 0x28010 (bank 10)
+          objType >= 0xC0 -> no handler at all
+```
+
+**New tool — `tools/ff2-talk-trace.mjs`.** Hooks every cartridge read and every
+zero-page write, walks to a named NPC, and talks. Minwu displays string 49,
+whose pointer sits at file `0x18072` = `$8062` with bank 6 mapped, so the read
+is unmissable. It landed on the generic fetch routine at `$EA8C` (`$92` = string
+id, `$93` = bank, `$94/$95` = table base) — a primitive, not the mapping. So the
+question became "who writes `$92`", and the write watch answered it in one run:
+`$CBD0 JSR $9794` returns the id in A.
+
+```
+$9794  LDA #$06 / STA $93        ; default bank 6
+       LDA #$80 / STA $95        ; default table base $8000 -> file 0x18010
+       LDA $7500,X               ; the object TYPE (X = object slot)
+       CMP #$C0 / BCS $97FE      ; >= 0xC0 -> RTS, no dialogue
+       CMP #$60 / BCC +          ; >= 0x60 -> LDX #$0A / STX $93  (bank 10)
+       ASL A / TAX               ; type * 2
+       LDA $8200,X / $8201,X     ; a POINTER PER OBJECT TYPE -> a 24-byte record
+       LDA $9923,Y / JMP ($0086) ; then a per-type CODE handler
+```
+
+`CMP #$60 → bank 10` is exactly why object types 97/99 read `0x28010` — the
+observation that made "one table indexed by type" impossible.
+
+**Every object type has its own handler.** Minwu's at `$9C82` tests a story flag,
+then `LDA $7B00` — byte 0 of the record. ⛔ So a line is **state-dependent**;
+`record[0]` is the no-flags line a fresh game shows, and is all a static tool
+can report. Both the library and the sheet say so.
+
+### Verified two ways
+
+`tools/ff2-talk-probe.mjs` now prints the rule's **prediction, made in advance**,
+against what the game puts on screen, and exits non-zero on a mismatch:
+**5/5 talked-to objects correct**, including objType 8 — the exact case that
+broke the old rule (it said 8, the screen says 49) — and both objects on the
+other table.
+
+And an independent check the derivation cannot satisfy by construction: **a named
+speaker must wear one sprite.** Nothing in the dialogue rule touches the sprite
+table, yet across 23 object types and 13 speakers it is **13/13** — ミンウ
+(types 8, 9, 10) is spr 14 in all three, レイラ (20, 21, 22) is spr 17, ヒルダ
+(1, 4) is spr 20, ゴードン (13, 14) is spr 16. Each character's types are even
+contiguous, exactly like one person with several story states. Under the
+retracted rule ヒルダ alone wore **seven** different sprites.
+
+The 13 speakers are the real cast — レイラ, ミンウ, ヒルダ, ゴードン, シド,
+ポール, ネリー, ボーゲン, トブール, フィンおう, ダークナイト, plus みはり and
+どれい. Under the old rule the list included a pendant, a bell and an airship.
+
+⛔ **A speaker name is written TWO ways** and the first detector only took one:
+Hilda is a `0x18` name insert (`18 EF B9`), Minwu is **literal kana**
+(`E9 F6 CC B9` = ミンウ「). Handling only the insert form silently dropped
+Minwu, Paul, Josef and the rest — the sheet printed their lines but left them
+unnamed. `speakerOfString` in `ff2-text.mjs` is now the single source, used by
+the sheet, the dump and the gate alike.
+
+### Changed
+
+- `tools/lib/ff2-text.mjs` — `stringIdForType` / `lineForType` /
+  `recordOffsetForType` / `handlerForType` / `tableForType`, plus the constants
+  (`RECORD_PTR_TABLE`, `HANDLER_TABLE`, `HI_TABLE_FIRST`, `NO_HANDLER_FIRST`).
+  `mapObjects` carries `stringId` / `stringTable` again.
+- `tools/check-ff12-text.mjs` — pins the four screen-measured pairs across both
+  tables, the constants, the insert-led count (17; the old rule gave 44), and the
+  one-speaker-one-sprite invariant. **8 reverts tested, all fail**, including
+  restoring the old rule outright.
+- `tools/npc-dialogue-ff2.mjs` — objects with string id, handler address, speaker,
+  line and romaji.
+- `tools/npc-sheet-ff2.mjs` — names are back, with the kana and the reading.
+
+### Two jsnes traps, both recorded in the tools
+
+- ⛔ **`nes.fromJSON` replaces `nes.cpu` with a new object.** A `cpu` reference
+  cached before the load — or a hook installed on it — silently traces a
+  discarded CPU: coordinates read 255 and not one hook fires.
+- ⛔ A 65,536-entry PC ring buffer wraps ~7× over one talk (~9,900 instructions
+  per frame), so "the instructions before the lookup" were all post-talk idle
+  loop until the recorder stopped at the hit.
+- An older note claiming `mmap.load` returns the byte at ADDR−1 does **not**
+  apply to this build: `Mapper1.load` returns `cpu.mem[address]` for
+  `$8000-$FFFF`, verified against every PRG bank.
+
 ## 1.8.31 — 2026-08-14
 
 ### ⛔ RETRACTED: FF2's `dialogueId == objType`, and the FF2 sprite sheet that caught it

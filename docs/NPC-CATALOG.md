@@ -372,36 +372,96 @@ against a PPU trace captured before any of it was known.
 > ⛔ `0xD10` sits in a region of mostly-small bytes that an early structural scan
 > dismissed as a trivial match. Structure did not find it; measurement did.
 
-### ⛔ objType → dialogue is UNSOLVED — and the old answer was wrong
+### objType → dialogue — solved by disassembling the talk routine
 
-v1.8.26 shipped `dialogueId == objType` **as verified. It is false**, and it
-failed exactly the way FF1's retracted rule did: one coincidence read as a rule.
+```
+record  = bank 14, pointer at file 0x38210 + objType*2      (24 bytes)
+id      = record[0]
+table   = objType < 0x60 ? 0x18010 (bank 6) : 0x28010 (bank 10)
+          objType >= 0xC0 -> no handler at all
+```
 
-`tools/ff2-talk-probe.mjs` walks to a tile, presses A, reads the box off the
-nametable, then finds that text in the ROM and reports which table entry points
-at it. Run against every object in the Altair throne room:
+**How it was found.** `tools/ff2-talk-trace.mjs` hooks every cartridge read,
+talks to Minwu, and catches the instruction that reads his string pointer.
+Minwu displays string 49, whose pointer is at file `0x18072` = `$8062` with
+bank 6 mapped — so the read is unmissable. It landed on the generic fetch
+routine:
 
-| objType | who | resolves to | verdict |
+```
+$EA8C  LDA $93 / JSR $FE03     ; switch to the string's PRG bank
+       LDA $92 / ASL A         ; string id * 2
+       ADC $94 / ... $95       ; + table base -> $80/$81
+       LDA ($80),Y             ; <- the $8062 read.  $3E/$3F = string address
+```
+
+That is a *primitive*, not the mapping — so the question became "who writes
+`$92`". Watching zero-page writes answered it in one run: `$CBD0 JSR $9794`
+returns the id in A, and `$CBD3 STA $92` stores it.
+
+```
+$9794  LDA #$06 / STA $93          ; default bank 6
+       LDA #$00 / STA $94
+       LDA #$80 / STA $95          ; default table base $8000  -> file 0x18010
+       LDA $7500,X                 ; the object TYPE (X = object slot)
+       CMP #$C0 / BCS $97FE        ; >= 0xC0 -> RTS, no dialogue
+       CMP #$60 / BCC +            ; >= 0x60 -> LDX #$0A / STX $93  (bank 10)
+       ASL A / TAX                 ; type * 2
+       LDA $8200,X / $8201,X       ; -> $84/$85, A POINTER PER OBJECT TYPE
+       LDY #$17 / LDA ($84),Y / STA $7B00,Y   ; copy a 24-byte RECORD to $7B00
+       LDA $A0 / ASL A / TAY
+       LDA $9923,Y / $9924,Y / JMP ($0086)    ; per-type CODE handler
+```
+
+**Every object type has its own handler routine.** Minwu's, at `$9C82`:
+
+```
+$9C82  LDY #$50 / JSR $989E    ; test a story flag
+       BNE (a different line)
+       LDA $7B00               ; <- byte 0 of the record IS the string id
+       RTS                     ; caller does STA $92
+```
+
+`CMP #$60 → bank 10` is why object types 97 and 99 read `0x28010` — the thing
+that made "one dialogue table indexed by type" impossible in the first place.
+
+> ⛔ **The default line only.** The handler swaps in other bytes of the record
+> as story flags are set, so a late-game player sees something else. `record[0]`
+> is what a fresh game shows and is all a static tool can report.
+
+### How it was verified
+
+`tools/ff2-talk-probe.mjs` walks to each NPC, talks, reads the box off the
+nametable, finds that text in the ROM, and compares against what
+`stringIdForType` **predicted in advance** — and exits non-zero on any mismatch:
+
+| objType | who | predicted | on screen |
 |---|---|---|---|
-| 1 | ヒルダ (Hilda) | `0x18010[1]` | id == type — **the coincidence** |
-| 8 | ミンウ (Minwu) | `0x18010[49]` | id ≠ type — **the disproof** |
-| 97 | — | `0x28010[2]` | a *different table* |
-| 99 | — | `0x28010[4]` | a *different table* |
+| 1 | ヒルダ (Hilda) | `0x18010[1]` | ✓ |
+| 8 | ミンウ (Minwu) | `0x18010[49]` | ✓ — **the case that broke the old rule** |
+| 97 | — | `0x28010[2]` | ✓ — the *other table* |
+| 99 | — | `0x28010[4]` | ✓ |
 
-So there is not even a single dialogue table to be indexed. Hilda being object
-type 1 *and* string 1 is the first thing anyone checks, which is why it stood.
+**5/5 talked-to objects predicted correctly.**
 
-**The tell it was wrong all along**: under that rule, 44 of the 175 placed object
-types "spoke" lines whose opening name insert was a *keyword* — ペンダント
-(pendant), めがみのベル (goddess bell), エギルのたいまつ (Egil's torch),
-ひくうせん (airship), ミスリル (mythril). Pendants do not talk. It also labelled
-ten visibly different sprites "Hilda", which is what made it visible at last:
-**rendering the sheet is what caught it.**
+An independent check the derivation cannot satisfy by construction: **a named
+speaker must wear one sprite.** Nothing in the dialogue rule touches the sprite
+table, yet ヒルダ (types 1, 4) is spr 20 in both, and ゴードン (types 13, 14) is
+spr 16 in both — **3/3**. Under the retracted rule ヒルダ wore **seven**
+different sprites and ゴードン four. The gate asserts this.
 
-Two measured pairs are not enough to identify the mapping — a byte table with
-`T[1]=1` and `T[8]=49` still leaves 6 candidates at stride 1. Finding it needs
-more probe points or a disassembly of FF2's talk routine, the way
-`tools/dis6502-ff1.mjs` cracked FF1's.
+### ⛔ The retraction that led here
+
+v1.8.26 shipped `dialogueId == objType` **as verified. It was false**, and it
+failed exactly the way FF1's did: one coincidence read as a rule. Hilda is the
+first NPC anyone talks to, she is object type 1, *and* she says string 1 — so
+the first measurement always agrees.
+
+**Rendering the sheet is what caught it.** Under that rule ten visibly different
+sprites all came out "Hilda", and 44 of the 175 placed object types "spoke" lines
+whose opening name insert was a *keyword* — ペンダント (pendant), めがみのベル
+(goddess bell), エギルのたいまつ (Egil's torch), ひくうせん (airship), ミスリル
+(mythril). Pendants do not talk. Under the real rule it is 17, and the speakers
+are people.
 
 > ⛔ FF2 has **eight** text pointer tables. Both object blocks validate "100%"
 > against `0x4010` as well — because almost any small id has *a* pointer there —
@@ -424,10 +484,9 @@ The name is never in the line itself. FF2 writes a speaker as `NAME「…」`
 > はけんされてきた?"* is a guard talking **about** Hilda. Only a name in the
 > opening-quote position counts.
 
-> ⛔ A speaker names **whoever speaks that string** — it does *not* name the NPC
-> you are standing in front of, because the objType → string link is unsolved
-> (above). Counting speakers per *object* was how the retracted rule produced
-> ten different sprites all labelled "Hilda".
+> ⛔ A speaker is only `18 NN B9` at the very start (`NAME「`). Counting any
+> mid-line insert as a speaker is how the retracted rule produced pendants and
+> airships "talking".
 
 ### There is no dictionary
 
@@ -491,8 +550,9 @@ fact about the *script*, not an assignment of names to sprites.
 | `tools/ff1-script-dump.mjs` | FF1 script + self-naming characters |
 | `tools/dis6502-ff1.mjs` | 6502 disassembler for the MMC1 ROMs |
 | `tools/lib/ff2-text.mjs` | FF2 kana decoder + map objects + objType→sprite |
-| `tools/npc-dialogue-ff2.mjs` | FF2 objects (no dialogue — see above); `--strings` dumps the script by id |
-| `tools/ff2-talk-probe.mjs` | walks to an NPC, talks, and reports which table entry it displayed |
+| `tools/npc-dialogue-ff2.mjs` | every FF2 object: position, sprite, string id, handler, line |
+| `tools/ff2-talk-probe.mjs` | walks to an NPC, talks, and checks the rule's prediction against the screen |
+| `tools/ff2-talk-trace.mjs` | hooks every cartridge read/zero-page write to find the talk routine |
 | `tools/npc-sheet-ff1.mjs` / `-ff2.mjs` | the rendered sprite sheets |
 | `tools/lib/romaji.mjs` | kana→Hepburn, a reading aid only (never a source of names) |
 | `tools/ff2-script-dump.mjs` | FF2 raw script dump |
