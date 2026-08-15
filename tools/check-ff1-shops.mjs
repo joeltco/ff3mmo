@@ -184,6 +184,18 @@ console.log('\nthe INN reads its price out of the record, live');
 // ⛔ Only index 0 is confirmed on screen (a live battle drew "IMP"); the rest
 // are decoded but not individually verified, because the encounter FORMATION
 // table is not decoded yet and a chosen monster cannot be made to appear.
+console.log('\nencounters (the chain is decoded; the last hop is not)');
+fixed(0xCDC3, [0xA5, 0x45, 0x10], 'LDA $45 / BPL    — prop1 bit 7 = encounter tile');
+fixed(0xCDCE, [0xA5, 0x48, 0x18, 0x69, 0x40], 'LDA $48 / ADC #$40 — formation by MAP');
+fixed(0xC54A, [0xA0, 0x10, 0x84, 0x11], 'LDY #$10 / STY $11 — the table page');
+fixed(0xC54E, [0x0A, 0x26, 0x11], 'ASL A / ROL $11  — ...times 8');
+fixed(0xC559, [0xA9, 0x0B], 'LDA #$0B         — bank 11');
+fixed(0xC56B, [0xB1, 0x10, 0x85, 0x6A], 'LDA ($10),Y / STA $6A — the GROUP id');
+eq('ENCOUNTER_TABLE(16) is $8280 in bank 11',
+   M.ENCOUNTER_TABLE(16), 0x10 + 11 * 0x4000 + (0x8280 - 0x8000));
+eq('eight groups per map', M.ENCOUNTER_SLOTS, 8);
+eq('ENCOUNTER_TILE_BIT is bit 7', M.ENCOUNTER_TILE_BIT, 0x80);
+
 console.log('\nmonster names');
 {
   const MN = await import('./lib/ff1-monsters.mjs');

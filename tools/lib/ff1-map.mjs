@@ -149,6 +149,31 @@ export const ENTRANCE_MAP = 0x2C50;     // CPU $AC40
 export const entranceFor = (rom, idx) =>
   ({ x: rom[ENTRANCE_X + idx], y: rom[ENTRANCE_Y + idx], map: rom[ENTRANCE_MAP + idx] });
 
+// ── encounters (partly decoded — read the warning) ───────────────────────────
+// prop1's BIT 7 is what separates a dungeon's encounter floor from a tile that
+// opens something. The shop path only ever sees prop1 < 0x80:
+//
+//   $CDC3  LDA $45 / BPL $CDDC   ; prop1 < $80 -> not an encounter tile
+//   $CDC7  JSR $C571 / CMP $F8   ; ...else roll against the encounter rate
+//   $CDCE  LDA $48 / CLC / ADC #$40 / JSR $C54A   ; formation, selected BY MAP
+//
+//   $C54A  LDY #$10 / STY $11
+//   $C54E  ASL A / ROL $11  (x3) ; => ($11:$10) = $8000 + (map + $40) * 8
+//   $C559  LDA #$0B / JSR $FE03  ; bank 11
+//   $C562  LDA $F100,X / AND #$3F / TAX
+//   $C568  LDY $C58C,X           ; a weight table picks one of eight
+//   $C56B  LDA ($10),Y / STA $6A ; the encounter GROUP id
+//
+// So each map has EIGHT group ids at bank 11, file 0x2C010 + (map + 0x40) * 8.
+//
+// ⛔ INCOMPLETE. `$6A` is a GROUP, not a monster — the hop from group to the
+// monster ids at $6BC9 is still undecoded. Patching a map's eight bytes does NOT
+// change which monster appears (tested on map 16, whose entry is all zeros
+// anyway), so this is a decoded chain with a missing link, not a working lever.
+export const ENCOUNTER_TABLE = (map) => 0x10 + 11 * 0x4000 + (map + 0x40) * 8;
+export const ENCOUNTER_SLOTS = 8;
+export const ENCOUNTER_TILE_BIT = 0x80;   // $CDC5 BPL — prop1 bit 7
+
 // ── objects ──────────────────────────────────────────────────────────────────
 // NPCs block movement, so pathfinding has to treat their live tiles as walls.
 export const OBJ_RAM = 0x6F00, OBJ_STRIDE = 0x10, OBJ_SLOTS = 16;

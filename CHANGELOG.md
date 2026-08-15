@@ -18,6 +18,53 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.54 — 2026-08-15
+
+### Reaching any FF1 map at all
+
+`tools/ff1-goto.mjs` (NEW) repoints the one overworld entrance the starting
+savestate can walk into (`$AC00/$AC20/$AC40 + 9`, Coneria Castle's door) at any
+map you name, then walks in. Everything past the castle was previously
+unreachable — no dungeon, no chest, no second town.
+
+⛔ The door is straight NORTH, six tiles up at world (146,152). Three search
+strategies failed before that was measured: a round-robin walk turns around long
+before it gets there, and poking `$27`/`$28` onto neighbouring tiles frequently
+lands the party on blocked terrain where no step is possible at all. Walking each
+direction to exhaustion finds it immediately.
+
+### FF1 encounters — the chain, and where it stops
+
+Reaching dungeon map 16 showed tile specials with ids 132-144, well above the
+0-70 shop range. They are not chests. prop1's **bit 7** is what separates a
+dungeon's encounter floor from a tile that opens something:
+
+```
+$CDC3  LDA $45 / BPL +          ; prop1 < $80 -> not an encounter tile
+$CDC7  JSR $C571 / CMP $F8      ; ...else roll against the encounter rate
+$CDCE  LDA $48 / ADC #$40 / JSR $C54A   ; the formation, selected BY MAP
+$C54A  LDY #$10 / STY $11
+$C54E  ASL A / ROL $11 (x3)     ; => ($11:$10) = $8000 + (map + $40) * 8
+$C559  LDA #$0B / JSR $FE03     ; bank 11
+$C568  LDY $C58C,X              ; a weight table picks one of eight
+$C56B  LDA ($10),Y / STA $6A    ; the encounter GROUP id
+```
+
+Each map has **eight** group ids at bank 11, file `0x2C010 + (map + 0x40) * 8`.
+
+⛔ **This is a decoded chain with a missing link, not a working lever.** `$6A` is
+a GROUP, not a monster, and the hop from group to the ids at `$6BC9` is still
+undecoded — patching a map's eight bytes does not change which monster appears
+(tested; map 16's entry is all zeros anyway). Written down as-is so the next
+attempt starts from here instead of from the same three dead ends.
+
+### Changed
+
+- `tools/ff1-goto.mjs` (NEW).
+- `tools/lib/ff1-map.mjs` — `ENCOUNTER_TABLE` / `ENCOUNTER_SLOTS` /
+  `ENCOUNTER_TILE_BIT`, with the incompleteness stated at the definition.
+- `tools/check-ff1-shops.mjs` — pins all six instructions of the chain. 66/66.
+
 ## 1.8.53 — 2026-08-15
 
 ### The scripts, written down; and an index for all of it
