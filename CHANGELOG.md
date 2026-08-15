@@ -18,6 +18,78 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.48 — 2026-08-15
+
+### FF1's shop inventory tables — decoded end to end
+
+Five tables, each found by opening a real shop and watching which cartridge
+bytes it read. Searching the ROM for a plausible run of item ids finds dozens of
+false hits; none of this came from a search.
+
+```
+prop1 of the tile          -> $51, the shop id
+$EB47  LDX $51 / LDA $EBB5,X / AND #$07            ; the shop KIND
+$A7D1  LDA $51 / ASL A / TAX
+$A7D5  LDA $8300,X -> $10 ; LDA $8301,X -> $11     ; the shop's RECORD
+$A7DF  LDY #$04 / LDA ($10),Y / STA $0300,Y        ; five bytes
+$A85F  LDA $0300,X / BEQ +                         ; 00 ENDS the list
+$A88D  CMP #$05                                    ; at most five items
+$ECB9  ASL A / STA $12 / LDA #$5E / ROL A / STA $13 ; the item's PRICE
+$E008  LDA $B700,X / LDA $B701,X                   ; the item's NAME pointer
+$DE47  LDA ($3E),Y / BEQ                           ; names are 00-terminated
+```
+
+| table | CPU | file | per entry |
+|---|---|---|---|
+| shop kind | `$EBB5` fixed bank | `0x3EBC5` | 1 byte, `& 0x07` |
+| shop record ptr | `$8300` bank 14 | `0x38310` | 2 bytes LE |
+| item price | `$BC00` bank 13 | `0x37C10` | 2 bytes LE |
+| item name ptr | `$B700` bank 10 | `0x2B710` | 2 bytes LE |
+
+**52 shops in use** across 70 ids; the other 18 are the tails of each band, all
+pointing at one shared filler record whose first byte is `00`. Full catalog:
+[`docs/FF1-SHOPS.md`](docs/FF1-SHOPS.md).
+
+⛔ The price base is never written as `#$BC`. It is `LDA #$5E / ROL A` — which
+is also how item ids >= `$80` reach `$BD00` for free, and the same trick appears
+in the name table's `BCS $E013`. `$B700` and `$B800` are one contiguous table.
+
+⛔ Item names are VARIABLE length, not a fixed stride. Most records are 8 bytes,
+so `base + id*8` fits Wooden/Chain/Iron and then breaks: "Ribbon" is 9 bytes and
+shifts everything after it. That mis-fit is what sent this down a blind alley
+before the pointer table was traced.
+
+⛔ **INN and CLINIC records are not item lists** — they are a 16-bit price
+(`$AAA0 LDA $0300 / LDA $0301` into the number printer). Read as a list, an
+unused inn "costs" 7680 G.
+
+### Verified against the shops themselves
+
+`tools/ff1-shop-probe.mjs --all` opens all 70 and compares. **0 mismatches** —
+but only after the comparison stopped pretending the kinds are alike, which had
+it reporting 20 failures when nothing was wrong:
+
+- WEAPON / ARMOR / ITEM / OASIS — the Buy list is the table, in order. Exact.
+- WMAGIC / BMAGIC — the shop only offers spells the chosen character can learn,
+  so a low-level party sees a subset (often none). Every price drawn is in the
+  table; the reverse is not required, and rows carry the spell LEVEL too.
+- INN / CLINIC — the price is never drawn on that screen. Confirmed instead by
+  catching `$AAA3`/`$AAA8` read the record live.
+
+### Changed
+
+- `tools/lib/ff1-shops.mjs` (NEW) — the five tables plus `shopAt` / `allShops`,
+  each constant next to the listing that proves it.
+- `tools/ff1-shop-trace.mjs`, `tools/ff1-shop-probe.mjs`,
+  `tools/ff1-shop-catalog.mjs` (NEW) — find it, verify it, render it.
+- `docs/FF1-SHOPS.md` (NEW) — every shop, its record, its stock and its prices.
+- `tools/check-ff1-shops.mjs` (NEW gate, in `deploy.sh`) — 44/44, **15 gate
+  reverts tested, all fail.** Two of those reverts initially passed and the gate
+  was strengthened until they didn't: swapping the `KINDS` order, and dropping
+  CLINIC from `PRICE_KINDS` (which silently turns a clinic into a one-item shop).
+- `tools/ff1-shop-probe.mjs` — `!B[k]` would have rejected A, since jsnes
+  numbers `BUTTON_A` as 0. Same trap as the talk probes.
+
 ## 1.8.47 — 2026-08-15
 
 ### `$0D` is FF1's DOOR byte — the `altLayer` reading was wrong
