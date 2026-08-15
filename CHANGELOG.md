@@ -18,6 +18,65 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.50 — 2026-08-15
+
+### FF3's shops — decoded from the ROM, not from ff3mmo's own catalog
+
+`src/data/shops.js` is this game's own design. This is the ROM's table, which
+had never been read. A shop in FF3 is a shopkeeper NPC, so
+`tools/ff3-shop-sweep.mjs` (NEW) patches the id of one shopkeeper standing two
+tiles from a savestate, warps in and talks — for all 256 ids.
+
+⛔ FF3 reloads its NPC table from ROM on every map load, so patching the ROM
+DOES take here. FF2 is the opposite: its savestate already holds the map in RAM
+and the poke has to go to `$7500`. Same trick, opposite plumbing.
+
+```
+3F/EA04  ASL A / TAY / BCC + / INX        ; id*2, carrying into the next page
+         STX $81 / LDA #$00 / STA $80     ; the pointer table is PAGE-ALIGNED
+3F/EA12  LDA ($80),Y -> $82 ; $83         ; -> the shop's record
+3F/EA1B  LDY #$3F / LDA ($82),Y / STA $7B00,Y
+3D/B220  LDX #$07 / LDA $7B01,X           ; EIGHT item slots
+3D/B230  JSR $F5D4                        ; item id -> price
+3F/F5DE  LDA $9E00,X / $9E01,X            ; the price, 16-bit LE
+```
+
+| table | bank/CPU | file | per entry |
+|---|---|---|---|
+| shop record ptr | 44 `$8200` | `0x58210` | 2 bytes LE, by NPC id |
+| item price | 16 `$9E00` | `0x21E10` | 2 bytes LE |
+| item name ptr | 24 `$8800` | `0x30810` | 2 bytes LE |
+
+A record is `[kind][up to 8 item ids]`, ended early by a `00`. Kind bytes: 7
+Weapons, 8 Armor, 9 Items, 10 Magic. **21 shops.** Catalog:
+[`docs/FF3-SHOPS.md`](docs/FF3-SHOPS.md).
+
+⛔ A record with all 8 slots used has **no terminator** (id 228 is one), so the
+reader has to stop on the count as well as on the zero.
+
+⛔ Ids 232, 239, 244 and 250 have well-formed records and open **nothing**. A
+record is necessary but not sufficient, so the shop-id list is measured rather
+than derived — and the gate re-checks all four live.
+
+### Verified
+
+`tools/ff3-shop-probe.mjs --all` opens all 21 and compares names, prices, the
+kind word the shop draws, and the record it loads into `$7B00`. **0 mismatches.**
+
+### Changed
+
+- `tools/lib/ff3-shops.mjs` (NEW), `tools/ff3-shop-sweep.mjs`,
+  `tools/ff3-shop-probe.mjs`, `tools/ff3-shop-catalog.mjs` (NEW).
+- `docs/FF3-SHOPS.md` (NEW).
+- `tools/check-ff3-shops.mjs` (NEW gate, in `deploy.sh`) — 49/49, **12 gate
+  reverts tested, all fail.**
+- `tools/states/ff3-freeroam.state.gz`.
+
+⛔ One of this gate's own expectations was written from a GUESS at an item id
+("0x93 is Diamond Mail") and failed on the first run. 0x93 is DiamndBrc at
+10000 G; DiamondMa is 0x84 at 33000. Both are pinned now, read off the id order
+in shop 241's record rather than assumed.
+
 ## 1.8.49 — 2026-08-15
 
 ### FF2's shops — and what all 256 object types do
