@@ -187,8 +187,10 @@ console.log('\nthe INN reads its price out of the record, live');
 console.log('\nmonster names');
 {
   const MN = await import('./lib/ff1-monsters.mjs');
-  fixed(0xFC77, [0xBD, 0xE4, 0x6B], 'LDA $6BE4,X      — the monster id in battle RAM');
-  eq('MONSTER_ID_RAM is $6BE4', MN.MONSTER_ID_RAM, 0x6BE4);
+  fixed(0xFBD4, [0xBD, 0xC9, 0x6B], 'LDA $6BC9,X      — the battle monster slots');
+  fixed(0xFBD7, [0xC9, MN.EMPTY_SLOT], 'CMP #$FF         — EMPTY_SLOT');
+  fixed(0xFBDB, [0x4C, 0x7A, 0xFC], 'JMP $FC7A        — into the printer, id already in A');
+  eq('MONSTER_SLOTS is $6BC9', MN.MONSTER_SLOTS, 0x6BC9);
   fixed(0xFC7B, [0xA9, 0x0B], 'LDA #$0B         — the name bank');
   fixed(0xFC83, [0xBD, 0xE0, 0x94], 'LDA $94E0,X      — NAME_PTR_TABLE');
   fixed(0xFC88, [0xBD, 0xE1, 0x94], 'LDA $94E1,X      — ...its high byte');

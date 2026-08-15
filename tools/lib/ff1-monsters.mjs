@@ -23,9 +23,25 @@
 // monster can be made to appear, and that is not decoded yet — a harness fact,
 // not a claim that the other 138 names are unreliable.
 
+// WHERE THE ID COMES FROM (decoded, but not yet usable to sweep):
+//   $FBD0  SEC / SBC #$08 / TAX
+//   $FBD4  LDA $6BC9,X      ; the battle's monster slots live at RAM $6BC9
+//   $FBD7  CMP #$FF / BEQ   ; $FF = no monster in that slot
+//   $FBDB  JMP $FC7A        ; -> the printer, entered with the id ALREADY in A
+//
+// ⛔ That JMP lands AFTER the `LDA $6BE4,X` at $FC77, which is why a read hook
+// on $6BE4 never fired and cost a long detour. $6BE4 is not the id's home.
+//
+// ⛔ Holding a poked value at $6BC9 across the battle setup does NOT make a
+// chosen monster appear — the encounter simply does not draw. Making one appear
+// needs the FORMATION table, which is still undecoded. Stated so nobody repeats
+// the attempt expecting it to work.
+
+export const MONSTER_SLOTS = 0x6BC9;            // $FBD4 LDA $6BC9,X
+export const EMPTY_SLOT = 0xFF;                 // $FBD7 CMP #$FF
+
 export const NAME_PTR_TABLE = 0x2D4F0;          // CPU $94E0, bank 11
 export const NAME_BANK_BASE = 0x10 + 11 * 0x4000;
-export const MONSTER_ID_RAM = 0x6BE4;           // $FC77 LDA $6BE4,X
 export const NAME_COUNT = 128;                  // ids that resolve to a real name
 
 /** The id whose name was read off a running battle. */

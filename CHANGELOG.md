@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.53 — 2026-08-15
+
+### The scripts, written down; and an index for all of it
+
+The three text decoders have been verified and gate-pinned for a while but only
+ever existed as dump *tools*, so no game's script was actually written down.
+`tools/script-catalog.mjs` (NEW) commits all three:
+
+- [`docs/FF1-SCRIPT.md`](docs/FF1-SCRIPT.md) — 399 strings
+- [`docs/FF2-SCRIPT.md`](docs/FF2-SCRIPT.md) — 508 strings across both tables
+- [`docs/FF3-SCRIPT.md`](docs/FF3-SCRIPT.md) — 931 strings
+
+⛔ FF2's sub-`0x8A` dictionary is still undecoded, so roughly a fifth of each JP
+line comes back as `{xx}`. Those are printed exactly as they are. Spot check:
+string `0x01` is `ヒルダ「あいことばは 【{16}{c}のばら】です。…`, which is the
+line the talk probe read off the running game — gaps and all.
+
+[`docs/ROM-CATALOGS.md`](docs/ROM-CATALOGS.md) (NEW) indexes every catalog, says
+how each game's shops were reached, and — the part that matters — states how far
+each table is actually proven, including the three that are weaker than the rest.
+
+### FF1's monster slots
+
+`$FBD4 LDA $6BC9,X` — the battle's monster ids live at RAM `$6BC9`, `$FF` marks
+an empty slot, and `$FBDB JMP $FC7A` enters the name printer with the id already
+in A.
+
+⛔ That JMP lands AFTER the `LDA $6BE4,X` at `$FC77`, which is why a read hook on
+`$6BE4` never fired and cost a long detour. `$6BE4` is not the id's home.
+
+⛔ Holding a poked value at `$6BC9` across the battle setup does **not** make a
+chosen monster appear — the encounter simply never draws. Making one appear needs
+the FORMATION table, which is still undecoded. Written into the module so nobody
+repeats the attempt expecting it to work, and the tool built for it was deleted
+rather than shipped broken.
+
+### Changed
+
+- `tools/script-catalog.mjs` (NEW); `docs/FF{1,2,3}-SCRIPT.md`,
+  `docs/ROM-CATALOGS.md` (NEW).
+- `tools/lib/ff1-monsters.mjs` — `MONSTER_SLOTS` / `EMPTY_SLOT`, and the dead end
+  documented.
+- `tools/check-ff1-shops.mjs` — pins `$FBD4` / `$FBD7` / `$FBDB`. 57/57.
+
 ## 1.8.52 — 2026-08-15
 
 ### FF2's monsters — all 128, confirmed by the guards that summon them
