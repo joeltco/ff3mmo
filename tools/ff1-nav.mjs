@@ -21,7 +21,8 @@
 //                      $CA8C  LDA $CDA1,X / JMP ($0010) ; per-terrain handler
 //                    so a tile is blocked iff (prop0 & 0x1F) == 0x01.
 //
-// ⛔ NOT $CBE2. That routine also reads the properties and does `AND #$C2`,
+// ⛔ NOT the routine at $CBE2 / its `AND #$C2` at $CBEF. That one also reads
+// the properties,
 // which is what an earlier pass mistook for the collision rule — it is some
 // other query, and it disagrees with reality: tile 0x38 (prop0 0x01) is blocked
 // though 0x01 & 0xC2 == 0, and tile 0x44 (prop0 0x80) is passable though
@@ -40,6 +41,7 @@
 
 import fs from 'node:fs';
 import { NES, Controller } from 'jsnes';
+import * as M from './lib/ff1-map.mjs';
 
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : args[i + 1]; };
@@ -49,12 +51,6 @@ const SAVE = flag('save', null);
 const SHOW = args.includes('--map');
 const ROMP = process.env.FF1_ROM || '/home/joeltco/roms/ff1-usa.nes';
 
-const PLAYER_X = 0x68, PLAYER_Y = 0x69, MAP_ID = 0x48;
-const MAP_RAM = 0x7000, MAP_W = 64, MAP_H = 64;
-const PROP_RAM = 0x0400;          // 2 bytes per tile
-const BLOCK_MASK = 0x1F, BLOCK_VALUE = 0x01;   // $CA83 AND #$1F / CMP #$01
-const SPECIAL_MASK = 0x1E, SPECIAL_DOOR = 0x08;
-const OBJ_RAM = 0x6F00, OBJ_STRIDE = 0x10, OBJ_SLOTS = 16;
 
 const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
 nes.loadROM(fs.readFileSync(ROMP, 'binary'));
@@ -67,34 +63,23 @@ const B = { up: Controller.BUTTON_UP, down: Controller.BUTTON_DOWN,
 const press = (k, hold = 6, after = 26) => {
   nes.buttonDown(1, B[k]); run(hold); nes.buttonUp(1, B[k]); run(after);
 };
-const at = () => [nes.cpu.mem[PLAYER_X], nes.cpu.mem[PLAYER_Y]];
-const tile = (x, y) => nes.cpu.mem[MAP_RAM + (y & 63) * MAP_W + (x & 63)];
-const prop0 = (x, y) => nes.cpu.mem[PROP_RAM + tile(x, y) * 2];
-const walkable = (x, y) => (prop0(x, y) & BLOCK_MASK) !== BLOCK_VALUE;
-/** $CA89 AND #$1E indexes the terrain-handler table at $CDA1. */
-const terrainType = (x, y) => prop0(x, y) & SPECIAL_MASK;
-
-/** Live object tiles — NPCs block movement. */
-function blockers() {
-  const s = new Set();
-  for (let i = 0; i < OBJ_SLOTS; i++) {
-    const b = OBJ_RAM + i * OBJ_STRIDE;
-    if (!nes.cpu.mem[b]) continue;                 // slot empty / not spawned
-    s.add(`${nes.cpu.mem[b + 2]},${nes.cpu.mem[b + 3]}`);
-  }
-  return s;
-}
+const at = () => [nes.cpu.mem[M.PLAYER_X], nes.cpu.mem[M.PLAYER_Y]];
+const tile = (x, y) => M.tileAt(nes.cpu.mem, x, y);
+const prop0 = (x, y) => M.prop0(nes.cpu.mem, x, y);
+const walkable = (x, y) => M.isWalkable(nes.cpu.mem, x, y);
+const terrainType = (x, y) => M.terrainType(nes.cpu.mem, x, y);
+const blockers = () => M.objectTiles(nes.cpu.mem);
 
 run(20);
-console.log(`FF1 nav — map ${nes.cpu.mem[MAP_ID]}, player at (${at()})`);
+console.log(`FF1 nav — map ${nes.cpu.mem[M.MAP_ID]}, player at (${at()})`);
 
 if (SHOW) {
   const [px, py] = at();
   const blk = blockers();
   console.log('\n  . walkable   # blocked   + door/trigger   @ player   N npc');
-  for (let y = 0; y < MAP_H; y++) {
+  for (let y = 0; y < M.MAP_H; y++) {
     let row = String(y).padStart(2) + ' ';
-    for (let x = 0; x < MAP_W; x++) {
+    for (let x = 0; x < M.MAP_W; x++) {
       row += (x === px && y === py) ? '@'
         : blk.has(`${x},${y}`) ? 'N'
         : terrainType(x, y) ? '+'
@@ -111,7 +96,7 @@ const [gx, gy] = TO.split(',').map(Number);
 /** BFS over walkable tiles; NPCs are walls, but the GOAL may be one. */
 function findPath(sx, sy, tx, ty, ignoreNpcs = false) {
   const blk = ignoreNpcs ? new Set() : blockers();
-  const key = (x, y) => y * MAP_W + x;
+  const key = (x, y) => y * M.MAP_W + x;
   const prev = new Map();
   const q = [[sx, sy]];
   const seen = new Set([key(sx, sy)]);

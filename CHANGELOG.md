@@ -18,6 +18,86 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.47 — 2026-08-15
+
+### `$0D` is FF1's DOOR byte — the `altLayer` reading was wrong
+
+The open question was whether `$0D` bit 0 is the runtime side of the map-object
+`0x80` flag, i.e. "the party is inside a building". It is not. The whole byte is
+a door-animation request:
+
+```
+$CE53 (open)   LSR A / AND #$03      ; A entered as prop0 & $1E ($CA96 TXA),
+                                     ; so this is (prop0 >> 1) & 3 = the variant
+      $CE65    ASL $0D               ; for the CARRY ONLY (old bit 7) —
+      $CE67    STA $0D               ; the ASL result is immediately overwritten
+      $CE69    BCS + / JSR $CF1E     ; already open -> skip the sound
+$CE44 (close)  LDA $0D / BPL + / EOR #$84 / STA $0D / JSR $CF1E
+$CEBB (draw)   LDA $0D / BEQ + / BMI +   ; nothing pending / already drawn
+               AND #$07               ; 1,2 -> tile $37 ; 5 -> $36 ; else $3B
+      $CEEA    LDA $2002 / $0F,$0E -> $2006   ; poke it into the nametable
+$C901          LDA #$00 / STA $0D     ; cleared when the tile's special fires
+```
+
+**Bit 7 is an "already serviced" guard** that makes the draw idempotent; bits
+0-2 pick the door graphic. Bit 0 is just the low bit of that 3-bit field and
+carries no inside/outside meaning.
+
+⛔ `$CF1E` writes `$400C/$400E/$400F` — the **noise channel**. It is the door
+SFX. Reading it as a layer redraw is what made "`$0D` switches rooms" look
+plausible.
+
+**Measured, not argued:** `$0D` is 0 outdoors in Coneria, 0 standing in a shop
+(80 shops checked), and 1 only for the few frames a door is opening.
+
+### Getting into a shop at all
+
+Coneria is unreachable by walking — the overworld pocket around the start is a
+few tiles wide. Per the hex-patch rule the castle entrance's destination was
+repointed at the town (patched ROM only; `~/roms/ff1-usa.nes` untouched), which
+put the party in Coneria. Stepping onto the door at (15,19) opens the ARMOR
+shop, read back off the nametable: `ARMOR / Welcome / Buy / Sell / Exit`.
+
+### The tile-special id space, decoded by what draws
+
+`$CEB0 LDA $45 / BEQ + / STA $51 / INC $50` — **tile property 1 IS the special
+id**, and `$51`/`$50` is a request the game runs itself. Driving that request
+for every id and reading the banner back gives the whole space:
+
+| ids | opens | | ids | opens |
+|---|---|---|---|---|
+| 0-9 | WEAPON | | 41-50 | CLINIC |
+| 10-20 | ARMOR | | 51-60 | INN |
+| 21-30 | WMAGIC | | 61-69 | ITEM |
+| 31-40 | BMAGIC | | 70 | OASIS |
+
+Coneria's seven special tiles come out as exactly one of each — WEAPON, ARMOR,
+WMAGIC, BMAGIC, CLINIC, INN, ITEM — which is independently what that town has.
+
+⛔ prop1 is **not** an index into the overworld entrance tables at
+`$AC00/$AC20/$AC40`; those are a different space. The first version of
+`ff1-exits.mjs` resolved it through them and printed confident nonsense
+("(15,19) -> map 11"). Fixed before it went anywhere.
+
+### Changed
+
+- `tools/lib/ff1-map.mjs` (NEW) — single source for FF1's map layout, collision
+  rule, terrain dispatch, the `$0D` door byte and the tile specials, each
+  constant sitting next to the listing that proves it. `ff1-nav`, `ff1-exits`,
+  `ff1-room-probe` and `ff1-warp` all import it instead of carrying copies.
+- `tools/ff1-room-probe.mjs` (NEW) — walks a tile at a time with a `$0D` write
+  hook armed and reads the screen, so "a shop opened" is distinguishable from
+  "the party moved".
+- `tools/ff1-warp.mjs` (NEW) — drives the game's own `$51`/`$50` request;
+  `--sweep` decodes the id space by what each one draws.
+- `tools/ff1-exits.mjs` (NEW) — every tile on the loaded map that does
+  something, and which shop it opens.
+- `tools/check-ff1-map.mjs` (NEW gate, in `deploy.sh`) — checks every constant
+  against the bytes at the address it cites, and re-opens 9 shops live because
+  no ROM table names them. 55/55. **13 gate reverts tested, all fail.**
+- Corrected v1.8.46's shorthand: the lookalike's mask is the `AND #$C2` at
+  `$CBEF`; `$CBE2` is that routine's entry, not the instruction.
+
 ## 1.8.46 — 2026-08-15
 
 ### The real FF1 collision check — found by diffing blocked vs successful moves
