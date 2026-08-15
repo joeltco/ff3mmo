@@ -609,9 +609,10 @@ gives, and where it stands. `--named` renders only the ones that name a speaker.
 ⛔ **Two caveats are printed on the sheets themselves**, because a sheet that
 looks authoritative gets believed:
 
-- **FF1 and FF2 use one representative palette** (their per-map palettes are not
-  decoded). **FF3's are real**: each NPC is drawn in its map's own sprite
-  palettes — see below.
+- **All three now use the real NPC palettes.** In every game an NPC's top half
+  draws on sprite palette 2 and its bottom half on palette 3 (the player takes
+  0/1). FF3's are resolved per map; FF1's and FF2's use the measured town/castle
+  values because their per-map selector is not decoded — see below.
 - **The line is the no-flag default.** All three games pick the actual line in a
   per-type code handler driven by story flags.
 
@@ -646,6 +647,40 @@ palette-7 values.
 The rendered sheet was checked pixel-by-pixel against the measurement: the cell
 for Topapa contains exactly five colours — `0F` black, `12` blue and `36` pale
 (the bottom palette), `27` gold and `30` white (the top) — and nothing else.
+
+### FF1 and FF2 NPC colours
+
+```
+top half    = sprite palette 2
+bottom half = sprite palette 3      (the player draws on 0 and 1)
+```
+
+**Measured** by `tools/nes12-npc-palette.mjs` two independent ways: by
+y-coordinate off OAM (FF1 `(112,76)`=pal2 sits above `(112,84)`=pal3; FF2
+`(80,92)`=pal2 above `(80,100)`=pal3), and in code — FF2's sprite layout tables
+at `$B24F`/`$B25F` contain only attribute bytes `02`, `03` and `43` (= 3 plus
+the horizontal-flip bit). That is why a single flat palette looked plausible for
+so long: the player really does use one pair, and NPCs another.
+
+FF1's palette pipeline, traced end to end:
+
+```
+$CC49  LDA $48 / ASL A x4        ; mapId * 16 -> $10/$11
+$CC60  TXA / ADC $11 / ORA #$A0  ; a pointer into the $A000 window
+$CC69  LDA ($10),Y / STA $0780,Y ; 0x30 bytes -> RAM
+$D8AD  LDA $0780,X / STA $03C0,X ; 0x20 bytes -> the PPU buffer
+$D880  LDA $03C0,X / STA $2007   ; re-uploaded EVERY FRAME
+```
+
+Map 8 loads the set at `$A480`, and all eight of its palettes — BG and sprite —
+match the PPU byte for byte. The table at `$A000` holds **40 valid 48-byte sets
+with 25 distinct NPC palette pairs**.
+
+> ⛔ **The per-map selector is NOT decoded.** The pointer is
+> `$A000 + X*0x100 + mapId*16`, and where `X` comes from is still unknown — maps
+> 8 and 24 reach the same record through different `X`. So FF1's and FF2's
+> sheets use the measured town/castle values rather than resolving each map, and
+> say so. FF3's *are* resolved per map. This is the one loose end.
 
 ### A name the sheet caught
 

@@ -18,6 +18,63 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.36 — 2026-08-15
+
+### FF1 and FF2 NPC palettes — measured, and the sheets were wrong
+
+```
+top half    = sprite palette 2
+bottom half = sprite palette 3      (the player draws on 0 and 1)
+```
+
+Both sheets had been drawing every NPC in ONE flat palette
+(`0F 0F 16 36`), which is the *player's*. NPCs use a different pair, and the top
+half was simply the wrong colour in both games.
+
+**New tool — `tools/nes12-npc-palette.mjs`** (FF1 and FF2 share a mapper, the
+`$68/$69` player coords and the OAM layout, so one tool serves both). It reads
+`$3F10-$3F1F`, clusters OAM into 16x16 NPCs, and can hook the OAM attribute
+writes and the palette upload path.
+
+Confirmed two independent ways:
+- **by y-coordinate** — FF1 `(112,76)`=pal2 sits above `(112,84)`=pal3; FF2
+  `(80,92)`=pal2 above `(80,100)`=pal3
+- **in code** — FF2's sprite layout tables at `$B24F`/`$B25F` contain only
+  attribute bytes `02`, `03` and `43` (3 + horizontal flip). Nothing else.
+
+### FF1's palette pipeline, traced end to end
+
+```
+$CC49  LDA $48 / ASL A x4        ; mapId * 16 -> $10/$11
+$CC60  TXA / ADC $11 / ORA #$A0  ; a pointer into the $A000 window
+$CC69  LDA ($10),Y / STA $0780,Y ; 0x30 bytes -> RAM
+$D8AD  LDA $0780,X / STA $03C0,X ; 0x20 bytes -> the PPU buffer
+$D880  LDA $03C0,X / STA $2007   ; re-uploaded EVERY FRAME
+```
+
+Map 8 loads the set at `$A480`; all eight of its palettes, BG and sprite, match
+the PPU byte for byte. The table at `$A000` holds **40 valid 48-byte sets with 25
+distinct NPC palette pairs**.
+
+> ⛔ **The per-map selector is NOT decoded.** The pointer is
+> `$A000 + X*0x100 + mapId*16` and where `X` comes from is still unknown — maps 8
+> and 24 reach the same record through different `X`. So unlike FF3, FF1's and
+> FF2's sheets cannot resolve colours per map; they use the measured
+> town/castle values and say so on the image. That is the one loose end.
+
+### Changed
+
+- `tools/nes12-npc-palette.mjs` (NEW) — `--trace` hooks OAM attribute writes,
+  `--paltrace` follows the palette from ROM to PPU, `--goto` walks to an NPC.
+- `tools/npc-sheet-ff1.mjs` / `-ff2.mjs` — two palettes, top and bottom.
+- `tools/check-ff12-text.mjs` — pins map 8's set (sprite AND BG halves), the
+  40-set table, and FF2's layout attributes. **6 reverts tested, all fail.**
+
+⛔ One gate hole found and closed on the way: a wrong 48→32 stride still landed
+on plausible palette data, so the structural "are these valid sets" test passed.
+The set size is now anchored to the instruction that defines it — `$CC6F` is
+`CPY #$30` — so the constant and the code cannot disagree.
+
 ## 1.8.35 — 2026-08-14
 
 ### FF3's NPC colours, decoded — and they are per-MAP, not per-NPC

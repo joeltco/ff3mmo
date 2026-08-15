@@ -418,5 +418,82 @@ const ok = (m) => console.log('  ✓ ' + m);
   if (since()) ok('FF2 pinned strings resolve at their own ids (shift-sensitive)');
 }
 
+// ══ NPC SPRITE PALETTES (FF1 + FF2) ═══════════════════════════════════════
+//
+// MEASURED off the PPU by `tools/nes12-npc-palette.mjs`: in BOTH games the
+// player draws on sprite palettes 0/1 and every NPC on 2 (top half) and 3
+// (bottom half). Confirmed by y-coordinate and in code — FF2's sprite layout
+// tables hold only attribute bytes 02, 03 and 43 (= 3 + horizontal flip).
+//
+// FF1's palette pipeline, traced end to end:
+//   $CC49  LDA $48 / ASL x4        ; mapId * 16 into $10/$11
+//   $CC60  TXA / ADC $11 / ORA #$A0 ; -> a pointer in the $A000 window
+//   $CC69  LDA ($10),Y / STA $0780,Y  (0x30 bytes)
+//   $D8AD  LDA $0780,X / STA $03C0,X  (0x20 bytes)
+//   $D880  LDA $03C0,X / STA $2007    (every frame)
+// ⛔ Where X comes from is NOT decoded, so a map's palette cannot be resolved
+// offline the way FF3's can. What IS pinned: the set map 8 loads, byte for byte.
+{
+  const f1 = F1.loadRom(FF1);
+  const hxs = (a) => a.map(v => v.toString(16).padStart(2, '0')).join(' ');
+  // map 8 loaded the 48-byte set at NES $A480 in bank 0 -> file 0x2490
+  const SET = 0x10 + (0xA480 - 0x8000);
+  const set = [...f1.slice(SET, SET + 0x30)];
+  // sprite palettes are bytes 16..31 of the set; NPC top = 24..27, bottom = 28..31
+  if (hxs(set.slice(24, 28)) !== '0f 0f 27 36') {
+    bad(`FF1 map 8 sprite palette 2 is ${hxs(set.slice(24, 28))}, the PPU measured 0f 0f 27 36`);
+  }
+  if (hxs(set.slice(28, 32)) !== '0f 0f 16 36') {
+    bad(`FF1 map 8 sprite palette 3 is ${hxs(set.slice(28, 32))}, the PPU measured 0f 0f 16 36`);
+  }
+  // the BG half of the same set was measured too — it pins the set's alignment
+  if (hxs(set.slice(8, 12)) !== '0f 12 1a 19') {
+    bad(`FF1 map 8 BG palette 2 is ${hxs(set.slice(8, 12))}, the PPU measured 0f 12 1a 19`);
+  }
+  // ⛔ Pin the SET SIZE to the code that defines it. A 0x20 stride still lands
+  // on plausible-looking palette data (the region is dense), so a structural
+  // "are these valid sets" test alone cannot catch a wrong stride.
+  // $CC6F is `CPY #$30` — the copy length IS the set size.
+  const SET_SIZE = 0x30;
+  const CPY_OFF = 0x10 + 15 * 0x4000 + (0xCC6F - 0xC000);
+  if (f1[CPY_OFF] !== 0xC0 || f1[CPY_OFF + 1] !== SET_SIZE) {
+    bad(`FF1 $CC6F is not \`CPY #$${SET_SIZE.toString(16)}\` ` +
+        `(found ${f1[CPY_OFF].toString(16)} ${f1[CPY_OFF + 1].toString(16)}) — the palette set size has moved`);
+  }
+  // ...and the table it sits in must still be a run of valid palette sets
+  const BASE = 0x10 + (0xA000 - 0x8000);
+  let valid = 0;
+  const pairs = new Set();
+  for (let n = 0; n < 40; n++) {
+    const o = BASE + n * SET_SIZE;
+    const s2 = [...f1.slice(o, o + SET_SIZE)];
+    if (s2.every(v => v <= 0x3F) && [0, 4, 8, 12, 16, 20, 24, 28].every(i => s2[i] === 0x0F)) {
+      valid++; pairs.add(hxs(s2.slice(24, 32)));
+    }
+  }
+  if (valid < 40) bad(`only ${valid}/40 FF1 palette sets from $A000 are valid — the table base has moved`);
+  if (pairs.size < 20) bad(`only ${pairs.size} distinct FF1 NPC palette pairs, expected ~25`);
+  if (since()) ok(`FF1 palettes: map 8's set matches the PPU, ${valid} valid sets, ${pairs.size} distinct NPC pairs`);
+}
+{
+  const f2 = F2.loadRom(FF2);
+  // FF2's NPC sprite layout tables live at $B24F/$B25F in bank 3; every entry is
+  // (attr, tile) and the attrs alternate palette 2 / palette 3.
+  const off = (a) => 0x10 + 3 * 0x4000 + (a - 0x8000);
+  // ⛔ ALIGNMENT: the pointer the game holds ($B24F) lands on a TILE byte — the
+  // routine writes tile0 before the loop. The attribute bytes are the EVEN
+  // addresses. Scanning from the odd pointer reads tiles and yields 0,1,0,1.
+  const attrs = new Set();
+  for (let a = 0xB240; a < 0xB270; a += 2) attrs.add(f2[off(a)]);
+  const stray = [...attrs].filter(v => (v & 3) !== 2 && (v & 3) !== 3);
+  if (stray.length) {
+    bad(`FF2 NPC layout tables use palette(s) ${stray.map(v => v & 3).join(',')} — NPCs draw only on 2 and 3`);
+  }
+  if (!attrs.has(0x02) || !attrs.has(0x03)) {
+    bad(`FF2 NPC layout tables no longer alternate 02/03 (got ${[...attrs].map(v => v.toString(16)).join(' ')})`);
+  }
+  if (since()) ok(`FF2 NPC layout tables draw only on sprite palettes 2 and 3 (${[...attrs].map(v => '0x' + v.toString(16)).join(' ')})`);
+}
+
 if (failed) { console.error(`\ncheck-ff12-text: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-ff12-text: OK');
