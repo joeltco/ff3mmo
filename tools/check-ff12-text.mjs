@@ -509,6 +509,42 @@ const ok = (m) => console.log('  ✓ ' + m);
     bad(`FF2 NPC layout tables no longer alternate 02/03 (got ${[...attrs].map(v => v.toString(16)).join(' ')})`);
   }
   if (since()) ok(`FF2 NPC layout tables draw only on sprite palettes 2 and 3 (${[...attrs].map(v => '0x' + v.toString(16)).join(' ')})`);
+
+  // ── which colours those two palettes hold ──────────────────────────────
+  //
+  //   $9D52  LDA $48 / LSR A x4 / ORA #$A0    ; -> $A000 + mapId*16
+  //   $9D3C  LDA ($80),Y / TAY                ; a palette INDEX
+  //   $9D3F  LDA $8E00,Y / $8E80,Y / $8F00,Y  ; three PARALLEL colour tables
+  //
+  // Same shape as FF3's 0x1110/0x1210/0x1310. MEASURED against the live $03C0
+  // buffer in the Altair throne room ($48 = 4), 5/5 map-driven slots exact.
+  // ⛔ Go through the LIBRARY, not a local copy — a gate that recomputes the
+  // constants passes even when the shipped module is reverted.
+  {
+    const hxs = (a) => a.map(v => v.toString(16).padStart(2, '0')).join(' ');
+    const np = F2.npcPalettesForMap(f2, 4);
+    if (hxs(np.top) !== '0f 0f 27 36') bad(`FF2 map 4 NPC top palette is ${hxs(np.top)}, the PPU measured 0f 0f 27 36`);
+    if (hxs(np.btm) !== '0f 0f 30 36') bad(`FF2 map 4 NPC bottom palette is ${hxs(np.btm)}, the PPU measured 0f 0f 30 36`);
+    // the BG slots the same list feeds — they pin the list's alignment
+    const list = F2.paletteListForMap(f2, 4);
+    const BG = [[1, '0f 00 10 30'], [2, '0f 08 16 28'], [3, '0f 00 10 37']];
+    for (const [i, want] of BG) {
+      const got = hxs(F2.paletteForIndex(f2, list[i]));
+      if (got !== want) bad(`FF2 map 4 BG palette from list[${i}] is ${got}, the PPU measured ${want}`);
+    }
+    if (F2.PAL_LIST_NPC_TOP !== 4 || F2.PAL_LIST_NPC_BTM !== 5) {
+      bad('FF2 NPC palette list slots are no longer 4/5');
+    }
+    // ⛔ and the variety must survive — a collapse would look fine but say nothing
+    const pairs = new Set();
+    const maps = F2.MAPOBJ_BLOCKS.reduce((a, b) => a + b.maps, 0);
+    for (let m = 0; m < maps; m++) {
+      const p = F2.npcPalettesForMap(f2, m);
+      pairs.add(hxs(p.top) + '|' + hxs(p.btm));
+    }
+    if (pairs.size < 8) bad(`only ${pairs.size} distinct FF2 NPC palette pairs across ${maps} maps — expected many more`);
+    if (since()) ok(`FF2 palettes: map 4 matches the PPU (NPC + 3 BG slots), ${pairs.size} distinct NPC pairs over ${maps} maps`);
+  }
 }
 
 if (failed) { console.error(`\ncheck-ff12-text: FAIL (${failed})`); process.exit(1); }

@@ -693,10 +693,34 @@ maps 8 and 24 match the PPU byte for byte across all eight palettes. The FF1
 sheet now draws every NPC in its map's real colours, pixel-verified: cell 0
 (objType 1, first placed on map 24) contains only `0F`, `16`, `27` and `36`.
 
-> ⛔ **FF2's palette source is still untraced.** Its NPCs are known to use
-> palettes 2 and 3, but where those colours come from has not been followed, so
-> the FF2 sheet uses the measured throne-room values and says so. That is the
-> remaining gap.
+### FF2: three parallel colour tables
+
+```
+list = $A000 + mapId*16                     (bank 0, file 0x2010 + mapId*16)
+palette(i) = [0x0F, T1[i], T2[i], T3[i]]    T1=$8E00  T2=$8E80  T3=$8F00
+BG 0/1/2 = list[1..3]     NPC top = list[4]     NPC bottom = list[5]
+```
+
+```
+$9D52  LDA $48 / LSR A x4 / ORA #$A0    ; -> $A000 + mapId*16
+$9D3C  LDA ($80),Y / TAY                ; a palette INDEX
+$9D3F  LDA $8E00,Y / $8E80,Y / $8F00,Y  ; three PARALLEL colour tables
+```
+
+**Exactly FF3's shape** — three parallel tables indexed by a per-map byte —
+even though FF1, its closer sibling, uses flat 48-byte sets instead. Measured
+against the live `$03C0` buffer in the Altair throne room (`$48 = 4`): **5/5
+map-driven slots exact**.
+
+> ⛔ BG palette 3 is the hardcoded menu palette (`$9D2E` writes `$03CD-$03CF`
+> directly) and sprite palettes 0/1 are the **party's** — neither comes from the
+> map, which is why a naive "the list feeds all eight slots" read is off by one
+> and then diverges.
+
+> ⛔ The second `MAPOBJ_BLOCKS` block's global map ids are **inferred**: block 0
+> index 4 is the throne room and the game reports `$48 = 4`, so block 0's indices
+> are map ids; block 1 is assumed to continue at 17 because the blocks are
+> consecutive. That has not been measured.
 
 ### A name the sheet caught
 

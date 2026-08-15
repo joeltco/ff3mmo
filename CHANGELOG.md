@@ -18,6 +18,64 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.38 — 2026-08-15
+
+### FF2's palette source traced — and it is FF3's shape, not FF1's
+
+The last gap from v1.8.37. FF2 turns out not to copy its closer sibling at all:
+
+```
+list = $A000 + mapId*16                     (bank 0, file 0x2010 + mapId*16)
+palette(i) = [0x0F, T1[i], T2[i], T3[i]]    T1=$8E00  T2=$8E80  T3=$8F00
+BG 0/1/2 = list[1..3]     NPC top = list[4]     NPC bottom = list[5]
+```
+
+```
+$9D52  LDA $48 / LSR A x4 / ORA #$A0    ; -> $A000 + mapId*16
+$9D3C  LDA ($80),Y / TAY                ; a palette INDEX
+$9D3F  LDA $8E00,Y / $8E80,Y / $8F00,Y  ; three PARALLEL colour tables
+```
+
+**Three parallel colour tables — the same structure as FF3's
+`0x1110`/`0x1210`/`0x1310`** — while FF1 uses flat 48-byte sets. Measured
+against the live `$03C0` buffer in the Altair throne room (`$48 = 4`): **5/5
+map-driven slots exact**, NPC pair and all three BG slots.
+
+⛔ BG palette 3 is the hardcoded menu palette (`$9D2E` writes `$03CD-$03CF`) and
+sprite palettes 0/1 are the **party's**. Neither comes from the map — which is
+why the first reading, "the list feeds all eight slots in order", matched three
+slots with a one-byte shift and then fell apart. The shift was the tell.
+
+### How it was found without a map transition
+
+FF2's throne room is walled in with two guards flanking the only door, and
+poking `$68/$69` desyncs the engine — so no map load could be triggered, and the
+palette is only written on load. Instead: search RAM for the live palette block
+(it is at `$03C0`, the **same buffer FF1 uses**), then search the ROM *code* for
+writes to it. Six `STA $03C0` sites, and the bank-0 indexed one was the loader.
+Searching for the data first found nothing — the block is not stored contiguously.
+
+### Both sheets now render real per-map colour
+
+FF1 and FF2 each draw every NPC in its map's own palettes. All three games are
+now colour-correct from their own tables.
+
+### Changed
+
+- `tools/lib/ff2-text.mjs` — `PAL_COLOR_TABLES`, `PAL_LIST_TABLE`,
+  `PAL_LIST_SIZE`, `PAL_LIST_NPC_TOP/BTM`, `paletteForIndex`,
+  `paletteListForMap`, `npcPalettesForMap`, `globalMapId`.
+- `tools/npc-sheet-ff2.mjs` — per-map colours.
+- `tools/check-ff12-text.mjs` — pins map 4's NPC pair and its three BG slots
+  against the PPU, plus the variety (14 distinct NPC pairs over 49 maps).
+  **5 reverts tested, all fail**, and the gate goes through the library rather
+  than recomputing the constants.
+
+⛔ **Inferred, not measured:** the second `MAPOBJ_BLOCKS` block's global map ids.
+Block 0 index 4 is the throne room and the game reports `$48 = 4`, so block 0's
+indices are map ids; block 1 is assumed to continue at 17. Recorded as an
+assumption in `globalMapId`.
+
 ## 1.8.37 — 2026-08-15
 
 ### X found — and it was never a selector

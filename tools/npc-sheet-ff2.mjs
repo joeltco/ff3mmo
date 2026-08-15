@@ -58,6 +58,7 @@ for (const { base, maps } of F2.MAPOBJ_BLOCKS) {
           off: F2.spriteOffsetForType(rom, o.type),
           text: sid ? F2.lineForType(rom, o.type, { nl: ' ' }) : '',
           name: F2.speakerForType(rom, o.type),
+          palMap: F2.globalMapId(F2.MAPOBJ_BLOCKS.findIndex(x => x.base === base), m),
           maps: new Set(), n: 0,
         });
       }
@@ -70,19 +71,21 @@ let cells = [...types.values()].sort((a, b) => a.type - b.type);
 if (NAMED_ONLY) cells = cells.filter(c => c.name);
 
 // MEASURED off the PPU (tools/nes12-npc-palette.mjs): an NPC's TOP half draws
-// on sprite palette 2 and its BOTTOM half on sprite palette 3 — confirmed in
-// code, not inferred. The player uses palettes 0/1, which is why a single flat
-// palette looked plausible for so long.
-// ⛔ These are the values measured in town/castle context. FF2's palette data is
-// per-map (pointer = $A000 + X*0x100 + mapId*16, 48 bytes -> RAM $0780 -> $03C0
-// -> PPU every frame) but where X comes from is NOT yet decoded, so these cannot
-// be resolved per map the way FF3's are.
-const PAL_TOP = [0x0F, 0x0F, 0x27, 0x36];    // sprite palette 2
-const PAL_BTM = [0x0F, 0x0F, 0x30, 0x36];    // sprite palette 3
+// on sprite palette 2 and its BOTTOM half on sprite palette 3 — confirmed by
+// y-coordinate AND in code (the layout tables hold only attrs 02/03/43).
+//
+// The colours are the MAP's: three parallel colour tables indexed by a 16-byte
+// list at $A000 + mapId*16 (see ff2-text.mjs#npcPalettesForMap). A type placed
+// on several maps is drawn in the colours of the FIRST one.
+const palCache = new Map();
+function palettesForMap(mapId) {
+  if (!palCache.has(mapId)) palCache.set(mapId, F2.npcPalettesForMap(rom, mapId));
+  return palCache.get(mapId);
+}
 const rgb = (v) => NES_SYSTEM_PALETTE[v & 0x3F] || [0, 0, 0];
 const SC = 3, FRAMES = 4;
 
-function drawFrame(g, ox, oy, base) {
+function drawFrame(g, ox, oy, base, pal) {
   [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([tx, ty], k) => {
     let px; try { px = decodeTile(rom, base + k * 16); } catch { return; }
     const img = g.createImageData(8 * SC, 8 * SC);
@@ -91,7 +94,7 @@ function drawFrame(g, ox, oy, base) {
         const ci = px[Math.floor(y / SC) * 8 + Math.floor(x / SC)];
         const i = (y * 8 * SC + x) * 4;
         if (ci === 0) { img.data[i + 3] = 0; continue; }
-        const [r, gg, b] = rgb((ty === 0 ? PAL_TOP : PAL_BTM)[ci]);
+        const [r, gg, b] = rgb((ty === 0 ? pal.top : pal.btm)[ci]);
         img.data[i] = r; img.data[i + 1] = gg; img.data[i + 2] = b; img.data[i + 3] = 255;
       }
     }
@@ -114,12 +117,13 @@ g.font = 'bold 14px sans-serif';
 g.fillStyle = '#ffe9a8';
 g.fillText(`FF2 NPCs — ${cells.length} placed object types, sprite + the DEFAULT line each gives`, 12, 12);
 g.font = '10px sans-serif'; g.fillStyle = '#c9cede';
-g.fillText('NPC colours: top half = sprite palette 2, bottom = palette 3 (measured). Per-map variation is NOT decoded for this game.', 12, 26);
+g.fillText('NPC colours are the MAP\'s: list at $A000 + mapId*16 -> tables $8E00/$8E80/$8F00; top = sprite palette 2, bottom = 3', 12, 26);
 
 cells.forEach((c, i) => {
   const cx = 12 + (i % COLS) * CW;
   const cy = 52 + Math.floor(i / COLS) * CH;
-  if (c.off !== null) for (let f = 0; f < FRAMES; f++) drawFrame(g, cx + f * CELL, cy, c.off + f * 0x40);
+  const pal = palettesForMap(c.palMap);
+  if (c.off !== null) for (let f = 0; f < FRAMES; f++) drawFrame(g, cx + f * CELL, cy, c.off + f * 0x40, pal);
 
   g.font = 'bold 11px sans-serif';
   g.fillStyle = '#20242e';

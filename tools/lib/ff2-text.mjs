@@ -348,3 +348,59 @@ export function mapObjects(rom, base, mapIndex) {
   }
   return out;
 }
+
+// ── map -> NPC palette, traced off the CPU ────────────────────────────────
+//
+//   $9D52  LDA $48 / LSR A x4 / ORA #$A0 / STA $81   ; high byte
+//          LDA $48 / ASL A x4                        ; low  -> $A000 + mapId*16
+//   $9D3C  LDA ($80),Y / TAY                         ; a palette INDEX
+//   $9D3F  LDA $8E00,Y / STA $03C0,X                 ; colour 1
+//   $9D45  LDA $8E80,Y / STA $03C1,X                 ; colour 2
+//   $9D4B  LDA $8F00,Y / STA $03C2,X                 ; colour 3
+//
+// So FF2 has THREE PARALLEL COLOUR TABLES — the same shape as FF3's
+// 0x1110/0x1210/0x1310 — indexed by a 16-byte list the map owns.
+//
+// Which list entry feeds which PPU slot, MEASURED against the live $03C0
+// buffer in the Altair throne room (map 4), 5/5 exact:
+//   BG 0/1/2 = list[1], list[2], list[3]
+//   NPC top    (sprite palette 2) = list[4]
+//   NPC bottom (sprite palette 3) = list[5]
+// ⛔ BG 3 is the hardcoded menu palette ($9D2E writes $03CD-$03CF directly) and
+// sprite palettes 0/1 are the PARTY's — neither comes from the map.
+
+const b0 = (addr) => 0x10 + (addr - 0x8000);       // bank 0
+export const PAL_COLOR_TABLES = [b0(0x8E00), b0(0x8E80), b0(0x8F00)];
+export const PAL_LIST_TABLE = b0(0xA000);
+export const PAL_LIST_SIZE = 16;
+/** Which entry of a map's list feeds the NPC's top / bottom half. */
+export const PAL_LIST_NPC_TOP = 4, PAL_LIST_NPC_BTM = 5;
+
+/** A palette from its index: colour 0 is the backdrop, 1-3 come from the tables. */
+export const paletteForIndex = (rom, i) =>
+  [0x0F, ...PAL_COLOR_TABLES.map(t => rom[t + i])];
+
+/** A map's 16-byte palette index list. */
+export const paletteListForMap = (rom, mapId) =>
+  [...rom.slice(PAL_LIST_TABLE + mapId * PAL_LIST_SIZE,
+                PAL_LIST_TABLE + (mapId + 1) * PAL_LIST_SIZE)];
+
+/** The two palettes an NPC wears on a map, as `{top, btm}`. */
+export function npcPalettesForMap(rom, mapId) {
+  const list = paletteListForMap(rom, mapId);
+  return {
+    top: paletteForIndex(rom, list[PAL_LIST_NPC_TOP]),
+    btm: paletteForIndex(rom, list[PAL_LIST_NPC_BTM]),
+  };
+}
+
+/**
+ * The global map id for a (block, index) pair from MAPOBJ_BLOCKS.
+ *
+ * ⛔ PARTLY INFERRED. The Altair throne room is block 0x3510 index 4 and the
+ * running game reports $48 = 4, so the first block's indices ARE map ids. The
+ * second block is assumed to continue at 17 because the blocks are consecutive
+ * — that has NOT been measured.
+ */
+export const globalMapId = (blockIndex, m) =>
+  blockIndex === 0 ? m : MAPOBJ_BLOCKS[0].maps + m;
