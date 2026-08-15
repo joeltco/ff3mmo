@@ -1,77 +1,64 @@
 #!/usr/bin/env node
-// npc-dialogue-ff1.mjs — every FF1 map object, with where it stands and what
-// it says. `tools/lib/ff1-text.mjs` documents how each piece was measured.
+// npc-dialogue-ff1.mjs — every FF1 map object: where it stands and which
+// SPRITE it wears. `tools/lib/ff1-text.mjs` documents how each piece was
+// measured (disassembly of the map-load routine + ROM-patch probes).
 //
-//   node tools/npc-dialogue-ff1.mjs            # maps that have objects
-//   node tools/npc-dialogue-ff1.mjs 0 1 2      # specific maps
+//   node tools/npc-dialogue-ff1.mjs            # all maps
+//   node tools/npc-dialogue-ff1.mjs 8          # one map
+//   node tools/npc-dialogue-ff1.mjs --sprites  # group by sprite entry
 //   node tools/npc-dialogue-ff1.mjs --json
-//   node tools/npc-dialogue-ff1.mjs --names    # only the self-identifying ones
+//
+// ⛔ NO DIALOGUE HERE, ON PURPOSE. An earlier version paired each object with
+// string[objType] and shipped that as verified. It is WRONG — see the header of
+// tools/lib/ff1-text.mjs. Patching every object on Coneria Castle (map 8) to
+// type 100 still made a talk fetch string 120, and that map's real types decode
+// to lines about Bahamut and a submarine. FF1's script IS decoded and verified
+// against the screen; what is unknown is which object speaks which line, so
+// this tool no longer guesses.
 
-import { loadRom, decodeString, mapObjects } from './lib/ff1-text.mjs';
+import { loadRom, mapObjects, MAPOBJ_PER_MAP } from './lib/ff1-text.mjs';
 
 const rom = loadRom();
 const args = process.argv.slice(2);
-const JSON_OUT = args.includes('--json');
-const NAMES_ONLY = args.includes('--names');
 const only = args.filter(a => /^\d+$/.test(a)).map(Number);
 
-/**
- * A name only counts when the speaker identifies ITSELF.
- * "I am Jane, Queen of Coneria" names Jane. "Garland used to be a good
- * knight" does NOT name that NPC Garland — it is somebody talking about him.
- */
-export function selfName(text) {
-  let m = /^I am ([A-Z][A-Za-z]+)/.exec(text);
-  if (m) return m[1];
-  m = /^I,? ([A-Z][A-Za-z]+),/.exec(text);
-  if (m) return m[1];
-  m = /^My name is ([A-Z][A-Za-z]+)/.exec(text);
-  if (m) return m[1];
-  // ⛔ NO "^Name:" rule here. FF1 writes ellipsis as "::", so "Oh:: My
-  // sister::" matches it and yields a character called "Oh". FF3 can use that
-  // pattern because it really does prefix speakers with "Cid:"; FF1 does not.
-  return null;
-}
-
 const rows = [];
-// ⛔ 64 maps, and every object must satisfy Y <= 63. Reading past the end of
-// the table yields plausible-looking rows with Y of 160+ — sweeping to 128
-// invented eight extra "Kope"s standing at y=161. The invariant is the guard.
 for (let mapId = 0; mapId < 64; mapId++) {
   if (only.length && !only.includes(mapId)) continue;
-  const objs = mapObjects(rom, mapId);
-  if (!objs.length) continue;
-  if (objs.some(o => o.y > 63)) continue;
-  for (const o of objs) {
-    const text = decodeString(rom, o.type);
+  for (const o of mapObjects(rom, mapId)) {
     rows.push({
-      mapId, objType: o.type, x: o.x, y: o.y,
+      mapId, slot: o.slot, objType: o.type, x: o.x, y: o.y,
       inRoom: o.inRoom, still: o.still,
-      dialogueId: o.type, name: selfName(text), text,
+      spriteEntry: o.sprite, spriteOffset: '0x' + o.spriteOffset.toString(16).toUpperCase(),
     });
   }
 }
 
-if (JSON_OUT) {
-  console.log(JSON.stringify({ rule: 'dialogueId === objType', objects: rows }, null, 2));
-} else if (NAMES_ONLY) {
-  const named = rows.filter(r => r.name);
-  console.log(`FF1 — ${named.length} objects that name themselves\n`);
-  for (const r of named) {
-    console.log(`map ${String(r.mapId).padStart(2)} obj ${String(r.objType).padStart(3)} (${r.x},${r.y})  «${r.name}»`);
-    console.log(`     "${r.text}"`);
+if (args.includes('--json')) {
+  console.log(JSON.stringify({
+    rule: 'sprite = 0xA210 + SPRITE_TABLE[objType] * 0x100 (table at file 0x2E10)',
+    note: 'dialogueId is NOT objType — that link is unknown',
+    slotsPerMap: MAPOBJ_PER_MAP, objects: rows,
+  }, null, 2));
+} else if (args.includes('--sprites')) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!by.has(r.spriteEntry)) by.set(r.spriteEntry, { off: r.spriteOffset, types: new Set(), n: 0 });
+    const e = by.get(r.spriteEntry); e.types.add(r.objType); e.n++;
+  }
+  console.log(`FF1 — ${by.size} sprite entries in use across ${rows.length} objects\n`);
+  for (const [e, v] of [...by].sort((a, b) => a[0] - b[0])) {
+    console.log(`entry ${String(e).padStart(2)}  ${v.off}   ${v.n} objects, ${v.types.size} types`);
+    console.log(`     types: ${[...v.types].sort((a, b) => a - b).join(',')}`);
   }
 } else {
-  let last = -1;
   console.log(`FF1 map objects — ${rows.length} across ${new Set(rows.map(r => r.mapId)).size} maps` +
-              `   (dialogue id == object type)\n`);
+              `   (sprite = 0xA210 + table[objType]*0x100)\n`);
+  let last = -1;
   for (const r of rows) {
     if (r.mapId !== last) { console.log(`── map ${r.mapId} ──`); last = r.mapId; }
-    const flags = (r.inRoom ? ' [room]' : '') + (r.still ? ' [still]' : '');
-    console.log(`  obj ${String(r.objType).padStart(3)} (${r.x},${r.y})${flags}${r.name ? '  «' + r.name + '»' : ''}`);
-    console.log(`     ${r.text ? '"' + r.text + '"' : '(silent)'}`);
+    const f = (r.inRoom ? ' [room]' : '') + (r.still ? ' [still]' : '');
+    console.log(`  slot${String(r.slot).padStart(2)}  type ${String(r.objType).padStart(3)} @(${r.x},${r.y})${f}` +
+                `   sprite ${String(r.spriteEntry).padStart(2)}  ${r.spriteOffset}`);
   }
-  const named = rows.filter(r => r.name);
-  console.log(`\n${named.length} name themselves: ` +
-    [...new Set(named.map(r => r.name))].join(', '));
 }

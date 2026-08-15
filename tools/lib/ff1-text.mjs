@@ -33,17 +33,50 @@
 //      them, do you?"
 // which forces 0x1a="e ", 0x1c="th", 0x1f="in", 0x26="ou", 0x41="ha", …
 //
-// ── NPCs ──────────────────────────────────────────────────────────────────
-// Each map has 16 object slots of 3 bytes at file 0x3410 (bank 0, CPU $B400):
-// type, X (bits 0-5; bit 7 = in a room, bit 6 = does not move), Y. Verified:
-// all 290 placed objects have Y <= 63.
+// ── NPCs — from the disassembly of the map-load routine ───────────────────
+// $E7FB  LDA $48        ; <- $0048 IS the current map id
+//        ASL/ROL x4     ; mapId * 16 (16-bit)
+//        ...            ; *2 then + itself  => mapId * 48
+//        ADC #$B4       ; + $B400
+//        LDA #$00 / JSR $FE03   ; switch to BANK 0
+// $E824  LDA ($1C),Y    ; read the object TYPE
+// $E82C  ADC #$03       ; 3 bytes per entry
+// $E7F3  LDA #$0F       ; <- FIFTEEN slots, always
 //
-//     dialogueId == objType        (exactly, 1:1)
+// So: 15 slots of 3 bytes per map at file 0x3410, stride 48.
 //
-// Confirmed by talking to a Coneria Castle guard in the running game and
-// getting string 49, which is object type 49 on map 0. Map 0 then reads as a
-// coherent castle cast (Honor Guard, the Queen locked inside, the LUTE) and
-// map 1's object 4 is Garland.
+// ⛔ FIFTEEN, not sixteen, and a zero type is NOT a terminator — the loader
+// reads all 15 regardless.
+// ⛔ BOTH coordinate bytes are masked with #$3F ($E85C and $E866); bits 6-7 of
+// each are flags. The X mask is observable — 108 of 287 objects have high bits
+// there. The Y mask is NOT: no object in this ROM has bit 6 or 7 set in byte 2,
+// so masking it changes nothing. It is applied because the code applies it, and
+// the gate does not pretend to test it.
+//
+// ── objType -> sprite ─────────────────────────────────────────────────────
+//     sprite ROM offset = 0xA210 + SPRITE_TABLE[objType] * 0x100
+//
+// The table is at file 0x2E10 (CPU $AE00, bank 0). MEASURED: patching every
+// object on a map to one type and reading which single sprite the PPU loads
+// gives objType -> entry directly, with no alignment assumption. Six such
+// probes (types 49, 32, 63, 100, 150, 200) yield exactly ONE table in the
+// whole ROM that reproduces them, and it then predicts the unpatched map's
+// ten objects 10/10. All 182 placed types resolve to entries 18-47 — exactly
+// the NPC half of the 48-entry bank (0-17 are the player classes/vehicles).
+//
+// ── ⛔ dialogueId is NOT objType ──────────────────────────────────────────
+// An earlier version of this file claimed it was. That was WRONG, and the
+// "confirmation" was a coincidence: talking in Coneria Castle produced string
+// 49, and some map happened to contain an object of type 49.
+//
+// Coneria Castle is map 8 (read out of $0048). Its object types are
+// 32,34,35,37,38,41,42,44,46 — whose strings are about Bahamut, a submarine
+// and Garland, nonsense for that castle. And patching every map-8 object to
+// type 100 still made a talk fetch string 120, not 100.
+//
+// The TEXT decoding below is unaffected and still verified against the screen
+// (string 49 is exactly the line the game displayed). Only the object -> string
+// link is unknown.
 
 import fs from 'node:fs';
 
@@ -54,7 +87,12 @@ export const DTE_FIRST_CH = 0x3F0B0;
 export const DTE_COUNT = 80;
 export const DTE_FIRST = 0x1A;
 export const MAPOBJ_TABLE = 0x3410;
-export const MAPOBJ_PER_MAP = 16;
+export const MAPOBJ_PER_MAP = 15;      // LDA #$0F — fifteen, and zero is not a terminator
+export const MAPOBJ_STRIDE = 48;
+/** objType -> sprite index; ROM offset = SPRITE_BASE + v * 0x100. */
+export const SPRITE_TABLE = 0x2E10;
+export const SPRITE_BASE = 0xA210;
+export const MAP_ID_ADDR = 0x0048;     // RAM: the current map
 
 const SYM = {
   0xBF: ',', 0xC0: '.', 0xC2: '!', 0xC3: ':', 0xC4: "'", 0xC5: '?', 0xBE: "'",
@@ -100,14 +138,27 @@ export function decodeString(rom, id, { nl = ' / ', max = 260 } = {}) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** The 16 object slots of one map: {type, x, y, inRoom, still}. */
+/** The sprite ROM offset an object type wears. */
+export const spriteOffsetForType = (rom, type) => SPRITE_BASE + rom[SPRITE_TABLE + type] * 0x100;
+/** The 0..47 bank index, for cross-checking against a PPU trace. */
+export const spriteEntryForType = (rom, type) => rom[SPRITE_TABLE + type] + 18;
+
+/**
+ * The 15 object slots of one map: {type, x, y, inRoom, still, sprite}.
+ * Both coords are masked with $3F — bits 6-7 of each byte are flags.
+ */
 export function mapObjects(rom, mapId) {
-  const base = MAPOBJ_TABLE + mapId * MAPOBJ_PER_MAP * 3;
+  const base = MAPOBJ_TABLE + mapId * MAPOBJ_STRIDE;
   const out = [];
   for (let i = 0; i < MAPOBJ_PER_MAP; i++) {
-    const t = rom[base + i * 3], xb = rom[base + i * 3 + 1], y = rom[base + i * 3 + 2];
-    if (!t) continue;
-    out.push({ slot: i, type: t, x: xb & 0x3F, y, inRoom: !!(xb & 0x80), still: !!(xb & 0x40) });
+    const t = rom[base + i * 3], xb = rom[base + i * 3 + 1], yb = rom[base + i * 3 + 2];
+    if (!t) continue;                  // skip empties, but do NOT stop: see header
+    out.push({
+      slot: i, type: t, x: xb & 0x3F, y: yb & 0x3F,
+      inRoom: !!(xb & 0x80), still: !!(xb & 0x40),
+      sprite: rom[SPRITE_TABLE + t] + 18,
+      spriteOffset: SPRITE_BASE + rom[SPRITE_TABLE + t] * 0x100,
+    });
   }
   return out;
 }

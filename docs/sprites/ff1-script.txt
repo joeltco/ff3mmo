@@ -1,0 +1,343 @@
+FF1 script — 341 strings
+
+0x000  Nothing here.
+0x001  LIGHT WARRIORS:: Just as / in Lukahn's prophecy. / Garland has kidnapped / the Princess. Please / help her''
+0x002  Thank you for saving the / Princess. To aid your / quest I ordered a bridge / built to the continent. / Go now, and make the / ORBS shine again''
+0x003  The Princess always / worries about you.
+0x004  No one touches my / Princess'' / LIGHT WARRIORS?? / You impertinent fools. / I, Garland, will knock / you all down''
+0x005  So, you are the / LIGHT WARRIORS' / Thank you.
+0x006  This LUTE has been / passed down from Queen / to Princess for 2000 / years. Garland stole it / when he kidnapped me. / Please accept it as my / gift, it just might come / in handy.
+0x007  Now, get ready for your / trip, and make the ORBS / shine again.
+0x008  Aye, I am Bikke the / Pirate, and surprised I / am that you scurvy dogs / have the nerve to face / me. / Mates' / Get those landlubbers'
+0x009  Okay, you got me. / Take my SHIP.
+0x00a  I won't be any more / bother. I promise.
+0x00b  For five years the / Prince has slept / under Astos' spell. / Only HERB can wake him'
+0x00c  Oh, this HERB will / release the Prince from / Astos' curse. Look' / He is waking::
+0x00d  Thank you. / Peace will return to / ElfLand.
+0x00e  Is this a dream?:: / Are you, the / LIGHT WARRIORS?:: / Is this for real?:: / So, as legend says, / I give you the mystic / KEY.
+0x00f  I feel fine now. / Thank you.
+0x010  z::z::
+0x011  Astos double!crossed us. / Go south, to the Cave of / Marsh, to retrieve the / CROWN. Then, bring it / directly back to me'
+0x012  HA, HA, HA' I am Astos, / King of the Dark Elves. / I have Matoya's CRYSTAL, / and you shall give me / that CROWN, now'''
+0x013  A rock blocks / construction of my / canal. / If I only had TNT.
+0x014  Oh, wonderful' / Nice work' Yes, yes / indeed, this TNT is just / what I need to finish my / canal. Now excuse me / while I get to work'
+0x015  For the LIGHT / WARRIORS I will make a / truly legendary sword. / However, my supply of / ADAMANT is exhausted.
+0x016  ADAMANT'' / Now let me make / the sword for you:: / Here, the best work I've / ever done. / It is my gift.
+0x017  Where is my CRYSTAL? / I can't see anything / without it:: Who stole / my CRYSTAL?
+0x018  WARRIORS. / Revive the Power of / the ORBS'
+0x019  The Prince needs HERB? / I'll trade the most / powerful HERB to get my / CRYSTAL back:: / Oh' I can see''
+0x01a  You have no more / business here. Go''
+0x01b  Everybody knows me. / What?' You've never / heard of Dr. Unne?
+0x01c  A SLAB'' / This SLAB will lead us / to solve the riddle of / the Lefeinish'' / Now, listen to me::
+0x01d  All living things were / born to die. / No one can defeat me, / the Vampire''
+0x01e  Use this ROD behind the / Vampire's room. Hiding / deep inside you will / find the cause of the / earth's rot.
+0x01f  «BAHAMUT»  I am BAHAMUT, King of / the Dragons. Bring me / proof of your courage, / to receive the honor / due true Warriors.
+0x020  The TAIL of a rat proves / your courage. I shall / give you the honor due / true Warriors.
+0x021  The four ORBS now cover / the black ORB:: / To take a step forward / is to go back 2000 years / in time.
+0x022  The black ORB / glitters ominously:: / But nothing happens.
+0x023  That pirate trapped me / in the BOTTLE. / I will draw OXYALE from / the bottom of the spring / for you.
+0x024  Thank you for saving me. / Remember' OXYALE will / give you air.
+0x025  I made a submarine to / save the mermaids. But, / to go deep enough it / will require OXYALE.
+0x026  WARRIORS, you have / OXYALE. The mermaids / wait, please help them'
+0x027  Take this CUBE. With it, / you can transfer to the / FLOATING CASTLE.
+0x028  Please::
+0x029  No one passes this road.
+0x02a  If you want pass, give / me the RUBY:: / Crunch, crunch, crunch, / mmm, it tastes so sweet. / Rubies are my favorite.
+0x02b  Great job vanquishing / the Earth FIEND. Now, / the Fire FIEND wakes. / With this CANOE go to / the VOLCANO, and defeat / that FIEND also'
+0x02c  400 years ago, we lost / control of the Wind. / 200 years later we lost / the Water, then Earth, / and Fire followed. The / Powers that bind this / world are gone.
+0x02d  Possession of the CROWN / is required to test your / courage. Take it to the / royal throne, and bring / back proof of your / courage. GOOD LUCK'
+0x02e  Remember me, Garland? / Your puny lot thought it / had defeated me. But, / the Four FIENDS sent me / back 2000 years into / the past.
+0x02f  From here I sent the / Four FIENDS to the / future. The FIENDS will / send me back to here, / and the Time!Loop will / go on.
+0x030  After 2000 years, I will / be forgotten, and the / Time!Loop will close. I / will live forever, and / you shall meet doom''
+0x031  The King is looking for / the LIGHT WARRIORS. You / do not happen to be them / do you?
+0x032  Yes Sir'' / I belong to the Honor / Guard of Castle Coneria.
+0x033  Please' / Save the Princess'
+0x034  Thank you for rescuing / the Princess.
+0x035  Legend says that the / LUTE can break the evil / gate.
+0x036  Garland used to be a / good knight until::
+0x037  In sadness, the Queen / locked herself inside.
+0x038  The Princess was / looking for you'
+0x039  So, you are the / LIGHT WARRIORS?
+0x03a  Don't be greedy. You / already have too many / weapons to carry.
+0x03b  «Jane»  I am Jane, Queen of / Coneria. Please save my / daughter, Princess Sara.
+0x03c  Thank you for saving / Princess Sara.
+0x03d  Oh:: My sister::
+0x03e  My sister is back safe' / Thank you.
+0x03f  Reports say that Garland / holds the Princess in a / Temple to the northwest.
+0x040  Use that KEY. Inside / what you find will be / quite helpful.
+0x041  400 years ago the / Treasury was locked by / the mystic KEY. Our / ancestors gave the KEY / to the Prince of ElfLand / for safekeeping.
+0x042  This treasure room is / locked with the mystical / KEY.
+0x043  The King is sure that / someday the LIGHT / WARRIORS will come to / save the Princess, / just as in Lukahn's / prophecy.
+0x044  Lukahn left this town, / to join his colleagues / at Crescent Lake.
+0x045  As legend foretold, once / again the ORBS shine'' / Quickly, to fulfill the / legend, take them to the / Temple north of here, / and stand in the center.
+0x046  Go to the King.
+0x047  «Arylon»  I am Arylon, the Dancer'
+0x048  This is Coneria, the / dream city.
+0x049  North of Coneria lives / a witch named Matoya.
+0x04a  Matoya has poor / eyesight. She needs the / CRYSTAL to see.
+0x04b  My home is Pravoka, a / beautiful port city far / east of here.
+0x04c  Kee::Kee::
+0x04d  Help' The FIEND's curse / turned us into bats. / With the ORBS shining / anew, once again we / can speak'
+0x04e  The Four FIENDS power / is rooted 2000 years / ago. The real enemy is / in that time.
+0x04f  When the 4 ORBS cover / the black ORB in the / center of the palace, / the Time Gate can open.
+0x050  You must travel back in / time 2000 years. Now, / with the ORBS shining, / stand in the Time Gate.
+0x051  We are the five lost / SKY WARRIORS. 400 years / ago we battled against / the cause of the world's / destruction.
+0x052  Thank you. We don't need / to be afraid of pirates / anymore.
+0x053  I have escaped from / Melmond, in the west. / My town is in trouble. / Please help them''
+0x054  The Elves live across / the sea. Matoya's HERB / is the only thing that / will wake their Prince.
+0x055  This town has been / invaded by pirates.
+0x056  Ships can stop only at / ports. There are no / ports in the north.
+0x057  Help'
+0x058  There are many dangerous / monsters in the sea. / Be careful'
+0x059  Astos put the Prince to / sleep. / Please' Save him'
+0x05a  The Prince is awake' / Thank you so much.
+0x05b  The Cave of Dwarf is at / the west end of the Aldi / Sea.
+0x05c  Without warning, Astos / attacked our castle. Our / Prince was laid under a / curse, and our treasury / ransacked.
+0x05d  It is said there is a / witch who has HERBS. / I believe that her name / is:: / Matoya'
+0x05e  Is that it? The HERB to / save the Prince?
+0x05f  The Prince keeps the / mystic KEY until the / coming of the / LIGHT WARRIORS.
+0x060  Maybe it's only rumour, / but, I think the cause / of all problems is to / be found in the cave of / Marsh.
+0x061  Save our Prince'
+0x062  Our Prince was to / become the King of / ElfLand.
+0x063  Long ago I wandered to / the Northwest. I found / an ancient castle that / was so spooky, I left / immediately.
+0x064  Astos has been defeated? / Peace will now return to / ElfLand.
+0x065  Astos wears a disguise, / and lurks in seclusion.
+0x066  The Prince must wake / soon, or the power of / the Dark Elf will / dominate'
+0x067  Legend says an AIRSHIP / is buried somewhere.
+0x068  Swords and armors made / of silver are / very powerful.
+0x069  I can see a cave above / the crescent:: / To the north of the / volcano, there you will / find the FLOATER.
+0x06a  In the desert south of / the crescent, something / is emerging from below / the sand:: / Use the FLOATER'
+0x06b  The Prince must wake / soon, or the Dark Elf / will dominate'
+0x06c  I'm looking for the / FLOATER. I'll bet with / it I could float / anything.
+0x06d  Old Nerrick is a very / respectable Dwarf.
+0x06e  That sound? / Nerrick is digging a / canal.
+0x06f  Dwarves can see in the / dark'
+0x070  Did you meet Smith, / our blacksmith?
+0x071  With the CRYSTAL, even / the blind can see. / Astos stole it from / Matoya.
+0x072  The earth is rotting / slowly from the west::
+0x073  The earth is reviving' / Thanks to you, / LIGHT WARRIORS'
+0x074  The {de}::bracelet can / protect you, like / armor.
+0x075  Oh, did you see that / canal? Old Nerrick truly / is great indeed.
+0x076  Long ago, Coneria's / Treasury safeguarded / the use of TNT.
+0x077  Hurray''
+0x078  ::TCELES B HSUP / A magic spell?
+0x079  The Vampire of the Earth / Cave is stealing the / Power of the earth. / We need your help.
+0x07a  Melmond was once a / beautiful town.
+0x07b  The Titan who lives in / the tunnel eats gems. / He loves RUBIES.
+0x07c  The Vampire is gone, but / the earth continues to / rot. What causes this?
+0x07d  I'm a farmer.
+0x07e  The Earth Cave is on / the peninsula southwest / of this town.
+0x07f  Look' The Earth ORB is / shining again.
+0x080  This town was invaded by / the Vampire. The Clinic / was destroyed and the / town was cursed.
+0x081  Are you the / LIGHT WARRIORS?
+0x082  Pass through the Titan's / Tunnel, then south to / find Sarda, the Sage.
+0x083  The Vampire is gone, but / the earth still rots?::
+0x084  In the northern world, / there once was a / prosperous civilization, / but now it is ruins.
+0x085  If the ORB of Earth / begins to shine again, / the earth shall revive.
+0x086  LIGHT WARRIORS:: / Thanks to you, the earth / is beginning to revive::
+0x087  They say the ancient / people used a stone to / make their ship float.
+0x088  OH' An AIRSHIP' / The fables are true, it / really exists''
+0x089  Sarda does not fear the / evils of the cave.
+0x08a  Well, well:: / You have become fine / Warriors.
+0x08b  «Jim»  I am Jim. My home is the / Dwarf Village, but I am / here investigating.
+0x08c  We, the Twelve Sages, / were lead here by the / stars and prophecy.
+0x08d  Once the ORBS shined / with the power of Earth, / Wind, Fire, and Water. / The four FIENDS seized / those Powers.
+0x08e  Earth, Wind, Fire, and / Water:: / The world is bound by / these four Powers.
+0x08f  Each element's power / focuses at its Altar. / Locate, and crush the / Fiend. Then to make / it shine, place the ORB / on the Altar it guarded'
+0x090  Four FIENDS are bent on / the world's destruction. / 200 years ago, the FIEND / of Wind teamed with that / of the Water to destroy / civilization.
+0x091  The Earth FIEND causes / the rot of our land.
+0x092  The Fire FIEND will / burn everything up'
+0x093  As you restore light to / the ORBS, we will reveal / more secrets, please see / us repeatedly.
+0x094  LIGHT WARRIORS, / only you can make the / ORBS shine again''
+0x095  Quickly, before all is / burnt, hurry to Gurgu / Volcano and stop the / FIEND of Fire.
+0x096  The Temple of FIENDS is / in the center of the / Four Altars. The time / has come to destroy the / source of evil.
+0x097  With the four ORBS / shining again the Time / Gate can be broken. The / true enemy is 2000 years / in the past.
+0x098  The world was suddenly / thrown into disorder. / You must restore it.
+0x099  Time is repeating. / In order to break the / Time!Loop you must / eliminate the enemy who / controls from 2000 years / in the past.
+0x09a  Someone travelled 2000 / years to the past. The / four FIENDS were sent / forward in time. Those / FIENDS threaten to / destroy the world today.
+0x09b  I see now. / Someone who travelled / back 2000 years is the / cause of the world's / destruction. After 2000 / years he will travel / back again:: / Then again::Then again::
+0x09c  Time will repeat itself / every 2000 years. / Break the Time!Loop'
+0x09d  In the Temple of FIENDS / are the remaining SKY / WARRIORS. They fought / the FIENDS and are now / bats'
+0x09e  We must use force only / for just purposes.
+0x09f  For ten years I probed / for the FLOATER. CANOE / north, to the Ice Cave.
+0x0a0  «Lukahn»  I am Lukahn. / Now all legends and / prophecy will be / fulfilled. Our path has / been decided.
+0x0a1  LIGHT WARRIORS, you can / do it'
+0x0a2  My brother Dr. Unne has / studied Lefeinish, the / language of the SKY / WARRIORS. If he had the / SLAB, he could teach it.
+0x0a3  Soar to my brother Unne / with the SLAB'
+0x0a4  Have you found OXYALE?
+0x0a5  You have legs'
+0x0a6  My legs are beautiful' / It's so nice to have / legs.
+0x0a7  Underhill, the Caravan / Master, had something / very strange::
+0x0a8  Until 200 years ago the / Mermaids lived in the / Shrine. Then, in fire / and smoke, it sank. The / Mermaids?::
+0x0a9  Until 200 years ago, the / Power of Water brought / us good fortune.
+0x0aa  The power of Water'' / Now, our country will / prosper like before.
+0x0ab  I saw BAHAMUT, but, to / be honored as a true / warrior I must return / with proof of my / courage.
+0x0ac  Well, well:: / I see you have been / honored.
+0x0ad  Avast ye landlubbers' / Stay out of me way.
+0x0ae  My father runs the / caravan. He is having a / close out sale near the / oasis in the western / desert.
+0x0af  Kope 'says' he saw a / shining object fall.
+0x0b0  Fables say that when / the shrine sank, many / treasures were lost. / Also, they tell of a / cryptic stone plate.
+0x0b1  «Kope»  My name is Kope. / I saw it north, near the / waterfall. Believe me' I / think it was a robot.
+0x0b2  This town used to be / prosperous 200 years / ago.
+0x0b3  No' / That is just an / unusable sample.
+0x0b4  If we cannot regain the / Power of Water, we will / become bubbles, then / disappear.
+0x0b5  Are we going to become / bubbles?
+0x0b6  As long as the FIEND of / Water lives, we:: / Oh, boo hoo.
+0x0b7  You have responded / to me''
+0x0b8  This is the Shrine's top / floor. The FIEND of / Water, KRAKEN lives on / the bottom floor.
+0x0b9  I suppose you are the / legendary::
+0x0ba  Please save the sea, / and make the ORB shine / again'
+0x0bb  Now, order has returned. / The sea will be as it / was before, beautiful.
+0x0bc  My friend Darryl went to / the land, then never / returned. I've often / wondered what happened:: / Maybe, she grew legs and / walked away?
+0x0bd  Unbelievable'' / You can breathe / underwater?' / I'm impressed'
+0x0be  To unlock the Mirage / Tower the Lefeinish / used a musical tone.
+0x0bf  This door is locked by / the mystic KEY.
+0x0c0  This town is Gaia::
+0x0c1  Have you been to the / city south of here? I / just cannot understand / a word spoken there. / I have wondered what / language::
+0x0c2  Legend says the SKY / WARRIORS flew about, / here and there, from a / castle high in the sky.
+0x0c3  I saw a shining object / flying towards the east.
+0x0c4  Unbelievable' / You are outsiders, / right? / How did you get this far / north?
+0x0c5  Let me see:: Yes, there / was a professor that / studied Lefeinish.
+0x0c6  Only a fairy can draw / OXYALE from the spring.
+0x0c7  Everyone thinks the / tower in Yahnikurm / Desert is a mirage. / I wonder::
+0x0c8  Hardy har, you are too / late' I BOTTLED the / fairy and sold her to a / caravan.
+0x0c9  Legends say that the / castle in the west is a / place to test courage.
+0x0ca  ?rewoP taerg evah uoy oD
+0x0cb  What's that broom up to? / It's talking backwards'
+0x0cc  The fairy at the spring / was kidnapped.
+0x0cd  With this CHIME you can / enter the Mirage Tower.
+0x0ce  The Mirage Tower was the / gateway to our home in / the sky.
+0x0cf  400 years ago, we had an / advanced civilization. / Our interest was the / universe''
+0x0d0  Lu::pa::? / Lu::pa::?
+0x0d1  We are the Lefeinish. / Only our bravest became / SKY WARRIORS. Your / AIRSHIP was theirs.
+0x0d2  The FLOATING CASTLE:: / Our ancestors lived / there. The Mirage Tower / is the entrance.
+0x0d3  At the time of / destruction a legend was / born:: In 400 years, / WARRIORS with ORBS will / appear to save our / people . / Are you?::
+0x0d4  We fought with TIAMAT, / but were unsuccessful. / The FIEND now inhabits / our FLOATING CASTLE.
+0x0d5  Our last five Warriors / left to find the cause / of the world's decay. / We Know they live, but, / as bats.
+0x0d6  We knew that a great / power controlled the / FIENDS. Our five bravest / Warriors left, never to / return.
+0x0d7  We have passed on the / legends from generation / to generation. But 400 / years have caused our / memories to fade.
+0x0d8  Oh, the LIGHT WARRIORS'' / The legend is true'
+0x0d9  Until 400 years ago we / controlled the Power of / the Wind. This enabled / us to suspend the castle / in the air.
+0x0da  The power of Wind was / taken by TIAMAT.
+0x0db  Here lies Erdrick / 837 ! 866 / R.I.P.
+0x0dc  I wonder if the robots / made by our ancestors / are still moving?
+0x0dd  The FLOATING CASTLE / floats high in the / sky, seemingly among / the stars.
+0x0de  One of us escaped with / a CUBE. He floated far / to the west.
+0x0df  Transporter operation / requires a CUBE.
+0x0e0  Are you the master?
+0x0e1  You can look out over / the world from this / window.
+0x0e2  If you are brave enough, / try meeting the King of / the Dragons, BAHAMUT.
+0x0e3  Unprofitable business / is not a practice of the / Dragons of Cardia.
+0x0e4  Long ago, Dragons and / humans lived and traded / together.
+0x0e5  You are not afraid of / me?? / Then, I am impressed'
+0x0e6  See your face upon the / clean water. How dirty' / Come' Wash your face'
+0x0e7  We are going to the / Castle of Ordeal to the / northeast. There we will / test, and bring back / proof of our courage.
+0x0e8  The proof of your / courage might be / anything.
+0x0e9  Have you met BAHAMUT, / the Dragon King? He / honors those with / courage as true / warriors.
+0x0ea  Only the courageous ones / bring back the proof of / their courage.
+0x0eb  Once in the north, there / were beautiful palaces / and big mechanical / castles.
+0x0ec  This is BAHAMUT's room.
+0x0ed  BAHAMUT verifies the / true courage of all.
+0x0ee  This is a tomb.
+0x0ef  This is a well. You / might think that there / is something to it:: / But in fact it is just / an ordinary well.
+0x0f0  In the treasure box, / you found::
+0x0f1  Can't hold anymore.
+0x0f2  The treasure box is / empty'
+0x0f3  The Altar of the Earth.
+0x0f4  The Altar of the Fire.
+0x0f5  The Altar of the Water.
+0x0f6  The Altar of the Wind.
+0x0f7  At the bottom of the / spring, something is / flowing.
+0x0f8  TIAMAT is the FIEND of / the WIND::
+0x0f9  From this window one can / see the entire world. / The Four Forces are / flowing together, into / the center of the Four / Altars. Into the Temple / of FIENDS.
+0x0fa  The FIEND's ball cracks / open:: An ominous cloud / rises, and an evil shape / congeals:: / It is LICH, the FIEND of / Earth.
+0x0fb  Is it you, the tinder / that defeated the FIEND / of the Earth, and / disturbed my sleep? / I, KARY will now show / you the force of Fire, / and you shall burn in / its flames''
+0x0fc  The FIEND's ball is / shattered, evaporating / all the water. / Ho, Ho, Ho:: / How foolhardy to dare / challenge me, KRAKEN the / FIEND of the Water.
+0x0fd  Lightning erupts from / the FIEND's ball:: / So, you have come this / far:: / I, TIAMAT the FIEND of / the Wind will now put an / end to your adventure''
+0x0fe  What?? / You can speak Lefeinish?
+0x0ff  There is a stone plate / on the floor:: / You sense something:: / Evil?::
+0x100  NDS.
+0x104  / Please' Save him'
+0x105  safekeeping.
+0x106  ars and prophecy.
+0x107  velled 2000 / years to the past. The / four FIENDS were sent / forward in time. Those / FIENDS threaten to / destroy the world today.
+0x108  was cursed.
+0x109  ining / anew, once again we / can speak'
+0x10a  he / LIGHT WARRIORS?
+0x10c  Melmond, in the west. / My town is in trouble. / Please help them''
+0x10e  Usbsjspsys's{c8}s{d0}s{d7}s{dd}sFROST
+0x10f  S will / appear to save our / people . / Are you?::
+0x111  'A'F'K'P'U'Z'e'j'o't'y'{c1}'{c6}'{cb}'{d0}'{d5}'{da}'{df}'{e4}'{e9}'{ee}'{f3}'{f8}'{fd}',{7},{c},{11},{16}, t, a,er,ng,ar,me,at,se, f,y ,te,it,rs,{6b},{73},{7b},3,B,J,R,Z,d,h,l,
+0x112  red as a true / warrior I must return / with proof of my / courage.
+0x113  ty'
+0x117  G
+0x119  ore.
+0x11a  water. How dirty' / Come' Wash your face'
+0x11d  ve, but, / as bats.
+0x11e  / empty'
+0x11f  oolhardy to dare / challenge me, KRAKEN the / FIEND of the Water.
+0x121  v{11}v{19}vt vn v bvatvhavomvcav hvilv::v{71}v{79}v1v9vBvDvFvHvPvXvfvlvrvzv?v{cd}v{d5}v{dd}v{e5}v{ed}v{f5}v{fd}v / w{d}w{15}whewerw iworwhiwlewrowurwwaw lw{6d}w{75}w{7d}w5wDwLwTwbwjwrwzw?w{cd}w{d5}w{dd}w{e5}w{ed}w{f5}w{fd}w / x{d}x{15}xhexerx ixorxhixlexroxurxwax lx{6d}x{75}x{7d}x5xDxLxTxbxjxrxzx?x{cd}x{d5}x{dd}x{e5}x{ed}x{f5}x{fe}x{6}y{e}y{16}ys youyo y oysey fyceyroyMAytiyriyily dy{6d}y{73}y{79}y{7f}y5yByHyNyTyZyfylyryxy{c1}y{c7}
+0x123  e adventure.
+0x124  sperous 200 years / ago.
+0x125  {c8}s{d0}s{d7}s{dd}sFROST
+0x127  impressed'
+0x129  s ago, we had an / advanced civilization. / Our interest was the / universe''
+0x12a  face upon the / clean water. How dirty' / Come' Wash your face'
+0x12e  Our ancestors lived / there. The Mirage Tower / is the entrance.
+0x12f  cestors / are still moving?
+0x132  k. The / Mermaids?::
+0x136  e adventure.
+0x137  sperous 200 years / ago.
+0x138  {c8}s{d0}s{d7}s{dd}sFROST
+0x13a  he FIEND's ball cracks / open:: An ominous cloud / rises, and an evil shape / congeals:: / It is LICH, the FIEND of / Earth.
+0x13b  Are you?::
+0x13c  ower {dd}
+0x13d  nge me,KRAKENthe FIEND of Water''
+0x13e  / I, TIAMAT the FIEND of / the Wind will now put an / end to your adventure''
+0x140  She needs the / CRYSTAL to see.
+0x142  d / a word spoken there. / I have wondered what / language::
+0x143  I suppose you are the / legendary::
+0x145  / again'
+0x147  'o't'y'{c1}'{c6}'{cb}'{d0}'{d5}'{da}'{df}'{e4}'{e9}'{ee}'{f3}'{f8}'{fd}',{7},{c},{11},{16}, t, a,er,ng,ar,me,at,se, f,y ,te,it,rs,{6b},{73},{7b},3,B,J,R,Z,d,h,l,
+0x148  w lw{6d}w{75}w{7d}w5wDwLwTwbwjwrwzw?w{cd}w{d5}w{dd}w{e5}w{ed}w{f5}w{fd}w / x{d}x{15}xhexerx ixorxhixlexroxurxwax lx{6d}x{75}x{7d}x5xDxLxTxbxjxrxzx?x{cd}x{d5}x{dd}x{e5}x{ed}x{f5}x{fe}x{6}y{e}y{16}ys youyo y oysey fyceyroyMAytiyriyily dy{6d}y{73}y{79}y{7f}y5yByHyNyTyZyfylyryxy{c1}y{c7}y{cd}y{d3}y{d9}y{df}y{e5}y{eb}y{f1}y{f8}y y{6}z{d}z{14}z tzanzn ziszstzsezlezofzteznezilzliz{6f}z{76}z{7d}z4zBzJzRzZzhzpzxz:z{cb}z{d3}z{db}z{e3}z{eb}z{f3}z{fb}z'{8}'{d}
+0x14d  ?v{cd}v{d5}v{dd}v{e5}v{ed}v{f5}v{fd}v / w{d}w{15}whewerw iworwhiwlewrowurwwaw lw{6d}w{75}w{7d}w5wDwLwTwbwjwrwzw?w{cd}w{d5}w{dd}w{e5}w{ed}w{f5}w{fd}w / x{d}x{15}xhexerx ixorxhixlexroxurxwax lx{6d}x{75}x{7d}x5xDxLxTxbxjxrxzx?x{cd}x{d5}x{dd}x{e5}x{ed}x{f5}x{fe}x{6}y{e}y{16}ys youyo y oysey fyceyroyMAytiyriyily dy{6d}y{73}y{79}y{7f}y5yByHyNyTyZyfylyryxy{c1}y{c7}y{cd}y{d3}y{d9}y{df}y{e5}y{eb}y{f1}y{f8}y y{6}z{d}z{14}z tzanzn ziszstzsezlezofzteznezilzliz{6f}z{76}z
+0x14f  / of FIENDS.
+0x150  the / spring, something is / flowing.
+0x151  HTER
+0x152  s is a tomb.
+0x153  of your / courage might be / anything.
+0x154  eration / requires a CUBE.
+0x157  he / LIGHT WARRIORS?
+0x158  e earth / is beginning to revive::
+0x159  r interest was the / universe''
+0x15b  pring / was kidnapped.
+0x15e  Sarda does not fear the / evils of the cave.
+0x160  e adventure.
+0x161  sperous 200 years / ago.
+0x164  NUCLEAR
+0x165  Large {d6}
+0x166  effeinish?
+0x167  d by / the mystic KEY.
+0x168  , it sank. The / Mermaids?::
+0x16a  s {dd}
+0x16c  n defeated? / Peace will now return to / ElfLand.
+0x171  ge.
+0x173  e adventure.
+0x174  sperous 200 years / ago.
+0x175  {c8}s{d0}s{d7}s{dd}sFROST
+0x177  ' Save him'
+0x178  safekeeping.
+0x179  ars and prophecy.
+0x17a  velled 2000 / years to the past. The / four FIENDS were sent / forward in time. Those / FIENDS threaten to / destroy the world today.
+0x17b  was cursed.
+0x17c  ining / anew, once again we / can speak'
+0x17d  he / LIGHT WARRIORS?
+0x180  ND's ball cracks / open:: An ominous cloud / rises, and an evil shape / congeals:: / It is LICH, the FIEND of / Earth.
+0x182  / challenge me, KRAKEN the / FIEND of the Water.
+0x183  vBvDvFvHvPvXvfvlvrvzv?v{cd}v{d5}v{dd}v{e5}v{ed}v{f5}v{fd}v / w{d}w{15}whewerw iworwhiwlewrowurwwaw lw{6d}w{75}w{7d}w5wDwLwTwbwjwrwzw?w{cd}w{d5}w{dd}w{e5}w{ed}w{f5}w{fd}w / x{d}x{15}xhexerx ixorxhixlexroxurxwax lx{6d}x{75}x{7d}x5xDxLxTxbxjxrxzx?x{cd}x{d5}x{dd}x{e5}x{ed}x{f5}x{fe}x{6}y{e}y{16}ys youyo y oysey fyceyroyMAytiyriyily dy{6d}y{73}y{79}y{7f}y5yByHyNyTyZyfylyryxy{c1}y{c7}y{cd}y{d3}y{d9}y{df}y{e5}y{eb}y{f1}y{f8}y y{6}z{d}z{14}z tzanzn zis
+0x185  ect / flying towards the east.
+0x186  :: An ominous cloud / rises, and an evil shape / congeals:: / It is LICH, the FIEND of / Earth.
+0x187  XIC
+0x18a  ust as in Lukahn's / prophecy.
+0x18b  iness / is not a practice of the / Dragons of Cardia.
+0x18f  y meeting the King of / the Dragons, BAHAMUT.

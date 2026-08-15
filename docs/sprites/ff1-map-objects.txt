@@ -1,0 +1,329 @@
+FF1 map objects — 287 across 40 maps   (sprite = 0xA210 + table[objType]*0x100)
+
+── map 0 ──
+  slot 0  type  49 @(16,1)   sprite 25  0xA910
+  slot 1  type  50 @(7,13)   sprite 25  0xA910
+  slot 2  type  52 @(4,1) [still]   sprite 29  0xAD10
+  slot 3  type  53 @(15,12)   sprite 21  0xA510
+  slot 4  type  54 @(18,20)   sprite 19  0xA310
+  slot 5  type  55 @(5,6)   sprite 20  0xA410
+  slot 6  type  56 @(27,5)   sprite 19  0xA310
+  slot 7  type  57 @(30,11)   sprite 28  0xAC10
+── map 1 ──
+  slot 0  type   4 @(5,7) [still]   sprite 37  0xB510
+  slot 1  type  63 @(13,16)   sprite 28  0xAC10
+  slot 2  type  63 @(12,3)   sprite 28  0xAC10
+  slot 3  type  63 @(24,21)   sprite 28  0xAC10
+  slot 4  type  64 @(29,8)   sprite 29  0xAD10
+  slot 5  type  65 @(8,14)   sprite 19  0xA310
+  slot 6  type  66 @(19,11)   sprite 27  0xAB10
+  slot 7  type  67 @(20,25)   sprite 28  0xAC10
+── map 2 ──
+  slot 0  type  77 @(37,23)   sprite 43  0xBB10
+  slot 1  type  78 @(38,1)   sprite 43  0xBB10
+  slot 2  type  79 @(28,11)   sprite 43  0xBB10
+  slot 3  type  80 @(24,15) [still]   sprite 43  0xBB10
+  slot 4  type  81 @(9,15)   sprite 43  0xBB10
+  slot 5  type  82 @(10,6)   sprite 43  0xBB10
+  slot 6  type  83 @(4,5) [still]   sprite 42  0xBA10
+  slot 7  type  84 @(15,27) [still]   sprite 42  0xBA10
+── map 3 ──
+  slot 0  type  11 @(26,1)   sprite 26  0xAA10
+  slot 1  type 104 @(8,3)   sprite 28  0xAC10
+  slot 2  type 105 @(22,3)   sprite 28  0xAC10
+  slot 3  type 106 @(21,17)   sprite 28  0xAC10
+  slot 4  type 107 @(12,1) [still]   sprite 29  0xAD10
+  slot 5  type 108 @(14,13)   sprite 28  0xAC10
+  slot 6  type 109 @(15,22)   sprite 28  0xAC10
+  slot 7  type 110 @(29,18) [still]   sprite 29  0xAD10
+  slot 8  type 111 @(24,7)   sprite 28  0xAC10
+  slot 9  type 112 @(24,23)   sprite 28  0xAC10
+  slot10  type 113 @(29,9)   sprite 28  0xAC10
+  slot11  type 114 @(20,26)   sprite 19  0xA310
+  slot12  type 115 @(22,12)   sprite 19  0xA310
+  slot13  type 116 @(25,13)   sprite 30  0xAE10
+── map 4 ──
+  slot 0  type  21 @(42,10) [still]   sprite 29  0xAD10
+  slot 1  type 119 @(38,11) [still]   sprite 29  0xAD10
+  slot 2  type 120 @(36,10) [still]   sprite 29  0xAD10
+  slot 3  type 121 @(35,8) [still]   sprite 29  0xAD10
+  slot 4  type 122 @(35,6) [still]   sprite 29  0xAD10
+  slot 5  type 123 @(36,4) [still]   sprite 29  0xAD10
+  slot 6  type 124 @(38,3) [still]   sprite 29  0xAD10
+  slot 7  type 125 @(40,3) [still]   sprite 29  0xAD10
+  slot 8  type 126 @(42,4) [still]   sprite 29  0xAD10
+  slot 9  type 127 @(43,6) [still]   sprite 29  0xAD10
+  slot10  type 128 @(43,8) [still]   sprite 29  0xAD10
+  slot11  type 129 @(5,1) [still]   sprite 28  0xAC10
+  slot12  type 130 @(40,11) [still]   sprite 29  0xAD10
+  slot13  type 131 @(16,7)   sprite 19  0xA310
+── map 5 ──
+  slot 0  type  19 @(49,19) [still]   sprite 38  0xB610
+  slot 1  type 174 @(56,60)   sprite 28  0xAC10
+  slot 2  type 175 @(41,59)   sprite 26  0xAA10
+  slot 3  type 176 @(58,41)   sprite 26  0xAA10
+  slot 4  type 177 @(10,52)   sprite 19  0xA310
+  slot 5  type 178 @(38,54)   sprite 21  0xA510
+  slot 6  type 179 @(12,31)   sprite 26  0xAA10
+  slot 7  type 180 @(27,43)   sprite 28  0xAC10
+  slot 8  type 181 @(58,49)   sprite 28  0xAC10
+  slot 9  type 182 @(16,16)   sprite 37  0xB510
+  slot10  type 183 @(23,59)   sprite 28  0xAC10
+  slot11  type 184 @(41,51)   sprite 34  0xB210
+  slot12  type 185 @(41,49) [still]   sprite 23  0xA710
+  slot13  type 186 @(23,54)   sprite 20  0xA410
+── map 6 ──
+  slot 0  type  16 @(45,30) [still]   sprite 19  0xA310
+  slot 1  type 147 @(18,24)   sprite 19  0xA310
+  slot 2  type 148 @(9,23)   sprite 26  0xAA10
+  slot 3  type 149 @(21,7)   sprite 25  0xA910
+  slot 4  type 150 @(30,21) [still]   sprite 23  0xA710
+  slot 5  type 151 @(17,12)   sprite 21  0xA510
+  slot 6  type 152 @(20,12)   sprite 27  0xAB10
+  slot 7  type 153 @(19,3) [still]   sprite 29  0xAD10
+  slot 8  type 154 @(46,23) [still]   sprite 29  0xAD10
+  slot 9  type 155 @(17,39)   sprite 40  0xB810
+  slot10  type 156 @(26,14)   sprite 37  0xB510
+  slot11  type 157 @(31,11)   sprite 27  0xAB10
+  slot12  type 158 @(4,23)   sprite 19  0xA310
+  slot13  type 159 @(41,27)   sprite 28  0xAC10
+  slot14  type 160 @(28,4)   sprite 28  0xAC10
+── map 7 ──
+  slot 0  type 187 @(24,21) [still]   sprite 32  0xB010
+  slot 1  type 188 @(4,8)   sprite 32  0xB010
+  slot 2  type 189 @(19,19) [still]   sprite 32  0xB010
+  slot 3  type 190 @(33,8)   sprite 32  0xB010
+  slot 4  type 191 @(16,10) [still]   sprite 32  0xB010
+  slot 5  type 192 @(26,14)   sprite 32  0xB010
+  slot 6  type 193 @(33,13)   sprite 32  0xB010
+  slot 7  type 194 @(35,22)   sprite 32  0xB010
+  slot 8  type 195 @(9,15)   sprite 32  0xB010
+  slot 9  type 196 @(22,10) [still]   sprite 32  0xB010
+  slot10  type 197 @(6,10)   sprite 32  0xB010
+  slot11  type 198 @(28,18)   sprite 32  0xB010
+  slot12  type 200 @(14,20)   sprite 32  0xB010
+  slot13  type 201 @(7,13)   sprite 32  0xB010
+── map 8 ──
+  slot 0  type  32 @(14,28) [still]   sprite 25  0xA910
+  slot 1  type  32 @(10,18) [still]   sprite 25  0xA910
+  slot 2  type  34 @(2,10)   sprite 19  0xA310
+  slot 3  type  35 @(8,11)   sprite 26  0xAA10
+  slot 4  type  37 @(7,28) [still]   sprite 25  0xA910
+  slot 5  type  38 @(7,15) [room] [still]   sprite 19  0xA310
+  slot 6  type  41 @(6,24) [room] [still]   sprite 18  0xA210
+  slot 7  type  42 @(17,23) [room]   sprite 18  0xA210
+  slot 8  type  44 @(22,9) [still]   sprite 29  0xAD10
+  slot 9  type  46 @(14,15) [still]   sprite 29  0xAD10
+── map 9 ──
+  slot 0  type   5 @(9,5) [room] [still]   sprite 42  0xBA10
+  slot 1  type   6 @(8,6) [room] [still]   sprite 44  0xBC10
+  slot 2  type  69 @(1,1) [still]   sprite 43  0xBB10
+  slot 3  type  70 @(23,14)   sprite 43  0xBB10
+  slot 4  type  71 @(2,24)   sprite 43  0xBB10
+  slot 5  type  72 @(19,4)   sprite 42  0xBA10
+  slot 6  type  73 @(15,20) [still]   sprite 43  0xBB10
+  slot 7  type  74 @(17,20) [still]   sprite 43  0xBB10
+── map 10 ──
+  slot 0  type   7 @(16,6) [room] [still]   sprite 33  0xB110
+  slot 1  type  87 @(22,8)   sprite 35  0xB310
+  slot 2  type  87 @(28,3)   sprite 35  0xB310
+  slot 3  type  87 @(4,3)   sprite 35  0xB310
+  slot 4  type  87 @(19,16)   sprite 35  0xB310
+  slot 5  type  87 @(11,10)   sprite 35  0xB310
+  slot 6  type  87 @(4,20)   sprite 35  0xB310
+── map 11 ──
+  slot 0  type 132 @(12,13) [still]   sprite 29  0xAD10
+── map 12 ──
+  slot 0  type   2 @(20,21) [room] [still]   sprite 36  0xB410
+  slot 1  type   3 @(20,18) [room] [still]   sprite 18  0xA210
+  slot 2  type  58 @(17,19) [room]   sprite 35  0xB310
+  slot 3  type  59 @(18,18) [room]   sprite 35  0xB310
+  slot 4  type  60 @(18,19) [room]   sprite 35  0xB310
+  slot 5  type  61 @(23,19) [room]   sprite 35  0xB310
+  slot 6  type  62 @(22,19) [room]   sprite 35  0xB310
+  slot 7  type 202 @(20,17) [room] [still]   sprite 22  0xA610
+── map 15 ──
+  slot 0  type  19 @(47,30) [still]   sprite 38  0xB610
+── map 16 ──
+  slot 0  type 133 @(28,9)   sprite 40  0xB810
+  slot 1  type 134 @(41,6)   sprite 40  0xB810
+  slot 2  type 135 @(41,22)   sprite 40  0xB810
+  slot 3  type 136 @(38,52) [room]   sprite 40  0xB810
+  slot 4  type 138 @(24,31)   sprite 40  0xB810
+  slot 5  type 139 @(17,37) [room]   sprite 40  0xB810
+  slot 6  type 140 @(37,30)   sprite 40  0xB810
+  slot 7  type 141 @(13,6)   sprite 40  0xB810
+  slot 8  type 142 @(21,37) [room]   sprite 40  0xB810
+── map 18 ──
+  slot 0  type  17 @(20,53) [room]   sprite 39  0xB710
+  slot 1  type  87 @(8,3)   sprite 35  0xB310
+  slot 2  type  87 @(15,23)   sprite 35  0xB310
+  slot 3  type  87 @(10,41)   sprite 35  0xB310
+  slot 4  type  87 @(23,25)   sprite 35  0xB310
+  slot 5  type  87 @(25,9)   sprite 35  0xB310
+  slot 6  type  87 @(40,9)   sprite 35  0xB310
+  slot 7  type  87 @(33,24)   sprite 35  0xB310
+  slot 8  type  87 @(50,35)   sprite 35  0xB310
+  slot 9  type  87 @(43,41)   sprite 35  0xB310
+  slot10  type  87 @(58,44)   sprite 35  0xB310
+── map 19 ──
+  slot 0  type   8 @(16,45) [still]   sprite 30  0xAE10
+  slot 1  type   9 @(7,2) [room] [still]   sprite 30  0xAE10
+  slot 2  type  88 @(14,21) [still]   sprite 30  0xAE10
+  slot 3  type  89 @(3,10)   sprite 30  0xAE10
+  slot 4  type  90 @(22,17)   sprite 30  0xAE10
+  slot 5  type  91 @(14,7)   sprite 30  0xAE10
+  slot 6  type  92 @(21,4) [room] [still]   sprite 30  0xAE10
+  slot 7  type  93 @(2,4)   sprite 30  0xAE10
+  slot 8  type  94 @(10,15)   sprite 30  0xAE10
+  slot 9  type  95 @(10,19)   sprite 30  0xAE10
+  slot10  type  96 @(19,14) [room] [still]   sprite 30  0xAE10
+  slot11  type  97 @(13,2)   sprite 30  0xAE10
+  slot12  type  99 @(18,10)   sprite 30  0xAE10
+── map 20 ──
+  slot 0  type  10 @(8,1) [room] [still]   sprite 23  0xA710
+  slot 1  type 100 @(3,13)   sprite 34  0xB210
+  slot 2  type 101 @(11,10) [room]   sprite 34  0xB210
+  slot 3  type 102 @(3,7) [room]   sprite 34  0xB210
+  slot 4  type 103 @(13,3) [room] [still]   sprite 34  0xB210
+── map 21 ──
+  slot 0  type  13 @(2,2) [room] [still]   sprite 29  0xAD10
+── map 22 ──
+  slot 0  type  87 @(4,3)   sprite 35  0xB310
+  slot 1  type  87 @(30,36)   sprite 35  0xB310
+  slot 2  type  87 @(16,21)   sprite 35  0xB310
+  slot 3  type  87 @(52,22)   sprite 35  0xB310
+  slot 4  type  87 @(24,28)   sprite 35  0xB310
+── map 23 ──
+  slot 0  type 206 @(20,5) [room] [still]   sprite 39  0xB710
+── map 24 ──
+  slot 0  type   1 @(12,4) [room] [still]   sprite 33  0xB110
+  slot 1  type  18 @(11,5) [room] [still]   sprite 18  0xA210
+  slot 2  type  43 @(2,29) [still]   sprite 25  0xA910
+  slot 3  type  48 @(13,9) [still]   sprite 25  0xA910
+── map 27 ──
+  slot 0  type  87 @(14,17)   sprite 35  0xB310
+  slot 1  type  87 @(27,11)   sprite 35  0xB310
+  slot 2  type  87 @(6,16)   sprite 35  0xB310
+  slot 3  type  87 @(15,45)   sprite 35  0xB310
+  slot 4  type  87 @(17,51)   sprite 35  0xB310
+  slot 5  type  87 @(22,48)   sprite 35  0xB310
+  slot 6  type  87 @(29,53)   sprite 35  0xB310
+  slot 7  type  87 @(34,50)   sprite 35  0xB310
+  slot 8  type  87 @(38,43)   sprite 35  0xB310
+  slot 9  type  87 @(49,30)   sprite 35  0xB310
+  slot10  type  87 @(54,40)   sprite 35  0xB310
+  slot11  type  87 @(47,40)   sprite 35  0xB310
+  slot12  type  87 @(46,51)   sprite 35  0xB310
+  slot13  type  87 @(58,56)   sprite 35  0xB310
+── map 28 ──
+  slot 0  type  87 @(6,10)   sprite 35  0xB310
+  slot 1  type  87 @(30,8)   sprite 35  0xB310
+  slot 2  type  87 @(17,16)   sprite 35  0xB310
+  slot 3  type  87 @(44,16)   sprite 35  0xB310
+  slot 4  type  87 @(42,29)   sprite 35  0xB310
+  slot 5  type  87 @(51,4)   sprite 35  0xB310
+  slot 6  type  87 @(47,34)   sprite 35  0xB310
+  slot 7  type  87 @(31,24)   sprite 35  0xB310
+  slot 8  type  87 @(29,32)   sprite 35  0xB310
+  slot 9  type  87 @(16,31)   sprite 35  0xB310
+  slot10  type  87 @(2,30)   sprite 35  0xB310
+  slot11  type  87 @(6,42)   sprite 35  0xB310
+  slot12  type  87 @(5,49)   sprite 35  0xB310
+  slot13  type  87 @(20,45)   sprite 35  0xB310
+  slot14  type  87 @(30,54)   sprite 35  0xB310
+── map 29 ──
+  slot 0  type  87 @(10,11)   sprite 35  0xB310
+  slot 1  type  87 @(18,15)   sprite 35  0xB310
+  slot 2  type  87 @(10,21)   sprite 35  0xB310
+  slot 3  type  87 @(21,22)   sprite 35  0xB310
+  slot 4  type  87 @(15,31)   sprite 35  0xB310
+  slot 5  type  87 @(25,36)   sprite 35  0xB310
+  slot 6  type  87 @(27,49)   sprite 35  0xB310
+  slot 7  type  87 @(33,40)   sprite 35  0xB310
+  slot 8  type  87 @(29,25)   sprite 35  0xB310
+  slot 9  type  87 @(39,22)   sprite 35  0xB310
+  slot10  type  87 @(31,18)   sprite 35  0xB310
+  slot11  type  87 @(40,16) [room]   sprite 35  0xB310
+  slot12  type  87 @(38,41)   sprite 35  0xB310
+── map 30 ──
+  slot 0  type  12 @(26,38) [room] [still]   sprite 47  0xBF10
+  slot 1  type  22 @(26,27) [still]   sprite 45  0xBD10
+  slot 2  type  87 @(11,9) [room]   sprite 35  0xB310
+  slot 3  type  87 @(10,10) [room]   sprite 35  0xB310
+  slot 4  type  87 @(9,9) [room]   sprite 35  0xB310
+  slot 5  type  87 @(15,16)   sprite 35  0xB310
+  slot 6  type  87 @(24,15)   sprite 35  0xB310
+  slot 7  type  87 @(17,34)   sprite 35  0xB310
+  slot 8  type  87 @(17,32)   sprite 35  0xB310
+  slot 9  type  87 @(18,34)   sprite 35  0xB310
+  slot10  type  87 @(28,18)   sprite 35  0xB310
+  slot11  type  87 @(26,19)   sprite 35  0xB310
+  slot12  type  87 @(35,20)   sprite 35  0xB310
+  slot13  type  87 @(39,16)   sprite 35  0xB310
+  slot14  type  87 @(44,12)   sprite 35  0xB310
+── map 31 ──
+  slot 0  type  87 @(19,40) [room]   sprite 35  0xB310
+  slot 1  type  87 @(16,38) [room]   sprite 35  0xB310
+  slot 2  type  87 @(19,36) [room]   sprite 35  0xB310
+  slot 3  type  87 @(10,35)   sprite 35  0xB310
+  slot 4  type  87 @(12,42)   sprite 35  0xB310
+  slot 5  type  87 @(24,21)   sprite 35  0xB310
+  slot 6  type  87 @(22,23)   sprite 35  0xB310
+  slot 7  type  87 @(19,27)   sprite 35  0xB310
+  slot 8  type  87 @(21,12)   sprite 35  0xB310
+  slot 9  type  87 @(18,18)   sprite 35  0xB310
+  slot10  type  87 @(39,12) [room]   sprite 35  0xB310
+  slot11  type  87 @(32,18)   sprite 35  0xB310
+  slot12  type  87 @(36,23)   sprite 35  0xB310
+  slot13  type  87 @(33,24)   sprite 35  0xB310
+  slot14  type  87 @(36,23)   sprite 35  0xB310
+── map 32 ──
+  slot 0  type  27 @(12,42) [room] [still]   sprite 22  0xA610
+  slot 1  type  87 @(17,49)   sprite 35  0xB310
+  slot 2  type  87 @(15,35)   sprite 35  0xB310
+  slot 3  type  87 @(26,37)   sprite 35  0xB310
+  slot 4  type  87 @(30,46)   sprite 35  0xB310
+  slot 5  type  87 @(31,50)   sprite 35  0xB310
+  slot 6  type  87 @(32,55)   sprite 35  0xB310
+  slot 7  type  87 @(36,42)   sprite 35  0xB310
+  slot 8  type  87 @(28,31)   sprite 35  0xB310
+  slot 9  type  87 @(18,24)   sprite 35  0xB310
+  slot10  type  87 @(20,26)   sprite 35  0xB310
+── map 36 ──
+  slot 0  type  28 @(7,55) [room] [still]   sprite 22  0xA610
+── map 39 ──
+  slot 0  type  14 @(21,3) [room] [still]   sprite 41  0xB910
+  slot 1  type 143 @(19,7) [room] [still]   sprite 40  0xB810
+  slot 2  type 144 @(23,7) [room] [still]   sprite 40  0xB810
+── map 40 ──
+  slot 0  type 204 @(19,4)   sprite 39  0xB710
+── map 41 ──
+  slot 0  type 205 @(9,10) [room] [still]   sprite 39  0xB710
+── map 42 ──
+  slot 0  type  29 @(12,8) [room] [still]   sprite 22  0xA610
+── map 46 ──
+  slot 0  type 163 @(6,18) [room]   sprite 31  0xAF10
+  slot 1  type 164 @(19,5) [room]   sprite 31  0xAF10
+  slot 2  type 165 @(26,18) [room]   sprite 31  0xAF10
+  slot 3  type 166 @(4,25) [room]   sprite 31  0xAF10
+  slot 4  type 167 @(19,18) [room]   sprite 31  0xAF10
+  slot 5  type 168 @(20,12) [room]   sprite 31  0xAF10
+  slot 6  type 169 @(11,11) [room]   sprite 31  0xAF10
+  slot 7  type 170 @(4,11) [room]   sprite 31  0xAF10
+  slot 8  type 171 @(5,4) [room]   sprite 31  0xAF10
+  slot 9  type 172 @(20,26) [room]   sprite 31  0xAF10
+── map 48 ──
+  slot 0  type  22 @(26,27) [room] [still]   sprite 45  0xBD10
+── map 49 ──
+  slot 0  type 207 @(30,25) [still]   sprite 39  0xB710
+── map 51 ──
+  slot 0  type  30 @(7,5) [room] [still]   sprite 22  0xA610
+── map 54 ──
+  slot 0  type  23 @(20,16) [room] [still]   sprite 45  0xBD10
+── map 59 ──
+  slot 0  type  24 @(15,19) [room] [still]   sprite 36  0xB410
+  slot 1  type  25 @(15,18) [room] [still]   sprite 36  0xB410
+  slot 2  type  26 @(15,17) [room] [still]   sprite 36  0xB410
+── map 60 ──
+  slot 0  type  20 @(8,7) [still]   sprite 46  0xBE10

@@ -360,6 +360,73 @@ encoding is not `(x = byte & 0x3F, y)`.
 (RAM does not contain a map's type list verbatim, so it is transformed), or
 disassembling the map-load routine. Fresh start, not a continuation.
 
+## 1.8.29 — 2026-08-14
+
+### FF1 objType → sprite, SOLVED by disassembling the map-load routine
+
+```
+sprite ROM offset = 0xA210 + SPRITE_TABLE[objType] * 0x100   (table @ file 0x2E10)
+```
+
+Disassembling the loader (new `tools/dis6502-ff1.mjs`) gave the ground truth:
+
+```
+$E7FB  LDA $48        ; $0048 IS the current map id
+       ASL/ROL x4     ; mapId*16, then *2 + itself => mapId*48
+       ADC #$B4       ; + $B400
+       LDA #$00 / JSR $FE03    ; switch to BANK 0
+$E824  LDA ($1C),Y    ; read the object TYPE
+$E82C  ADC #$03       ; 3 bytes per entry
+$E7F3  LDA #$0F       ; FIFTEEN slots, always
+```
+
+Every earlier attempt failed because the searches were fed **wrong pairs**. The
+fix was to stop inferring and **patch the ROM**: set every object on one map to
+a single type, boot in, read which single sprite the PPU loads. Six probes
+(types 49, 32, 63, 100, 150, 200) yield **exactly one** table in the ROM that
+reproduces them, with a constant +18 bias. It then predicts the *unpatched*
+map's ten objects **10/10**, and all 182 placed types land in entries **18–47** —
+exactly the NPC half of the 48-entry bank.
+
+### Three corrections the disassembly forced
+
+- **15 slots, not 16, and zero is not a terminator** (`LDA #$0F`). The old
+  reader stopped at the first zero *and* over-ran into a 16th slot: **287
+  objects, not 290**.
+- **Both coord bytes take `#$3F`.** The X mask is observable (108/287 carry flag
+  bits); the **Y mask is not** — no object sets bits 6–7 of byte 2 — so the gate
+  does not pretend to test it.
+- **The map being probed was 8, not 0.** `$0048` held 8 and the captured table
+  pointer was `$B580` = `0x3410 + 8*48`. That is why the first patch probe
+  returned identical results for all eight types: it patched a map the game
+  never loaded.
+
+### ⛔ RETRACTED: dialogueId is NOT objType
+
+v1.8.25 shipped `dialogueId == objType` as verified. **It is wrong.** The
+"confirmation" was a coincidence — talking in Coneria Castle gave string 49, and
+*some* map happened to hold an object of type 49.
+
+Coneria Castle is map 8; its types (32, 34, 35, 37, 38, 41, 42, 44, 46) decode to
+lines about Bahamut, a submarine and Garland. Patching **every** map-8 object to
+type 100 still made a talk fetch string **120** — `"::TCELES B HSUP / A magic
+spell?"`, exactly what appeared on screen.
+
+The **text decoding is unaffected and still verified**: string 49 is exactly the
+box the guard displayed, and FF1's self-naming characters (Jane, Lukahn, Jim,
+Arylon, Kope, Bahamut) are real. What is unknown is **which object speaks which
+line**, so the tools no longer pair them.
+
+`docs/sprites/ff1-npc-dialogue.txt` is replaced by `ff1-map-objects.txt`
+(position + sprite, verified) and `ff1-script.txt` (the text, verified).
+
+### Gate
+
+`check-ff12-text` drops the false object↔dialogue assertion and gains the sprite
+table, slot count, stride, offset and X-mask checks — **11 more reverts tested,
+all fail**, including two holes found and closed on the way (`SPRITE_BASE` was
+unpinned because only the biased index was asserted; the X mask was untested).
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware

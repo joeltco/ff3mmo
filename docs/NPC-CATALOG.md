@@ -244,99 +244,73 @@ never will.
 
 ---
 
-## FF1 — the dialogue table, decoded
+## FF1 — the map-load routine, disassembled
 
-Same result as FF3, one game earlier:
+The link is solved, and disassembling the loader corrected three things I had
+wrong.
 
 ```
-dialogueId == objType        (exactly, 1:1)
+$E7FB  LDA $48        ; $0048 IS the current map id
+       ASL/ROL x4     ; mapId * 16, then *2 + itself  => mapId * 48
+       ADC #$B4       ; + $B400
+       LDA #$00 / JSR $FE03    ; switch to BANK 0
+$E824  LDA ($1C),Y    ; read the object TYPE
+$E82C  ADC #$03       ; 3 bytes per entry
+$E7F3  LDA #$0F       ; FIFTEEN slots, always
 ```
 
-**Map objects**: 16 slots of 3 bytes per map at file `0x3410` (bank 0, CPU
-`$B400`) — type, X (bits 0-5; bit 7 = in a room, bit 6 = does not move), Y.
-Verified: all **290 placed objects across 40 maps have Y ≤ 63**.
+So: **15 slots of 3 bytes per map at file `0x3410`, stride 48**, and
 
-Confirmed by talking to a Coneria Castle guard in the running game, which
-displayed *"The King is looking for the LIGHT WARRIORS. You do not happen to be
-them, do you?"* — that box is string **49**, and object type **49** is on map 0.
-Map 0 then reads as a coherent castle cast (Honor Guard, the Queen locked
-inside, the LUTE), and map 1's object 4 is **Garland**.
+```
+sprite ROM offset = 0xA210 + SPRITE_TABLE[objType] * 0x100     (table @ file 0x2E10)
+```
 
-### The text format
+### How the sprite table was found
 
-- **Encoding** calibrated off the game's own class-select menu: "FIGHTER"
-  renders as `8f 92 90 91 9d 8e 9b`, fixing **A–Z = 0x8A+, a–z = 0xA4+**.
-- **String pointer table at `0x28010`** — the *same offset FF2 uses*, which is
-  what you'd expect from one engine family. Text lives in the same bank.
-- **DTE**: bytes `0x1A`–`0x69`, 80 entries, two parallel arrays — and FF1 stores
-  them **in the opposite order to FF3**: *second* chars at `0x3F060`, *first*
-  chars at `0x3F0B0`.
+Every earlier attempt failed because I was feeding searches *wrong pairs*. The
+fix was to stop inferring and **patch the ROM**: set every object on one map to
+a single type, boot in, and read which single sprite the PPU loads. That gives
+`objType -> sprite` with no alignment assumption anywhere.
 
-> ⛔ That reversal is why every search failed. Pairs-adjacent, firsts-then-seconds,
-> and a delta-invariant sweep of the whole ROM all returned nothing. It was only
-> found by deriving 16 codes from a single line read off the running game, then
-> searching for **each half independently**.
+Six probes (types 49, 32, 63, 100, 150, 200) yield **exactly one** table in the
+whole ROM that reproduces them — file `0x2E10`, CPU `$AE00`, bank 0, with a
+constant bias of +18. It then predicts the *unpatched* map's ten objects
+**10/10**, and all **182 placed types land in entries 18–47** — exactly the NPC
+half of the 48-entry bank (0–17 are the player classes and vehicles).
 
-### The named cast
+### Three corrections the disassembly forced
 
-Only five FF1 objects identify themselves, and all five do it with "I am …" /
-"My name is …":
+1. **15 slots, not 16 — and a zero type is not a terminator.** The loader reads
+   all 15 (`LDA #$0F`). The old reader stopped at the first zero *and* read a
+   16th slot: 287 objects, not 290.
+2. **Both coordinate bytes are masked with `#$3F`.** The X mask is observable
+   (108 of 287 objects carry flag bits). The **Y mask is not** — no object in
+   this ROM sets bits 6–7 of byte 2 — so the gate does not pretend to test it.
+3. **The map I had been probing was map 8, not map 0.** `$0048` held 8, and the
+   captured table pointer was `$B580` = `0x3410 + 8*48`. Patching map 0 changed
+   nothing, which is why the first probe returned identical results for all
+   eight types.
 
-| name | object | map |
-|---|---|---|
-| **Jane**, Queen of Coneria | 59 | 12 |
-| **Lukahn**, the prophet | 160 | 6 |
-| **Arylon**, the Dancer | 71 | 9 |
-| **Jim**, of the Dwarf Village | 139 | 16 |
-| **Kope** | 177 | 5 |
+### ⛔ RETRACTED: dialogueId is NOT objType
 
-Others are named only in the third person — *"Garland used to be a good knight
-until…"*, *"I am BAHAMUT, King of the Dragons"* (an unplaced object) — and those
-do **not** name the NPC saying them.
+An earlier version of this document claimed `dialogueId == objType`, verified.
+**That was wrong**, and the "confirmation" was a coincidence: talking in Coneria
+Castle produced string 49, and *some* map happened to contain an object of
+type 49.
 
-> ⛔ Two traps recorded in the tool: FF1 writes ellipsis as `::`, so a `"Name:"`
-> speaker rule matches *"Oh:: My sister::"* and invents a character called
-> **Oh**. And sweeping past map 63 yields plausible rows with Y of 161+ —
-> it invented eight extra "Kope"s before the `Y ≤ 63` invariant caught it.
+Coneria Castle is map 8. Its object types are 32, 34, 35, 37, 38, 41, 42, 44, 46
+— whose strings are about Bahamut, a submarine and Garland, nonsense for that
+castle. And patching **every** map-8 object to type 100 still made a talk fetch
+string **120** (`"::TCELES B HSUP / A magic spell?"`, which is exactly what
+appeared on screen).
 
-Full roster: `docs/sprites/ff1-npc-dialogue.txt`.
-
-### ⛔ objType → sprite entry: NOT SOLVED
-
-Every FF1 NPC has its line, its map and its position. It does **not** have its
-picture, and I could not make the link. Recording the dead ends so this is not
-re-walked:
-
-**What is measured and solid**
-- the sprite bank is 48 entries at `0x9010 + n*0x100` (PPU-verified)
-- Coneria Castle's entry room loads entries `{18, 19, 25, 26, 29}` plus the party
-- the two guards flanking that room **share entry 25** and stand **7 tiles
-  apart on the same row** (read off OAM, confirmed against a screenshot)
-
-**What is disproven**
-- **PPU slot order is NOT object-table order.** The engine allocates 16-tile
-  groups per *unique sprite*, not per object. Aligning group *i* to object *i*
-  forces the same objType to two different entries, which is impossible.
-- **No byte table maps the pairs.** A full-ROM exact search and a
-  delta-invariant search (immune to any constant offset in the stored values)
-  both return nothing, because the pairs being searched for are wrong — see
-  above.
-- **The map cannot be identified geometrically.** Candidates picked by the
-  7-apart signature (maps 27, 6, 8) all fail: map 27 is 14 identical objects,
-  map 6 is Crescent Lake (it holds Lukahn), map 8's cast is incoherent
-  (Bahamut + a submarine + Garland in one list).
-
-**The contradiction that blocks it**
-Talking in that room produced string 49, and **only map 0 contains objType 49** —
-but map 0 has **no** pair of objects 7 apart on the same row. Sweeping the table
-base across ±12 map-widths finds **no** alignment where any map has both. So
-either the on-screen guards are not the object-table entries I think they are,
-or the coordinate encoding is not `(x = byte & 0x3F, y)`.
-
-**What would crack it**: the RAM array where FF1 stores per-object sprite
-assignment (searching RAM for a map's type list verbatim finds nothing, so it is
-transformed), or disassembling the map-load routine. Both are a fresh start, not
-a continuation of the above.
+The **text decoding is unaffected and still verified** against the running game:
+string 49 is exactly the box the guard displayed. FF1's script and its
+self-naming characters (Jane, Lukahn, Jim, Arylon, Kope, Bahamut) are real.
+What is unknown is **which object speaks which line** — so
+`tools/npc-dialogue-ff1.mjs` no longer pairs them, and the roster
+`ff1-npc-dialogue.txt` has been replaced by `ff1-map-objects.txt` (positions +
+sprites, verified) and `ff1-script.txt` (the text, verified).
 
 ---
 
@@ -454,7 +428,10 @@ descriptive labels (みはり, まどうし, ははおや, どれい).
 | `tools/npc-dialogue.mjs` | every NPC with its sprite and its line |
 | `tools/check-npc-dialogue.mjs` | dialogue gate — 6 reverts tested, all fail |
 | `docs/sprites/ff3-npc-dialogue*.txt` | the named FF3 rosters |
-| `tools/lib/ff1-text.mjs` / `tools/npc-dialogue-ff1.mjs` | FF1 script + named NPC roster |
+| `tools/lib/ff1-text.mjs` | FF1 script + map objects + objType→sprite |
+| `tools/npc-dialogue-ff1.mjs` | FF1 objects: position + sprite (no dialogue — see above) |
+| `tools/ff1-script-dump.mjs` | FF1 script + self-naming characters |
+| `tools/dis6502-ff1.mjs` | 6502 disassembler for the MMC1 ROMs |
 | `tools/lib/ff2-text.mjs` / `tools/npc-dialogue-ff2.mjs` | FF2 decoder + named NPC roster |
 | `tools/ff2-script-dump.mjs` | FF2 raw script dump |
 | `tools/check-ff12-text.mjs` | FF1/FF2 gate — 11 reverts tested, all fail |

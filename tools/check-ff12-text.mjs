@@ -56,27 +56,62 @@ const ok = (m) => console.log('  ✓ ' + m);
   } else ok('FF1 string 49 matches the line read off the running game');
   since();
 
-  // 3. the map object table, and dialogueId == objType
-  let objs = 0, badY = 0, maps = 0;
+  // 3. the map object table — 15 slots of 3 bytes, stride 48, from the
+  // disassembly ($E7F3 LDA #$0F, $E82C ADC #$03, mapId*48 + $B400 in bank 0)
+  let objs = 0, maps = 0;
   for (let m = 0; m < 64; m++) {
     const o = F1.mapObjects(rom, m);
     if (!o.length) continue;
-    if (o.some(e => e.y > 63)) { badY++; continue; }
     maps++; objs += o.length;
+    if (o.some(e => e.x > 63 || e.y > 63)) bad(`FF1 map ${m} has an unmasked coord — both bytes take #$3F`);
   }
-  if (badY > 0) bad(`FF1 map object table: ${badY} maps have objects with Y>63 — the table has moved`);
-  if (objs < 250) bad(`FF1 map object table yields only ${objs} objects, expected ~290`);
-  const m0 = F1.mapObjects(rom, 0);
-  if (!m0.some(o => o.type === 49)) bad('FF1 map 0 has no object type 49 — the guard that was measured');
-  if (since()) ok(`FF1 map objects: ${objs} across ${maps} maps, all Y<=63; map 0 carries type 49`);
+  if (objs !== 287) bad(`FF1 map object table yields ${objs} objects, expected 287`);
+  if (F1.MAPOBJ_PER_MAP !== 15) bad(`FF1 MAPOBJ_PER_MAP is ${F1.MAPOBJ_PER_MAP}; the loader reads 15 (LDA #$0F)`);
+  if (since()) ok(`FF1 map objects: ${objs} across ${maps} maps, 15 slots each`);
 
-  // 4. the named cast still names itself
+  // 4. objType -> sprite. MEASURED by patching every object on Coneria Castle
+  // (map 8) to one type and reading which single sprite the PPU loaded.
+  {
+    const PROBED = [[49, 25], [32, 25], [63, 28], [100, 34], [150, 23], [200, 32]];
+    for (const [t, e] of PROBED) {
+      const got = F1.spriteEntryForType(rom, t);
+      if (got !== e) bad(`FF1 objType ${t} resolves to sprite entry ${got}, the PPU measured ${e}`);
+    }
+    // ...and it must reproduce the unpatched map 8, in order
+    const M8 = [25, 25, 19, 26, 25, 19, 18, 18, 29, 29];
+    const o8 = F1.mapObjects(rom, 8);
+    for (let i = 0; i < M8.length; i++) {
+      if (o8[i].sprite !== M8[i]) bad(`FF1 map 8 slot ${i} predicts sprite ${o8[i].sprite}, the PPU showed ${M8[i]}`);
+    }
+    // the OFFSET too, not just the index — otherwise SPRITE_BASE can drift
+    const o8a = F1.mapObjects(rom, 8)[0];
+    if (o8a.spriteOffset !== 0xA910) {
+      bad(`FF1 map 8 slot 0 resolves to 0x${o8a.spriteOffset.toString(16)}, the PPU traced 0xA910`);
+    }
+    // the X mask is observable (108 objects carry flag bits); the Y mask is
+    // NOT — no object in this ROM sets bits 6-7 of byte 2 — so it is not tested.
+    let flagged = 0;
+    for (let m = 0; m < 64; m++) for (const o of F1.mapObjects(rom, m)) if (o.inRoom || o.still) flagged++;
+    if (flagged < 90) bad(`only ${flagged} FF1 objects carry X flag bits, expected ~108 — the mask is off`);
+    // every placed type must land in the NPC half of the 48-entry bank
+    let outside = 0;
+    for (let m = 0; m < 64; m++) for (const o of F1.mapObjects(rom, m))
+      if (o.sprite < 18 || o.sprite > 47) outside++;
+    if (outside) bad(`${outside} FF1 objects resolve outside sprite entries 18-47`);
+    if (since()) ok('FF1 objType -> sprite: 6 probes + map 8 10/10, all types land in entries 18-47');
+  }
+
+  // 5. the names are in the SCRIPT — not attributed to any object
+  //
+  // ⛔ There is no "object N is Jane" assertion here any more. The old gate had
+  // one, built on dialogueId == objType, which is FALSE: patching every map-8
+  // object to type 100 still made a talk fetch string 120.
   const NAMED = [[59, /^I am Jane, Queen of/], [160, /^I am Lukahn/],
                  [139, /^I am Jim\./], [71, /^I am Arylon/], [177, /^My name is Kope/]];
   for (const [id, re] of NAMED) {
-    if (!re.test(F1.decodeString(rom, id))) bad(`FF1 object ${id} no longer names itself`);
+    if (!re.test(F1.decodeString(rom, id))) bad(`FF1 string ${id} no longer names itself`);
   }
-  if (since()) ok(`FF1 named cast intact: Jane, Lukahn, Jim, Arylon, Kope`);
+  if (since()) ok(`FF1 script names intact: Jane, Lukahn, Jim, Arylon, Kope (strings, not objects)`);
 }
 
 // ══ FF2 ═══════════════════════════════════════════════════════════════════
