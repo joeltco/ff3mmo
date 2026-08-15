@@ -79,6 +79,15 @@ export const STAT_STRIDE = 20;
  *   16,18 MASK  $A6C0 LDA $686D / AND $6876 and $A6C9 LDA $686E / AND $6877,
  *               then ORA / BEQ skip / x40. Two attack-property masks ANDed
  *               against two defender fields; a match adds a x40 damage term.
+ *               ⭐ PROVEN behaviourally, once the party was GIVEN a weakness:
+ *               the defender's fields live at $6800 + n*0x12, +0x0D and +0x0E,
+ *               and every party member's are 0x00 in a stock save — which is
+ *               why patching the monster alone had looked like it did nothing.
+ *               Poke them and the AND fires. IMP's natural byte 16 is 0x04:
+ *                 party weakness 0x04  -> 24 damage   (the ONE matching bit)
+ *                 party weakness 0xFB  -> 12 damage   (every bit EXCEPT it)
+ *                 masks 0xFF, party 0x00 -> 12 ; both 0xFF -> 24
+ *               Only the specific bit matters, in both directions.
  *   15   STATUS $A85F LDA $6873 / BEQ skip gates a path that immediately ANDs
  *               with byte 18's mask — a status/effect attack, off when 0.
  *   11   a second multiplier term ($A71F LDX $686F / JSR $AEDD, the same routine
@@ -88,11 +97,12 @@ export const STAT_STRIDE = 20;
  * Byte 6 gates whether the monster attacks but was not isolated further. Those
  * four stay unnamed.
  *
- * ⛔ The MASK bytes could not be confirmed behaviourally: patching them changes
- * nothing measurable because this party has no matching weakness bit, so the
- * AND never fires. The disassembly is unambiguous; the black-box test is simply
- * blind to it, and that is why they are named from code and labelled as such.
+ * ⛔ Bytes 6, 14, 17 and 19 remain unnamed.
  */
+/** The DEFENDER's weakness fields, as addressed live at $A5EA / $A5F1. */
+export const DEFENDER_BASE = 0x6800, DEFENDER_STRIDE = 0x12;
+export const DEFENDER_WEAK_OFFS = [0x0D, 0x0E];
+export const MASK_BONUS_X = 0x28;    // $A6DC LDX #$28 — the x40 term
 export const STAT_FIELDS = {
   exp: [0, 1], gil: [2, 3], hp: [4, 5], evade: 8, defense: 9, attack: 12,
   special: 7, crit: 13, hits: 10, status: 15, mask1: 16, mask2: 18,

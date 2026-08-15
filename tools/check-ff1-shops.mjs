@@ -412,6 +412,66 @@ console.log('\nmonster names');
   };
   eq('maxing the CRIT byte makes the game print "Critical hit"', critWords(255), true);
   eq('...and at 0 it never does', critWords(0), false);
+
+  // ── the property masks, proven by GIVING the party a weakness ─────────────
+  // ⛔ A stock party has 0x00 in both weakness fields, so the AND never fires and
+  // patching the monster alone looks like it does nothing. That is what made
+  // these code-only until now. Poke the defender and the mechanism appears.
+  b12(0xA5E6, [0xA0, MN.DEFENDER_WEAK_OFFS[0], 0xB1, 0x80], 'LDY #$0D / LDA ($80),Y — defender weakness 1');
+  b12(0xA5ED, [0xA0, MN.DEFENDER_WEAK_OFFS[1], 0xB1, 0x80], 'LDY #$0E / LDA ($80),Y — defender weakness 2');
+  b12(0xA6DC, [0xA2, MN.MASK_BONUS_X], 'LDX #$28         — MASK_BONUS_X');
+
+  const maskFight = (partyWeak, rounds = 140) => {
+    const pp = Uint8Array.from(rom);
+    pp[MN.FORMATION_TABLE + MN.FORMATION_MONSTER_OFF] = 0;
+    pp[MN.FORMATION_TABLE + 6] = 0x21;
+    pp[MN.STAT_TABLE + 4] = 0xFF; pp[MN.STAT_TABLE + 5] = 0x0F;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(pp).toString('binary'));
+    n.fromJSON(JSON.parse(WORLD));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    r(20); n.cpu.mem[0x27] = 150; n.cpu.mem[0x28] = 170; r(20);
+    const sc = () => {
+      const v2 = n.ppu.vramMem, o = [];
+      for (let row = 0; row < 30; row++) {
+        let x = '';
+        for (let c = 0; c < 32; c++) {
+          const g = F1.glyph(v2[0x2000 + row * 32 + c]);
+          x += (g === null || g === '\n') ? ' ' : g;
+        }
+        if (x.trim()) o.push(x.trim());
+      }
+      return o;
+    };
+    for (let k = 0; k < 300; k++) {
+      const b2 = DIRS[Math.floor(k / 6) % 2];
+      n.buttonDown(1, b2); r(8); n.buttonUp(1, b2); r(12);
+      if (sc().some(l => /\bRUN\b/.test(l))) break;
+    }
+    const party = () => { let t = 0; for (let i = 0; i < 4; i++) { const a2 = 0x610A + i * 0x40; t += n.cpu.mem[a2] | (n.cpu.mem[a2 + 1] << 8); } return t; };
+    // ⛔ hold it — the game refreshes the defender block between rounds
+    const poke = () => {
+      for (let i = 0; i < 4; i++) for (const off of MN.DEFENDER_WEAK_OFFS) {
+        n.cpu.mem[MN.DEFENDER_BASE + i * MN.DEFENDER_STRIDE + off] = partyWeak;
+      }
+    };
+    poke();
+    const h0 = party();
+    for (let k = 0; k < rounds; k++) {
+      poke(); n.buttonDown(1, Controller.BUTTON_A); r(6);
+      poke(); n.buttonUp(1, Controller.BUTTON_A); r(20);
+    }
+    return h0 - party();
+  };
+  // IMP's byte 16 is 0x04. Only that bit should matter — in BOTH directions.
+  const natural = MN.statValue(rom, 0, 'mask1');
+  eq('IMP\'s mask is a single bit', [natural, natural & (natural - 1)], [0x04, 0]);
+  const withBit = maskFight(natural);
+  const withoutBit = maskFight((~natural) & 0xFF);
+  eq('the party takes MORE damage carrying exactly the matching bit',
+     withBit > withoutBit, true);
+  eq('...and carrying every OTHER bit changes nothing',
+     withoutBit, maskFight(0x00));
 }
 
 console.log(`\n${checks - fails}/${checks} checks passed`);

@@ -18,6 +18,55 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.60 — 2026-08-15
+
+### FF1's property masks — proven, by giving the party a weakness
+
+Two versions running, these were the one thing named from code alone: patching a
+monster's mask bytes moved nothing measurable, so the mechanism was visible in
+the disassembly but invisible to every experiment.
+
+The reason turned out to be the experiment, not the ROM. The defender's side of
+the AND lives at **`$6800 + n*0x12`, offsets `+0x0D` and `+0x0E`** (found by
+hooking the actual addresses `$A5EA`/`$A5F1` reach), and **every party member's
+are `0x00` in a stock save.** There was never anything for the monster's mask to
+match. Poke them and the mechanism appears immediately:
+
+| monster masks | party weakness | damage taken |
+|---|---|---|
+| `0x00` | `0xFF` | 12 |
+| `0xFF` | `0x00` | 12 |
+| `0xFF` | `0xFF` | **24** |
+
+and then the sharp version — IMP's natural byte 16 is `0x04`, a single bit:
+
+| party weakness | damage taken |
+|---|---|
+| `0x04` — the one matching bit | **24** |
+| `0xFB` — every bit *except* it | 12 |
+
+Only that bit matters, in both directions. Damage doubles, consistent with the
+`LDX #$28` term at `$A6DC`.
+
+⛔ This also explains an anomaly from the first run: with byte 18 zeroed the
+bonus still fired, because IMP's byte **16** is naturally `0x04` and the poked
+party matched *that* instead. The controls above set both masks together, which
+is what the first pass should have done.
+
+### Changed
+
+- `tools/lib/ff1-monsters.mjs` — `DEFENDER_BASE`, `DEFENDER_STRIDE`,
+  `DEFENDER_WEAK_OFFS`, `MASK_BONUS_X`; the masks are no longer labelled
+  code-only.
+- `docs/FF1-MONSTERS.md` — the measurement table.
+- `tools/check-ff1-shops.mjs` — fights with the party carrying the matching bit
+  and then every other bit, and asserts the difference. 106/106, **5 gate
+  reverts tested, all fail.** Gate is 95s.
+
+With this, every byte of FF1's monster record that does anything is named and
+behaviourally proven. Bytes 6, 14, 17 and 19 stay unnamed — nothing reads them
+during a battle and nothing moved them.
+
 ## 1.8.59 — 2026-08-15
 
 ### FF2's nibble fields — named by the damage formula

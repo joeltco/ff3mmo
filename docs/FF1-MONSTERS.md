@@ -41,9 +41,21 @@ game behave differently — never by matching against a wiki:
 | 15 | status | `$A85F LDA $6873 / BEQ skip` gates a path that immediately ANDs with byte 18's mask |
 | 11 | (a second multiplier term) | `$A71F LDX $686F / JSR $AEDD`, the same routine the ×40 bonus uses |
 
-⛔ The MASK bytes could not be confirmed behaviourally — patching them moves
-nothing measurable, because this party has no matching weakness bit so the
-AND never fires. They are named from code and labelled as such.
+⭐ The MASK bytes are now **proven behaviourally**, by giving the party a
+weakness. The defender's fields sit at `$6800 + n*0x12`, `+0x0D` and `+0x0E`,
+and every party member's are `0x00` in a stock save — which is exactly why
+patching the monster alone had looked like it did nothing. Poke them and the
+AND fires. IMP's natural byte 16 is `0x04`:
+
+| party weakness | damage taken |
+|---|---|
+| `0x04` — the one matching bit | **24** |
+| `0xFB` — every bit except it | 12 |
+| `0x00` | 12 |
+| `0xFF` vs monster masks `0xFF` | **24** |
+| `0xFF` vs monster masks `0x00` | 12 |
+
+Only the specific bit matters, in both directions.
 
 ⛔ Bytes 14, 17 and 19 are never read during a battle and nothing moved them.
 Byte 6 gates whether the monster attacks but was not isolated further. Those
