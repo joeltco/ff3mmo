@@ -472,6 +472,59 @@ console.log('\nmonster names');
      withBit > withoutBit, true);
   eq('...and carrying every OTHER bit changes nothing',
      withoutBit, maskFight(0x00));
+
+  // ── morale, and the three bytes nothing reads ─────────────────────────────
+  b12(0xB23C, [0xA0, 0x09, 0xB1, 0x9A], 'LDY #$09 / LDA ($9A),Y — the morale byte');
+  b12(0xB253, [0xC9, MN.MORALE_THRESHOLD], 'CMP #$50         — MORALE_THRESHOLD');
+  eq('every monster is braver than the threshold',
+     [...Array(128).keys()].every(i => MN.statValue(rom, i, 'morale') > MN.MORALE_THRESHOLD), true);
+
+  // ⛔ the only proof morale is morale is the game SAYING so
+  const ranAway = (v) => {
+    const pp = Uint8Array.from(rom);
+    pp[MN.FORMATION_TABLE + MN.FORMATION_MONSTER_OFF] = 0;
+    pp[MN.FORMATION_TABLE + 6] = 0x21;
+    pp[MN.STAT_TABLE + 4] = 0xFF; pp[MN.STAT_TABLE + 5] = 0x0F;
+    pp[MN.STAT_TABLE + MN.STAT_FIELDS.morale] = v;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(pp).toString('binary'));
+    n.fromJSON(JSON.parse(WORLD));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    r(20); n.cpu.mem[0x27] = 150; n.cpu.mem[0x28] = 170; r(20);
+    const sc = () => {
+      const v2 = n.ppu.vramMem, o = [];
+      for (let row = 0; row < 30; row++) {
+        let x = '';
+        for (let c = 0; c < 32; c++) {
+          const g = F1.glyph(v2[0x2000 + row * 32 + c]);
+          x += (g === null || g === '\n') ? ' ' : g;
+        }
+        if (x.trim()) o.push(x.trim());
+      }
+      return o;
+    };
+    for (let k = 0; k < 300; k++) {
+      const b2 = DIRS[Math.floor(k / 6) % 2];
+      n.buttonDown(1, b2); r(8); n.buttonUp(1, b2); r(12);
+      if (sc().some(l => /\bRUN\b/.test(l))) break;
+    }
+    let saw = false;
+    for (let k = 0; k < 160; k++) {
+      n.buttonDown(1, Controller.BUTTON_A); r(6); n.buttonUp(1, Controller.BUTTON_A); r(20);
+      if (sc().some(l => /Run away/.test(l))) saw = true;
+    }
+    return saw;
+  };
+  eq('a monster below the threshold RUNS AWAY, and the game says so', ranAway(0), true);
+  eq('...at its natural morale it stands and fights',
+     ranAway(MN.statValue(rom, 0, 'morale')), false);
+
+  // ⛔ "never read" is a claim about the ROM, so pin that these bytes still hold
+  // real data — otherwise a table of zeroes would satisfy it just as well.
+  eq('the unread offsets are 14, 17 and 19', MN.UNREAD_OFFSETS, [14, 17, 19]);
+  const distinct = MN.UNREAD_OFFSETS.map(o =>
+    new Set([...Array(128).keys()].map(i => MN.statRecord(rom, i)[o])).size);
+  eq('...and they are NOT empty padding', distinct, [3, 62, 24]);
 }
 
 console.log(`\n${checks - fails}/${checks} checks passed`);

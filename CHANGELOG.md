@@ -18,6 +18,53 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.61 — 2026-08-15
+
+### Byte 6 is MORALE — and the game says so out loud
+
+`$B23C LDY #$09 / LDA ($9A),Y`, then a random 0..0x32 is added and the total
+compared against `$B253 CMP #$50`. Below that, the monster leaves:
+
+| byte 6 | what happens |
+|---|---|
+| 0 | the game prints **"Run away"**; the party takes 0 damage |
+| 40 | **"Run away"** |
+| 80 | stands and fights (party takes 18) |
+| 104, 128, 200, 255 | stands and fights |
+
+⭐ The behavioural flip lands **exactly** on the `0x50` in the code, and every
+monster's natural value (104..255) sits above it. That is morale.
+
+### Bytes 14, 17 and 19 are never read — measured, not shrugged at
+
+Hooking the record's address range across a **full** encounter — walk in, the
+monster acts and deals damage, it dies, the reward is paid — shows **17 of the 20
+offsets being read and exactly these three not**, for several monsters including
+one with a special attack (MEDUSA) and a boss (GARLAND).
+
+⛔ An earlier pass had wrongly listed 10, 11, 13 and 15 as unread too. That was
+an artifact of killing the monster in one hit: it never attacked, so the attacker
+staging at `$A5B0` never ran. Let it swing and they appear. The three that
+survive that correction are the real answer.
+
+They are **not padding**: byte 14 takes 3 distinct values, byte 17 takes 62
+across 14..200, byte 19 takes 24. Real data that no battle path consumes, which
+is a more interesting result than either "unused" or a guessed name — and the
+gate pins the distinct-value counts so a table of zeroes could not satisfy the
+claim.
+
+### Changed
+
+- `tools/lib/ff1-monsters.mjs` — `morale` in `STAT_FIELDS`, `MORALE_THRESHOLD`,
+  `UNREAD_OFFSETS`.
+- `docs/FF1-MONSTERS.md` — a morale column for all 128.
+- `tools/check-ff1-shops.mjs` — makes a monster flee and asserts the game prints
+  "Run away", then asserts it does not at natural morale. 113/113, **3 gate
+  reverts tested, all fail.** Gate is 124s; its `deploy.sh` budget went to 300s.
+
+**FF1's monster record is now fully accounted for**: every byte either has a name
+proven by changing it, or a measured statement that nothing reads it.
+
 ## 1.8.60 — 2026-08-15
 
 ### FF1's property masks — proven, by giving the party a weakness

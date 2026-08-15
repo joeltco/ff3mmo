@@ -97,15 +97,32 @@ export const STAT_STRIDE = 20;
  * Byte 6 gates whether the monster attacks but was not isolated further. Those
  * four stay unnamed.
  *
- * ⛔ Bytes 6, 14, 17 and 19 remain unnamed.
+ *   6    MORALE  the flee threshold. $B23C LDY #$09 / LDA ($9A),Y / SBC, then a
+ *               random 0..0x32 is added and the total compared against
+ *               $B253 CMP #$50. Below it the monster RUNS: at byte 6 = 0 or 40
+ *               the game prints "Run away" and the party takes no damage; at 80
+ *               and above it stays and fights. The behavioural flip lands exactly
+ *               on that 0x50, and every monster's natural value (104..255) sits
+ *               above it.
+ *
+ * ⛔ BYTES 14, 17 AND 19 ARE NEVER READ. Not a shrug — measured. Hooking the
+ * record's address range across a full encounter (walk in, the monster acts and
+ * deals damage, it dies, the reward is paid) shows 17 of the 20 offsets being
+ * read and exactly these three not, for several monsters including one with a
+ * special attack and a boss. They are not zero either: byte 14 takes 3 distinct
+ * values, byte 17 takes 62 across 14..200, byte 19 takes 24. Real data that no
+ * battle path consumes.
  */
 /** The DEFENDER's weakness fields, as addressed live at $A5EA / $A5F1. */
 export const DEFENDER_BASE = 0x6800, DEFENDER_STRIDE = 0x12;
 export const DEFENDER_WEAK_OFFS = [0x0D, 0x0E];
 export const MASK_BONUS_X = 0x28;    // $A6DC LDX #$28 — the x40 term
+export const MORALE_THRESHOLD = 0x50;   // $B253 CMP #$50 — below it, it flees
+/** Offsets no battle path reads, and the distinct-value count each still holds. */
+export const UNREAD_OFFSETS = [14, 17, 19];
 export const STAT_FIELDS = {
   exp: [0, 1], gil: [2, 3], hp: [4, 5], evade: 8, defense: 9, attack: 12,
-  special: 7, crit: 13, hits: 10, status: 15, mask1: 16, mask2: 18,
+  special: 7, crit: 13, hits: 10, status: 15, mask1: 16, mask2: 18, morale: 6,
 };
 /** 0xFF in the SPECIAL byte means the monster has no special attack. */
 export const NO_SPECIAL = 0xFF;
