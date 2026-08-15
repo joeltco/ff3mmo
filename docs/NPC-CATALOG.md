@@ -102,6 +102,41 @@ live town is a content decision, not a cataloguing one.
 
 ---
 
+## FF3 — the map NPC list, verified against the CPU
+
+`src/map-loader.js#readNPCs` is **load-bearing** — the shipped game places NPCs
+from it — and it had never been checked. Traced with
+`tools/ff3-mapobj-trace.mjs` (warp while recording reads in banks 44/45):
+
+```
+3B/B310  LDA #$80 / STA $81      ; pointer base $8000
+3B/B314  LDA $0784               ; the map's npcIdx
+3B/B317  ASL A / BCC / INC $81   ; idx*2, carry -> the "+0x100" branch
+3B/B31D  LDA ($80),Y             ; pointer LO
+3B/B324  ORA #$80                ; force bit 7 of the HIGH byte
+3B/B336  LDY #$00 / LDA ($8C),Y
+3B/B33A  BEQ                     ; id == 0 is the ONLY terminator
+3B/B342  ADC #$04                ; 4 bytes per record {id, x, y, flags}
+```
+
+Every assumption in `readNPCs` is one of those lines, and **this model held up**
+— like FF1's, unlike FF2's. Map 7's pointer was read at file `0x5801a`, its
+records at `0x58b01`, giving `(17,2,4,0xCB) (18,6,4,0xCA) (19,4,3,0xC8)` —
+byte for byte what `loadMap` returns. `npcIdx` is map property byte 4, confirmed
+on four maps by where the traced pointer landed.
+
+> ⛔ **The 16-NPC cap is ours, not the game's.** The game's loop is unbounded and
+> stops only on `id == 0`. The cap is safe only because the busiest map (69) has
+> **12**. The gate asserts no map ever reaches 16.
+
+> ⛔ **`hi | 0x80` is untestable here.** It faithfully mirrors `$B324 ORA #$80`,
+> but every map's pointer high byte is already `0x8A`-`0x99`, so removing it
+> changes nothing and **no revert test can catch it**. The gate asserts the
+> *reason* instead — that no pointer lacks bit 7 — so it fires if that ever
+> stops being true.
+
+---
+
 ## FF3 — the dialogue table, decoded
 
 Every NPC's line is its id, offset into the global string table:

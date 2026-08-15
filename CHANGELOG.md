@@ -18,6 +18,58 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.41 — 2026-08-15
+
+### FF3's map NPC list verified against the CPU — the load-bearing one
+
+FF1's and FF2's map object tables were re-derived; FF3's never had been, and it
+is the one that matters most: `src/map-loader.js#readNPCs` is what the **shipped
+game** places NPCs from.
+
+```
+3B/B310  LDA #$80 / STA $81      ; pointer base $8000
+3B/B314  LDA $0784               ; the map's npcIdx
+3B/B317  ASL A / BCC / INC $81   ; idx*2, carry -> the "+0x100" branch
+3B/B31D  LDA ($80),Y             ; pointer LO
+3B/B324  ORA #$80                ; force bit 7 of the HIGH byte
+3B/B336  LDY #$00 / LDA ($8C),Y
+3B/B33A  BEQ                     ; id == 0 is the ONLY terminator
+3B/B342  ADC #$04                ; 4 bytes per record {id, x, y, flags}
+```
+
+Every assumption in `readNPCs` is one of those lines, and **it held up** — like
+FF1's, unlike FF2's. Map 7's pointer was read at file `0x5801a`, its records at
+`0x58b01`, giving `(17,2,4,0xCB) (18,6,4,0xCA) (19,4,3,0xC8)`: byte for byte
+what `loadMap` returns. `npcIdx` is map property byte 4, confirmed on four maps
+by where the traced pointer landed (`0x5801a`, `0x58016`, `0x58024`, `0x58026`).
+
+### Two honest asterisks
+
+⛔ **The 16-NPC cap is ours, not the game's.** The game's loop is unbounded and
+stops only on `id == 0`. The cap is safe *only* because the busiest map (69) has
+**12**. The gate now asserts no map reaches 16 — if one ever did, `readNPCs`
+would be silently truncating the shipped game's NPCs.
+
+⛔ **`hi | 0x80` cannot be revert-tested.** It faithfully mirrors `$B324
+ORA #$80`, but every map's pointer high byte is already `0x8A`-`0x99`, so
+removing it changes nothing observable and the revert **passes** — correctly.
+Rather than fake an assertion, the gate pins the *reason*: no pointer lacks bit
+7. If that ever stopped being true the OR would become load-bearing and the gate
+would fire.
+
+### Changed
+
+- `tools/ff3-mapobj-trace.mjs` (NEW) — warps while recording reads in the NPC
+  banks and prints what `readNPCs` predicts alongside.
+- `tools/check-npc-gfx.mjs` — pins map 7's records byte for byte, the four
+  traced pointer offsets, the cap-never-bites bound and the bit-7 precondition.
+  **6 reverts tested against the shipped `map-loader.js`; 5 fail and the sixth
+  is the unobservable one above.**
+
+⛔ Also fixed in the tracer: the PC's bank was being resolved *after* the warp,
+which disassembles a different routine entirely — the same stale-bank trap as
+the FF1 palette trace. It is recorded at read time now.
+
 ## 1.8.40 — 2026-08-15
 
 ### FF1's map object table re-derived from the CPU — and this one held up

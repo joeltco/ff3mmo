@@ -204,6 +204,75 @@ const off = (g) => G.offsetForGfx(g);
   else ok(`${total} placements resolve: ${people} people/job, ${objects} object, ${undrawn} undrawn markers`);
 }
 
+// ── the map NPC list itself ───────────────────────────────────────────────
+//
+// `src/map-loader.js#readNPCs` is LOAD-BEARING — the shipped game places NPCs
+// from it — and it had never been checked against the CPU. Traced with
+// `tools/ff3-mapobj-trace.mjs` (warp while recording reads in banks 44/45):
+//
+//   3B/B310  LDA #$80 / STA $81      ; pointer base $8000
+//   3B/B314  LDA $0784               ; the map's npcIdx
+//   3B/B317  ASL A / BCC / INC $81   ; idx*2, carry -> the "+0x100" branch
+//   3B/B31D  LDA ($80),Y             ; pointer LO
+//   3B/B324  ORA #$80                ; force bit 7 of the HIGH byte
+//   3B/B336  LDY #$00 / LDA ($8C),Y
+//   3B/B33A  BEQ                     ; id == 0 is the ONLY terminator
+//   3B/B342  ADC #$04                ; 4 bytes per record {id, x, y, flags}
+//
+// Every assumption in readNPCs is one of those lines. ⛔ EXCEPT the cap: the
+// game's loop is UNBOUNDED, and `readNPCs` stops at 16. That is ours, not the
+// game's — it is safe only because no map has more than 12.
+{
+  const before = failed;
+  // MEASURED: map 7's pointer was read at file 0x5801a and the records at
+  // 0x58b01, giving these three NPCs with these flags.
+  const m7 = loadMap(rom, 7).npcs;
+  const WANT = [[17, 2, 4, 0xCB], [18, 6, 4, 0xCA], [19, 4, 3, 0xC8]];
+  if (m7.length !== WANT.length) bad(`FF3 map 7 yields ${m7.length} NPCs, the CPU read ${WANT.length}`);
+  else {
+    for (let i = 0; i < WANT.length; i++) {
+      const [id, x, y, fl] = WANT[i];
+      if (m7[i].id !== id || m7[i].x !== x || m7[i].y !== y || m7[i].flags !== fl) {
+        bad(`FF3 map 7 NPC ${i} is (${m7[i].id},${m7[i].x},${m7[i].y},0x${(m7[i].flags ?? 0).toString(16)}), ` +
+            `the CPU read (${id},${x},${y},0x${fl.toString(16)})`);
+      }
+    }
+  }
+  // the pointer index IS map property byte 4 — the traced pointer offsets for
+  // these four maps land exactly where that byte predicts
+  const PROPS = 0x004010, PTR = 0x058010;
+  const TRACED = [[7, 0x5801a], [114, 0x58016], [10, 0x58024], [12, 0x58026]];
+  for (const [mapId, off] of TRACED) {
+    const idx = rom[PROPS + mapId * 16 + 4];
+    const predicted = PTR + (idx >= 128 ? 0x100 : 0) + ((idx << 1) & 0xFF);
+    if (predicted !== off) {
+      bad(`FF3 map ${mapId} npcIdx ${idx} predicts pointer 0x${predicted.toString(16)}, the CPU read 0x${off.toString(16)}`);
+    }
+  }
+  // ⛔ `hi | 0x80` mirrors a real instruction ($B324 ORA #$80) but is a NO-OP in
+  // this ROM: every map's pointer high byte is already 0x8A-0x99. Removing it is
+  // therefore UNOBSERVABLE and no revert test can catch it — so assert the
+  // reason instead. If a high byte ever lost bit 7, the OR would start mattering
+  // and this would fire.
+  let noBit7 = 0;
+  for (let m = 0; m < 512; m++) {
+    const idx = rom[PROPS + m * 16 + 4];
+    const off = PTR + (idx >= 128 ? 0x100 : 0) + ((idx << 1) & 0xFF);
+    if (!(rom[off + 1] & 0x80)) noBit7++;
+  }
+  if (noBit7) bad(`${noBit7} FF3 map NPC pointers lack bit 7 — the ORA #$80 is now load-bearing and needs a real test`);
+
+  // ⛔ the 16 cap must never actually bite. The game has no cap at all, so a map
+  // reaching 16 would mean readNPCs is silently truncating.
+  let most = 0, mostMap = -1;
+  for (let m = 0; m < 512; m++) {
+    let md; try { md = loadMap(rom, m); } catch { continue; }
+    if (md.npcs.length > most) { most = md.npcs.length; mostMap = m; }
+  }
+  if (most >= 16) bad(`FF3 map ${mostMap} has ${most} NPCs — readNPCs' cap of 16 is truncating (the game has none)`);
+  if (failed === before) ok(`FF3 map NPC list: map 7 matches the CPU byte for byte, 4 pointer offsets exact, busiest map ${mostMap} has ${most} (cap 16 never bites)`);
+}
+
 // ── the sprite palettes an NPC is drawn with ──────────────────────────────
 //
 // MEASURED off the PPU by `tools/ff3-npc-palette.mjs`: warp in, read
