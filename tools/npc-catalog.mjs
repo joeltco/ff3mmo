@@ -148,6 +148,10 @@ function buildFF3() {
     [10, 'Kazus'], [12, 'Kazus inn'], [15, 'Kazus magic'], [16, 'Kazus weapon'],
     [17, 'Kazus armor'], [18, 'Castle Sasune'],
   ]);
+  // ⛔ One representative pair ON PURPOSE here: this sheet is keyed by GFX, and
+  // one gfx is worn by NPCs across many maps with different palettes, so there
+  // is no single right answer. `tools/npc-sheet-ff3.mjs` is keyed by npcId and
+  // does use the real per-map colours. Measurement: tools/ff3-npc-palette.mjs.
   const PT = [0x1A, 0x0F, 0x26, 0x36], PB = [0x1A, 0x0F, 0x12, 0x36];
   const OBJ = [0x0F, 0x16, 0x27, 0x30];
 

@@ -18,6 +18,59 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.35 — 2026-08-14
+
+### FF3's NPC colours, decoded — and they are per-MAP, not per-NPC
+
+The sheets carried a caveat that FF3's palette tables at `0x1110`/`0x1210`/`0x1310`
+had never been decoded. They are now, and the headline is that the obvious
+reading is wrong.
+
+```
+top half    = the map's spritePalette7   (PPU sprite palette 3)
+bottom half = the map's spritePalette6   (PPU sprite palette 2)
+```
+
+Both are indices into a shared palette **library** at those three addresses
+(entry `i` = colours 1, 2, 3; colour 0 is the backdrop), taken from bytes 8 and 9
+of the map's own properties.
+
+**New tool — `tools/ff3-npc-palette.mjs`.** Warps in, reads `$3F10-$3F1F` and
+OAM, clusters the 8x8 sprites into 16x16 NPCs, and takes each cluster's palette
+attribute. `--compare A,B` is the discriminating test (same npcId, two maps) and
+`--sweep` checks many maps at once: **16/16 predicted exactly**, across **8
+distinct** palette-7 values.
+
+> ⛔ **There is no per-NPC palette.** Every map NPC draws top-on-3 and
+> bottom-on-2 with no per-NPC selection. Indexing those tables by npcId — the
+> reading the old comment implied — produces numbers that match nothing on
+> screen: npcId 17 would give `1b 22 0c` where the PPU holds `0f 27 30`.
+> `src/map-loader.js` had in fact been reading them correctly all along as a
+> map-indexed library; what was missing was the confirmation that this is what
+> NPCs actually wear.
+
+### The FF3 sheet is now in real colour
+
+`tools/npc-sheet-ff3.mjs` draws each NPC in its map's own palettes (an NPC
+placed on several maps wears the first one's, and the cell names it). Verified
+pixel-by-pixel: Topapa's cell contains exactly five colours — `0F` black, `12`
+blue and `36` pale from the bottom palette, `27` gold and `30` white from the top
+— and nothing else.
+
+`tools/npc-catalog.mjs` deliberately keeps one representative pair: it is keyed
+by GFX, and one gfx is worn across many maps with different palettes, so there is
+no single right answer there.
+
+### Changed
+
+- `tools/ff3-npc-palette.mjs` (NEW) — the measurement, with `--compare` and `--sweep`.
+- `tools/npc-sheet-ff3.mjs` — real per-map colours; the subtitle says so.
+- `src/data/npc-gfx.js` — the comment no longer implies npcId indexing.
+- `tools/check-npc-gfx.mjs` — pins 6 maps' sprite palettes against the PPU
+  measurements and asserts the variety survives (a collapse to one palette would
+  otherwise look "fine" while carrying no information). **6 reverts tested, all
+  fail**, including collapsing every map to one palette index.
+
 ## 1.8.34 — 2026-08-14
 
 ### All three NPC sheets, rendered with names

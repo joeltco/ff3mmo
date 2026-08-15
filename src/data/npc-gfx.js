@@ -16,6 +16,13 @@
 // next table in the series belongs, right after the three parallel palette
 // tables at 0x1110 / 0x1210 / 0x1310.
 //
+// ⛔ Those three are a shared palette LIBRARY — entry `i` holds colours 1, 2, 3
+// of palette `i` (colour 0 is the backdrop). They are NOT indexed by npcId.
+// A map picks its own entries via bytes 5-9 of its properties; for NPC sprites
+// that is byte 8 (spritePalette6) and byte 9 (spritePalette7), read by
+// `src/map-loader.js#buildSpritePalettes`. MEASURED off the PPU on 16 maps,
+// 16/16 exact — see `tools/ff3-npc-palette.mjs`.
+//
 // ── how it was verified ───────────────────────────────────────────────────
 // Predicted bundle sets vs. what the real PPU holds
 // (`tools/monscan/map-bundles.cjs`), over every map the harness could load:

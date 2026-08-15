@@ -609,15 +609,43 @@ gives, and where it stands. `--named` renders only the ones that name a speaker.
 ⛔ **Two caveats are printed on the sheets themselves**, because a sheet that
 looks authoritative gets believed:
 
-- **The palette is representative, not per-map.** FF3 has per-NPC palette tables
-  at `0x1110`/`0x1210`/`0x1310`, but their semantics have never been decoded, so
-  every cell uses one pair rather than a guess.
+- **FF1 and FF2 use one representative palette** (their per-map palettes are not
+  decoded). **FF3's are real**: each NPC is drawn in its map's own sprite
+  palettes — see below.
 - **The line is the no-flag default.** All three games pick the actual line in a
   per-type code handler driven by story flags.
 
 ⛔ FF1's Bahamut (type 14) renders as noise: he is drawn larger than the standard
 16x16 four-frame layout, so the table is right and the sprite simply is not a
 normal NPC.
+
+### FF3's NPC colours, decoded
+
+```
+top half    = the map's spritePalette7   (PPU sprite palette 3)
+bottom half = the map's spritePalette6   (PPU sprite palette 2)
+```
+
+Both are indices into the shared palette library at `0x1110`/`0x1210`/`0x1310`
+(entry `i` = colours 1, 2, 3; colour 0 is the backdrop), taken from bytes 8 and 9
+of the map's own properties. `src/map-loader.js#buildSpritePalettes` already read
+them; what was missing was the confirmation that this is what NPCs wear.
+
+**Measured** by `tools/ff3-npc-palette.mjs` — warp in, read `$3F10-$3F1F` and
+OAM, cluster the 8x8 sprites into 16x16 NPCs and take each cluster's palette
+attribute. Result: **16/16 maps predicted exactly**, across **8 distinct**
+palette-7 values.
+
+> ⛔ **There is no per-NPC palette.** Every map NPC draws top-on-3 and
+> bottom-on-2 with no per-NPC selection, so the colours are a property of the
+> MAP. The competing reading — that `0x1110`/`0x1210`/`0x1310` are indexed by
+> npcId — produces numbers that match nothing on screen (npcId 17 would give
+> `1b 22 0c`; the PPU holds `0f 27 30`). An NPC standing on several maps really
+> does change colour, and the sheet says which map it is showing.
+
+The rendered sheet was checked pixel-by-pixel against the measurement: the cell
+for Topapa contains exactly five colours — `0F` black, `12` blue and `36` pale
+(the bottom palette), `27` gold and `30` white (the top) — and nothing else.
 
 ### A name the sheet caught
 

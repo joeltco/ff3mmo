@@ -204,5 +204,45 @@ const off = (g) => G.offsetForGfx(g);
   else ok(`${total} placements resolve: ${people} people/job, ${objects} object, ${undrawn} undrawn markers`);
 }
 
+// ── the sprite palettes an NPC is drawn with ──────────────────────────────
+//
+// MEASURED off the PPU by `tools/ff3-npc-palette.mjs`: warp in, read
+// $3F10-$3F1F, and read OAM. Every map NPC draws its TOP half on sprite palette
+// 3 and its BOTTOM half on sprite palette 2 — there is NO per-NPC selection.
+//
+// ⛔ The three tables at 0x1110/0x1210/0x1310 are a shared palette LIBRARY, not
+// per-NPC data. `src/map-loader.js` indexes them with bytes 8 and 9 of the map's
+// own properties (spritePalette6 -> PPU 2, spritePalette7 -> PPU 3). Reading
+// them by npcId gives numbers that match nothing on screen.
+//
+// The pairs below came off the PPU on 16 maps, 16/16 exact, 8 distinct values.
+{
+  const MEASURED = [
+    [7,   [0x0F, 0x12, 0x36], [0x0F, 0x27, 0x30]],
+    [114, [0x0F, 0x12, 0x36], [0x0F, 0x26, 0x36]],
+    [10,  [0x0F, 0x15, 0x36], [0x0F, 0x29, 0x36]],
+    [12,  [0x0F, 0x15, 0x36], [0x0F, 0x2A, 0x36]],
+    [18,  [0x0F, 0x15, 0x36], [0x0F, 0x12, 0x36]],
+    [6,   [0x0F, 0x15, 0x30], [0x0F, 0x27, 0x30]],
+  ];
+  const hx = (a) => a.map(v => v.toString(16).padStart(2, '0')).join(' ');
+  let bad6 = 0;
+  for (const [mapId, want6, want7] of MEASURED) {
+    let md; try { md = loadMap(rom, mapId); } catch { bad(`map ${mapId} will not load`); continue; }
+    const got6 = md.spritePalettes[0].slice(1), got7 = md.spritePalettes[1].slice(1);
+    if (hx(got6) !== hx(want6)) { bad(`map ${mapId} spritePalette6 is ${hx(got6)}, the PPU measured ${hx(want6)}`); bad6++; }
+    if (hx(got7) !== hx(want7)) { bad(`map ${mapId} spritePalette7 is ${hx(got7)}, the PPU measured ${hx(want7)}`); bad6++; }
+  }
+  // ⛔ and the variety must survive: if every map collapsed to one palette the
+  // sheet would look "fine" while carrying no information at all.
+  const seen = new Set();
+  for (let m = 0; m < 512; m++) {
+    let md; try { md = loadMap(rom, m); } catch { continue; }
+    seen.add(md.spritePalettes[1].slice(1).join(','));
+  }
+  if (seen.size < 8) bad(`only ${seen.size} distinct sprite palette 7 values across all maps — expected 8+`);
+  if (!bad6) ok(`FF3 sprite palettes: ${MEASURED.length} maps match the PPU, ${seen.size} distinct palette-7 values`);
+}
+
 if (failed) { console.error(`\ncheck-npc-gfx: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-npc-gfx: OK');

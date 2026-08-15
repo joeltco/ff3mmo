@@ -22,6 +22,14 @@
 // ⛔ A LABEL IS NOT A NAME. Only self-identification counts (`selfName` in
 // lib/ff3-text.mjs). "Takka is the finest blacksmith around" is someone talking
 // ABOUT Takka — that NPC is not Takka.
+//
+// COLOURS ARE PER-MAP, not per-NPC. MEASURED off the PPU by
+// `tools/ff3-npc-palette.mjs`: every map NPC draws its TOP half on sprite
+// palette 3 and its BOTTOM half on sprite palette 2, with no per-NPC selection.
+// The map supplies both, via bytes 8/9 of its properties indexing the shared
+// palette library at 0x1110/0x1210/0x1310 — 16/16 maps predicted exactly.
+// An NPC placed on several maps is drawn in the colours of the FIRST one, which
+// the cell names.
 
 import fs from 'node:fs';
 import { createCanvas } from '@napi-rs/canvas';
@@ -63,14 +71,26 @@ for (const [id, spots] of [...placed].sort((a, b) => a[0] - b[0])) {
   const text = decodeString(rom, id + NPC_DIALOGUE_BASE);
   cellsAll.push({
     id, gfx, off: G.offsetForGfx(gfx), text, name: selfName(text), spots,
+    palMap: spots[0].mapId,
     where: [...new Set(spots.map(s => s.mapId))]
       .map(m => MAP_NAMES.get(m) || `map ${m}`),
   });
 }
 const cells = NAMED_ONLY ? cellsAll.filter(c => c.name) : cellsAll;
 
-// FF3 people use a two-row palette: the head row differs from the body row.
-const PT = [0x1A, 0x0F, 0x26, 0x36], PB = [0x1A, 0x0F, 0x12, 0x36];
+// MEASURED: top half = the map's spritePalette7, bottom half = spritePalette6.
+// Cached per map so 179 cells do not reload 179 maps.
+const palCache = new Map();
+function palettesForMap(mapId) {
+  if (!palCache.has(mapId)) {
+    let sp;
+    try { sp = loadMap(rom, mapId).spritePalettes; } catch { sp = null; }
+    palCache.set(mapId, sp
+      ? { top: sp[1], btm: sp[0] }
+      : { top: [0x0F, 0x0F, 0x26, 0x36], btm: [0x0F, 0x0F, 0x12, 0x36] });
+  }
+  return palCache.get(mapId);
+}
 const rgb = (v) => NES_SYSTEM_PALETTE[v & 0x3F] || [0, 0, 0];
 const SC = 3, FRAMES = 4;
 
@@ -90,9 +110,9 @@ function drawTile(g, ox, oy, off, pal) {
 }
 
 /** A 2x2 facing from 4 consecutive tiles, TL TR BL BR. */
-function drawPose(g, ox, oy, base) {
+function drawPose(g, ox, oy, base, pal) {
   [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([tx, ty], k) =>
-    drawTile(g, ox + tx * 8 * SC, oy + ty * 8 * SC, base + k * 16, ty === 0 ? PT : PB));
+    drawTile(g, ox + tx * 8 * SC, oy + ty * 8 * SC, base + k * 16, ty === 0 ? pal.top : pal.btm));
 }
 
 const CELL = 16 * SC;
@@ -109,16 +129,14 @@ g.textBaseline = 'top';
 g.font = 'bold 14px sans-serif';
 g.fillStyle = '#ffe9a8';
 g.fillText(`FF3 NPCs — ${cells.length} placed ids, sprite + the DEFAULT line each gives`, 12, 12);
-// ⛔ FF3 has per-NPC palette tables at 0x1110/0x1210/0x1310, but their
-// semantics have never been decoded. Rather than guess, every cell uses one
-// representative palette — say so on the sheet instead of looking authoritative.
 g.font = '10px sans-serif'; g.fillStyle = '#c9cede';
-g.fillText('palette is one representative pair (per-NPC palettes at 0x1110/0x1210/0x1310 are NOT decoded)', 12, 26);
+g.fillText('colours are the MAP\'s sprite palettes (measured off the PPU, 16/16 maps) — an NPC on several maps wears the first one\'s', 12, 26);
 
 cells.forEach((c, i) => {
   const cx = 12 + (i % COLS) * CW;
   const cy = 52 + Math.floor(i / COLS) * CH;
-  for (let f = 0; f < FRAMES; f++) drawPose(g, cx + f * CELL, cy, c.off + f * 64);
+  const pal = palettesForMap(c.palMap);
+  for (let f = 0; f < FRAMES; f++) drawPose(g, cx + f * CELL, cy, c.off + f * 64, pal);
 
   g.font = 'bold 11px sans-serif';
   g.fillStyle = c.name ? '#fff2c4' : '#20242e';
