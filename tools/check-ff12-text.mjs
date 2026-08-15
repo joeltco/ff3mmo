@@ -162,6 +162,35 @@ const ok = (m) => console.log('  ✓ ' + m);
     if (since()) ok(`FF1 objType -> sprite: 6 probes + map 8 10/10; X flags ${flag7} layer / ${flag6} still, Y carries none`);
   }
 
+  // 4c. the player-move COLLISION rule, pinned to the instruction that is it.
+  //
+  // Found by diffing the executed-PC sets of a blocked and a successful move
+  // (tools/ff1-block-diff.mjs). The check is $CA76:
+  //   $CA79  JSR $CAA2 / BCS $CA9A   ; an earlier refusal path
+  //   $CA7E  JSR $CBBE               ; tile properties -> $44
+  //   $CA81  LDA $44 / AND #$1F
+  //   $CA85  CMP #$01 / BEQ $CA9A    ; BLOCKED
+  //   $CA89  AND #$1E / TAX / LDA $CDA1,X / JMP ($0010)  ; terrain handler
+  //
+  // ⛔ NOT $CBE2, which also reads the properties and does `AND #$C2` — that is
+  // a different query and it disagrees with reality (tile 0x38 prop0 0x01 is
+  // blocked though 0x01 & 0xC2 == 0). The rule is (prop0 & 0x1F) == 0x01.
+  {
+    const B = 0x10 + 15 * 0x4000 + (0xCA81 - 0xC000);
+    const want = [0xA5, 0x44, 0x29, 0x1F, 0xC9, 0x01, 0xF0];   // LDA $44 / AND #$1F / CMP #$01 / BEQ
+    const got = [...rom.slice(B, B + want.length)];
+    if (got.join(',') !== want.join(',')) {
+      bad(`FF1 $CA81 is [${got.map(v => v.toString(16)).join(' ')}], expected ` +
+          `LDA $44 / AND #$1F / CMP #$01 / BEQ — the collision rule has moved`);
+    }
+    // and the terrain-handler table it falls through to
+    const J = 0x10 + 15 * 0x4000 + (0xCA8C - 0xC000);
+    if (rom[J] !== 0xBD || rom[J + 1] !== 0xA1 || rom[J + 2] !== 0xCD) {
+      bad('FF1 $CA8C is not `LDA $CDA1,X` — the terrain handler table has moved');
+    }
+    if (since()) ok('FF1 collision: $CA81 LDA $44 / AND #$1F / CMP #$01 (blocked), handlers at $CDA1');
+  }
+
   // 5. objType -> dialogue: a FOUR-BYTE record at 0x395E5, byte 1 is the
   // default line. Traced from the talk path ($DB71 <- $D4B1 <- $CA03 <- $902B).
   {

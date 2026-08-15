@@ -18,6 +18,60 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.46 — 2026-08-15
+
+### The real FF1 collision check — found by diffing blocked vs successful moves
+
+v1.8.45 shipped the tilemap solved and the collision rule guessed. This settles
+it. `$CBE2` was never the player-move check:
+
+```
+$CA79  JSR $CAA2 / BCS $CA9A   ; an earlier refusal path
+$CA7E  JSR $CBBE               ; tile properties -> $44
+$CA81  LDA $44 / AND #$1F
+$CA85  CMP #$01 / BEQ $CA9A    ; <- BLOCKED
+$CA89  AND #$1E / TAX
+$CA8C  LDA $CDA1,X / JMP ($0010)   ; a per-terrain HANDLER, one per type
+```
+
+**A tile is blocked iff `(prop0 & 0x1F) == 0x01`**, and everything else indexes
+a handler table at `$CDA1` — terrain behaviour is code, like every other rule in
+this engine.
+
+It fits all three measurements that broke the old guess: tile `0x38`
+(prop0 `0x01`) blocked, `0x31` (`0x00`) passable, `0x44` (`0x80`) passable.
+
+**How:** `tools/ff1-block-diff.mjs` (NEW) executes a blocked move and a
+successful move from the same tile and diffs the executed-PC sets. The blocked
+attempt runs 14 PCs the other never touches; they converge just after `$CA76`.
+That is where the decision is, and no amount of staring at `$CBE2` would have
+shown it.
+
+⛔ It also corrected v1.8.45's claim that a blocked move "never reaches
+`$CBD7`". It does — `$CBDA` reads `$470 = 0x01` for tile `0x38`. The earlier
+claim was an artifact of the cartridge-only read hook that `onAnyRead` fixed.
+
+### Pathfinding works
+
+`tools/ff1-nav.mjs` now routes through doors and reaches every target tried —
+(6,25), (7,16) and (17,24) — none of which the old axis-walker could get to.
+`--map` renders a real castle floor plan: walls, rooms, doors, corridors.
+
+⛔ NPCs are treated as walls when planning, but they WANDER, so a route sealed
+only by an NPC re-plans ignoring them and waits rather than reporting
+"unreachable". (17,24) needs exactly that: its chamber is entered through the
+door at (18,27), and an NPC parks in the one corridor that leads there.
+
+### Changed
+
+- `tools/ff1-block-diff.mjs` (NEW) — the blocked-vs-successful PC diff.
+- `tools/ff1-nav.mjs` — the real rule, NPC waiting, and the `$CBE2` trap written
+  into the header so nobody re-derives the wrong one.
+- `tools/check-ff12-text.mjs` — pins the rule to the ROM bytes that ARE it
+  (`$CA81 LDA $44 / AND #$1F / CMP #$01`) and the handler table at `$CDA1`.
+  **3 gate reverts tested, all fail**, plus a functional proof: restoring the
+  old `& 0xC2` rule makes (17,24) unreachable again.
+
 ## 1.8.45 — 2026-08-15
 
 ### FF1's tilemap decoded; the collision rule is NOT

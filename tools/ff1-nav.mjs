@@ -1,23 +1,8 @@
 #!/usr/bin/env node
-// ff1-nav.mjs — pathfinding for FF1. ⛔ PARTIAL: the map is solved, the
-// COLLISION RULE IS NOT. Read the warning below before trusting a route.
+// ff1-nav.mjs — pathfinding for FF1, so probes stop being limited by
+// "the axis-walker cannot route through doors".
 //
-// STATUS
-//   ✅ the tilemap  — solved and verified against the screen
-//   ✅ where the properties live — RAM $0400, 2 bytes per tile, tile*2
-//   ❌ WHICH BIT MEANS BLOCKED — unresolved, see below
-//   ⚠️ routing works sometimes: it reaches (7,16) on map 8, which the old
-//      axis-walker never could, but other targets report "no walkable path"
-//
-// ⛔ THE COLLISION RULE IS A GUESS AND IS KNOWN WRONG IN PLACES.
-// `$CBE2` reads the properties and does `AND #$C2` -> blocked, but MEASURED
-// moves contradict that: tile 0x38 with prop0 0x01 is blocked (0x01 & 0xC2 = 0)
-// while tile 0x44 with prop0 0x80 is passable. `BLOCK_MASK` below is set to
-// 0x01 because that fits the handful of clean observations — it is NOT derived.
-// Blocked moves do not appear to reach $CBD7 at all, so $CBE2 is probably not
-// the check that stops the player; the real one has not been found.
-//
-// WHAT IS READ OFF THE CPU, not guessed:
+// EVERYTHING HERE IS READ OFF THE CPU, not guessed:
 //
 //   the map          RAM $7000, 64x64, one byte per tile
 //                    $CBBE builds the address as $7000 + y*64 + x:
@@ -26,9 +11,21 @@
 //                      LDY #$00 / LDA ($10),Y
 //   tile properties  RAM $0400, TWO bytes per tile, indexed tile*2
 //                      $CBD5 ASL A / TAY / LDA $0400,Y -> $44 (and $45)
-//   walkable         $CBED LDA $44 / AND #$C2 / BNE -> blocked
-//                    so a tile is blocked iff prop0 & 0xC2 (bits 7, 6, 1)
-//   special          $CBE5 AND #$1E / CMP #$08 -> a door/trigger type
+//   walkable         the PLAYER-MOVE check is $CA76, found by diffing the
+//                    executed-PC sets of a blocked and a successful move:
+//                      $CA79  JSR $CAA2 / BCS $CA9A   ; an earlier refusal
+//                      $CA7E  JSR $CBBE               ; fetch properties -> $44
+//                      $CA81  LDA $44 / AND #$1F
+//                      $CA85  CMP #$01 / BEQ $CA9A    ; BLOCKED
+//                      $CA89  AND #$1E / TAX
+//                      $CA8C  LDA $CDA1,X / JMP ($0010) ; per-terrain handler
+//                    so a tile is blocked iff (prop0 & 0x1F) == 0x01.
+//
+// ⛔ NOT $CBE2. That routine also reads the properties and does `AND #$C2`,
+// which is what an earlier pass mistook for the collision rule — it is some
+// other query, and it disagrees with reality: tile 0x38 (prop0 0x01) is blocked
+// though 0x01 & 0xC2 == 0, and tile 0x44 (prop0 0x80) is passable though
+// 0x80 & 0xC2 != 0. Both are exactly right under (prop0 & 0x1F) == 1.
 //
 // The property table lives in RAM because it is loaded per tileset, so this
 // reads it live rather than resolving a ROM table — always correct for whatever
@@ -55,7 +52,7 @@ const ROMP = process.env.FF1_ROM || '/home/joeltco/roms/ff1-usa.nes';
 const PLAYER_X = 0x68, PLAYER_Y = 0x69, MAP_ID = 0x48;
 const MAP_RAM = 0x7000, MAP_W = 64, MAP_H = 64;
 const PROP_RAM = 0x0400;          // 2 bytes per tile
-const BLOCK_MASK = 0x01;          // ⛔ GUESS — see the warning above
+const BLOCK_MASK = 0x1F, BLOCK_VALUE = 0x01;   // $CA83 AND #$1F / CMP #$01
 const SPECIAL_MASK = 0x1E, SPECIAL_DOOR = 0x08;
 const OBJ_RAM = 0x6F00, OBJ_STRIDE = 0x10, OBJ_SLOTS = 16;
 
@@ -73,8 +70,9 @@ const press = (k, hold = 6, after = 26) => {
 const at = () => [nes.cpu.mem[PLAYER_X], nes.cpu.mem[PLAYER_Y]];
 const tile = (x, y) => nes.cpu.mem[MAP_RAM + (y & 63) * MAP_W + (x & 63)];
 const prop0 = (x, y) => nes.cpu.mem[PROP_RAM + tile(x, y) * 2];
-const walkable = (x, y) => (prop0(x, y) & BLOCK_MASK) === 0;
-const isDoor = (x, y) => (prop0(x, y) & SPECIAL_MASK) === SPECIAL_DOOR;
+const walkable = (x, y) => (prop0(x, y) & BLOCK_MASK) !== BLOCK_VALUE;
+/** $CA89 AND #$1E indexes the terrain-handler table at $CDA1. */
+const terrainType = (x, y) => prop0(x, y) & SPECIAL_MASK;
 
 /** Live object tiles — NPCs block movement. */
 function blockers() {
@@ -99,7 +97,7 @@ if (SHOW) {
     for (let x = 0; x < MAP_W; x++) {
       row += (x === px && y === py) ? '@'
         : blk.has(`${x},${y}`) ? 'N'
-        : isDoor(x, y) ? '+'
+        : terrainType(x, y) ? '+'
         : walkable(x, y) ? '.' : '#';
     }
     console.log(row);
@@ -111,8 +109,8 @@ if (!TO) { if (!SHOW) console.error('give --to X,Y or --map'); process.exit(0); 
 const [gx, gy] = TO.split(',').map(Number);
 
 /** BFS over walkable tiles; NPCs are walls, but the GOAL may be one. */
-function findPath(sx, sy, tx, ty) {
-  const blk = blockers();
+function findPath(sx, sy, tx, ty, ignoreNpcs = false) {
+  const blk = ignoreNpcs ? new Set() : blockers();
   const key = (x, y) => y * MAP_W + x;
   const prev = new Map();
   const q = [[sx, sy]];
@@ -145,7 +143,11 @@ let replans = 0, steps = 0;
 for (let guard = 0; guard < 400; guard++) {
   const [cx, cy] = at();
   if (cx === gx && cy === gy) break;
-  const path = findPath(cx, cy, gx, gy);
+  // ⛔ NPCs are walls for planning, but they WANDER — if the only thing sealing
+  // the route is an NPC standing in a corridor, the honest answer is "wait",
+  // not "unreachable". Re-plan ignoring them and let the step loop stall.
+  let path = findPath(cx, cy, gx, gy);
+  if (!path) path = findPath(cx, cy, gx, gy, true);
   if (!path) {
     console.log(`no walkable path from (${cx},${cy}) to (${gx},${gy}) — ` +
                 `target tile 0x${tile(gx, gy).toString(16)} prop0 0x${prop0(gx, gy).toString(16)}` +
