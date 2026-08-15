@@ -142,7 +142,7 @@ const ok = (m) => console.log('  ✓ ' + m);
         if (rom[b + 1] & 0x40) flag6++;
         if (rom[b + 2] & 0xC0) yHigh++;
         // the decoded flags must be exactly the raw bits, per object
-        if (o.inRoom !== !!(rom[b + 1] & 0x80) || o.still !== !!(rom[b + 1] & 0x40)) decodeBad++;
+        if (o.altLayer !== !!(rom[b + 1] & 0x80) || o.still !== !!(rom[b + 1] & 0x40)) decodeBad++;
         if (o.x !== (rom[b + 1] & 0x3F) || o.y !== (rom[b + 2] & 0x3F)) decodeBad++;
       }
     }

@@ -26,7 +26,7 @@ for (let mapId = 0; mapId < 64; mapId++) {
   for (const o of mapObjects(rom, mapId)) {
     rows.push({
       mapId, slot: o.slot, objType: o.type, x: o.x, y: o.y,
-      inRoom: o.inRoom, still: o.still,
+      altLayer: o.altLayer, still: o.still,
       spriteEntry: o.sprite, spriteOffset: '0x' + o.spriteOffset.toString(16).toUpperCase(),
       dialogueId: o.dialogueId, dialogueAfter: o.dialogueAfter,
       text: decodeString(rom, o.dialogueId),
@@ -57,7 +57,7 @@ if (args.includes('--json')) {
   let last = -1;
   for (const r of rows) {
     if (r.mapId !== last) { console.log(`── map ${r.mapId} ──`); last = r.mapId; }
-    const f = (r.inRoom ? ' [room]' : '') + (r.still ? ' [still]' : '');
+    const f = (r.altLayer ? ' [alt-layer]' : '') + (r.still ? ' [still]' : '');
     console.log(`  slot${String(r.slot).padStart(2)}  type ${String(r.objType).padStart(3)} @(${r.x},${r.y})${f}` +
                 `   sprite ${String(r.spriteEntry).padStart(2)} ${r.spriteOffset}   str ${r.dialogueId}`);
     console.log(`        "${r.text}"`);

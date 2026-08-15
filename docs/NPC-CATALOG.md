@@ -538,11 +538,23 @@ LDA $6F01,X / BMI E72C   ; $0D.0 clear + bit7 set   -> skip
 The object is processed **only when bit 7 equals `$0D` bit 0** — a layer match
 against a global player state.
 
-> ⛔ **`inRoom` is an inferred NAME.** The match rule above is proven; that
-> `$0D` bit 0 means "the player is inside a room" is not. It stayed 0 everywhere
-> a walk could reach in Coneria Castle, and all three of that map's bit-7 objects
-> sit in enclosed areas a courtyard walk cannot route into — consistent with the
-> name, but corroboration, not proof.
+> ⛔ **The field was called `inRoom`. That name is RETRACTED** (v1.8.43) — it
+> was never derived from anything, and `tools/ff1-flag0d-probe.mjs` argues
+> against it:
+>
+> - `$0D` bit 0 is **0 in every reachable state** — castle courtyard, castle
+>   interior, overworld — so bit-7 objects are never processed there at all.
+> - It does **not** flip while walking, and does **not** flip across a map
+>   transition (overworld → Coneria Castle). "Inside a room" would have to.
+> - It is not frame parity either: `$0D` reads 0 for 24 consecutive frames.
+> - `$0D` is pushed/popped alongside `$48`, the map id (`$C95C`-`$C964` /
+>   `$C991`-`$C998`); it is `ASL`'d at `$CE65`, `EOR #$84` at `$CE48`, cleared at
+>   `$C20D`/`$C70E`/`$C903`, and written inside the PPU nametable routines. It
+>   behaves like a **bitfield of engine state**, not a boolean.
+>
+> The field is now `altLayer`, named for the mechanism: the object belongs to the
+> alternate layer selected by `$0D` bit 0. **What that layer is remains
+> undetermined** — an open question, not a solved one.
 
 Counts: **61 objects carry bit 7, 78 carry bit 6**, and **0 set Y high bits**.
 

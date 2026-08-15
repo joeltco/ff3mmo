@@ -170,11 +170,21 @@ export const COORD_MASK = 0x3F;
 //   The object is processed ONLY when bit 7 EQUALS $0D bit 0 — a layer match
 //   against a global player state.
 //
-// ⛔ `inRoom` is the INFERRED name. What is proven is the match rule above.
-// That $0D bit 0 means "the player is inside a room" is NOT demonstrated: it
-// stayed 0 everywhere the walker could reach in Coneria Castle, and all three
-// of that map's bit-7 objects sit in enclosed areas a courtyard walk cannot
-// route into — consistent with the name, but corroboration, not proof.
+// ⛔ THE FIELD WAS CALLED `inRoom`. That name is RETRACTED (v1.8.43): it was
+// never derived from anything, and everything since measured argues against it
+// (`tools/ff1-flag0d-probe.mjs`):
+//   * `$0D` bit 0 is **0 in every reachable state** — castle courtyard, castle
+//     interior, overworld — so bit-7 objects are never processed there at all.
+//   * It does NOT flip while walking, and does NOT flip across a map transition
+//     (overworld -> Coneria Castle). "Inside a room" would have to.
+//   * It is not frame parity either: `$0D` reads 0 for 24 consecutive frames.
+//   * `$0D` is PUSHED/POPPED alongside `$48`, the map id ($C95C-$C964 /
+//     $C991-$C998); it is ASL'd at $CE65, EOR #$84 at $CE48, cleared at $C20D /
+//     $C70E / $C903, and written inside the PPU nametable routines. It behaves
+//     like a BITFIELD of engine state, not a boolean.
+//
+// So the field is named for the MECHANISM: the object belongs to the alternate
+// layer selected by `$0D` bit 0. ⛔ What that layer IS remains UNDETERMINED.
 /** objType -> sprite index; ROM offset = SPRITE_BASE + v * 0x100. */
 export const SPRITE_TABLE = 0x2E10;
 export const SPRITE_BASE = 0xA210;
@@ -275,7 +285,7 @@ export const spriteOffsetForType = (rom, type) => SPRITE_BASE + rom[SPRITE_TABLE
 export const spriteEntryForType = (rom, type) => rom[SPRITE_TABLE + type] + 18;
 
 /**
- * The 15 object slots of one map: {type, x, y, inRoom, still, sprite}.
+ * The 15 object slots of one map: {type, x, y, altLayer, still, sprite}.
  * Both coords are masked with $3F — bits 6-7 of each byte are flags.
  */
 export function mapObjects(rom, mapId) {
@@ -286,7 +296,7 @@ export function mapObjects(rom, mapId) {
     if (!t) continue;                  // skip empties, but do NOT stop: see header
     out.push({
       slot: i, type: t, x: xb & 0x3F, y: yb & 0x3F,
-      inRoom: !!(xb & FLAG_LAYER), still: !!(xb & FLAG_STILL),
+      altLayer: !!(xb & FLAG_LAYER), still: !!(xb & FLAG_STILL),
       sprite: rom[SPRITE_TABLE + t] + 18,
       spriteOffset: SPRITE_BASE + rom[SPRITE_TABLE + t] * 0x100,
       dialogueId: rom[DIALOGUE_TABLE + t * 4 + 1],
