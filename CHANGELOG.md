@@ -18,6 +18,54 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.40 — 2026-08-15
+
+### FF1's map object table re-derived from the CPU — and this one held up
+
+FF2's two-block model collapsed when checked, so FF1's got the same treatment.
+It survived.
+
+```
+map objects = 0x3410 + mapId * 48        (bank 0, $B400)
+```
+
+```
+$E7F3  LDA #$0F / STA $1B      ; FIFTEEN slots
+$E7FB  LDA $48 / ASL A x4      ; mapId * 16
+$E80D  ASL $1C / ROL $1D       ; mapId * 32
+$E812  ADC $1C                 ; 16x + 32x  =  mapId * 48
+$E819  ADC #$B4                ; + $B400   =  file 0x3410
+$E824  LDA ($1C),Y / ADC #$03  ; 3 bytes per entry
+$E836  DEC $1B / BNE           ; exactly 15 — a zero is NOT a terminator
+```
+
+Every constant the catalog uses is now a line of that loader. **Cross-checked
+against the live object array at RAM `$6F00`:** Coneria Castle (map 8) matches
+the ROM in all 15 slots byte for byte; map 24 differs only where a story NPC is
+conditionally not spawned.
+
+### The extent, which was never actually verified
+
+`64` had been chosen by eyeballing an invariant. It is now fixed two independent
+ways: every map 0-63 keeps its raw Y byte inside the `#$3F` mask while **all** of
+64-127 exceed it, and `0x3410 + 64*48 = 0x4010` — exactly the end of bank 0. The
+table fills the bank to its last byte.
+
+### A dead 16th slot
+
+15 x 3 = 45 bytes, but the stride is **48**. Bytes 45-47 of each map are never
+reached by the loader, and maps 28, 30 and 31 hold leftover object data there
+(all type 87). Reading 16 slots would inject **3 phantom NPCs** — the exact kind
+of plausible-looking mistake the FF2 arc kept producing. The gate pins it.
+
+### Changed
+
+- `tools/lib/ff1-text.mjs` — `MAPOBJ_MAPS` added; the loader disassembly and the
+  dead-slot warning recorded next to the constants.
+- `tools/check-ff12-text.mjs` — pins table, stride, slot count and extent, the
+  bank-boundary identity, the sharp 63/64 invariant boundary, and the dead-slot
+  count. **4 reverts tested, all fail**, including 15 -> 16 slots and 48 -> 45.
+
 ## 1.8.39 — 2026-08-15
 
 ### Verifying block 1's map ids disproved the two-block model — 79 objects were missing

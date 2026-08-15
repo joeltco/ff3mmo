@@ -112,9 +112,34 @@ export const DTE_SECOND = 0x3F060;
 export const DTE_FIRST_CH = 0x3F0B0;
 export const DTE_COUNT = 80;
 export const DTE_FIRST = 0x1A;
+// ── map objects, RE-DERIVED from the CPU ──────────────────────────────────
+//
+//   $E7F3  LDA #$0F / STA $1B      ; FIFTEEN slots
+//   $E7FB  LDA $48 / ASL A x4      ; mapId * 16
+//   $E80D  ASL $1C / ROL $1D       ; mapId * 32
+//   $E812  ADC $1C                 ; 16x + 32x  =  mapId * 48
+//   $E819  ADC #$B4                ; + $B400  ->  file 0x3410 (bank 0)
+//   $E824  LDA ($1C),Y             ; the object TYPE
+//   $E82C  ADC #$03                ; 3 bytes per entry
+//   $E836  DEC $1B / BNE           ; exactly 15 — a zero is NOT a terminator
+//
+// ⛔ 15 slots x 3 = 45 bytes, but the STRIDE IS 48. Bytes 45-47 of each map are
+// DEAD — the loader never reaches them. Three maps have leftover object data
+// there (28, 30, 31: all type 87), so reading 16 slots injects 3 phantom NPCs.
+// This was checked because FF2's "two blocks" turned out to be one table; here
+// the existing model held up.
 export const MAPOBJ_TABLE = 0x3410;
 export const MAPOBJ_PER_MAP = 15;      // LDA #$0F — fifteen, and zero is not a terminator
 export const MAPOBJ_STRIDE = 48;
+/**
+ * How many maps the table holds.
+ *
+ * ⛔ NOT enforced in code — the loader takes whatever `$48` holds. 64 is fixed
+ * two independent ways: every map 0-63 keeps its raw Y byte within the #$3F
+ * mask while ALL of 64-127 exceed it, and `0x3410 + 64*48 = 0x4010`, which is
+ * exactly the end of bank 0.
+ */
+export const MAPOBJ_MAPS = 64;
 /** objType -> sprite index; ROM offset = SPRITE_BASE + v * 0x100. */
 export const SPRITE_TABLE = 0x2E10;
 export const SPRITE_BASE = 0xA210;

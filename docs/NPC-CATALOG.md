@@ -286,7 +286,38 @@ $E82C  ADC #$03       ; 3 bytes per entry
 $E7F3  LDA #$0F       ; FIFTEEN slots, always
 ```
 
-So: **15 slots of 3 bytes per map at file `0x3410`, stride 48**, and
+Map objects are **15 slots of 3 bytes** (type, X + flags, Y), stride 48:
+
+```
+map objects = 0x3410 + mapId * 48        (bank 0, $B400)
+```
+
+Re-derived from the CPU (v1.8.40), the same way FF2's was:
+
+```
+$E7F3  LDA #$0F / STA $1B      ; FIFTEEN slots
+$E7FB  LDA $48 / ASL A x4      ; mapId * 16
+$E80D  ASL $1C / ROL $1D       ; mapId * 32
+$E812  ADC $1C                 ; 16x + 32x  =  mapId * 48
+$E819  ADC #$B4                ; + $B400   =  file 0x3410
+$E824  LDA ($1C),Y             ; the object TYPE
+$E82C  ADC #$03                ; 3 bytes per entry
+$E836  DEC $1B / BNE           ; exactly 15 — a zero is NOT a terminator
+```
+
+Unlike FF2's, **this model held up** — the check confirmed it rather than
+overturning it. Cross-checked against the live object array at RAM `$6F00`:
+Coneria Castle (map 8) matches the ROM in all 15 slots byte for byte, and map 24
+differs only where a story NPC is conditionally not spawned.
+
+**64 maps**, fixed two independent ways: every map 0-63 keeps its raw Y byte
+inside the `#$3F` mask while **all** of 64-127 exceed it, and
+`0x3410 + 64*48 = 0x4010` — exactly the end of bank 0.
+
+> ⛔ 15 x 3 = 45 bytes but the stride is **48**. Bytes 45-47 of each map are
+> **dead** — the loader never reaches them. Maps 28, 30 and 31 hold leftover
+> object data there (all type 87), so reading 16 slots injects **3 phantom
+> NPCs**. The gate asserts the count stays 3.
 
 ```
 sprite ROM offset = 0xA210 + SPRITE_TABLE[objType] * 0x100     (table @ file 0x2E10)

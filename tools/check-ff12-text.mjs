@@ -67,7 +67,43 @@ const ok = (m) => console.log('  ✓ ' + m);
     if (o.some(e => e.x > 63 || e.y > 63)) bad(`FF1 map ${m} has an unmasked coord — both bytes take #$3F`);
   }
   if (objs !== 287) bad(`FF1 map object table yields ${objs} objects, expected 287`);
+  // ⛔ every one of these is a line of the loader, RE-DERIVED from the CPU:
+  //   $E7F3 LDA #$0F (15 slots) / $E812 16x+32x = *48 / $E819 ADC #$B4 ($B400)
+  //   $E82C ADC #$03 (3 bytes) / $E836 DEC $1B BNE (no terminator)
   if (F1.MAPOBJ_PER_MAP !== 15) bad(`FF1 MAPOBJ_PER_MAP is ${F1.MAPOBJ_PER_MAP}; the loader reads 15 (LDA #$0F)`);
+  if (F1.MAPOBJ_STRIDE !== 48) bad(`FF1 MAPOBJ_STRIDE is ${F1.MAPOBJ_STRIDE}; $E812 computes 16x+32x = 48`);
+  if (F1.MAPOBJ_TABLE !== 0x3410) bad(`FF1 MAPOBJ_TABLE is 0x${F1.MAPOBJ_TABLE.toString(16)}; ADC #$B4 gives $B400 = 0x3410`);
+  if (F1.MAPOBJ_MAPS !== 64) bad(`FF1 MAPOBJ_MAPS is ${F1.MAPOBJ_MAPS}, expected 64`);
+  // the extent, two independent ways
+  if (F1.MAPOBJ_TABLE + F1.MAPOBJ_MAPS * F1.MAPOBJ_STRIDE !== 0x4010) {
+    bad('FF1 map object table no longer ends exactly at the bank 0 boundary (0x4010)');
+  }
+  {
+    // raw Y stays inside the #$3F mask for every real map and leaves it for all
+    // of 64-127 — a sharp boundary, not a judgement call
+    const rawYok = (m) => {
+      for (let i = 0; i < 15; i++) {
+        const o = F1.MAPOBJ_TABLE + m * F1.MAPOBJ_STRIDE + i * 3;
+        if (rom[o] && rom[o + 2] > 0x3F) return false;
+      }
+      return true;
+    };
+    let inside = 0, outside = 0;
+    for (let m = 0; m < 64; m++) if (rawYok(m)) inside++;
+    for (let m = 64; m < 128; m++) if (!rawYok(m)) outside++;
+    if (inside !== 64) bad(`only ${inside}/64 FF1 maps keep raw Y within #$3F — the table has moved`);
+    if (outside !== 64) bad(`${64 - outside}/64 maps past 63 look valid — the 64-map extent is not sharp`);
+  }
+  {
+    // ⛔ bytes 45-47 of each map are DEAD (15*3=45, stride 48). Three maps hold
+    // leftover object data there; reading 16 slots injects 3 phantom NPCs.
+    let ghosts = 0;
+    for (let m = 0; m < 64; m++) {
+      const o = F1.MAPOBJ_TABLE + m * F1.MAPOBJ_STRIDE;
+      if (rom[o + 45]) ghosts++;
+    }
+    if (ghosts !== 3) bad(`${ghosts} FF1 maps carry data in the dead 16th slot, expected 3 (28, 30, 31)`);
+  }
   if (since()) ok(`FF1 map objects: ${objs} across ${maps} maps, 15 slots each`);
 
   // 4. objType -> sprite. MEASURED by patching every object on Coneria Castle
