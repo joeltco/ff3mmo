@@ -500,6 +500,52 @@ them* in the emulator and finding an NPC there.
 > a main character who was missing from the catalog. Corrected in v1.8.39, which
 > took the named cast from 13 speakers to 18.
 
+### The X/Y flag bits
+
+```
+X byte:  bits 6-7 = flags,  bits 0-5 = the X coordinate
+Y byte:  bits 0-5 = the Y coordinate,  bits 6-7 DISCARDED
+```
+
+Read off the loader:
+
+```
+$E84D  LDA ($1C),Y / STA $16   ; the X byte, raw
+$E851  AND #$C0 / STA ($1E),Y  ; object+1 = FLAGS (bits 6-7)
+$E85C  AND #$3F / STA ($1E),Y  ; object+2 = X  (bits 0-5)
+$E864  LDA $17 / AND #$3F      ; the Y byte -> object+3 and +5
+```
+
+> ⛔ **The Y byte has no flags.** Its top two bits are masked off and never
+> stored. The old note said only that no object *sets* them — a fact about the
+> data. This is a fact about the **code**: data could set them and nothing would
+> happen.
+
+**Bit 6** — measured at `$E51F`: `LDA $6F01,X / AND #$40 / ORA $6F0C,X / BEQ +`
+then `RTS`. Set means the update routine returns early and the object skips that
+work. "Does not move" is supported.
+
+**Bit 7** — measured at `$E6D8`:
+
+```
+LDA $0D / AND #$01 / BEQ E6E5
+LDA $6F01,X / BMI E6EA   ; $0D.0 set   + bit7 set   -> proceed
+             / BPL E72C  ; $0D.0 set   + bit7 clear -> skip
+LDA $6F01,X / BMI E72C   ; $0D.0 clear + bit7 set   -> skip
+                         ; $0D.0 clear + bit7 clear -> proceed
+```
+
+The object is processed **only when bit 7 equals `$0D` bit 0** — a layer match
+against a global player state.
+
+> ⛔ **`inRoom` is an inferred NAME.** The match rule above is proven; that
+> `$0D` bit 0 means "the player is inside a room" is not. It stayed 0 everywhere
+> a walk could reach in Coneria Castle, and all three of that map's bit-7 objects
+> sit in enclosed areas a courtyard walk cannot route into — consistent with the
+> name, but corroboration, not proof.
+
+Counts: **61 objects carry bit 7, 78 carry bit 6**, and **0 set Y high bits**.
+
 ### objType → sprite
 
 ```

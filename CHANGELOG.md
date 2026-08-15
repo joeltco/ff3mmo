@@ -18,6 +18,71 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.42 — 2026-08-15
+
+### FF1's X/Y flag bits, read off the loader
+
+```
+X byte:  bits 6-7 = flags,  bits 0-5 = the X coordinate
+Y byte:  bits 0-5 = the Y coordinate,  bits 6-7 DISCARDED
+```
+
+```
+$E84D  LDA ($1C),Y / STA $16   ; the X byte, raw
+$E851  AND #$C0 / STA ($1E),Y  ; object+1 = FLAGS (bits 6-7)
+$E85C  AND #$3F / STA ($1E),Y  ; object+2 = X  (bits 0-5)
+$E864  LDA $17 / AND #$3F      ; the Y byte -> object+3 and +5
+```
+
+⛔ **The Y byte has no flags.** Its top two bits are masked off and never stored
+anywhere. The old note said only that no object *sets* them — a fact about the
+data. This is a fact about the **code**: data could set them and nothing would
+happen.
+
+**Bit 6** — `$E51F`: `LDA $6F01,X / AND #$40 / ORA $6F0C,X / BEQ +` then `RTS`.
+Set means the update routine returns early and the object skips that work.
+"Does not move" is supported by the code.
+
+**Bit 7** — `$E6D8`:
+
+```
+LDA $0D / AND #$01 / BEQ E6E5
+LDA $6F01,X / BMI E6EA   ; $0D.0 set   + bit7 set   -> proceed
+             / BPL E72C  ; $0D.0 set   + bit7 clear -> skip
+LDA $6F01,X / BMI E72C   ; $0D.0 clear + bit7 set   -> skip
+                         ; $0D.0 clear + bit7 clear -> proceed
+```
+
+The object is processed **only when bit 7 equals `$0D` bit 0** — a layer match
+against a global player state.
+
+⛔ **`inRoom` is an inferred NAME, and stays labelled as one.** The match rule is
+proven; that `$0D` bit 0 means "the player is inside a room" is not. It stayed 0
+everywhere a walk could reach in Coneria Castle, and all three of that map's
+bit-7 objects sit in enclosed areas a courtyard walk cannot route into —
+corroboration, not proof.
+
+### A misalignment that nearly became a finding
+
+The first read of the bit-7 site disassembled as `ORA $0129`, and a search for
+writers of `$0129` found **none** — a variable read twice and never written.
+That was the tell: `$0129` does not exist. `0D 29 01` is `LDA $0D / AND #$01`
+read one byte late. Disassembling from an arbitrary address starts
+mid-instruction; the listing has to be given a lead-in to sync.
+
+### Changed
+
+- `tools/lib/ff1-text.mjs` — `FLAG_LAYER` / `FLAG_STILL` / `COORD_MASK`, with
+  the loader disassembly and the proven-vs-inferred split recorded.
+- `tools/check-ff12-text.mjs` — pins the masks, per-object decode against the
+  raw bytes, and the counts (61 bit 7, 78 bit 6, 0 with Y high bits).
+  **5 reverts tested; 4 fail.**
+
+⛔ The fifth — dropping the `& 0x3F` on y — **cannot** be caught: no object sets
+those bits, so masking is a no-op and its removal is unobservable, exactly like
+FF3's `hi | 0x80`. The gate pins the reason (`yHigh === 0`) instead of faking a
+check.
+
 ## 1.8.41 — 2026-08-15
 
 ### FF3's map NPC list verified against the CPU — the load-bearing one

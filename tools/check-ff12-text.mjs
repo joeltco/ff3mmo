@@ -125,17 +125,41 @@ const ok = (m) => console.log('  ✓ ' + m);
     if (o8a.spriteOffset !== 0xA910) {
       bad(`FF1 map 8 slot 0 resolves to 0x${o8a.spriteOffset.toString(16)}, the PPU traced 0xA910`);
     }
-    // the X mask is observable (108 objects carry flag bits); the Y mask is
-    // NOT — no object in this ROM sets bits 6-7 of byte 2 — so it is not tested.
-    let flagged = 0;
-    for (let m = 0; m < 64; m++) for (const o of F1.mapObjects(rom, m)) if (o.inRoom || o.still) flagged++;
-    if (flagged < 90) bad(`only ${flagged} FF1 objects carry X flag bits, expected ~108 — the mask is off`);
+    // ── the X/Y flag bits, read off the loader ($E851 AND #$C0, $E85C AND #$3F)
+    //
+    // ⛔ THE Y BYTE HAS NO FLAGS: $E866 masks it with #$3F and the high bits are
+    // never stored. That is a fact about the CODE — data could set them and
+    // nothing would happen — which is why no assertion about Y flags exists.
+    // Only the invariant that this ROM's data agrees is checked.
+    if (F1.FLAG_LAYER !== 0x80 || F1.FLAG_STILL !== 0x40 || F1.COORD_MASK !== 0x3F) {
+      bad('FF1 X-byte flag masks changed; the loader uses AND #$C0 / AND #$3F');
+    }
+    let flag7 = 0, flag6 = 0, yHigh = 0, decodeBad = 0;
+    for (let m = 0; m < F1.MAPOBJ_MAPS; m++) {
+      for (const o of F1.mapObjects(rom, m)) {
+        const b = F1.MAPOBJ_TABLE + m * F1.MAPOBJ_STRIDE + o.slot * 3;
+        if (rom[b + 1] & 0x80) flag7++;
+        if (rom[b + 1] & 0x40) flag6++;
+        if (rom[b + 2] & 0xC0) yHigh++;
+        // the decoded flags must be exactly the raw bits, per object
+        if (o.inRoom !== !!(rom[b + 1] & 0x80) || o.still !== !!(rom[b + 1] & 0x40)) decodeBad++;
+        if (o.x !== (rom[b + 1] & 0x3F) || o.y !== (rom[b + 2] & 0x3F)) decodeBad++;
+      }
+    }
+    if (decodeBad) bad(`${decodeBad} FF1 objects decode flags/coords differently from the raw bytes`);
+    if (flag7 !== 61) bad(`${flag7} FF1 objects carry X bit 7, expected 61`);
+    if (flag6 !== 78) bad(`${flag6} FF1 objects carry X bit 6, expected 78`);
+    // ⛔ Because yHigh is 0, MASKING Y IS A NO-OP in this ROM and dropping the
+    // `& 0x3F` on y is UNOBSERVABLE — no revert test can catch it (same shape as
+    // FF3's `hi | 0x80`). This assertion pins the reason: if data ever set those
+    // bits the mask would become load-bearing and this fires.
+    if (yHigh !== 0) bad(`${yHigh} FF1 objects set Y high bits — the y mask is now load-bearing and needs a real test`);
     // every placed type must land in the NPC half of the 48-entry bank
     let outside = 0;
     for (let m = 0; m < 64; m++) for (const o of F1.mapObjects(rom, m))
       if (o.sprite < 18 || o.sprite > 47) outside++;
     if (outside) bad(`${outside} FF1 objects resolve outside sprite entries 18-47`);
-    if (since()) ok('FF1 objType -> sprite: 6 probes + map 8 10/10, all types land in entries 18-47');
+    if (since()) ok(`FF1 objType -> sprite: 6 probes + map 8 10/10; X flags ${flag7} layer / ${flag6} still, Y carries none`);
   }
 
   // 5. objType -> dialogue: a FOUR-BYTE record at 0x395E5, byte 1 is the

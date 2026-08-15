@@ -140,6 +140,41 @@ export const MAPOBJ_STRIDE = 48;
  * exactly the end of bank 0.
  */
 export const MAPOBJ_MAPS = 64;
+
+// ── the X/Y flag bits, read off the loader ────────────────────────────────
+//
+//   $E84D  LDA ($1C),Y / STA $16   ; the X byte, raw
+//   $E851  AND #$C0 / STA ($1E),Y  ; object+1 = FLAGS (bits 6-7)
+//   $E85C  AND #$3F / STA ($1E),Y  ; object+2 = X  (bits 0-5)
+//   $E864  LDA $17 / AND #$3F      ; the Y byte -> object+3 and +5
+//
+// ⛔ THE Y BYTE HAS NO FLAGS. Its top two bits are masked off and never stored
+// anywhere — the game DISCARDS them. (The old note said only that no object
+// sets them, which is a fact about the data; this is a fact about the code, and
+// it means data could set them and nothing would happen.)
+export const FLAG_LAYER = 0x80;   // bit 7 — see below
+export const FLAG_STILL = 0x40;   // bit 6
+export const COORD_MASK = 0x3F;
+
+// bit 6 (FLAG_STILL) — MEASURED at $E51F:
+//     LDA $6F01,X / AND #$40 / ORA $6F0C,X / BEQ + / RTS
+//   set -> the update routine returns early and the object skips that work.
+//   "does not move" is supported by the code.
+//
+// bit 7 (FLAG_LAYER) — MEASURED at $E6D8:
+//     LDA $0D / AND #$01 / BEQ E6E5
+//     LDA $6F01,X / BMI E6EA   ; $0D.0 set + bit7 set   -> proceed
+//                  / BPL E72C  ; $0D.0 set + bit7 clear -> skip
+//     LDA $6F01,X / BMI E72C   ; $0D.0 clear + bit7 set -> skip
+//                              ; $0D.0 clear + bit7 clear -> proceed
+//   The object is processed ONLY when bit 7 EQUALS $0D bit 0 — a layer match
+//   against a global player state.
+//
+// ⛔ `inRoom` is the INFERRED name. What is proven is the match rule above.
+// That $0D bit 0 means "the player is inside a room" is NOT demonstrated: it
+// stayed 0 everywhere the walker could reach in Coneria Castle, and all three
+// of that map's bit-7 objects sit in enclosed areas a courtyard walk cannot
+// route into — consistent with the name, but corroboration, not proof.
 /** objType -> sprite index; ROM offset = SPRITE_BASE + v * 0x100. */
 export const SPRITE_TABLE = 0x2E10;
 export const SPRITE_BASE = 0xA210;
@@ -251,7 +286,7 @@ export function mapObjects(rom, mapId) {
     if (!t) continue;                  // skip empties, but do NOT stop: see header
     out.push({
       slot: i, type: t, x: xb & 0x3F, y: yb & 0x3F,
-      inRoom: !!(xb & 0x80), still: !!(xb & 0x40),
+      inRoom: !!(xb & FLAG_LAYER), still: !!(xb & FLAG_STILL),
       sprite: rom[SPRITE_TABLE + t] + 18,
       spriteOffset: SPRITE_BASE + rom[SPRITE_TABLE + t] * 0x100,
       dialogueId: rom[DIALOGUE_TABLE + t * 4 + 1],
