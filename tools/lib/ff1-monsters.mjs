@@ -28,17 +28,59 @@ export const FORMATION_MONSTER_OFF = 2;  // measured, see above
 // copy loop ($AFB6 LDA ($9C),Y): monster 0 reads from $8520, monster 58 from
 // $89A8 — exactly 58 * 20 further on, in bank 12.
 //
-// ⛔ The FIELDS are NOT identified. The copy at $AFC1 goes through a scatter
-// table at $AFCB, so the RAM record is a PERMUTATION of the ROM one plus some
-// runtime state (the last four bytes are identical for every monster). Neither a
-// byte-for-byte nor a multiset search of the ROM finds the RAM record, which is
-// how that was established. The raw records are cataloged; naming a byte "HP"
-// would be a guess.
+// The copy at $AFC1 goes through a scatter table at $AFCB, so the RAM record is a
+// PERMUTATION of the ROM one plus runtime state. The mapping was MEASURED by
+// patching each ROM byte to a sentinel and seeing which RAM byte moved
+// (`tools/ff1-stat-fields.mjs --map`):
+//
+//   ROM  0 -> RAM  4     ROM  5 -> RAM 14
+//   ROM  1 -> RAM  5     ROM  6 -> RAM  0
+//   ROM  2 -> RAM  6     ROM  7 -> RAM  3
+//   ROM  3 -> RAM  7     ROM  8 -> RAM  1
+//   ROM  4 -> RAM  9 AND 13   (max and CURRENT hp)
+//   ROM  9 -> RAM 15     ROM 12 -> RAM  2
+//   ROM 10, 11, 13-19 are not copied into the enemy block at all.
+export const ROM_TO_RAM = { 0: [4], 1: [5], 2: [6], 3: [7], 4: [9, 13], 5: [14],
+                            6: [0], 7: [3], 8: [1], 9: [15], 12: [2] };
 export const MONSTER_SLOTS = 0x6BC9;   // $FBD4 LDA $6BC9,X
 export const EMPTY_SLOT = 0xFF;       // $FBD7 CMP #$FF
 
 export const STAT_TABLE = 0x10 + 12 * 0x4000 + (0x8520 - 0x8000);   // 0x30530
 export const STAT_STRIDE = 20;
+
+/**
+ * What each byte DOES. Every entry was established by changing that byte and
+ * watching the game behave differently — never by matching against a wiki.
+ *
+ *   0-1  EXP    award = field / 2, linear over five values (6, 18, 438, 1337,
+ *               4242 -> 3, 9, 219, 668, 2121 on the victory screen)
+ *   2-3  GIL    award = field * 2, linear over five values (6, 18, 108, 999,
+ *               777 -> 12, 36, 216, 1998, 1554)
+ *   4-5  HP     RAM 13 is CURRENT hp: it counts down as the monster is hit,
+ *               reaches 0, and RAM 17 flips to a dead flag. IMP 8, TIGER 132,
+ *               CHAOS 2000.
+ *   8    EVADE  damage the party lands falls monotonically to ZERO as it rises
+ *               (0/32/128/255 -> 32/19/1/0 over 120 rounds)
+ *   9    DEF    damage falls too, but FLOORS at a nonzero minimum
+ *               (0/32/128/255 -> 59/9/9/9). That floor is what separates a
+ *               damage reduction from a miss chance.
+ *   12   ATTACK zeroing it drops the damage the party TAKES from 7 to 1;
+ *               raising it multiplies it (0/64/200 -> 1/35/35)
+ *
+ * ⛔ NOT identified, only bounded: 10 and 13 also raise the damage the party
+ * takes but are not required for it (10 at 0 leaves the baseline). 6 and 7 gate
+ * whether the monster attacks at all — 7 is 0xFF for every monster and any other
+ * value stops it acting. 11 and 14-19 showed no effect in any test run here.
+ * They are left unnamed rather than guessed at.
+ */
+export const STAT_FIELDS = {
+  exp: [0, 1], gil: [2, 3], hp: [4, 5], evade: 8, defense: 9, attack: 12,
+};
+export const statValue = (rom, id, field) => {
+  const f = STAT_FIELDS[field];
+  const o = STAT_TABLE + id * STAT_STRIDE;
+  return Array.isArray(f) ? (rom[o + f[0]] | (rom[o + f[1]] << 8)) : rom[o + f];
+};
 
 export const NAME_PTR_TABLE = 0x2D4F0;          // CPU $94E0, bank 11
 export const NAME_BANK_BASE = 0x10 + 11 * 0x4000;

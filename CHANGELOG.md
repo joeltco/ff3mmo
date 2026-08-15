@@ -18,6 +18,72 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.56 — 2026-08-15
+
+### FF1's monster stat fields — identified by changing them, not by looking them up
+
+v1.8.55 located the 20-byte record and said plainly that naming a byte "HP"
+would be a guess. It no longer is. `tools/ff1-stat-fields.mjs` (NEW) changes one
+byte at a time and watches what the game does differently.
+
+**First, the scatter.** The copy at `$AFC1` runs through a table at `$AFCB`, so
+the RAM record is a permutation of the ROM one. Patching each ROM byte to a
+sentinel and seeing which RAM byte moved gives the whole mapping:
+
+```
+ROM 0->RAM 4   ROM 4->RAM 9 AND 13   ROM 8 ->RAM 1
+ROM 1->RAM 5   ROM 5->RAM 14         ROM 9 ->RAM 15
+ROM 2->RAM 6   ROM 6->RAM 0          ROM 12->RAM 2
+ROM 3->RAM 7   ROM 7->RAM 3
+```
+
+ROM 10, 11 and 13-19 are never copied into the enemy block at all.
+
+**Then the fields**, each from an experiment:
+
+| bytes | field | evidence |
+|---|---|---|
+| 0-1 | EXP | award = field ÷ 2, linear over five values (6, 18, 438, 1337, 4242 → 3, 9, 219, 668, 2121 on the victory screen) |
+| 2-3 | GIL | award = field × 2, linear over five values (6, 18, 108, 999, 777 → 12, 36, 216, 1998, 1554) |
+| 4-5 | HP | RAM 13 is current HP — it counts down as the monster is hit, reaches 0, and RAM 17 flips to a dead flag |
+| 8 | evade | the damage the party lands falls to **zero** as it rises (0/32/128/255 → 32/19/1/0) |
+| 9 | defense | damage falls too but **floors above zero** (0/32/128/255 → 59/9/9/9) |
+| 12 | attack | zeroing it drops the damage the party TAKES from 35 to 1 |
+
+⭐ Evasion and defense both make the party's damage fall, so a byte-level check
+can never tell them apart. What separates them is the SIGNATURE: evasion reaches
+zero, defense floors above it. That is the shape the gate asserts.
+
+⛔ Bytes 10 and 13 also raise the damage the party takes but are not required for
+it. 6 and 7 gate whether the monster attacks at all (7 is `0xFF` for every
+monster; any other value stops it acting). 11 and 14-19 showed no effect in any
+run. **They are left unnamed rather than guessed at.**
+
+Winning a battle on demand needed one more measurement: formation byte 6 packs
+the enemy count, and `0x21` spawns exactly one.
+
+[`docs/FF1-MONSTERS.md`](docs/FF1-MONSTERS.md) now carries HP / atk / def / evade
+/ exp / gil for all 128, next to the raw record.
+
+### Three gate holes found and closed this turn
+
+- The field checks **hardcoded byte numbers**, so changing `STAT_FIELDS.attack`
+  from 12 to 11, or swapping evade and defense, changed nothing the gate looked
+  at. It now indexes through `STAT_FIELDS`, which is the whole point of having it.
+- The scatter check walked `ROM_TO_RAM`'s **own entries**, so deleting one made
+  it check less and still pass. The map's shape is now pinned independently.
+- The attack check ran 80 rounds, and at 80 rounds the monster has not landed a
+  blow — both sides read 0, which looks exactly like "no effect". 110 rounds.
+
+### Changed
+
+- `tools/ff1-stat-fields.mjs` (NEW) — `--map`, `--damage`, `--probe N`.
+- `tools/lib/ff1-monsters.mjs` — `ROM_TO_RAM`, `STAT_FIELDS`, `statValue`.
+- `docs/FF1-MONSTERS.md` — named stat columns for all 128.
+- `tools/check-ff1-shops.mjs` — fights four battles to pin the fields. 87/87,
+  **6 more gate reverts tested, all fail** (two only after the holes above were
+  closed). Gate is now 45s; its `deploy.sh` budget went to 150s.
+
 ## 1.8.55 — 2026-08-15
 
 ### The last hop — all 128 FF1 monsters made to appear, and read off the screen

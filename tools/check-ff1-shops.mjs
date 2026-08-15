@@ -262,6 +262,94 @@ console.log('\nmonster names');
   }
   eq('patching formation byte 2 puts TIGER in a real battle',
      drew !== null && drew.includes('TIGER'), true);
+
+  // ── the stat FIELDS ────────────────────────────────────────────────────────
+  // ⛔ Every claim here is behavioural, so nothing but a real battle can pin it.
+  // A byte-level check cannot tell "defense" from "evasion" — both make the
+  // party's damage fall — so the two are separated by their SIGNATURE: evasion
+  // drives it to zero, defense floors it above zero.
+  const statFight = (patch, rounds) => {
+    const pp = Uint8Array.from(rom);
+    pp[MN.FORMATION_TABLE + MN.FORMATION_MONSTER_OFF] = 0;
+    pp[MN.FORMATION_TABLE + 6] = 0x21;                 // exactly one enemy
+    pp[MN.STAT_TABLE + 4] = 0xFF; pp[MN.STAT_TABLE + 5] = 0x0F;   // huge HP
+    for (const [o, v] of Object.entries(patch)) pp[MN.STAT_TABLE + Number(o)] = v;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(pp).toString('binary'));
+    n.fromJSON(JSON.parse(WORLD));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    r(20); n.cpu.mem[0x27] = 150; n.cpu.mem[0x28] = 170; r(20);
+    const sc = () => {
+      const v = n.ppu.vramMem, o = [];
+      for (let row = 0; row < 30; row++) {
+        let x = '';
+        for (let c = 0; c < 32; c++) {
+          const g = F1.glyph(v[0x2000 + row * 32 + c]);
+          x += (g === null || g === '\n') ? ' ' : g;
+        }
+        if (x.trim()) o.push(x.trim());
+      }
+      return o;
+    };
+    for (let k = 0; k < 300; k++) {
+      const b2 = DIRS[Math.floor(k / 6) % 2];
+      n.buttonDown(1, b2); r(8); n.buttonUp(1, b2); r(12);
+      if (sc().some(l => /\bRUN\b/.test(l))) break;
+    }
+    const party = () => {
+      let t = 0;
+      for (let i = 0; i < 4; i++) { const a2 = 0x610A + i * 0x40; t += n.cpu.mem[a2] | (n.cpu.mem[a2 + 1] << 8); }
+      return t;
+    };
+    const hp0 = party();
+    // ⛔ snapshot the enemy block BEFORE any rounds — after them the HP bytes
+    // have been counted down and no longer match the record they came from.
+    const ram = [...n.cpu.mem.slice(0x6BDC, 0x6BDC + 20)];
+    for (let k = 0; k < rounds; k++) {
+      n.buttonDown(1, Controller.BUTTON_A); r(6); n.buttonUp(1, Controller.BUTTON_A); r(20);
+    }
+    const enemyHp = n.cpu.mem[0x6BDC + 13] | (n.cpu.mem[0x6BDC + 14] << 8);
+    return { dealt: 0x0FFF - enemyHp, taken: hp0 - party(), ram, patched: pp };
+  };
+
+  const baseStat = statFight({}, 80);
+  // ⛔ compare against the PATCHED record this battle actually loaded, not the
+  // stock one — statFight raises HP so the fight lasts, so bytes 4/5 differ.
+  const loaded = [...baseStat.patched.slice(MN.STAT_TABLE, MN.STAT_TABLE + MN.STAT_STRIDE)];
+  let permOk = true;
+  for (const [romOff, ramOffs] of Object.entries(MN.ROM_TO_RAM)) {
+    for (const ra of ramOffs) if (baseStat.ram[ra] !== loaded[Number(romOff)]) permOk = false;
+  }
+  eq('the ROM -> RAM scatter holds for every mapped byte', permOk, true);
+  // ⛔ The loop above walks ROM_TO_RAM's OWN entries, so DELETING one makes it
+  // check less and still pass. These pin the map's shape independently, written
+  // out by hand from the measurement rather than read back off the table.
+  eq('the scatter has 12 destinations across 11 source bytes',
+     [Object.keys(MN.ROM_TO_RAM).length, Object.values(MN.ROM_TO_RAM).flat().length], [11, 12]);
+  eq('ROM 4 lands in TWO RAM slots — max AND current HP', MN.ROM_TO_RAM[4].length, 2);
+  eq('RAM 9 and RAM 13 both carry the HP low byte',
+     [baseStat.ram[9], baseStat.ram[13]], [loaded[4], loaded[4]]);
+  // ⛔ go through STAT_FIELDS, never a literal byte number — a gate that hardcodes
+  // "12" cannot notice STAT_FIELDS.attack being changed to 11, which is exactly
+  // what it is here to protect.
+  eq('RAM 13 (current HP) starts at the HP field',
+     baseStat.ram[13], loaded[MN.STAT_FIELDS.hp[0]]);
+  eq('RAM 14 carries the HP high byte',
+     baseStat.ram[14], loaded[MN.STAT_FIELDS.hp[1]]);
+  eq('the party can hurt a baseline monster', baseStat.dealt > 0, true);
+
+  // ⛔ 80 rounds is NOT enough for this one — the monster has not landed a blow
+  // by then and both sides read 0, which looks like "no effect". Measured: the
+  // signal appears at ~100 rounds (1 vs 35) and grows from there.
+  eq('zeroing ATTACK (byte 12) reduces the damage the party takes',
+     statFight({ [MN.STAT_FIELDS.attack]: 0 }, 110).taken <
+     statFight({ [MN.STAT_FIELDS.attack]: 200 }, 110).taken, true);
+  // evasion drives the party's damage to ZERO...
+  eq('maxing EVADE (byte 8) drives the party\'s damage to zero',
+     statFight({ [MN.STAT_FIELDS.evade]: 255 }, 80).dealt, 0);
+  // ...while defense only floors it. This is the check that keeps the two apart.
+  eq('maxing DEFENSE (byte 9) floors the party\'s damage ABOVE zero',
+     statFight({ [MN.STAT_FIELDS.defense]: 255 }, 80).dealt > 0, true);
 }
 
 console.log(`\n${checks - fails}/${checks} checks passed`);
