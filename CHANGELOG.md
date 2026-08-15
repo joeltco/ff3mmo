@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.52 — 2026-08-15
+
+### FF2's monsters — all 128, confirmed by the guards that summon them
+
+Leg Eater through the Emperor. The table is at bank 5, file `0x16C54`, 2 bytes
+LE per id pointing at a `00`-terminated string — found by encoding a known name
+through the shipped glyph table, fitting a pointer table against THREE
+consecutive entries (Goblin / GoblinGuard / GoblinPrince), then walking outward
+while entries stayed valid.
+
+⛔ **This table is NOT pinned to an instruction** — FF2's battle code has not
+been traced, and saying otherwise would be the easy lie here. It is confirmed a
+different and stronger way than a single sample. The object-type sweep from
+v1.8.49 found that types 73-76 are monster GUARDS: each names its monster in
+dialogue and then starts the fight. Talking to all four and reading the battle
+screen gives four confirmations spread across the table, and each agrees with
+what the guard said it was guarding:
+
+| guard type | says | battle draws | index |
+|---|---|---|---|
+| 73 | めがみのベルをまもるかいぶつ アダマンタイマイだ!! | アダマンタイマイ | 11 |
+| 74 | エギルのたいまつをまもるかいぶつ レッドソウルだ!! | レッドソウル | 79 |
+| 75 | くろいかめんをまもるかいぶつ ビッグホーンだ!! | ビッグホーン | 47 |
+| 76 | ふねのまえに たちふさがる ラウンドウォームだ!! | ラウンドウォーム | 72 |
+
+Catalog with romaji: [`docs/FF2-MONSTERS.md`](docs/FF2-MONSTERS.md).
+
+### Changed
+
+- `tools/lib/ff2-monsters.mjs`, `tools/ff2-monster-catalog.mjs` (NEW).
+- `docs/FF2-MONSTERS.md` (NEW).
+- `tools/check-ff2-shops.mjs` — pins the table, its 128-entry span, its four
+  final bosses, and re-runs all four guard battles live. 49/49; **4 more gate
+  reverts tested, all fail.**
+
 ## 1.8.51 — 2026-08-15
 
 ### Every item in all three games, checked against the game itself

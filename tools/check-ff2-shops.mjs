@@ -142,5 +142,26 @@ console.log('\nthe shop range itself, re-measured');
   eq('...and the table says so', S.SPECIAL_TYPES[0xDE], 'INN');
 }
 
+// ── FF2's monster NAME table ────────────────────────────────────────────────
+// ⛔ Not pinned to an instruction (FF2's battle code is not traced). Confirmed
+// instead by the four monster-GUARD object types, which name their monster and
+// then start the fight — four samples spread across the table, each agreeing
+// with the guard's own dialogue.
+console.log('\nmonster names, confirmed by the guards that summon them');
+{
+  const MN = await import('./lib/ff2-monsters.mjs');
+  eq('128 names decode', MN.allMonsters(rom, F2.glyph).length, MN.NAME_COUNT);
+  eq('the table ends with the four final bosses',
+     MN.allMonsters(rom, F2.glyph).slice(-4).map(m => m.name),
+     ['ティアマット', 'ベルゼブル', 'アスタロート', 'こうてい']);
+  for (const c of MN.CONFIRMED) {
+    eq(`index ${c.id} is ${c.name}`, MN.monsterName(rom, c.id, F2.glyph), c.name);
+    const r = talk(c.type, false);
+    const hay = r.full.map(l => l.replace(/\s/g, '')).join('|');
+    eq(`...and guard type ${c.type} names it in its dialogue`,
+       hay.includes(strip(c.name)), true);
+  }
+}
+
 console.log(`\n${checks - fails}/${checks} checks passed`);
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
