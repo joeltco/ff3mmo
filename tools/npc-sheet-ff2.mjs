@@ -95,7 +95,7 @@ const CW = CELL * FRAMES + 18;
 const CH = CELL + 62;   // ids, the reading, the kana itself, placements
 const COLS = 5;
 const ROWS = Math.ceil(cells.length / COLS);
-const cv = createCanvas(COLS * CW + 14, ROWS * CH + 44);
+const cv = createCanvas(COLS * CW + 14, ROWS * CH + 58);
 const g = cv.getContext('2d');
 g.imageSmoothingEnabled = false;
 g.fillStyle = '#5a6072';
@@ -104,10 +104,12 @@ g.textBaseline = 'top';
 g.font = 'bold 14px sans-serif';
 g.fillStyle = '#ffe9a8';
 g.fillText(`FF2 NPCs — ${cells.length} placed object types, sprite + the DEFAULT line each gives`, 12, 12);
+g.font = '10px sans-serif'; g.fillStyle = '#c9cede';
+g.fillText('palette is a fixed legible one, not the per-map palette; the line is the no-flag default', 12, 26);
 
 cells.forEach((c, i) => {
   const cx = 12 + (i % COLS) * CW;
-  const cy = 38 + Math.floor(i / COLS) * CH;
+  const cy = 52 + Math.floor(i / COLS) * CH;
   if (c.off !== null) for (let f = 0; f < FRAMES; f++) drawFrame(g, cx + f * CELL, cy, c.off + f * 0x40);
 
   g.font = 'bold 11px sans-serif';

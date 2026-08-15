@@ -18,6 +18,51 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.34 — 2026-08-14
+
+### All three NPC sheets, rendered with names
+
+`tools/npc-sheet-ff3.mjs` (NEW) completes the set; FF1's and FF2's were
+re-rendered to match, so the three read alike.
+
+| game | placed | named |
+|---|---|---|
+| FF1 | 182 object types | 5 |
+| FF2 | 175 object types | 23 |
+| FF3 | 179 npc ids | 23 |
+
+### ⛔ Rendering FF3's sheet caught two invented names
+
+Two NPCs were labelled **«Sara»** who are not Sara:
+
+- npcId 27 — `"Princess Sara.You're safe."` is someone **greeting** her
+- npcId 65 — `"Princess Sara wanted to see you guys"` is someone talking **about** her
+
+`selfName`'s title rule matched a bare `Princess X` anywhere at the start. The
+genuine narrator-label form always carries its descriptive clause — *"Elder
+Topapa, **the man who** raised the four orphans"* — so the rule now requires it.
+This is the same class of bug as FF1's invented "Oh" (from `"Oh:: My sister::"`,
+because FF1 writes an ellipsis as `::`). **Found by drawing the sheet and reading
+it, not by reading the code.**
+
+`selfName` moved into `tools/lib/ff3-text.mjs` so the sheet, the dump and the
+gate share one definition instead of three. `check-npc-dialogue.mjs` now pins 3
+self-identifications and 3 third-person mentions; **2 reverts tested, both fail.**
+
+FF3's named cast is now: Dahn, Nina, Tomak, Topapa (x3), King, Cid (x4), Girl,
+Takka (x2), Salina (x2), Desch (x2), Shelco (x2), Kate, Sara (id 67, who really
+does say *"Sara:I'm Sara! King Sasune's daughter"*).
+
+### Two caveats printed on the sheets themselves
+
+A sheet that looks authoritative gets believed, so both limits are on the image:
+
+- **The palette is representative, not per-map.** FF3 has per-NPC palette tables
+  at `0x1110`/`0x1210`/`0x1310` whose semantics have never been decoded — one
+  representative pair is used rather than a guess at them.
+- **The line is the no-flag default.** All three games choose the actual line in
+  a per-type code handler driven by story flags.
+
 ## 1.8.33 — 2026-08-14
 
 ### FF1 and FF3 given the same treatment as FF2 — one rule confirmed, one demoted

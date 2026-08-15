@@ -96,3 +96,34 @@ export function loadRom(p) {
   return new Uint8Array(fs.readFileSync(
     p || process.env.FF3_ROM || new URL('../../FF3-English.nes', import.meta.url).pathname));
 }
+
+/**
+ * The name an NPC gives for ITSELF, or null.
+ *
+ * Only patterns where the character self-identifies count:
+ *   "Topapa:I know..."                       -> speaker prefix
+ *   "Nina, the adoptive mother of...:"       -> narrator label before a colon
+ *   "Elder Topapa, the man who..."           -> title + name
+ *
+ * ⛔ "Takka is the finest blacksmith around" is someone talking ABOUT Takka —
+ * that NPC is not Takka. Naming him Takka would invent a character, so
+ * third-person mentions are deliberately NOT matched. FF1 had exactly this bug:
+ * a loose "Name:" rule invented a character called "Oh" out of "Oh:: My
+ * sister::" because FF1 writes an ellipsis as "::".
+ */
+export function selfName(text) {
+  if (!text) return null;
+  let m = /^([A-Z][a-z]+(?: [A-Z][a-z]+)?):/.exec(text);
+  if (m) return m[1];
+  m = /^([A-Z][a-z]+), (?:the|a) [^:]{0,60}:/.exec(text);
+  if (m) return m[1];
+  // ⛔ A TITLE + NAME ONLY COUNTS WITH ITS DESCRIPTIVE CLAUSE.
+  // "Elder Topapa, the man who raised the four orphans." is a narrator label
+  // introducing the speaker. Matching a bare "Princess Sara" instead names the
+  // wrong NPC twice over — "Princess Sara.You're safe." is someone GREETING
+  // her, and "Princess Sara wanted to see you guys" is someone talking ABOUT
+  // her. Both were labelled «Sara» until the sheet was rendered and read.
+  m = /^(?:Elder|King|Princess|Father) ([A-Z][a-z]+), (?:the|a) /.exec(text);
+  if (m) return m[1];
+  return null;
+}

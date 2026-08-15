@@ -41,7 +41,7 @@ import { createCanvas } from '@napi-rs/canvas';
 globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false }) };
 globalThis.document = { createElement: () => createCanvas(8, 8), getElementById: () => null, addEventListener() {} };
 
-import { loadRom, decodeString } from './lib/ff3-text.mjs';
+import { loadRom, decodeString, selfName } from './lib/ff3-text.mjs';
 const { loadMap } = await import('../src/map-loader.js');
 const G = await import('../src/data/npc-gfx.js');
 
@@ -68,27 +68,7 @@ for (let m = 0; m < 512; m++) {
   }
 }
 
-/**
- * The name an NPC gives for ITSELF.
- *
- * Only two patterns count, and both are the character self-identifying:
- *   "Topapa:I know..."                       -> speaker prefix
- *   "Nina, the adoptive mother of...:"       -> narrator label before a colon
- *
- * ⛔ "Takka is the finest blacksmith around" is someone talking ABOUT Takka —
- * that NPC is not Takka. Naming him Takka would be inventing a character, so
- * third-person mentions are deliberately NOT matched.
- */
-export function selfName(text) {
-  if (!text) return null;
-  let m = /^([A-Z][a-z]+(?: [A-Z][a-z]+)?):/.exec(text);
-  if (m) return m[1];
-  m = /^([A-Z][a-z]+), (?:the|a) [^:]{0,60}:/.exec(text);
-  if (m) return m[1];
-  m = /^(?:Elder|King|Princess|Father) ([A-Z][a-z]+)/.exec(text);
-  if (m) return m[1];
-  return null;
-}
+export { selfName };
 
 const rows = [];
 for (const id of [...where.keys()].sort((a, b) => a - b)) {

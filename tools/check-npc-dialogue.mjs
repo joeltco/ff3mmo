@@ -42,7 +42,7 @@ import { createCanvas } from '@napi-rs/canvas';
 globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false }) };
 globalThis.document = { createElement: () => createCanvas(8, 8), getElementById: () => null, addEventListener() {} };
 
-import { loadRom, decodeString, buildDte, DTE_COUNT } from './lib/ff3-text.mjs';
+import { loadRom, decodeString, buildDte, DTE_COUNT, selfName } from './lib/ff3-text.mjs';
 const { loadMap } = await import('../src/map-loader.js');
 const G = await import('../src/data/npc-gfx.js');
 
@@ -113,6 +113,32 @@ const ok = (m) => console.log('  ✓ ' + m);
       bad('FF3 Ur now has an npcId 4 — the 0x206 counterexample needs re-deriving');
     }
     if (!failed) ok('FF3 npcId + 0x202 keeps its MEASURED counterexample (Ur 10,28 shows 0x206, not 0x207)');
+  }
+
+  // ⛔ A LABEL IS NOT A NAME. `selfName` must only fire when the character
+  // IDENTIFIES ITSELF. A loose title rule named two NPCs «Sara» who were merely
+  // GREETING her ("Princess Sara.You're safe.") or talking ABOUT her ("Princess
+  // Sara wanted to see you guys"). Caught by rendering the sheet and reading it.
+  {
+    const NAMES = [
+      [19, 'Topapa', 'narrator label WITH its descriptive clause'],
+      [16, 'Dahn', 'speaker prefix'],
+      [17, 'Nina', 'name + descriptive clause + colon'],
+    ];
+    for (const [id, want, why] of NAMES) {
+      const got = selfName(decodeString(rom, id + BASE));
+      if (got !== want) bad(`FF3 npcId ${id} names itself "${got}", expected "${want}" (${why})`);
+    }
+    const THIRD_PERSON = [
+      [27, 'greeting Sara, not being her'],
+      [65, 'talking ABOUT Sara'],
+      [40, 'talking ABOUT Takka ("Takka is the finest blacksmith around")'],
+    ];
+    for (const [id, why] of THIRD_PERSON) {
+      const got = selfName(decodeString(rom, id + BASE));
+      if (got !== null) bad(`FF3 npcId ${id} was named "${got}" — it is ${why}`);
+    }
+    if (!failed) ok(`FF3 selfName takes ${NAMES.length} self-identifications and rejects ${THIRD_PERSON.length} third-person mentions`);
   }
 }
 

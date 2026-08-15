@@ -594,6 +594,43 @@ fact about the *script*, not an assignment of names to sprites.
 
 ---
 
+## The three sheets
+
+`docs/sprites/ff{1,2,3}-npc-sheet.png` — one cell per placed object type (FF1,
+FF2) or NPC id (FF3): the four facings, the sprite it resolves to, the line it
+gives, and where it stands. `--named` renders only the ones that name a speaker.
+
+| game | placed | named | how a name is established |
+|---|---|---|---|
+| FF1 | 182 types | 5 | first person only — "I am X" / "My name is X" |
+| FF2 | 175 types | 23 | `NAME「` in the opening-quote position |
+| FF3 | 179 ids | 23 | self-identification (`selfName`) |
+
+⛔ **Two caveats are printed on the sheets themselves**, because a sheet that
+looks authoritative gets believed:
+
+- **The palette is representative, not per-map.** FF3 has per-NPC palette tables
+  at `0x1110`/`0x1210`/`0x1310`, but their semantics have never been decoded, so
+  every cell uses one pair rather than a guess.
+- **The line is the no-flag default.** All three games pick the actual line in a
+  per-type code handler driven by story flags.
+
+⛔ FF1's Bahamut (type 14) renders as noise: he is drawn larger than the standard
+16x16 four-frame layout, so the table is right and the sprite simply is not a
+normal NPC.
+
+### A name the sheet caught
+
+Rendering FF3's sheet and reading it found two NPCs wrongly labelled **Sara**:
+`"Princess Sara.You're safe."` is someone *greeting* her, and `"Princess Sara
+wanted to see you guys"` is someone talking *about* her. A bare `Princess X`
+pattern had matched both. The genuine narrator-label form always carries its
+descriptive clause — *"Elder Topapa, **the man who** raised the four orphans"* —
+so `selfName` now requires it. The gate pins three self-identifications and three
+third-person mentions.
+
+---
+
 ## Files
 
 | path | what |
@@ -616,7 +653,7 @@ fact about the *script*, not an assignment of names to sprites.
 | `tools/lib/nes-trace.mjs` | the shared read/write/PC tracer (and its three jsnes traps) |
 | `tools/ff1-talk-trace.mjs` / `ff1-talk-probe.mjs` | FF1: find the rule, then predict-vs-screen |
 | `tools/ff3-talk-trace.mjs` / `ff3-talk-probe.mjs` | FF3: find the rule, then predict-vs-screen |
-| `tools/npc-sheet-ff1.mjs` / `-ff2.mjs` | the rendered sprite sheets |
+| `tools/npc-sheet-ff1.mjs` / `-ff2.mjs` / `-ff3.mjs` | the rendered sprite sheets, `--named` for the cast |
 | `tools/lib/romaji.mjs` | kana→Hepburn, a reading aid only (never a source of names) |
 | `tools/ff2-script-dump.mjs` | FF2 raw script dump |
 | `tools/check-ff12-text.mjs` | FF1/FF2 gate — 11 reverts tested, all fail |
