@@ -18,6 +18,60 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.45 — 2026-08-15
+
+### FF1's tilemap decoded; the collision rule is NOT
+
+⛔ **Partial result. The map is solved, walkability is not**, so pathfinding is
+not usable yet.
+
+**Solved — the tilemap.** The decompressed map is at **RAM `$7000`, 64x64, one
+byte per tile**, `map[y*64 + x]`. Taken straight from the address arithmetic:
+
+```
+$CBBE  LDA $15 / LSR x2 / ORA #$70      ; high byte = $70 + (y>>2)
+$CBC6  LDA $15 / ROR x3 / AND #$C0 / ORA $14   ; low = (y&3)<<6 | x
+$CBD3  LDA ($10),Y                      ; the tile
+```
+
+Verified by rendering it next to the screen: the `0x39` field, the `0x30`
+corridor and the castle walls all land where the screenshot shows them.
+
+**Located — the properties.** `$CBD5 ASL A / TAY / LDA $0400,Y` then
+`$0401,Y`: **RAM `$0400`, two bytes per tile, indexed `tile*2`**.
+
+**NOT solved — which bit blocks.** `$CBE2` does `AND #$C2`, but measured moves
+contradict it: tile `0x38` (prop0 `0x01`) is **blocked** while tile `0x44`
+(prop0 `0x80`) is **passable**. Blocked attempts do not appear to reach `$CBD7`
+at all, so `$CBE2` is probably not the check that stops the player. The real one
+has not been found.
+
+`tools/ff1-nav.mjs` ships with `BLOCK_MASK = 0x01` labelled **a guess**. It does
+route to (7,16) on map 8 — which the old axis-walker could never reach — but
+other targets report "no walkable path", and the header says so plainly.
+
+### A tracer flaw that invalidated several measurements
+
+`nes-trace.mjs` only hooked `loadFromCartridge`, so **reads of internal RAM
+below `$2000` were invisible**. Every attempt to sample the `$0400` property
+table was therefore either missed entirely or read back later from a region the
+engine had already reused — which is why the same tile appeared to have three
+different property values across runs, and why one sweep produced a table where
+`0x21`, `0x30`, `0x31` and `0x33` all read `0x0f` yet behaved differently.
+
+`makeTracer` now exposes **`onAnyRead`**, hooking `cpu.load` so RAM reads are
+visible. With it, `$CBDA` is seen reading `$462 = 0x00` for tile `0x31` — the
+lookup, captured at the instant it happens.
+
+### Changed
+
+- `tools/lib/nes-trace.mjs` — `onAnyRead`, with the cartridge-only limitation of
+  `onRead` written into the docstring.
+- `tools/ff1-collision-trace.mjs` (NEW) — finds the tile fetch and the property
+  lookup for a given move.
+- `tools/ff1-nav.mjs` (NEW) — BFS over the tilemap, `--map` renders walkability.
+  Honest about the unresolved mask.
+
 ## 1.8.44 — 2026-08-15
 
 ### $0D is a pending-request byte — and the shop savestate could NOT be produced

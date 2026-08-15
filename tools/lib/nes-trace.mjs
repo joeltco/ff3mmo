@@ -50,8 +50,18 @@ export function makeTracer(nes, { ringSize = 1 << 16 } = {}) {
 
   const t = {
     recording: false,
-    /** called for every cartridge read while recording: (addr, val, pc) */
+    /** called for every CARTRIDGE read while recording: (addr, val, pc) */
     onRead: null,
+    /**
+     * called for EVERY read, including internal RAM below $2000.
+     *
+     * ⛔ `onRead` only sees cartridge space — jsnes serves `addr < 0x2000` from
+     * `cpu.mem` without going through `loadFromCartridge`. Anything that reads a
+     * table in zero page or the $0200-$07FF range (FF1's tile properties at
+     * $0400, for one) is INVISIBLE to `onRead`, and sampling that table later
+     * from RAM gives stale values because the region is reused.
+     */
+    onAnyRead: null,
     /** called for every write while recording: (addr, val, pc) */
     onWrite: null,
     /** current instruction address (see TRAP 3 — this is the byte AFTER) */
@@ -82,6 +92,15 @@ export function makeTracer(nes, { ringSize = 1 << 16 } = {}) {
   cpu.loadFromCartridge = function (addr) {
     const v = origLoad(addr);
     if (t.recording && t.onRead) t.onRead(addr, v, t.pc());
+    return v;
+  };
+
+  // full read hook — only installed when someone asks, since it fires on every
+  // operand fetch and is markedly slower than the cartridge-only path
+  const origAny = cpu.load.bind(cpu);
+  cpu.load = function (addr) {
+    const v = origAny(addr);
+    if (t.recording && t.onAnyRead) t.onAnyRead(addr, v, t.pc());
     return v;
   };
 
