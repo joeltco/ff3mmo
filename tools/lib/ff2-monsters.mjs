@@ -73,11 +73,65 @@ export const NIBBLE_TABLES = [0x8D03, 0x8D13, 0x8D23, 0x8D33];      // 16 entrie
 export const nibbleTable = (rom, cpu) =>
   [...rom.slice(0x10 + 12 * 0x4000 + (cpu - 0x8000),
                 0x10 + 12 * 0x4000 + (cpu - 0x8000) + 16)];
-export const ENEMY_RAM = 0x7E30, ENEMY_RAM_STRIDE = 0x30;           // $9A32 CPX #$30
-export const RAM_HP_OFF = 0x14;   // measured: it counts down when the monster is hit
+// ⛔ CORRECTED: the record starts at $7E3A, not $7E30. $9878 fills $7E30-$7E39
+// and $9A3A starts the record proper. HP goes to zero-page $4E = $44 + 0x0A, and
+// $7E3A + 0x0A = $7E44, which is the byte measured counting down. The old
+// 0x7E30/+0x14 pair described the same byte from the wrong base and made every
+// other offset in this file off by ten.
+export const ENEMY_RAM = 0x7E3A, ENEMY_RAM_STRIDE = 0x30;           // $9A3C CPX #$30
+export const RAM_HP_OFF = 0x0A;   // measured: it counts down when the monster is hit
 
-/** Which record byte is which. Only HP is behaviourally proven — see below. */
-export const STAT_FIELDS = { hp: 0, mp: 1 };
+/**
+ * The record's TEN bytes, and where each nibble ends up. Bytes 2 and up are
+ * nibble-split: the high nibble indexes one table, the low nibble another, and
+ * each result lands at a different offset in the 48-byte enemy record.
+ *
+ *   byte 0  -> pool          -> +0x0A   HP        (proven: the battle loads it,
+ *                                                  it counts down, patching the
+ *                                                  index changes it)
+ *   byte 1  -> pool          -> +0x0C   MP        (code only)
+ *   byte 2  -> $8D03 / $8D13 -> +0x18 / +0x19     to-hit ($AFBD adds +0x18 to
+ *                                                  +0x07 then subtracts 20)
+ *   byte 3  -> $8D23 / $8D33 -> +0x1A / +0x1D  ⭐ ATTACK / a property mask
+ *   byte 4  -> $8D03 / $8D13 -> +0x00 / +0x01
+ *   byte 5  -> $8D23 / $8D03 -> +0x02 / +0x03  ⭐ DEFENCE
+ *   byte 6  -> $8D13 / $8D43 -> +0x04 / +0x15  ⭐ ...a WEAKNESS mask
+ *   byte 7  -> $8D53 / $8D63 -> +0x05 / +0x16  ⭐ ...the second one
+ *   byte 8  -> $8D23 / $8D63 -> +0x14 / +0x17
+ *
+ * THE DAMAGE FORMULA, which is what names them (12/$B084):
+ *   $B084  LDY #$1A / LDA ($9F),Y      ; the attacker's +0x1A is the base damage
+ *   $B08E  LDY #$1C / AND ($A1),Y @$15 ; attacker mask vs the DEFENDER's +0x15
+ *   $B098  LDY #$1B / AND ($A1),Y @$16 ; ...and the second pair
+ *   $B0A5  ADC #$14                    ; either match is worth +20
+ *   $B0AF  LDY #$02 / LDA ($A1),Y      ; then the defender's +0x02 comes off
+ *
+ * ⭐ VERIFIED by changing only that nibble, on Adamantoise:
+ *   ATTACK  byte 3 high: 0x00 -> the party takes 0 damage; 0x70/0xF0 -> 96
+ *   DEFENCE byte 5 high: 0x01 -> the party deals 56; 0x81/0xF1 -> 10
+ *
+ * ⛔ The masks are named from the formula, not from behaviour — this party has
+ * no matching weakness bit, so the AND never fires and no experiment can see it.
+ * The same blindness applies in FF1. Bytes 2, 4 and 8 measurably move the fight
+ * but were not isolated to a single stat, so they are DESCRIBED, not named.
+ */
+export const STAT_FIELDS = { hp: 0, mp: 1, attackByte: 3, defenceByte: 5 };
+/** High nibble indexes the first table, low nibble the second. */
+export const hiNibble = (v) => (v >> 4) & 0x0F;
+export const loNibble = (v) => v & 0x0F;
+/** Enemy-record offsets the damage formula reads. */
+export const RAM_ATTACK_OFF = 0x1A, RAM_DEFENCE_OFF = 0x02;
+export const RAM_WEAKNESS_OFFS = [0x15, 0x16];
+export const WEAKNESS_BONUS = 0x14;    // $B0A5 ADC #$14
+
+export const monsterAttack = (rom, id) => {
+  const b = rom[STAT_TABLE + id * STAT_STRIDE + STAT_FIELDS.attackByte];
+  return nibbleTable(rom, 0x8D23)[hiNibble(b)];
+};
+export const monsterDefence = (rom, id) => {
+  const b = rom[STAT_TABLE + id * STAT_STRIDE + STAT_FIELDS.defenceByte];
+  return nibbleTable(rom, 0x8D23)[hiNibble(b)];
+};
 
 export const poolValue = (rom, idx) =>
   rom[VALUE_POOL + idx * 2] | (rom[VALUE_POOL + idx * 2 + 1] << 8);
@@ -107,6 +161,7 @@ export function allMonsters(rom, glyph, count = NAME_COUNT) {
   for (let id = 0; id < count; id++) {
     const name = monsterName(rom, id, glyph);
     if (name) out.push({ id, name, hp: monsterHP(rom, id), mp: monsterMP(rom, id),
+                         attack: monsterAttack(rom, id), defence: monsterDefence(rom, id),
                          stats: statRecord(rom, id) });
   }
   return out;

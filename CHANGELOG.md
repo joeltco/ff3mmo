@@ -18,6 +18,63 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.59 — 2026-08-15
+
+### FF2's nibble fields — named by the damage formula
+
+The four (in fact seven) tables were described last version but nothing was
+named. The formula at `12/$B084` names them, and it is the same shape as FF1's:
+
+```
+$B084  LDY #$1A / LDA ($9F),Y      ; the attacker's +0x1A is the base damage
+$B08E  LDY #$1C / AND ($A1),Y @$15 ; attacker mask vs the DEFENDER's +0x15
+$B098  LDY #$1B / AND ($A1),Y @$16 ; ...and the second pair
+$B0A5  ADC #$14                    ; either match is worth +20
+$B0AF  LDY #$02 / LDA ($A1),Y      ; then the defender's +0x02 comes off
+```
+
+| byte | nibbles → tables | lands at | field |
+|---|---|---|---|
+| 0 | whole byte → pool | +0x0A | **HP** |
+| 1 | whole byte → pool | +0x0C | MP _(code only)_ |
+| 2 | `$8D03` / `$8D13` | +0x18 / +0x19 | to-hit |
+| 3 | `$8D23` / `$8D33` | +0x1A / +0x1D | ⭐ **attack** / a property mask |
+| 5 | `$8D23` / `$8D03` | +0x02 / +0x03 | ⭐ **defence** |
+| 6 | `$8D13` / `$8D43` | +0x04 / +0x15 | ⭐ a **weakness mask** |
+| 7 | `$8D53` / `$8D63` | +0x05 / +0x16 | ⭐ the second one |
+
+⭐ **Verified by changing only that nibble**, on Adamantoise: zeroing the ATTACK
+nibble makes the party take **0** damage where the baseline is 96; zeroing the
+DEFENCE nibble makes the party deal **56** instead of 10. That last number also
+retro-explains v1.8.57's loose end — "zeroing byte 5 tripled the damage dealt"
+was the defence nibble all along.
+
+The Emperor comes out 10000 HP / 180 atk / 210 def; the Leg Eater 6 / 4 / 0.
+
+⛔ The masks are named from the formula, **not** from behaviour: this party has
+no matching weakness bit, so the AND never fires and no experiment can see it.
+Exactly the same blindness as FF1's. Bytes 2, 4 and 8 move the fight but were not
+isolated to a single stat, so they are described, not named.
+
+### A correction
+
+`ENEMY_RAM` was `0x7E30` with HP at `+0x14`. The record actually starts at
+**`$7E3A`** — `$9878` fills `$7E30-$7E39` and `$9A3A` starts the record proper,
+HP goes to zero-page `$4E` = `$44 + 0x0A`, and `$7E3A + 0x0A` is the byte
+measured counting down. The old pair described the right byte from the wrong
+base and would have made every other offset in the file off by ten. Caught when
+the loader map and the RAM measurement disagreed.
+
+### Changed
+
+- `tools/lib/ff2-monsters.mjs` — corrected `ENEMY_RAM`; `RAM_ATTACK_OFF`,
+  `RAM_DEFENCE_OFF`, `RAM_WEAKNESS_OFFS`, `WEAKNESS_BONUS`, `hiNibble`/`loNibble`,
+  `monsterAttack` / `monsterDefence`.
+- `docs/FF2-MONSTERS.md` — atk and def columns, and the nibble map.
+- `tools/check-ff2-shops.mjs` — pins the formula and fights two battles, because
+  a byte check cannot tell attack from defence: they sit in the same magnitude
+  table, one nibble apart. 75/75, **7 gate reverts tested, all fail.**
+
 ## 1.8.58 — 2026-08-15
 
 ### Naming the rest of FF1's record — by finding what READS each byte

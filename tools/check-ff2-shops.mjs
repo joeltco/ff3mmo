@@ -231,6 +231,50 @@ console.log('\nmonster stats — an INDEX into a value pool, not a number');
      [T[3][1], T[3][2], T[3][3], T[3].every((v, i, a2) => i === 0 || v > a2[i - 1])],
      [129, 65, 17, false]);
 
+  // the damage formula names ATTACK, DEFENCE and the weakness masks
+  b12(0xB084, [0xA0, MN.RAM_ATTACK_OFF, 0xB1, 0x9F], 'LDY #$1A / LDA ($9F),Y — base damage');
+  b12(0xB092, [0xA0, MN.RAM_WEAKNESS_OFFS[0], 0x31, 0xA1], 'LDY #$15 / AND ($A1),Y — mask 1');
+  b12(0xB09C, [0xA0, MN.RAM_WEAKNESS_OFFS[1], 0x31, 0xA1], 'LDY #$16 / AND ($A1),Y — mask 2');
+  b12(0xB0A3, [0xA5, 0x44, 0x69, MN.WEAKNESS_BONUS], 'LDA $44 / ADC #$14 — a match is worth +20');
+  b12(0xB0AF, [0xA0, MN.RAM_DEFENCE_OFF, 0xB1, 0xA1], 'LDY #$02 / LDA ($A1),Y — the defender\'s DEFENCE');
+  eq('the Emperor is the strongest thing in the game',
+     [MN.monsterHP(rom, 127), MN.monsterAttack(rom, 127), MN.monsterDefence(rom, 127)],
+     [10000, 180, 210]);
+  eq('...and the Leg Eater the weakest',
+     [MN.monsterHP(rom, 0), MN.monsterAttack(rom, 0), MN.monsterDefence(rom, 0)], [6, 4, 0]);
+
+  // ⛔ live, because a byte check cannot tell ATTACK from DEFENCE — both sit in
+  // the same magnitude table, one nibble apart.
+  const combat = (patch, rounds) => {
+    const p2 = Uint8Array.from(rom);
+    for (const [o, v] of Object.entries(patch)) p2[MN.STAT_TABLE + 11 * MN.STAT_STRIDE + Number(o)] = v;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(p2).toString('binary'));
+    n.fromJSON(JSON.parse(SNAP));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    const pr = (k, h = 6, a2 = 16) => { n.buttonDown(1, B[k]); r(h); n.buttonUp(1, B[k]); r(a2); };
+    r(8); pr('b'); pr('b'); r(30);
+    const mm = n.cpu.mem, px = mm[0x68], py = mm[0x69];
+    for (let sl = 1; sl < 12; sl++) mm[0x7500 + sl * 0x10] = 0;
+    mm[0x7500] = 73; mm[0x750A] = 73;
+    mm[0x7502] = px; mm[0x7504] = px; mm[0x7503] = py - 1; mm[0x7505] = py - 1;
+    r(10); pr('up'); pr('a', 6, 120);
+    for (let k = 0; k < 8; k++) pr('a', 6, 60);
+    const party = () => { let t = 0; for (let i = 0; i < 4; i++) { const a2 = 0x615D + i * 0x40; t += mm[a2] | (mm[a2 + 1] << 8); } return t; };
+    const eh = () => mm[MN.ENEMY_RAM + MN.RAM_HP_OFF] | (mm[MN.ENEMY_RAM + MN.RAM_HP_OFF + 1] << 8);
+    const p0 = party(), e0 = eh();
+    for (let k = 0; k < rounds; k++) {
+      n.buttonDown(1, Controller.BUTTON_A); r(6); n.buttonUp(1, Controller.BUTTON_A); r(20);
+    }
+    return { taken: p0 - party(), dealt: e0 - eh() };
+  };
+  const atkByte = rom[MN.STAT_TABLE + 11 * MN.STAT_STRIDE + MN.STAT_FIELDS.attackByte];
+  const defByte = rom[MN.STAT_TABLE + 11 * MN.STAT_STRIDE + MN.STAT_FIELDS.defenceByte];
+  eq('zeroing the ATTACK nibble stops the party taking damage at all',
+     combat({ [MN.STAT_FIELDS.attackByte]: MN.loNibble(atkByte) }, 200).taken, 0);
+  eq('zeroing the DEFENCE nibble multiplies the damage the party deals',
+     combat({ [MN.STAT_FIELDS.defenceByte]: MN.loNibble(defByte) }, 200).dealt > 30, true);
+
   const hit = fightGuard({}, 14);
   eq('the byte at RAM_HP_OFF goes DOWN when the monster is hit',
      hit.after < hit.atStart, true);
