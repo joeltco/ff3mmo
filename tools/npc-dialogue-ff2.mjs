@@ -21,7 +21,7 @@
 //   node tools/npc-dialogue-ff2.mjs --json
 
 import {
-  loadRom, decodeLine, mapObjects, MAPOBJ_BLOCKS, INSERT_CODE, PTR_TABLE,
+  loadRom, decodeLine, mapObjects, MAPOBJ_MAPS,
   stringIdForType, lineForType, handlerForType, speakerForType,
 } from './lib/ff2-text.mjs';
 import { romaji } from './lib/romaji.mjs';
@@ -31,11 +31,11 @@ const NAMES_ONLY = process.argv.includes('--names');
 const JSON_OUT = process.argv.includes('--json');
 
 const rows = [];
-for (const { base, maps } of MAPOBJ_BLOCKS) {
-  for (let m = 0; m < maps; m++) {
-    for (const o of mapObjects(rom, base, m)) {
+{
+  for (let m = 0; m < MAPOBJ_MAPS; m++) {
+    for (const o of mapObjects(rom, m)) {
       rows.push({
-        block: '0x' + base.toString(16), mapIndex: m, slot: o.slot,
+        mapId: m, slot: o.slot,
         objType: o.type, x: o.x, y: o.y,
         sprite: o.sprite, spriteOffset: '0x' + o.spriteOffset.toString(16),
         stringId: o.stringId,
@@ -59,20 +59,19 @@ if (JSON_OUT) {
   const named = rows.filter(r => r.speaker);
   console.log(`FF2 — ${named.length} objects whose default line names a speaker\n`);
   for (const r of named) {
-    console.log(`${r.block} map ${String(r.mapIndex).padStart(2)} type ${String(r.objType).padStart(3)} ` +
+    console.log(`map ${String(r.mapId).padStart(2)} type ${String(r.objType).padStart(3)} ` +
                 `(${r.x},${r.y}) spr ${r.sprite}  «${r.speaker}»  ${r.stringTable}[${r.stringId}]`);
     console.log(`     ${r.text.slice(0, 140)}`);
   }
   const uniq = [...new Set(named.map(r => r.speaker))];
   console.log(`\ndistinct speakers (${uniq.length}): ${uniq.join(', ')}`);
 } else {
-  const maps = MAPOBJ_BLOCKS.reduce((a, b) => a + b.maps, 0);
+  const maps = MAPOBJ_MAPS;
   console.log(`FF2 map objects — ${rows.length} across ${maps} maps\n` +
               `   id = record[0] via 0x38210 + objType*2; DEFAULT line only\n`);
   let last = null;
   for (const r of rows) {
-    const key = r.block + '/' + r.mapIndex;
-    if (key !== last) { console.log(`── ${r.block} map ${r.mapIndex} ──`); last = key; }
+    if (r.mapId !== last) { console.log(`── map ${r.mapId} ──`); last = r.mapId; }
     console.log(`  type ${String(r.objType).padStart(3)} (${r.x},${r.y}) spr ${String(r.sprite).padStart(2)}` +
                 `${r.stringId === null ? '  (no handler)' : `  ${r.stringTable}[${r.stringId}] ${r.handler}`}` +
                 `${r.speaker ? '  «' + r.speaker + '»' : ''}`);

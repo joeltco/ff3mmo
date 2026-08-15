@@ -219,34 +219,41 @@ const ok = (m) => console.log('  ✓ ' + m);
   // the coordinates below were confirmed by WALKING to them in the emulator
   // and finding an NPC there.
   {
+    // ⛔ ONE table, stride 36, indexed by map id — CONFIRMED from the CPU
+    // ($9E15: mapId*4, *32, summed = *36; ADC #$B5 -> $B500 = file 0x3510).
+    // The old two-block model read maps 0-16 and 32-63 and SKIPPED 17-31.
     let objs = 0, maps = 0;
-    for (const { base, maps: n } of F2.MAPOBJ_BLOCKS) {
-      for (let m = 0; m < n; m++) {
-        const o = F2.mapObjects(rom, base, m);
-        if (o.length) { maps++; objs += o.length; }
-        if (o.some(e => e.y > 63)) bad(`FF2 block 0x${base.toString(16)} map ${m} has Y>63 — the table has moved`);
-      }
+    for (let m = 0; m < F2.MAPOBJ_MAPS; m++) {
+      const o = F2.mapObjects(rom, m);
+      if (o.length) { maps++; objs += o.length; }
+      if (o.some(e => e.y > 63)) bad(`FF2 map ${m} has Y>63 — the table has moved`);
     }
-    if (objs < 280) bad(`FF2 map objects yield only ${objs}, expected ~311`);
-    // read the base from the CONSTANT, not a literal — otherwise shifting
-    // MAPOBJ_BLOCKS silently still passes.
-    const hilda = F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[0].base, 4);
+    if (objs < 380) bad(`FF2 map objects yield only ${objs}, expected ~401`);
+    if (F2.MAPOBJ_STRIDE !== 36) bad(`FF2 MAPOBJ_STRIDE is ${F2.MAPOBJ_STRIDE}; $9E26 computes 32x+4x = 36`);
+    if (F2.MAPOBJ_TABLE !== 0x3510) bad(`FF2 MAPOBJ_TABLE is 0x${F2.MAPOBJ_TABLE.toString(16)}; ADC #$B5 gives $B500 = 0x3510`);
+    // map 4 is the Altair throne room, measured on the running game ($48 = 4)
+    const hilda = F2.mapObjects(rom, 4);
     if (!hilda.length || hilda[0].type !== 1) {
-      bad('FF2 0x3510 map 4 does not start with object type 1 — the block base has drifted');
+      bad('FF2 map 4 does not start with object type 1 — the table base has drifted');
     }
-    // ...and anchor the SECOND block too, or shifting it passes unnoticed.
-    const b2 = F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[1].base, 0);
-    if (!b2.length || b2[0].type !== 62) {
-      bad(`FF2 second block map 0 starts with type ${b2[0]?.type} — expected 62`);
+    // ⛔ the old "second block" base is simply MAP 32; anchor it by id so the
+    // contiguous reading cannot silently revert to two blocks
+    const m32 = F2.mapObjects(rom, 32);
+    if (!m32.length || m32[0].type !== 62) {
+      bad(`FF2 map 32 starts with type ${m32[0]?.type} — expected 62 (this is the old 0x3990 "block")`);
     } else if (!/ミスリル/.test(F2.decodeLine(rom, 62))) {
-      bad('FF2 object 62 no longer mentions ミスリル — the second block has drifted');
+      bad('FF2 object 62 no longer mentions ミスリル — the table has drifted');
     }
+    // ...and the range the old model SKIPPED must carry real objects
+    let skipped = 0;
+    for (let m = 17; m < 32; m++) skipped += F2.mapObjects(rom, m).length;
+    if (skipped < 70) bad(`maps 17-31 yield only ${skipped} objects — the two-block model may be back (they were skipped entirely)`);
     // string 1 IS the line the running game displayed when talking to Hilda.
     const line = F2.decodeLine(rom, 1);
     if (!/あいこと/.test(line)) {
       bad(`FF2 string 1 is "${line.slice(0, 40)}…" — not the line the running game displayed`);
     }
-    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps`);
+    if (since()) ok(`FF2 map objects: ${objs} across ${maps} maps (one table, stride 36; maps 17-31 recovered)`);
   }
 
   // 4a. objType -> dialogue. SOLVED by disassembling the talk routine
@@ -294,17 +301,25 @@ const ok = (m) => console.log('  ✓ ' + m);
     // placed types opened with a keyword insert (a pendant "speaking"). The
     // real rule must stay far below that.
     const placed = new Set();
-    for (const { base, maps: n } of F2.MAPOBJ_BLOCKS) {
-      for (let mi = 0; mi < n; mi++) for (const o of F2.mapObjects(rom, base, mi)) placed.add(o.type);
-    }
-    let insertLed = 0;
+    for (let mi = 0; mi < F2.MAPOBJ_MAPS; mi++) for (const o of F2.mapObjects(rom, mi)) placed.add(o.type);
+    let insertLed = 0, resolvable = 0;
     for (const t of placed) {
       const sid = F2.stringIdForType(rom, t);
       if (!sid) continue;
+      resolvable++;
       const raw = F2.rawString(rom, sid.table, sid.id) || [];
       if (raw[0] === F2.INSERT_CODE) insertLed++;
     }
-    if (insertLed > 25) bad(`${insertLed} FF2 placed types open with a name insert — the old rule gave 44; this looks like it is back`);
+    // ⛔ Express this as a RATIO, re-derived on the CURRENT domain. It was an
+    // absolute (>25) tuned to the old 175-type set, and recovering maps 17-31
+    // grew the domain to 231 types — the threshold went stale, not the rule.
+    // MEASURED on this domain: the real rule gives 29/174 insert-led (17%), the
+    // retracted one gives 68/174 (39%). 27% sits clear of both.
+    const ratio = insertLed / resolvable;
+    if (ratio > 0.27) {
+      bad(`${insertLed}/${resolvable} FF2 placed types open with a name insert (${(ratio * 100).toFixed(0)}%) — ` +
+          `the real rule measures 17%, the retracted one 39%; this looks like the old rule is back`);
+    }
     // ⛔ THE INDEPENDENT CHECK. A named speaker must wear ONE sprite across
     // every object type that speaks as them — Hilda cannot be a guard AND a
     // ninja AND a mage. The retracted rule failed this outright: it put ヒルダ
@@ -327,7 +342,7 @@ const ok = (m) => console.log('  ✓ ' + m);
         bad(`FF2 speaker ${nm} wears ${sprites.size} different sprites (${[...sprites].join(',')}) — one character, one sprite`);
       }
     }
-    if (since()) ok(`FF2 objType -> dialogue: 4 screen-measured pairs across BOTH tables, ${insertLed} insert-led types`);
+    if (since()) ok(`FF2 objType -> dialogue: 4 screen-measured pairs across BOTH tables, ${insertLed}/${resolvable} insert-led (${(100 * insertLed / resolvable).toFixed(0)}%, retracted rule = 39%)`);
   }
 
   // 4b. objType -> sprite. MEASURED the same way as FF1's: patch every object
@@ -342,7 +357,7 @@ const ok = (m) => console.log('  ✓ ' + m);
     // ...and it must reproduce the unpatched throne room, in order — a trace
     // captured BEFORE the table was known.
     const M4 = [20, 14, 16, 37, 37, 41, 37];
-    const o4 = F2.mapObjects(rom, F2.MAPOBJ_BLOCKS[0].base, 4);
+    const o4 = F2.mapObjects(rom, 4);
     for (let i = 0; i < M4.length; i++) {
       if (o4[i]?.sprite !== M4[i]) bad(`FF2 map 4 slot ${i} predicts sprite ${o4[i]?.sprite}, the PPU showed ${M4[i]}`);
     }
@@ -537,7 +552,7 @@ const ok = (m) => console.log('  ✓ ' + m);
     }
     // ⛔ and the variety must survive — a collapse would look fine but say nothing
     const pairs = new Set();
-    const maps = F2.MAPOBJ_BLOCKS.reduce((a, b) => a + b.maps, 0);
+    const maps = F2.MAPOBJ_MAPS;
     for (let m = 0; m < maps; m++) {
       const p = F2.npcPalettesForMap(f2, m);
       pairs.add(hxs(p.top) + '|' + hxs(p.btm));

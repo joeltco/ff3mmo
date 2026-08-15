@@ -167,9 +167,31 @@ export function speakerForType(rom, type) {
   const s = stringIdForType(rom, type);
   return s ? speakerOfString(rom, s.table, s.id) : null;
 }
-/** {type, x, y} x 12 per map. Two blocks — see the header. */
-export const MAPOBJ_BLOCKS = [{ base: 0x3510, maps: 17 }, { base: 0x3990, maps: 32 }];
+// ── map objects: ONE table, not two blocks ────────────────────────────────
+//
+// CONFIRMED from the CPU (bank 0, $9E15):
+//   ASL A / ASL A          ; mapId * 4
+//   ASL A / ROL $81  x3    ; mapId * 32
+//   ADC $80                ; 32x + 4x = mapId * 36
+//   LDA $81 / ADC #$B5     ; + $B500  ->  file 0x3510
+//   LDY #$23 / LDA ($80),Y / STA $0780,Y   ; copy 36 bytes = 12 objects x 3
+//
+// ⛔ THIS REPLACES the old `MAPOBJ_BLOCKS = [{0x3510,17},{0x3990,32}]` model.
+// There is no second block: 0x3990 is simply map 32 (0x3990-0x3510 = 32*36).
+// That model read maps 0-16 and 32-63 and SKIPPED maps 17-31 entirely — 79
+// objects, plus everything past map 63. Corrected in v1.8.39.
+export const MAPOBJ_TABLE = 0x3510;
+export const MAPOBJ_STRIDE = 36;
 export const MAPOBJ_PER_MAP = 12;
+/**
+ * How many maps the table holds.
+ *
+ * ⛔ NOT read from code — the loader takes whatever map id it is given. This is
+ * the extent over which the data still satisfies the Y <= 63 invariant: maps
+ * 0-69 are all clean and 70+ break. Treat it as a measured bound, not a
+ * constant the game enforces.
+ */
+export const MAPOBJ_MAPS = 70;
 /** 0x18 N -> string (0x100 | N) from PTR_TABLE. */
 export const INSERT_CODE = 0x18;
 
@@ -328,9 +350,9 @@ export function decodeLine(rom, id, { table = DIALOGUE_TABLE, nl = ' / ' } = {})
   return s.trim();
 }
 
-/** The 12 object slots of one map, as {slot,type,x,y}. */
-export function mapObjects(rom, base, mapIndex) {
-  const o = base + mapIndex * MAPOBJ_PER_MAP * 3;
+/** The 12 object slots of one map, as {slot,type,x,y,...}. */
+export function mapObjects(rom, mapId) {
+  const o = MAPOBJ_TABLE + mapId * MAPOBJ_STRIDE;
   const out = [];
   for (let i = 0; i < MAPOBJ_PER_MAP; i++) {
     const t = rom[o + i * 3];
@@ -394,13 +416,6 @@ export function npcPalettesForMap(rom, mapId) {
   };
 }
 
-/**
- * The global map id for a (block, index) pair from MAPOBJ_BLOCKS.
- *
- * ⛔ PARTLY INFERRED. The Altair throne room is block 0x3510 index 4 and the
- * running game reports $48 = 4, so the first block's indices ARE map ids. The
- * second block is assumed to continue at 17 because the blocks are consecutive
- * — that has NOT been measured.
- */
-export const globalMapId = (blockIndex, m) =>
-  blockIndex === 0 ? m : MAPOBJ_BLOCKS[0].maps + m;
+// ⛔ `globalMapId` is gone. It existed to paper over the two-block model, and
+// its second-block guess (17) was wrong anyway — 0x3990 is map 32. Map ids are
+// now just map ids.

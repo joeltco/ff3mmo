@@ -47,9 +47,9 @@ const rom = F2.loadRom();
 const NAMED_ONLY = process.argv.includes('--named');
 
 const types = new Map();
-for (const { base, maps } of F2.MAPOBJ_BLOCKS) {
-  for (let m = 0; m < maps; m++) {
-    for (const o of F2.mapObjects(rom, base, m)) {
+for (let m = 0; m < F2.MAPOBJ_MAPS; m++) {
+  {
+    for (const o of F2.mapObjects(rom, m)) {
       if (!types.has(o.type)) {
         const sid = F2.stringIdForType(rom, o.type);
         types.set(o.type, {
@@ -58,12 +58,12 @@ for (const { base, maps } of F2.MAPOBJ_BLOCKS) {
           off: F2.spriteOffsetForType(rom, o.type),
           text: sid ? F2.lineForType(rom, o.type, { nl: ' ' }) : '',
           name: F2.speakerForType(rom, o.type),
-          palMap: F2.globalMapId(F2.MAPOBJ_BLOCKS.findIndex(x => x.base === base), m),
+          palMap: m,
           maps: new Set(), n: 0,
         });
       }
       const e = types.get(o.type);
-      e.maps.add(`${base.toString(16)}/${m}`); e.n++;
+      e.maps.add(m); e.n++;
     }
   }
 }

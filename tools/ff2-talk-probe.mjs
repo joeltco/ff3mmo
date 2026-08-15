@@ -27,7 +27,7 @@
 // on any mismatch, so it can be run as a check.
 //
 //   node tools/ff2-talk-probe.mjs --state ff2-town.state --talk 7,19
-//   node tools/ff2-talk-probe.mjs --state ff2-town.state --map 0x3510,4 --all
+//   node tools/ff2-talk-probe.mjs --state ff2-town.state --map 4 --all
 //
 // Reads `nes.ppu.vramMem`, `nes.cpu.mem` and the raw ROM file. (jsnes'
 // Mapper1.load returns `cpu.mem[address]` for $8000-$FFFF, so the mapped PRG is
@@ -45,7 +45,7 @@ const flag = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : ar
 const STATE = flag('state', null);
 const SHOT = flag('shot', null);
 const TALK = flag('talk', null);
-const MAP = flag('map', '0x3510,4');
+const MAP = flag('map', '4');
 const ALL = args.includes('--all');
 const ROMP = process.env.FF2_ROM || '/home/joeltco/roms/ff2-jp.nes';
 
@@ -203,9 +203,8 @@ function talkTo(tx, ty) {
 }
 
 // ── run it ────────────────────────────────────────────────────────────────
-const [blockStr, mapStr] = MAP.split(',');
-const BLOCK = parseInt(blockStr, 16), MAPI = parseInt(mapStr, 10);
-const objects = F2.mapObjects(rom, BLOCK, MAPI);
+const MAPI = parseInt(MAP, 10);
+const objects = F2.mapObjects(rom, MAPI);
 
 const targets = ALL
   ? objects.map(o => ({ x: o.x, y: o.y, type: o.type }))
@@ -218,7 +217,7 @@ const targets = ALL
 
 if (!targets.length) { console.error('give --talk X,Y or --all'); process.exit(1); }
 
-console.log(`FF2 talk probe — block 0x${BLOCK.toString(16)} map ${MAPI}\n`);
+console.log(`FF2 talk probe — map ${MAPI}\n`);
 const results = [];
 for (const t of targets) {
   const said = talkTo(t.x, t.y);

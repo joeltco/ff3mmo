@@ -406,16 +406,33 @@ map 39, his own cave. The gate now asserts both.
 
 ### The objects
 
-Map objects are **12 slots of 3 bytes** (type, X + flags, Y), in **two blocks** —
-FF2 does *not* use FF1's `0x3410` (332 of 569 entries there give Y > 63):
+Map objects are **12 slots of 3 bytes** (type, X + flags, Y) in **ONE table**,
+indexed straight by map id — FF2 does *not* use FF1's `0x3410` (332 of 569
+entries there give Y > 63):
 
-| block | maps |
-|---|---|
-| `0x3510` | 17 |
-| `0x3990` | 32 |
+```
+map objects = 0x3510 + mapId * 36        (bank 0, $B500)
+```
 
-**311 objects across 44 populated maps.** Coordinates confirmed by *walking to
+Confirmed from the CPU:
+
+```
+$9E15  ASL A / ASL A         ; mapId * 4
+$9E1D  ASL A / ROL $81  x3   ; mapId * 32
+$9E26  ADC $80               ; 32x + 4x  =  mapId * 36
+$9E2A  LDA $81 / ADC #$B5    ; + $B500   =  file 0x3510
+$9E30  LDY #$23              ; copy 36 bytes = 12 objects x 3
+```
+
+**401 objects across 60 populated maps.** Coordinates confirmed by *walking to
 them* in the emulator and finding an NPC there.
+
+> ⛔ **This replaces a two-block model that was wrong.** The catalog used to read
+> `[{0x3510, 17}, {0x3990, 32}]`. There is no second block — `0x3990` is simply
+> **map 32** (`0x3990 - 0x3510 = 32 x 36`). That model read maps 0-16 and 32-63
+> and **skipped maps 17-31 entirely**: 79 objects, including **ヨーゼフ (Josef)**,
+> a main character who was missing from the catalog. Corrected in v1.8.39, which
+> took the named cast from 13 speakers to 18.
 
 ### objType → sprite
 
@@ -717,10 +734,9 @@ map-driven slots exact**.
 > map, which is why a naive "the list feeds all eight slots" read is off by one
 > and then diverges.
 
-> ⛔ The second `MAPOBJ_BLOCKS` block's global map ids are **inferred**: block 0
-> index 4 is the throne room and the game reports `$48 = 4`, so block 0's indices
-> are map ids; block 1 is assumed to continue at 17 because the blocks are
-> consecutive. That has not been measured.
+> Map ids are just map ids — see the single-table note above. The old
+> `globalMapId` helper existed only to paper over the two-block model, and its
+> guess (block 1 starts at 17) was wrong; `0x3990` is map 32.
 
 ### A name the sheet caught
 

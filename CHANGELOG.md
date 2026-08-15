@@ -18,6 +18,66 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.39 — 2026-08-15
+
+### Verifying block 1's map ids disproved the two-block model — 79 objects were missing
+
+v1.8.38 shipped `globalMapId` with block 1's map ids **inferred** (assumed to
+start at 17). Checking that assumption killed the model it belonged to.
+
+```
+map objects = 0x3510 + mapId * 36        (bank 0, $B500)
+```
+
+```
+$9E15  ASL A / ASL A         ; mapId * 4
+$9E1D  ASL A / ROL $81  x3   ; mapId * 32
+$9E26  ADC $80               ; 32x + 4x  =  mapId * 36
+$9E2A  LDA $81 / ADC #$B5    ; + $B500   =  file 0x3510
+$9E30  LDY #$23              ; copy 36 bytes = 12 objects x 3
+```
+
+**There is no second block.** `0x3990 - 0x3510 = 1152 = 32 x 36`, so `0x3990` is
+simply **map 32** of one contiguous table. The old
+`[{0x3510, 17}, {0x3990, 32}]` model read maps 0-16 and 32-63 and **skipped maps
+17-31 entirely**.
+
+| | before | after |
+|---|---|---|
+| objects | 311 | **401** |
+| populated maps | 44 | **60** |
+| distinct speakers | 13 | **18** |
+| named sheet cells | 23 | **36** |
+
+The 79 recovered objects include **ヨーゼフ (Josef)** — a main FF2 party member
+who was absent from the catalog entirely — plus マスター, ゴートス, こども and
+ひりゅう.
+
+⛔ The two-block reading was never measured; it came from spotting two plausible
+regions. The single-table rule is read off the CPU, and the arithmetic (`32x +
+4x`) is the kind of thing no structural guess produces.
+
+### Changed
+
+- `tools/lib/ff2-text.mjs` — `MAPOBJ_TABLE` / `MAPOBJ_STRIDE` / `MAPOBJ_MAPS`
+  replace `MAPOBJ_BLOCKS`; `mapObjects(rom, mapId)` now takes a map id.
+  `globalMapId` deleted — it existed only to paper over the block model.
+- `tools/npc-dialogue-ff2.mjs`, `tools/npc-sheet-ff2.mjs`,
+  `tools/ff2-talk-probe.mjs` — single-table, map ids throughout.
+- `tools/check-ff12-text.mjs` — pins the table, stride 36, map 4 (throne room)
+  and map 32 (the old "second block" base, now anchored BY ID), and asserts maps
+  17-31 carry real objects so the skip cannot come back. **4 reverts tested, all
+  fail**, including reinstating the skip.
+
+⛔ `MAPOBJ_MAPS = 70` is a **measured bound, not a constant the game enforces** —
+the loader takes whatever map id it is handed. Maps 0-69 satisfy the Y <= 63
+invariant and 70+ break, so that is where the data stops.
+
+⛔ One threshold went stale with the bigger domain: the insert-led check was an
+absolute (`> 25`) tuned to 175 placed types. With 231 it now re-derives as a
+**ratio** — the real rule measures 17%, the retracted one 39%, so the bar sits
+at 27%.
+
 ## 1.8.38 — 2026-08-15
 
 ### FF2's palette source traced — and it is FF3's shape, not FF1's
