@@ -2,8 +2,8 @@
 // ff1-script-dump.mjs — FF1's script, decoded.
 //
 // The TEXT decoding is verified against the running game: string 49 is exactly
-// the box a Coneria Castle guard displayed. What is NOT known is which map
-// object speaks which string — see tools/lib/ff1-text.mjs.
+// the box a Coneria Castle guard displayed. Which OBJECT says which string is
+// resolved in tools/npc-dialogue-ff1.mjs (four-byte table at 0x395E5).
 //
 //   node tools/ff1-script-dump.mjs
 //   node tools/ff1-script-dump.mjs --names

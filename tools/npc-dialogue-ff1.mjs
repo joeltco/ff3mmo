@@ -8,15 +8,13 @@
 //   node tools/npc-dialogue-ff1.mjs --sprites  # group by sprite entry
 //   node tools/npc-dialogue-ff1.mjs --json
 //
-// ⛔ NO DIALOGUE HERE, ON PURPOSE. An earlier version paired each object with
-// string[objType] and shipped that as verified. It is WRONG — see the header of
-// tools/lib/ff1-text.mjs. Patching every object on Coneria Castle (map 8) to
-// type 100 still made a talk fetch string 120, and that map's real types decode
-// to lines about Bahamut and a submarine. FF1's script IS decoded and verified
-// against the screen; what is unknown is which object speaks which line, so
-// this tool no longer guesses.
+// ⛔ dialogueId is NOT objType — that was a wrong claim in v1.8.25. The real
+// link is a FOUR-BYTE record per type at file 0x395E5:
+//     [0] flag index   [1] default line   [2] line after that event   [3] 0
+// A per-type handler picks between [1] and [2], so [1] is "the first thing this
+// NPC says", not the only thing. See tools/lib/ff1-text.mjs for the trace.
 
-import { loadRom, mapObjects, MAPOBJ_PER_MAP } from './lib/ff1-text.mjs';
+import { loadRom, mapObjects, MAPOBJ_PER_MAP, decodeString } from './lib/ff1-text.mjs';
 
 const rom = loadRom();
 const args = process.argv.slice(2);
@@ -30,14 +28,16 @@ for (let mapId = 0; mapId < 64; mapId++) {
       mapId, slot: o.slot, objType: o.type, x: o.x, y: o.y,
       inRoom: o.inRoom, still: o.still,
       spriteEntry: o.sprite, spriteOffset: '0x' + o.spriteOffset.toString(16).toUpperCase(),
+      dialogueId: o.dialogueId, dialogueAfter: o.dialogueAfter,
+      text: decodeString(rom, o.dialogueId),
     });
   }
 }
 
 if (args.includes('--json')) {
   console.log(JSON.stringify({
-    rule: 'sprite = 0xA210 + SPRITE_TABLE[objType] * 0x100 (table at file 0x2E10)',
-    note: 'dialogueId is NOT objType — that link is unknown',
+    rule: 'sprite = 0xA210 + SPRITE_TABLE[objType]*0x100 (0x2E10); ' +
+          'dialogue = [flag, default, after, 0] at 0x395E5 + objType*4',
     slotsPerMap: MAPOBJ_PER_MAP, objects: rows,
   }, null, 2));
 } else if (args.includes('--sprites')) {
@@ -59,6 +59,7 @@ if (args.includes('--json')) {
     if (r.mapId !== last) { console.log(`── map ${r.mapId} ──`); last = r.mapId; }
     const f = (r.inRoom ? ' [room]' : '') + (r.still ? ' [still]' : '');
     console.log(`  slot${String(r.slot).padStart(2)}  type ${String(r.objType).padStart(3)} @(${r.x},${r.y})${f}` +
-                `   sprite ${String(r.spriteEntry).padStart(2)}  ${r.spriteOffset}`);
+                `   sprite ${String(r.spriteEntry).padStart(2)} ${r.spriteOffset}   str ${r.dialogueId}`);
+    console.log(`        "${r.text}"`);
   }
 }

@@ -101,17 +101,38 @@ const ok = (m) => console.log('  ✓ ' + m);
     if (since()) ok('FF1 objType -> sprite: 6 probes + map 8 10/10, all types land in entries 18-47');
   }
 
-  // 5. the names are in the SCRIPT — not attributed to any object
-  //
-  // ⛔ There is no "object N is Jane" assertion here any more. The old gate had
-  // one, built on dialogueId == objType, which is FALSE: patching every map-8
-  // object to type 100 still made a talk fetch string 120.
-  const NAMED = [[59, /^I am Jane, Queen of/], [160, /^I am Lukahn/],
-                 [139, /^I am Jim\./], [71, /^I am Arylon/], [177, /^My name is Kope/]];
-  for (const [id, re] of NAMED) {
-    if (!re.test(F1.decodeString(rom, id))) bad(`FF1 string ${id} no longer names itself`);
+  // 5. objType -> dialogue: a FOUR-BYTE record at 0x395E5, byte 1 is the
+  // default line. Traced from the talk path ($DB71 <- $D4B1 <- $CA03 <- $902B).
+  {
+    // MEASURED: a Coneria Castle guard displayed string 49; its type is 32.
+    if (F1.dialogueForType(rom, 32) !== 49) {
+      bad(`FF1 objType 32 says string ${F1.dialogueForType(rom, 32)}, the game displayed 49`);
+    }
+    const rec = F1.dialogueRecordForType(rom, 32);
+    if (rec.join(',') !== '18,49,50,0') bad(`FF1 type 32 record is [${rec}], expected [18,49,50,0]`);
+    // ⛔ and it must NOT be the old objType==dialogueId rule
+    if (F1.dialogueForType(rom, 100) === 100) bad('FF1 dialogue still resolves as objType — the retracted rule is back');
+    // map 8 is Coneria Castle: every line must fall in that block
+    for (const o of F1.mapObjects(rom, 8)) {
+      if (o.dialogueId < 49 || o.dialogueId > 66) {
+        bad(`FF1 map 8 type ${o.type} says string ${o.dialogueId}, outside the Coneria Castle block 49-66`);
+      }
+    }
+    if (since()) ok('FF1 objType -> dialogue: type 32 = string 49 as displayed; map 8 all within 49-66');
   }
-  if (since()) ok(`FF1 script names intact: Jane, Lukahn, Jim, Arylon, Kope (strings, not objects)`);
+
+  // 6. named characters land on the RIGHT objects
+  // Jane is Queen of Coneria and must be inside Coneria Castle (map 8). Under
+  // the retracted rule she landed on map 12, which is how it looked plausible.
+  {
+    const WHO = [[8, /^I am Jane, Queen of/, 'Jane in Coneria Castle'],
+                 [39, /^I am BAHAMUT/, 'Bahamut in his cave']];
+    for (const [mapId, re, what] of WHO) {
+      const hit = F1.mapObjects(rom, mapId).some(o => re.test(F1.decodeString(rom, o.dialogueId)));
+      if (!hit) bad(`FF1: ${what} — no object on map ${mapId} speaks that line`);
+    }
+    if (since()) ok('FF1 named characters sit on the right maps (Jane in Coneria Castle, Bahamut in his cave)');
+  }
 }
 
 // ══ FF2 ═══════════════════════════════════════════════════════════════════

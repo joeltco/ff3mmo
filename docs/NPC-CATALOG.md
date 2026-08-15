@@ -291,26 +291,47 @@ half of the 48-entry bank (0–17 are the player classes and vehicles).
    nothing, which is why the first probe returned identical results for all
    eight types.
 
-### ⛔ RETRACTED: dialogueId is NOT objType
+### objType → dialogue: a four-byte record
 
-An earlier version of this document claimed `dialogueId == objType`, verified.
-**That was wrong**, and the "confirmation" was a coincidence: talking in Coneria
-Castle produced string 49, and *some* map happened to contain an object of
-type 49.
+Traced by hooking the string-pointer fetch and walking the stack back
+(`$DB71` ← `$D4B1` ← `$CA03` ← `$902B` in bank 14):
 
-Coneria Castle is map 8. Its object types are 32, 34, 35, 37, 38, 41, 42, 44, 46
-— whose strings are about Bahamut, a submarine and Garland, nonsense for that
-castle. And patching **every** map-8 object to type 100 still made a talk fetch
-string **120** (`"::TCELES B HSUP / A magic spell?"`, which is exactly what
-appeared on screen).
+```
+$902B  LDA $6F00,X    ; the object's TYPE, from the RAM object array
+       ASL A / ASL A  ; type * 4
+       ADC #$D5 ...   ; + $95D5
+$9046  LDA ($14),Y    ; four bytes
+$9059  JMP ($0016)    ; per-type handler ($90D3 / $91D3 jump tables)
+```
 
-The **text decoding is unaffected and still verified** against the running game:
-string 49 is exactly the box the guard displayed. FF1's script and its
-self-naming characters (Jane, Lukahn, Jim, Arylon, Kope, Bahamut) are real.
-What is unknown is **which object speaks which line** — so
-`tools/npc-dialogue-ff1.mjs` no longer pairs them, and the roster
-`ff1-npc-dialogue.txt` has been replaced by `ff1-map-objects.txt` (positions +
-sprites, verified) and `ff1-script.txt` (the text, verified).
+Each type has a **four-byte record at CPU `$95D5` in bank 14 = file `0x395E5`**:
+
+| byte | meaning |
+|---|---|
+| 0 | game-flag / condition index |
+| 1 | **the line shown by default** |
+| 2 | the line after that event |
+| 3 | usually 0 |
+
+A per-type handler picks between [1] and [2] on a flag, so there is no single
+"the" id — but **[1] is the first thing an NPC says**.
+
+**Measured**: the Coneria Castle guard displayed string 49, and type 32's record
+is `(18, 49, 50, 0)`. Decoding [1] map-wide comes out location-coherent: map 8 is
+Coneria Castle (King / LUTE / Queen locked inside), map 2 is ElfLand (Save our
+Prince / Astos / Dark Elf), map 12 is the Temple of Fiends past.
+
+### ⛔ The retraction that led here
+
+v1.8.25 claimed `dialogueId == objType`, verified. **It was wrong** — the
+"confirmation" was a coincidence (a talk gave string 49; some map happened to
+hold an object of type 49). Patching *every* map-8 object to type 100 still made
+a talk fetch string 120, which is what forced the trace above.
+
+The tell that it was wrong all along: under that rule **Jane, Queen of Coneria,
+sat on map 12**. Under the real table she is **object type 41 on map 8 —
+Coneria Castle**, where a Queen of Coneria belongs. Bahamut likewise moved to
+map 39, his own cave. The gate now asserts both.
 
 ---
 

@@ -64,6 +64,32 @@
 // ten objects 10/10. All 182 placed types resolve to entries 18-47 — exactly
 // the NPC half of the 48-entry bank (0-17 are the player classes/vehicles).
 //
+// ── objType -> dialogue ───────────────────────────────────────────────────
+// From the talk path, traced by hooking the string-pointer fetch and walking
+// the stack back ($DB71 <- $D4B1 <- $CA03 <- $902B in bank 14):
+//
+//   $902B  LDA $6F00,X    ; the object's TYPE, out of the RAM object array
+//          ASL A / ASL A  ; type * 4
+//          ADC #$D5 ...   ; + $95D5
+//   $9046  LDA ($14),Y    ; four bytes
+//   $9059  ...            ; JMP ($0016) into a per-type handler
+//                         ; (jump table $90D3 for type<128, $91D3 for >=128)
+//
+// So each type has a FOUR-BYTE entry at CPU $95D5 in bank 14 = file 0x395E5:
+//
+//     [0] a game-flag / condition index
+//     [1] the dialogue id shown by default     <- this is the line you hear
+//     [2] the dialogue id after that event
+//     [3] usually 0
+//
+// The per-type handler chooses between [1] and [2] on a flag, so there is no
+// single "the" id — but [1] is the first line an NPC gives you.
+//
+// MEASURED: a Coneria Castle guard displayed string 49, and type 32's entry is
+// (18, 49, 50, 0). Decoding [1] for whole maps comes out location-coherent:
+// map 8 is Coneria Castle (King / LUTE / Queen locked inside), map 2 is ElfLand
+// (Save our Prince / Astos / Dark Elf), map 12 is the Temple of Fiends past.
+//
 // ── ⛔ dialogueId is NOT objType ──────────────────────────────────────────
 // An earlier version of this file claimed it was. That was WRONG, and the
 // "confirmation" was a coincidence: talking in Coneria Castle produced string
@@ -75,8 +101,8 @@
 // type 100 still made a talk fetch string 120, not 100.
 //
 // The TEXT decoding below is unaffected and still verified against the screen
-// (string 49 is exactly the line the game displayed). Only the object -> string
-// link is unknown.
+// (string 49 is exactly the line the game displayed). The real link is the
+// four-byte table above.
 
 import fs from 'node:fs';
 
@@ -93,6 +119,8 @@ export const MAPOBJ_STRIDE = 48;
 export const SPRITE_TABLE = 0x2E10;
 export const SPRITE_BASE = 0xA210;
 export const MAP_ID_ADDR = 0x0048;     // RAM: the current map
+/** Four bytes per objType: [flag, defaultStringId, afterStringId, 0]. */
+export const DIALOGUE_TABLE = 0x395E5;
 
 const SYM = {
   0xBF: ',', 0xC0: '.', 0xC2: '!', 0xC3: ':', 0xC4: "'", 0xC5: '?', 0xBE: "'",
@@ -138,6 +166,12 @@ export function decodeString(rom, id, { nl = ' / ', max = 260 } = {}) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
+/** The four-byte dialogue record for an object type. */
+export const dialogueRecordForType = (rom, type) =>
+  [0, 1, 2, 3].map(k => rom[DIALOGUE_TABLE + type * 4 + k]);
+/** The string id an object type says by default (record byte 1). */
+export const dialogueForType = (rom, type) => rom[DIALOGUE_TABLE + type * 4 + 1];
+
 /** The sprite ROM offset an object type wears. */
 export const spriteOffsetForType = (rom, type) => SPRITE_BASE + rom[SPRITE_TABLE + type] * 0x100;
 /** The 0..47 bank index, for cross-checking against a PPU trace. */
@@ -158,6 +192,8 @@ export function mapObjects(rom, mapId) {
       inRoom: !!(xb & 0x80), still: !!(xb & 0x40),
       sprite: rom[SPRITE_TABLE + t] + 18,
       spriteOffset: SPRITE_BASE + rom[SPRITE_TABLE + t] * 0x100,
+      dialogueId: rom[DIALOGUE_TABLE + t * 4 + 1],
+      dialogueAfter: rom[DIALOGUE_TABLE + t * 4 + 2],
     });
   }
   return out;

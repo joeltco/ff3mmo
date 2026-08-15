@@ -1,329 +1,616 @@
 FF1 map objects — 287 across 40 maps   (sprite = 0xA210 + table[objType]*0x100)
 
 ── map 0 ──
-  slot 0  type  49 @(16,1)   sprite 25  0xA910
-  slot 1  type  50 @(7,13)   sprite 25  0xA910
-  slot 2  type  52 @(4,1) [still]   sprite 29  0xAD10
-  slot 3  type  53 @(15,12)   sprite 21  0xA510
-  slot 4  type  54 @(18,20)   sprite 19  0xA310
-  slot 5  type  55 @(5,6)   sprite 20  0xA410
-  slot 6  type  56 @(27,5)   sprite 19  0xA310
-  slot 7  type  57 @(30,11)   sprite 28  0xAC10
+  slot 0  type  49 @(16,1)   sprite 25 0xA910   str 67
+        "The King is sure that / someday the LIGHT / WARRIORS will come to / save the Princess, / just as in Lukahn's / prophecy."
+  slot 1  type  50 @(7,13)   sprite 25 0xA910   str 70
+        "Go to the King."
+  slot 2  type  52 @(4,1) [still]   sprite 29 0xAD10   str 69
+        "As legend foretold, once / again the ORBS shine'' / Quickly, to fulfill the / legend, take them to the / Temple north of here, / and stand in the center."
+  slot 3  type  53 @(15,12)   sprite 21 0xA510   str 71
+        "I am Arylon, the Dancer'"
+  slot 4  type  54 @(18,20)   sprite 19 0xA310   str 72
+        "This is Coneria, the / dream city."
+  slot 5  type  55 @(5,6)   sprite 20 0xA410   str 51
+        "Please' / Save the Princess'"
+  slot 6  type  56 @(27,5)   sprite 19 0xA310   str 51
+        "Please' / Save the Princess'"
+  slot 7  type  57 @(30,11)   sprite 28 0xAC10   str 75
+        "My home is Pravoka, a / beautiful port city far / east of here."
 ── map 1 ──
-  slot 0  type   4 @(5,7) [still]   sprite 37  0xB510
-  slot 1  type  63 @(13,16)   sprite 28  0xAC10
-  slot 2  type  63 @(12,3)   sprite 28  0xAC10
-  slot 3  type  63 @(24,21)   sprite 28  0xAC10
-  slot 4  type  64 @(29,8)   sprite 29  0xAD10
-  slot 5  type  65 @(8,14)   sprite 19  0xA310
-  slot 6  type  66 @(19,11)   sprite 27  0xAB10
-  slot 7  type  67 @(20,25)   sprite 28  0xAC10
+  slot 0  type   4 @(5,7) [still]   sprite 37 0xB510   str 8
+        "Aye, I am Bikke the / Pirate, and surprised I / am that you scurvy dogs / have the nerve to face / me. / Mates' / Get those landlubbers'"
+  slot 1  type  63 @(13,16)   sprite 28 0xAC10   str 82
+        "Thank you. We don't need / to be afraid of pirates / anymore."
+  slot 2  type  63 @(12,3)   sprite 28 0xAC10   str 82
+        "Thank you. We don't need / to be afraid of pirates / anymore."
+  slot 3  type  63 @(24,21)   sprite 28 0xAC10   str 82
+        "Thank you. We don't need / to be afraid of pirates / anymore."
+  slot 4  type  64 @(29,8)   sprite 29 0xAD10   str 83
+        "I have escaped from / Melmond, in the west. / My town is in trouble. / Please help them''"
+  slot 5  type  65 @(8,14)   sprite 19 0xA310   str 84
+        "The Elves live across / the sea. Matoya's HERB / is the only thing that / will wake their Prince."
+  slot 6  type  66 @(19,11)   sprite 27 0xAB10   str 85
+        "This town has been / invaded by pirates."
+  slot 7  type  67 @(20,25)   sprite 28 0xAC10   str 87
+        "Help'"
 ── map 2 ──
-  slot 0  type  77 @(37,23)   sprite 43  0xBB10
-  slot 1  type  78 @(38,1)   sprite 43  0xBB10
-  slot 2  type  79 @(28,11)   sprite 43  0xBB10
-  slot 3  type  80 @(24,15) [still]   sprite 43  0xBB10
-  slot 4  type  81 @(9,15)   sprite 43  0xBB10
-  slot 5  type  82 @(10,6)   sprite 43  0xBB10
-  slot 6  type  83 @(4,5) [still]   sprite 42  0xBA10
-  slot 7  type  84 @(15,27) [still]   sprite 42  0xBA10
+  slot 0  type  77 @(37,23)   sprite 43 0xBB10   str 97
+        "Save our Prince'"
+  slot 1  type  78 @(38,1)   sprite 43 0xBB10   str 98
+        "Our Prince was to / become the King of / ElfLand."
+  slot 2  type  79 @(28,11)   sprite 43 0xBB10   str 99
+        "Long ago I wandered to / the Northwest. I found / an ancient castle that / was so spooky, I left / immediately."
+  slot 3  type  80 @(24,15) [still]   sprite 43 0xBB10   str 101
+        "Astos wears a disguise, / and lurks in seclusion."
+  slot 4  type  81 @(9,15)   sprite 43 0xBB10   str 102
+        "The Prince must wake / soon, or the power of / the Dark Elf will / dominate'"
+  slot 5  type  82 @(10,6)   sprite 43 0xBB10   str 104
+        "Swords and armors made / of silver are / very powerful."
+  slot 6  type  83 @(4,5) [still]   sprite 42 0xBA10   str 105
+        "I can see a cave above / the crescent:: / To the north of the / volcano, there you will / find the FLOATER."
+  slot 7  type  84 @(15,27) [still]   sprite 42 0xBA10   str 106
+        "In the desert south of / the crescent, something / is emerging from below / the sand:: / Use the FLOATER'"
 ── map 3 ──
-  slot 0  type  11 @(26,1)   sprite 26  0xAA10
-  slot 1  type 104 @(8,3)   sprite 28  0xAC10
-  slot 2  type 105 @(22,3)   sprite 28  0xAC10
-  slot 3  type 106 @(21,17)   sprite 28  0xAC10
-  slot 4  type 107 @(12,1) [still]   sprite 29  0xAD10
-  slot 5  type 108 @(14,13)   sprite 28  0xAC10
-  slot 6  type 109 @(15,22)   sprite 28  0xAC10
-  slot 7  type 110 @(29,18) [still]   sprite 29  0xAD10
-  slot 8  type 111 @(24,7)   sprite 28  0xAC10
-  slot 9  type 112 @(24,23)   sprite 28  0xAC10
-  slot10  type 113 @(29,9)   sprite 28  0xAC10
-  slot11  type 114 @(20,26)   sprite 19  0xA310
-  slot12  type 115 @(22,12)   sprite 19  0xA310
-  slot13  type 116 @(25,13)   sprite 30  0xAE10
+  slot 0  type  11 @(26,1)   sprite 26 0xAA10   str 27
+        "Everybody knows me. / What?' You've never / heard of Dr. Unne?"
+  slot 1  type 104 @(8,3)   sprite 28 0xAC10   str 122
+        "Melmond was once a / beautiful town."
+  slot 2  type 105 @(22,3)   sprite 28 0xAC10   str 123
+        "The Titan who lives in / the tunnel eats gems. / He loves RUBIES."
+  slot 3  type 106 @(21,17)   sprite 28 0xAC10   str 124
+        "The Vampire is gone, but / the earth continues to / rot. What causes this?"
+  slot 4  type 107 @(12,1) [still]   sprite 29 0xAD10   str 127
+        "Look' The Earth ORB is / shining again."
+  slot 5  type 108 @(14,13)   sprite 28 0xAC10   str 129
+        "Are you the / LIGHT WARRIORS?"
+  slot 6  type 109 @(15,22)   sprite 28 0xAC10   str 131
+        "The Vampire is gone, but / the earth still rots?::"
+  slot 7  type 110 @(29,18) [still]   sprite 29 0xAD10   str 130
+        "Pass through the Titan's / Tunnel, then south to / find Sarda, the Sage."
+  slot 8  type 111 @(24,7)   sprite 28 0xAC10   str 132
+        "In the northern world, / there once was a / prosperous civilization, / but now it is ruins."
+  slot 9  type 112 @(24,23)   sprite 28 0xAC10   str 134
+        "LIGHT WARRIORS:: / Thanks to you, the earth / is beginning to revive::"
+  slot10  type 113 @(29,9)   sprite 28 0xAC10   str 135
+        "They say the ancient / people used a stone to / make their ship float."
+  slot11  type 114 @(20,26)   sprite 19 0xA310   str 137
+        "Sarda does not fear the / evils of the cave."
+  slot12  type 115 @(22,12)   sprite 19 0xA310   str 24
+        "WARRIORS. / Revive the Power of / the ORBS'"
+  slot13  type 116 @(25,13)   sprite 30 0xAE10   str 134
+        "LIGHT WARRIORS:: / Thanks to you, the earth / is beginning to revive::"
 ── map 4 ──
-  slot 0  type  21 @(42,10) [still]   sprite 29  0xAD10
-  slot 1  type 119 @(38,11) [still]   sprite 29  0xAD10
-  slot 2  type 120 @(36,10) [still]   sprite 29  0xAD10
-  slot 3  type 121 @(35,8) [still]   sprite 29  0xAD10
-  slot 4  type 122 @(35,6) [still]   sprite 29  0xAD10
-  slot 5  type 123 @(36,4) [still]   sprite 29  0xAD10
-  slot 6  type 124 @(38,3) [still]   sprite 29  0xAD10
-  slot 7  type 125 @(40,3) [still]   sprite 29  0xAD10
-  slot 8  type 126 @(42,4) [still]   sprite 29  0xAD10
-  slot 9  type 127 @(43,6) [still]   sprite 29  0xAD10
-  slot10  type 128 @(43,8) [still]   sprite 29  0xAD10
-  slot11  type 129 @(5,1) [still]   sprite 28  0xAC10
-  slot12  type 130 @(40,11) [still]   sprite 29  0xAD10
-  slot13  type 131 @(16,7)   sprite 19  0xA310
+  slot 0  type  21 @(42,10) [still]   sprite 29 0xAD10   str 43
+        "Great job vanquishing / the Earth FIEND. Now, / the Fire FIEND wakes. / With this CANOE go to / the VOLCANO, and defeat / that FIEND also'"
+  slot 1  type 119 @(38,11) [still]   sprite 29 0xAD10   str 140
+        "We, the Twelve Sages, / were lead here by the / stars and prophecy."
+  slot 2  type 120 @(36,10) [still]   sprite 29 0xAD10   str 150
+        "The Temple of FIENDS is / in the center of the / Four Altars. The time / has come to destroy the / source of evil."
+  slot 3  type 121 @(35,8) [still]   sprite 29 0xAD10   str 151
+        "With the four ORBS / shining again the Time / Gate can be broken. The / true enemy is 2000 years / in the past."
+  slot 4  type 122 @(35,6) [still]   sprite 29 0xAD10   str 152
+        "The world was suddenly / thrown into disorder. / You must restore it."
+  slot 5  type 123 @(36,4) [still]   sprite 29 0xAD10   str 153
+        "Time is repeating. / In order to break the / Time!Loop you must / eliminate the enemy who / controls from 2000 years / in the past."
+  slot 6  type 124 @(38,3) [still]   sprite 29 0xAD10   str 154
+        "Someone travelled 2000 / years to the past. The / four FIENDS were sent / forward in time. Those / FIENDS threaten to / destroy the world today."
+  slot 7  type 125 @(40,3) [still]   sprite 29 0xAD10   str 155
+        "I see now. / Someone who travelled / back 2000 years is the / cause of the world's / destruction. After 2000 / years he will travel / back again:: / Then again::Then again::"
+  slot 8  type 126 @(42,4) [still]   sprite 29 0xAD10   str 156
+        "Time will repeat itself / every 2000 years. / Break the Time!Loop'"
+  slot 9  type 127 @(43,6) [still]   sprite 29 0xAD10   str 157
+        "In the Temple of FIENDS / are the remaining SKY / WARRIORS. They fought / the FIENDS and are now / bats'"
+  slot10  type 128 @(43,8) [still]   sprite 29 0xAD10   str 149
+        "Quickly, before all is / burnt, hurry to Gurgu / Volcano and stop the / FIEND of Fire."
+  slot11  type 129 @(5,1) [still]   sprite 28 0xAC10   str 159
+        "For ten years I probed / for the FLOATER. CANOE / north, to the Ice Cave."
+  slot12  type 130 @(40,11) [still]   sprite 29 0xAD10   str 160
+        "I am Lukahn. / Now all legends and / prophecy will be / fulfilled. Our path has / been decided."
+  slot13  type 131 @(16,7)   sprite 19 0xA310   str 161
+        "LIGHT WARRIORS, you can / do it'"
 ── map 5 ──
-  slot 0  type  19 @(49,19) [still]   sprite 38  0xB610
-  slot 1  type 174 @(56,60)   sprite 28  0xAC10
-  slot 2  type 175 @(41,59)   sprite 26  0xAA10
-  slot 3  type 176 @(58,41)   sprite 26  0xAA10
-  slot 4  type 177 @(10,52)   sprite 19  0xA310
-  slot 5  type 178 @(38,54)   sprite 21  0xA510
-  slot 6  type 179 @(12,31)   sprite 26  0xAA10
-  slot 7  type 180 @(27,43)   sprite 28  0xAC10
-  slot 8  type 181 @(58,49)   sprite 28  0xAC10
-  slot 9  type 182 @(16,16)   sprite 37  0xB510
-  slot10  type 183 @(23,59)   sprite 28  0xAC10
-  slot11  type 184 @(41,51)   sprite 34  0xB210
-  slot12  type 185 @(41,49) [still]   sprite 23  0xA710
-  slot13  type 186 @(23,54)   sprite 20  0xA410
+  slot 0  type  19 @(49,19) [still]   sprite 38 0xB610   str 35
+        "That pirate trapped me / in the BOTTLE. / I will draw OXYALE from / the bottom of the spring / for you."
+  slot 1  type 174 @(56,60)   sprite 28 0xAC10   str 192
+        "This town is Gaia::"
+  slot 2  type 175 @(41,59)   sprite 26 0xAA10   str 193
+        "Have you been to the / city south of here? I / just cannot understand / a word spoken there. / I have wondered what / language::"
+  slot 3  type 176 @(58,41)   sprite 26 0xAA10   str 194
+        "Legend says the SKY / WARRIORS flew about, / here and there, from a / castle high in the sky."
+  slot 4  type 177 @(10,52)   sprite 19 0xA310   str 195
+        "I saw a shining object / flying towards the east."
+  slot 5  type 178 @(38,54)   sprite 21 0xA510   str 196
+        "Unbelievable' / You are outsiders, / right? / How did you get this far / north?"
+  slot 6  type 179 @(12,31)   sprite 26 0xAA10   str 197
+        "Let me see:: Yes, there / was a professor that / studied Lefeinish."
+  slot 7  type 180 @(27,43)   sprite 28 0xAC10   str 198
+        "Only a fairy can draw / OXYALE from the spring."
+  slot 8  type 181 @(58,49)   sprite 28 0xAC10   str 199
+        "Everyone thinks the / tower in Yahnikurm / Desert is a mirage. / I wonder::"
+  slot 9  type 182 @(16,16)   sprite 37 0xB510   str 200
+        "Hardy har, you are too / late' I BOTTLED the / fairy and sold her to a / caravan."
+  slot10  type 183 @(23,59)   sprite 28 0xAC10   str 201
+        "Legends say that the / castle in the west is a / place to test courage."
+  slot11  type 184 @(41,51)   sprite 34 0xB210   str 202
+        "?rewoP taerg evah uoy oD"
+  slot12  type 185 @(41,49) [still]   sprite 23 0xA710   str 203
+        "What's that broom up to? / It's talking backwards'"
+  slot13  type 186 @(23,54)   sprite 20 0xA410   str 204
+        "The fairy at the spring / was kidnapped."
 ── map 6 ──
-  slot 0  type  16 @(45,30) [still]   sprite 19  0xA310
-  slot 1  type 147 @(18,24)   sprite 19  0xA310
-  slot 2  type 148 @(9,23)   sprite 26  0xAA10
-  slot 3  type 149 @(21,7)   sprite 25  0xA910
-  slot 4  type 150 @(30,21) [still]   sprite 23  0xA710
-  slot 5  type 151 @(17,12)   sprite 21  0xA510
-  slot 6  type 152 @(20,12)   sprite 27  0xAB10
-  slot 7  type 153 @(19,3) [still]   sprite 29  0xAD10
-  slot 8  type 154 @(46,23) [still]   sprite 29  0xAD10
-  slot 9  type 155 @(17,39)   sprite 40  0xB810
-  slot10  type 156 @(26,14)   sprite 37  0xB510
-  slot11  type 157 @(31,11)   sprite 27  0xAB10
-  slot12  type 158 @(4,23)   sprite 19  0xA310
-  slot13  type 159 @(41,27)   sprite 28  0xAC10
-  slot14  type 160 @(28,4)   sprite 28  0xAC10
+  slot 0  type  16 @(45,30) [still]   sprite 19 0xA310   str 37
+        "I made a submarine to / save the mermaids. But, / to go deep enough it / will require OXYALE."
+  slot 1  type 147 @(18,24)   sprite 19 0xA310   str 174
+        "My father runs the / caravan. He is having a / close out sale near the / oasis in the western / desert."
+  slot 2  type 148 @(9,23)   sprite 26 0xAA10   str 163
+        "Soar to my brother Unne / with the SLAB'"
+  slot 3  type 149 @(21,7)   sprite 25 0xA910   str 164
+        "Have you found OXYALE?"
+  slot 4  type 150 @(30,21) [still]   sprite 23 0xA710   str 165
+        "You have legs'"
+  slot 5  type 151 @(17,12)   sprite 21 0xA510   str 166
+        "My legs are beautiful' / It's so nice to have / legs."
+  slot 6  type 152 @(20,12)   sprite 27 0xAB10   str 167
+        "Underhill, the Caravan / Master, had something / very strange::"
+  slot 7  type 153 @(19,3) [still]   sprite 29 0xAD10   str 168
+        "Until 200 years ago the / Mermaids lived in the / Shrine. Then, in fire / and smoke, it sank. The / Mermaids?::"
+  slot 8  type 154 @(46,23) [still]   sprite 29 0xAD10   str 170
+        "The power of Water'' / Now, our country will / prosper like before."
+  slot 9  type 155 @(17,39)   sprite 40 0xB810   str 171
+        "I saw BAHAMUT, but, to / be honored as a true / warrior I must return / with proof of my / courage."
+  slot10  type 156 @(26,14)   sprite 37 0xB510   str 173
+        "Avast ye landlubbers' / Stay out of me way."
+  slot11  type 157 @(31,11)   sprite 27 0xAB10   str 175
+        "Kope 'says' he saw a / shining object fall."
+  slot12  type 158 @(4,23)   sprite 19 0xA310   str 176
+        "Fables say that when / the shrine sank, many / treasures were lost. / Also, they tell of a / cryptic stone plate."
+  slot13  type 159 @(41,27)   sprite 28 0xAC10   str 177
+        "My name is Kope. / I saw it north, near the / waterfall. Believe me' I / think it was a robot."
+  slot14  type 160 @(28,4)   sprite 28 0xAC10   str 178
+        "This town used to be / prosperous 200 years / ago."
 ── map 7 ──
-  slot 0  type 187 @(24,21) [still]   sprite 32  0xB010
-  slot 1  type 188 @(4,8)   sprite 32  0xB010
-  slot 2  type 189 @(19,19) [still]   sprite 32  0xB010
-  slot 3  type 190 @(33,8)   sprite 32  0xB010
-  slot 4  type 191 @(16,10) [still]   sprite 32  0xB010
-  slot 5  type 192 @(26,14)   sprite 32  0xB010
-  slot 6  type 193 @(33,13)   sprite 32  0xB010
-  slot 7  type 194 @(35,22)   sprite 32  0xB010
-  slot 8  type 195 @(9,15)   sprite 32  0xB010
-  slot 9  type 196 @(22,10) [still]   sprite 32  0xB010
-  slot10  type 197 @(6,10)   sprite 32  0xB010
-  slot11  type 198 @(28,18)   sprite 32  0xB010
-  slot12  type 200 @(14,20)   sprite 32  0xB010
-  slot13  type 201 @(7,13)   sprite 32  0xB010
+  slot 0  type 187 @(24,21) [still]   sprite 32 0xB010   str 205
+        "With this CHIME you can / enter the Mirage Tower."
+  slot 1  type 188 @(4,8)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 2  type 189 @(19,19) [still]   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 3  type 190 @(33,8)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 4  type 191 @(16,10) [still]   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 5  type 192 @(26,14)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 6  type 193 @(33,13)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 7  type 194 @(35,22)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 8  type 195 @(9,15)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot 9  type 196 @(22,10) [still]   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot10  type 197 @(6,10)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot11  type 198 @(28,18)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot12  type 200 @(14,20)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
+  slot13  type 201 @(7,13)   sprite 32 0xB010   str 208
+        "Lu::pa::? / Lu::pa::?"
 ── map 8 ──
-  slot 0  type  32 @(14,28) [still]   sprite 25  0xA910
-  slot 1  type  32 @(10,18) [still]   sprite 25  0xA910
-  slot 2  type  34 @(2,10)   sprite 19  0xA310
-  slot 3  type  35 @(8,11)   sprite 26  0xAA10
-  slot 4  type  37 @(7,28) [still]   sprite 25  0xA910
-  slot 5  type  38 @(7,15) [room] [still]   sprite 19  0xA310
-  slot 6  type  41 @(6,24) [room] [still]   sprite 18  0xA210
-  slot 7  type  42 @(17,23) [room]   sprite 18  0xA210
-  slot 8  type  44 @(22,9) [still]   sprite 29  0xAD10
-  slot 9  type  46 @(14,15) [still]   sprite 29  0xAD10
+  slot 0  type  32 @(14,28) [still]   sprite 25 0xA910   str 49
+        "The King is looking for / the LIGHT WARRIORS. You / do not happen to be them / do you?"
+  slot 1  type  32 @(10,18) [still]   sprite 25 0xA910   str 49
+        "The King is looking for / the LIGHT WARRIORS. You / do not happen to be them / do you?"
+  slot 2  type  34 @(2,10)   sprite 19 0xA310   str 51
+        "Please' / Save the Princess'"
+  slot 3  type  35 @(8,11)   sprite 26 0xAA10   str 53
+        "Legend says that the / LUTE can break the evil / gate."
+  slot 4  type  37 @(7,28) [still]   sprite 25 0xA910   str 55
+        "In sadness, the Queen / locked herself inside."
+  slot 5  type  38 @(7,15) [room] [still]   sprite 19 0xA310   str 56
+        "The Princess was / looking for you'"
+  slot 6  type  41 @(6,24) [room] [still]   sprite 18 0xA210   str 59
+        "I am Jane, Queen of / Coneria. Please save my / daughter, Princess Sara."
+  slot 7  type  42 @(17,23) [room]   sprite 18 0xA210   str 61
+        "Oh:: My sister::"
+  slot 8  type  44 @(22,9) [still]   sprite 29 0xAD10   str 64
+        "Use that KEY. Inside / what you find will be / quite helpful."
+  slot 9  type  46 @(14,15) [still]   sprite 29 0xAD10   str 66
+        "This treasure room is / locked with the mystical / KEY."
 ── map 9 ──
-  slot 0  type   5 @(9,5) [room] [still]   sprite 42  0xBA10
-  slot 1  type   6 @(8,6) [room] [still]   sprite 44  0xBC10
-  slot 2  type  69 @(1,1) [still]   sprite 43  0xBB10
-  slot 3  type  70 @(23,14)   sprite 43  0xBB10
-  slot 4  type  71 @(2,24)   sprite 43  0xBB10
-  slot 5  type  72 @(19,4)   sprite 42  0xBA10
-  slot 6  type  73 @(15,20) [still]   sprite 43  0xBB10
-  slot 7  type  74 @(17,20) [still]   sprite 43  0xBB10
+  slot 0  type   5 @(9,5) [room] [still]   sprite 42 0xBA10   str 11
+        "For five years the / Prince has slept / under Astos' spell. / Only HERB can wake him'"
+  slot 1  type   6 @(8,6) [room] [still]   sprite 44 0xBC10   str 14
+        "Is this a dream?:: / Are you, the / LIGHT WARRIORS?:: / Is this for real?:: / So, as legend says, / I give you the mystic / KEY."
+  slot 2  type  69 @(1,1) [still]   sprite 43 0xBB10   str 91
+        "The Cave of Dwarf is at / the west end of the Aldi / Sea."
+  slot 3  type  70 @(23,14)   sprite 43 0xBB10   str 92
+        "Without warning, Astos / attacked our castle. Our / Prince was laid under a / curse, and our treasury / ransacked."
+  slot 4  type  71 @(2,24)   sprite 43 0xBB10   str 94
+        "Is that it? The HERB to / save the Prince?"
+  slot 5  type  72 @(19,4)   sprite 42 0xBA10   str 66
+        "This treasure room is / locked with the mystical / KEY."
+  slot 6  type  73 @(15,20) [still]   sprite 43 0xBB10   str 89
+        "Astos put the Prince to / sleep. / Please' Save him'"
+  slot 7  type  74 @(17,20) [still]   sprite 43 0xBB10   str 89
+        "Astos put the Prince to / sleep. / Please' Save him'"
 ── map 10 ──
-  slot 0  type   7 @(16,6) [room] [still]   sprite 33  0xB110
-  slot 1  type  87 @(22,8)   sprite 35  0xB310
-  slot 2  type  87 @(28,3)   sprite 35  0xB310
-  slot 3  type  87 @(4,3)   sprite 35  0xB310
-  slot 4  type  87 @(19,16)   sprite 35  0xB310
-  slot 5  type  87 @(11,10)   sprite 35  0xB310
-  slot 6  type  87 @(4,20)   sprite 35  0xB310
+  slot 0  type   7 @(16,6) [room] [still]   sprite 33 0xB110   str 17
+        "Astos double!crossed us. / Go south, to the Cave of / Marsh, to retrieve the / CROWN. Then, bring it / directly back to me'"
+  slot 1  type  87 @(22,8)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(28,3)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(4,3)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(19,16)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(11,10)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(4,20)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 11 ──
-  slot 0  type 132 @(12,13) [still]   sprite 29  0xAD10
+  slot 0  type 132 @(12,13) [still]   sprite 29 0xAD10   str 45
+        "Possession of the CROWN / is required to test your / courage. Take it to the / royal throne, and bring / back proof of your / courage. GOOD LUCK'"
 ── map 12 ──
-  slot 0  type   2 @(20,21) [room] [still]   sprite 36  0xB410
-  slot 1  type   3 @(20,18) [room] [still]   sprite 18  0xA210
-  slot 2  type  58 @(17,19) [room]   sprite 35  0xB310
-  slot 3  type  59 @(18,18) [room]   sprite 35  0xB310
-  slot 4  type  60 @(18,19) [room]   sprite 35  0xB310
-  slot 5  type  61 @(23,19) [room]   sprite 35  0xB310
-  slot 6  type  62 @(22,19) [room]   sprite 35  0xB310
-  slot 7  type 202 @(20,17) [room] [still]   sprite 22  0xA610
+  slot 0  type   2 @(20,21) [room] [still]   sprite 36 0xB410   str 4
+        "No one touches my / Princess'' / LIGHT WARRIORS?? / You impertinent fools. / I, Garland, will knock / you all down''"
+  slot 1  type   3 @(20,18) [room] [still]   sprite 18 0xA210   str 5
+        "So, you are the / LIGHT WARRIORS' / Thank you."
+  slot 2  type  58 @(17,19) [room]   sprite 35 0xB310   str 77
+        "Help' The FIEND's curse / turned us into bats. / With the ORBS shining / anew, once again we / can speak'"
+  slot 3  type  59 @(18,18) [room]   sprite 35 0xB310   str 78
+        "The Four FIENDS power / is rooted 2000 years / ago. The real enemy is / in that time."
+  slot 4  type  60 @(18,19) [room]   sprite 35 0xB310   str 79
+        "When the 4 ORBS cover / the black ORB in the / center of the palace, / the Time Gate can open."
+  slot 5  type  61 @(23,19) [room]   sprite 35 0xB310   str 80
+        "You must travel back in / time 2000 years. Now, / with the ORBS shining, / stand in the Time Gate."
+  slot 6  type  62 @(22,19) [room]   sprite 35 0xB310   str 81
+        "We are the five lost / SKY WARRIORS. 400 years / ago we battled against / the cause of the world's / destruction."
+  slot 7  type 202 @(20,17) [room] [still]   sprite 22 0xA610   str 33
+        "The four ORBS now cover / the black ORB:: / To take a step forward / is to go back 2000 years / in time."
 ── map 15 ──
-  slot 0  type  19 @(47,30) [still]   sprite 38  0xB610
+  slot 0  type  19 @(47,30) [still]   sprite 38 0xB610   str 35
+        "That pirate trapped me / in the BOTTLE. / I will draw OXYALE from / the bottom of the spring / for you."
 ── map 16 ──
-  slot 0  type 133 @(28,9)   sprite 40  0xB810
-  slot 1  type 134 @(41,6)   sprite 40  0xB810
-  slot 2  type 135 @(41,22)   sprite 40  0xB810
-  slot 3  type 136 @(38,52) [room]   sprite 40  0xB810
-  slot 4  type 138 @(24,31)   sprite 40  0xB810
-  slot 5  type 139 @(17,37) [room]   sprite 40  0xB810
-  slot 6  type 140 @(37,30)   sprite 40  0xB810
-  slot 7  type 141 @(13,6)   sprite 40  0xB810
-  slot 8  type 142 @(21,37) [room]   sprite 40  0xB810
+  slot 0  type 133 @(28,9)   sprite 40 0xB810   str 226
+        "If you are brave enough, / try meeting the King of / the Dragons, BAHAMUT."
+  slot 1  type 134 @(41,6)   sprite 40 0xB810   str 227
+        "Unprofitable business / is not a practice of the / Dragons of Cardia."
+  slot 2  type 135 @(41,22)   sprite 40 0xB810   str 228
+        "Long ago, Dragons and / humans lived and traded / together."
+  slot 3  type 136 @(38,52) [room]   sprite 40 0xB810   str 229
+        "You are not afraid of / me?? / Then, I am impressed'"
+  slot 4  type 138 @(24,31)   sprite 40 0xB810   str 231
+        "We are going to the / Castle of Ordeal to the / northeast. There we will / test, and bring back / proof of our courage."
+  slot 5  type 139 @(17,37) [room]   sprite 40 0xB810   str 232
+        "The proof of your / courage might be / anything."
+  slot 6  type 140 @(37,30)   sprite 40 0xB810   str 233
+        "Have you met BAHAMUT, / the Dragon King? He / honors those with / courage as true / warriors."
+  slot 7  type 141 @(13,6)   sprite 40 0xB810   str 234
+        "Only the courageous ones / bring back the proof of / their courage."
+  slot 8  type 142 @(21,37) [room]   sprite 40 0xB810   str 235
+        "Once in the north, there / were beautiful palaces / and big mechanical / castles."
 ── map 18 ──
-  slot 0  type  17 @(20,53) [room]   sprite 39  0xB710
-  slot 1  type  87 @(8,3)   sprite 35  0xB310
-  slot 2  type  87 @(15,23)   sprite 35  0xB310
-  slot 3  type  87 @(10,41)   sprite 35  0xB310
-  slot 4  type  87 @(23,25)   sprite 35  0xB310
-  slot 5  type  87 @(25,9)   sprite 35  0xB310
-  slot 6  type  87 @(40,9)   sprite 35  0xB310
-  slot 7  type  87 @(33,24)   sprite 35  0xB310
-  slot 8  type  87 @(50,35)   sprite 35  0xB310
-  slot 9  type  87 @(43,41)   sprite 35  0xB310
-  slot10  type  87 @(58,44)   sprite 35  0xB310
+  slot 0  type  17 @(20,53) [room]   sprite 39 0xB710   str 39
+        "Take this CUBE. With it, / you can transfer to the / FLOATING CASTLE."
+  slot 1  type  87 @(8,3)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(15,23)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(10,41)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(23,25)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(25,9)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(40,9)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(33,24)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(50,35)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(43,41)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(58,44)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 19 ──
-  slot 0  type   8 @(16,45) [still]   sprite 30  0xAE10
-  slot 1  type   9 @(7,2) [room] [still]   sprite 30  0xAE10
-  slot 2  type  88 @(14,21) [still]   sprite 30  0xAE10
-  slot 3  type  89 @(3,10)   sprite 30  0xAE10
-  slot 4  type  90 @(22,17)   sprite 30  0xAE10
-  slot 5  type  91 @(14,7)   sprite 30  0xAE10
-  slot 6  type  92 @(21,4) [room] [still]   sprite 30  0xAE10
-  slot 7  type  93 @(2,4)   sprite 30  0xAE10
-  slot 8  type  94 @(10,15)   sprite 30  0xAE10
-  slot 9  type  95 @(10,19)   sprite 30  0xAE10
-  slot10  type  96 @(19,14) [room] [still]   sprite 30  0xAE10
-  slot11  type  97 @(13,2)   sprite 30  0xAE10
-  slot12  type  99 @(18,10)   sprite 30  0xAE10
+  slot 0  type   8 @(16,45) [still]   sprite 30 0xAE10   str 19
+        "A rock blocks / construction of my / canal. / If I only had TNT."
+  slot 1  type   9 @(7,2) [room] [still]   sprite 30 0xAE10   str 21
+        "For the LIGHT / WARRIORS I will make a / truly legendary sword. / However, my supply of / ADAMANT is exhausted."
+  slot 2  type  88 @(14,21) [still]   sprite 30 0xAE10   str 108
+        "I'm looking for the / FLOATER. I'll bet with / it I could float / anything."
+  slot 3  type  89 @(3,10)   sprite 30 0xAE10   str 109
+        "Old Nerrick is a very / respectable Dwarf."
+  slot 4  type  90 @(22,17)   sprite 30 0xAE10   str 111
+        "Dwarves can see in the / dark'"
+  slot 5  type  91 @(14,7)   sprite 30 0xAE10   str 112
+        "Did you meet Smith, / our blacksmith?"
+  slot 6  type  92 @(21,4) [room] [still]   sprite 30 0xAE10   str 111
+        "Dwarves can see in the / dark'"
+  slot 7  type  93 @(2,4)   sprite 30 0xAE10   str 115
+        "The earth is reviving' / Thanks to you, / LIGHT WARRIORS'"
+  slot 8  type  94 @(10,15)   sprite 30 0xAE10   str 116
+        "The {de}::bracelet can / protect you, like / armor."
+  slot 9  type  95 @(10,19)   sprite 30 0xAE10   str 117
+        "Oh, did you see that / canal? Old Nerrick truly / is great indeed."
+  slot10  type  96 @(19,14) [room] [still]   sprite 30 0xAE10   str 118
+        "Long ago, Coneria's / Treasury safeguarded / the use of TNT."
+  slot11  type  97 @(13,2)   sprite 30 0xAE10   str 113
+        "With the CRYSTAL, even / the blind can see. / Astos stole it from / Matoya."
+  slot12  type  99 @(18,10)   sprite 30 0xAE10   str 119
+        "Hurray''"
 ── map 20 ──
-  slot 0  type  10 @(8,1) [room] [still]   sprite 23  0xA710
-  slot 1  type 100 @(3,13)   sprite 34  0xB210
-  slot 2  type 101 @(11,10) [room]   sprite 34  0xB210
-  slot 3  type 102 @(3,7) [room]   sprite 34  0xB210
-  slot 4  type 103 @(13,3) [room] [still]   sprite 34  0xB210
+  slot 0  type  10 @(8,1) [room] [still]   sprite 23 0xA710   str 23
+        "Where is my CRYSTAL? / I can't see anything / without it:: Who stole / my CRYSTAL?"
+  slot 1  type 100 @(3,13)   sprite 34 0xB210   str 120
+        "::TCELES B HSUP / A magic spell?"
+  slot 2  type 101 @(11,10) [room]   sprite 34 0xB210   str 120
+        "::TCELES B HSUP / A magic spell?"
+  slot 3  type 102 @(3,7) [room]   sprite 34 0xB210   str 120
+        "::TCELES B HSUP / A magic spell?"
+  slot 4  type 103 @(13,3) [room] [still]   sprite 34 0xB210   str 120
+        "::TCELES B HSUP / A magic spell?"
 ── map 21 ──
-  slot 0  type  13 @(2,2) [room] [still]   sprite 29  0xAD10
+  slot 0  type  13 @(2,2) [room] [still]   sprite 29 0xAD10   str 30
+        "Use this ROD behind the / Vampire's room. Hiding / deep inside you will / find the cause of the / earth's rot."
 ── map 22 ──
-  slot 0  type  87 @(4,3)   sprite 35  0xB310
-  slot 1  type  87 @(30,36)   sprite 35  0xB310
-  slot 2  type  87 @(16,21)   sprite 35  0xB310
-  slot 3  type  87 @(52,22)   sprite 35  0xB310
-  slot 4  type  87 @(24,28)   sprite 35  0xB310
+  slot 0  type  87 @(4,3)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 1  type  87 @(30,36)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(16,21)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(52,22)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(24,28)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 23 ──
-  slot 0  type 206 @(20,5) [room] [still]   sprite 39  0xB710
+  slot 0  type 206 @(20,5) [room] [still]   sprite 39 0xB710   str 224
+        "Are you the master?"
 ── map 24 ──
-  slot 0  type   1 @(12,4) [room] [still]   sprite 33  0xB110
-  slot 1  type  18 @(11,5) [room] [still]   sprite 18  0xA210
-  slot 2  type  43 @(2,29) [still]   sprite 25  0xA910
-  slot 3  type  48 @(13,9) [still]   sprite 25  0xA910
+  slot 0  type   1 @(12,4) [room] [still]   sprite 33 0xB110   str 1
+        "LIGHT WARRIORS:: Just as / in Lukahn's prophecy. / Garland has kidnapped / the Princess. Please / help her''"
+  slot 1  type  18 @(11,5) [room] [still]   sprite 18 0xA210   str 6
+        "This LUTE has been / passed down from Queen / to Princess for 2000 / years. Garland stole it / when he kidnapped me. / Please accept it as my / gift, it just might come / in handy."
+  slot 2  type  43 @(2,29) [still]   sprite 25 0xA910   str 63
+        "Reports say that Garland / holds the Princess in a / Temple to the northwest."
+  slot 3  type  48 @(13,9) [still]   sprite 25 0xA910   str 49
+        "The King is looking for / the LIGHT WARRIORS. You / do not happen to be them / do you?"
 ── map 27 ──
-  slot 0  type  87 @(14,17)   sprite 35  0xB310
-  slot 1  type  87 @(27,11)   sprite 35  0xB310
-  slot 2  type  87 @(6,16)   sprite 35  0xB310
-  slot 3  type  87 @(15,45)   sprite 35  0xB310
-  slot 4  type  87 @(17,51)   sprite 35  0xB310
-  slot 5  type  87 @(22,48)   sprite 35  0xB310
-  slot 6  type  87 @(29,53)   sprite 35  0xB310
-  slot 7  type  87 @(34,50)   sprite 35  0xB310
-  slot 8  type  87 @(38,43)   sprite 35  0xB310
-  slot 9  type  87 @(49,30)   sprite 35  0xB310
-  slot10  type  87 @(54,40)   sprite 35  0xB310
-  slot11  type  87 @(47,40)   sprite 35  0xB310
-  slot12  type  87 @(46,51)   sprite 35  0xB310
-  slot13  type  87 @(58,56)   sprite 35  0xB310
+  slot 0  type  87 @(14,17)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 1  type  87 @(27,11)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(6,16)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(15,45)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(17,51)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(22,48)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(29,53)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(34,50)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(38,43)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(49,30)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(54,40)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot11  type  87 @(47,40)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot12  type  87 @(46,51)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot13  type  87 @(58,56)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 28 ──
-  slot 0  type  87 @(6,10)   sprite 35  0xB310
-  slot 1  type  87 @(30,8)   sprite 35  0xB310
-  slot 2  type  87 @(17,16)   sprite 35  0xB310
-  slot 3  type  87 @(44,16)   sprite 35  0xB310
-  slot 4  type  87 @(42,29)   sprite 35  0xB310
-  slot 5  type  87 @(51,4)   sprite 35  0xB310
-  slot 6  type  87 @(47,34)   sprite 35  0xB310
-  slot 7  type  87 @(31,24)   sprite 35  0xB310
-  slot 8  type  87 @(29,32)   sprite 35  0xB310
-  slot 9  type  87 @(16,31)   sprite 35  0xB310
-  slot10  type  87 @(2,30)   sprite 35  0xB310
-  slot11  type  87 @(6,42)   sprite 35  0xB310
-  slot12  type  87 @(5,49)   sprite 35  0xB310
-  slot13  type  87 @(20,45)   sprite 35  0xB310
-  slot14  type  87 @(30,54)   sprite 35  0xB310
+  slot 0  type  87 @(6,10)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 1  type  87 @(30,8)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(17,16)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(44,16)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(42,29)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(51,4)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(47,34)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(31,24)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(29,32)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(16,31)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(2,30)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot11  type  87 @(6,42)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot12  type  87 @(5,49)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot13  type  87 @(20,45)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot14  type  87 @(30,54)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 29 ──
-  slot 0  type  87 @(10,11)   sprite 35  0xB310
-  slot 1  type  87 @(18,15)   sprite 35  0xB310
-  slot 2  type  87 @(10,21)   sprite 35  0xB310
-  slot 3  type  87 @(21,22)   sprite 35  0xB310
-  slot 4  type  87 @(15,31)   sprite 35  0xB310
-  slot 5  type  87 @(25,36)   sprite 35  0xB310
-  slot 6  type  87 @(27,49)   sprite 35  0xB310
-  slot 7  type  87 @(33,40)   sprite 35  0xB310
-  slot 8  type  87 @(29,25)   sprite 35  0xB310
-  slot 9  type  87 @(39,22)   sprite 35  0xB310
-  slot10  type  87 @(31,18)   sprite 35  0xB310
-  slot11  type  87 @(40,16) [room]   sprite 35  0xB310
-  slot12  type  87 @(38,41)   sprite 35  0xB310
+  slot 0  type  87 @(10,11)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 1  type  87 @(18,15)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(10,21)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(21,22)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(15,31)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(25,36)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(27,49)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(33,40)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(29,25)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(39,22)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(31,18)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot11  type  87 @(40,16) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot12  type  87 @(38,41)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 30 ──
-  slot 0  type  12 @(26,38) [room] [still]   sprite 47  0xBF10
-  slot 1  type  22 @(26,27) [still]   sprite 45  0xBD10
-  slot 2  type  87 @(11,9) [room]   sprite 35  0xB310
-  slot 3  type  87 @(10,10) [room]   sprite 35  0xB310
-  slot 4  type  87 @(9,9) [room]   sprite 35  0xB310
-  slot 5  type  87 @(15,16)   sprite 35  0xB310
-  slot 6  type  87 @(24,15)   sprite 35  0xB310
-  slot 7  type  87 @(17,34)   sprite 35  0xB310
-  slot 8  type  87 @(17,32)   sprite 35  0xB310
-  slot 9  type  87 @(18,34)   sprite 35  0xB310
-  slot10  type  87 @(28,18)   sprite 35  0xB310
-  slot11  type  87 @(26,19)   sprite 35  0xB310
-  slot12  type  87 @(35,20)   sprite 35  0xB310
-  slot13  type  87 @(39,16)   sprite 35  0xB310
-  slot14  type  87 @(44,12)   sprite 35  0xB310
+  slot 0  type  12 @(26,38) [room] [still]   sprite 47 0xBF10   str 29
+        "All living things were / born to die. / No one can defeat me, / the Vampire''"
+  slot 1  type  22 @(26,27) [still]   sprite 45 0xBD10   str 255
+        "There is a stone plate / on the floor:: / You sense something:: / Evil?::"
+  slot 2  type  87 @(11,9) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(10,10) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(9,9) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(15,16)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(24,15)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(17,34)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(17,32)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(18,34)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(28,18)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot11  type  87 @(26,19)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot12  type  87 @(35,20)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot13  type  87 @(39,16)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot14  type  87 @(44,12)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 31 ──
-  slot 0  type  87 @(19,40) [room]   sprite 35  0xB310
-  slot 1  type  87 @(16,38) [room]   sprite 35  0xB310
-  slot 2  type  87 @(19,36) [room]   sprite 35  0xB310
-  slot 3  type  87 @(10,35)   sprite 35  0xB310
-  slot 4  type  87 @(12,42)   sprite 35  0xB310
-  slot 5  type  87 @(24,21)   sprite 35  0xB310
-  slot 6  type  87 @(22,23)   sprite 35  0xB310
-  slot 7  type  87 @(19,27)   sprite 35  0xB310
-  slot 8  type  87 @(21,12)   sprite 35  0xB310
-  slot 9  type  87 @(18,18)   sprite 35  0xB310
-  slot10  type  87 @(39,12) [room]   sprite 35  0xB310
-  slot11  type  87 @(32,18)   sprite 35  0xB310
-  slot12  type  87 @(36,23)   sprite 35  0xB310
-  slot13  type  87 @(33,24)   sprite 35  0xB310
-  slot14  type  87 @(36,23)   sprite 35  0xB310
+  slot 0  type  87 @(19,40) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 1  type  87 @(16,38) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(19,36) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(10,35)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(12,42)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(24,21)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(22,23)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(19,27)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(21,12)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(18,18)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(39,12) [room]   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot11  type  87 @(32,18)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot12  type  87 @(36,23)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot13  type  87 @(33,24)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot14  type  87 @(36,23)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 32 ──
-  slot 0  type  27 @(12,42) [room] [still]   sprite 22  0xA610
-  slot 1  type  87 @(17,49)   sprite 35  0xB310
-  slot 2  type  87 @(15,35)   sprite 35  0xB310
-  slot 3  type  87 @(26,37)   sprite 35  0xB310
-  slot 4  type  87 @(30,46)   sprite 35  0xB310
-  slot 5  type  87 @(31,50)   sprite 35  0xB310
-  slot 6  type  87 @(32,55)   sprite 35  0xB310
-  slot 7  type  87 @(36,42)   sprite 35  0xB310
-  slot 8  type  87 @(28,31)   sprite 35  0xB310
-  slot 9  type  87 @(18,24)   sprite 35  0xB310
-  slot10  type  87 @(20,26)   sprite 35  0xB310
+  slot 0  type  27 @(12,42) [room] [still]   sprite 22 0xA610   str 250
+        "The FIEND's ball cracks / open:: An ominous cloud / rises, and an evil shape / congeals:: / It is LICH, the FIEND of / Earth."
+  slot 1  type  87 @(17,49)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 2  type  87 @(15,35)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 3  type  87 @(26,37)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 4  type  87 @(30,46)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 5  type  87 @(31,50)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 6  type  87 @(32,55)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 7  type  87 @(36,42)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 8  type  87 @(28,31)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot 9  type  87 @(18,24)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
+  slot10  type  87 @(20,26)   sprite 35 0xB310   str 76
+        "Kee::Kee::"
 ── map 36 ──
-  slot 0  type  28 @(7,55) [room] [still]   sprite 22  0xA610
+  slot 0  type  28 @(7,55) [room] [still]   sprite 22 0xA610   str 251
+        "Is it you, the tinder / that defeated the FIEND / of the Earth, and / disturbed my sleep? / I, KARY will now show / you the force of Fire, / and you shall burn in / its flames''"
 ── map 39 ──
-  slot 0  type  14 @(21,3) [room] [still]   sprite 41  0xB910
-  slot 1  type 143 @(19,7) [room] [still]   sprite 40  0xB810
-  slot 2  type 144 @(23,7) [room] [still]   sprite 40  0xB810
+  slot 0  type  14 @(21,3) [room] [still]   sprite 41 0xB910   str 31
+        "I am BAHAMUT, King of / the Dragons. Bring me / proof of your courage, / to receive the honor / due true Warriors."
+  slot 1  type 143 @(19,7) [room] [still]   sprite 40 0xB810   str 236
+        "This is BAHAMUT's room."
+  slot 2  type 144 @(23,7) [room] [still]   sprite 40 0xB810   str 237
+        "BAHAMUT verifies the / true courage of all."
 ── map 40 ──
-  slot 0  type 204 @(19,4)   sprite 39  0xB710
+  slot 0  type 204 @(19,4)   sprite 39 0xB710   str 222
+        "One of us escaped with / a CUBE. He floated far / to the west."
 ── map 41 ──
-  slot 0  type 205 @(9,10) [room] [still]   sprite 39  0xB710
+  slot 0  type 205 @(9,10) [room] [still]   sprite 39 0xB710   str 223
+        "Transporter operation / requires a CUBE."
 ── map 42 ──
-  slot 0  type  29 @(12,8) [room] [still]   sprite 22  0xA610
+  slot 0  type  29 @(12,8) [room] [still]   sprite 22 0xA610   str 252
+        "The FIEND's ball is / shattered, evaporating / all the water. / Ho, Ho, Ho:: / How foolhardy to dare / challenge me, KRAKEN the / FIEND of the Water."
 ── map 46 ──
-  slot 0  type 163 @(6,18) [room]   sprite 31  0xAF10
-  slot 1  type 164 @(19,5) [room]   sprite 31  0xAF10
-  slot 2  type 165 @(26,18) [room]   sprite 31  0xAF10
-  slot 3  type 166 @(4,25) [room]   sprite 31  0xAF10
-  slot 4  type 167 @(19,18) [room]   sprite 31  0xAF10
-  slot 5  type 168 @(20,12) [room]   sprite 31  0xAF10
-  slot 6  type 169 @(11,11) [room]   sprite 31  0xAF10
-  slot 7  type 170 @(4,11) [room]   sprite 31  0xAF10
-  slot 8  type 171 @(5,4) [room]   sprite 31  0xAF10
-  slot 9  type 172 @(20,26) [room]   sprite 31  0xAF10
+  slot 0  type 163 @(6,18) [room]   sprite 31 0xAF10   str 180
+        "If we cannot regain the / Power of Water, we will / become bubbles, then / disappear."
+  slot 1  type 164 @(19,5) [room]   sprite 31 0xAF10   str 181
+        "Are we going to become / bubbles?"
+  slot 2  type 165 @(26,18) [room]   sprite 31 0xAF10   str 182
+        "As long as the FIEND of / Water lives, we:: / Oh, boo hoo."
+  slot 3  type 166 @(4,25) [room]   sprite 31 0xAF10   str 183
+        "You have responded / to me''"
+  slot 4  type 167 @(19,18) [room]   sprite 31 0xAF10   str 184
+        "This is the Shrine's top / floor. The FIEND of / Water, KRAKEN lives on / the bottom floor."
+  slot 5  type 168 @(20,12) [room]   sprite 31 0xAF10   str 185
+        "I suppose you are the / legendary::"
+  slot 6  type 169 @(11,11) [room]   sprite 31 0xAF10   str 187
+        "Now, order has returned. / The sea will be as it / was before, beautiful."
+  slot 7  type 170 @(4,11) [room]   sprite 31 0xAF10   str 188
+        "My friend Darryl went to / the land, then never / returned. I've often / wondered what happened:: / Maybe, she grew legs and / walked away?"
+  slot 8  type 171 @(5,4) [room]   sprite 31 0xAF10   str 189
+        "Unbelievable'' / You can breathe / underwater?' / I'm impressed'"
+  slot 9  type 172 @(20,26) [room]   sprite 31 0xAF10   str 190
+        "To unlock the Mirage / Tower the Lefeinish / used a musical tone."
 ── map 48 ──
-  slot 0  type  22 @(26,27) [room] [still]   sprite 45  0xBD10
+  slot 0  type  22 @(26,27) [room] [still]   sprite 45 0xBD10   str 255
+        "There is a stone plate / on the floor:: / You sense something:: / Evil?::"
 ── map 49 ──
-  slot 0  type 207 @(30,25) [still]   sprite 39  0xB710
+  slot 0  type 207 @(30,25) [still]   sprite 39 0xB710   str 225
+        "You can look out over / the world from this / window."
 ── map 51 ──
-  slot 0  type  30 @(7,5) [room] [still]   sprite 22  0xA610
+  slot 0  type  30 @(7,5) [room] [still]   sprite 22 0xA610   str 253
+        "Lightning erupts from / the FIEND's ball:: / So, you have come this / far:: / I, TIAMAT the FIEND of / the Wind will now put an / end to your adventure''"
 ── map 54 ──
-  slot 0  type  23 @(20,16) [room] [still]   sprite 45  0xBD10
+  slot 0  type  23 @(20,16) [room] [still]   sprite 45 0xBD10   str 255
+        "There is a stone plate / on the floor:: / You sense something:: / Evil?::"
 ── map 59 ──
-  slot 0  type  24 @(15,19) [room] [still]   sprite 36  0xB410
-  slot 1  type  25 @(15,18) [room] [still]   sprite 36  0xB410
-  slot 2  type  26 @(15,17) [room] [still]   sprite 36  0xB410
+  slot 0  type  24 @(15,19) [room] [still]   sprite 36 0xB410   str 46
+        "Remember me, Garland? / Your puny lot thought it / had defeated me. But, / the Four FIENDS sent me / back 2000 years into / the past."
+  slot 1  type  25 @(15,18) [room] [still]   sprite 36 0xB410   str 47
+        "From here I sent the / Four FIENDS to the / future. The FIENDS will / send me back to here, / and the Time!Loop will / go on."
+  slot 2  type  26 @(15,17) [room] [still]   sprite 36 0xB410   str 48
+        "After 2000 years, I will / be forgotten, and the / Time!Loop will close. I / will live forever, and / you shall meet doom''"
 ── map 60 ──
-  slot 0  type  20 @(8,7) [still]   sprite 46  0xBE10
+  slot 0  type  20 @(8,7) [still]   sprite 46 0xBE10   str 41
+        "No one passes this road."

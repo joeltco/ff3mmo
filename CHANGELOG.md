@@ -427,6 +427,50 @@ table, slot count, stride, offset and X-mask checks — **11 more reverts tested
 all fail**, including two holes found and closed on the way (`SPRITE_BASE` was
 unpinned because only the biased index was asserted; the X mask was untested).
 
+## 1.8.30 — 2026-08-14
+
+### FF1 objType → dialogue, SOLVED — the last link in all three games
+
+```
+record = 0x395E5 + objType*4     [flag, defaultLine, afterLine, 0]
+```
+
+Traced by hooking the string-pointer fetch and walking the stack back
+(`$DB71` ← `$D4B1` ← `$CA03` ← `$902B` in bank 14):
+
+```
+$902B  LDA $6F00,X    ; the object's TYPE, from the RAM object array
+       ASL A / ASL A  ; type * 4
+       ADC #$D5 ...   ; + $95D5
+$9046  LDA ($14),Y    ; four bytes
+$9059  JMP ($0016)    ; per-type handler ($90D3 / $91D3 jump tables)
+```
+
+A per-type handler chooses between byte 1 and byte 2 on a game flag, so there is
+no single "the" id — **byte 1 is the first thing an NPC says**.
+
+**Measured**: the Coneria Castle guard displayed string 49, and type 32's record
+is `(18, 49, 50, 0)`. Decoding byte 1 map-wide is location-coherent — map 8 is
+Coneria Castle (King / LUTE / Queen locked inside), map 2 ElfLand (Save our
+Prince / Astos / Dark Elf), map 12 the Temple of Fiends past.
+
+### The tell that the retracted rule was wrong
+
+Under v1.8.25's `dialogueId == objType`, **Jane, Queen of Coneria, sat on
+map 12**. Under the real table she is object type 41 on **map 8 — Coneria
+Castle**, where a Queen of Coneria belongs. Bahamut likewise moves to map 39,
+his own cave. The gate now asserts both placements, so the retracted rule cannot
+come back unnoticed.
+
+### Gate
+
+`check-ff12-text` gains the dialogue-record assertions, an explicit
+"dialogue must NOT resolve as objType" check, and a map-8 block-range check —
+**4 more reverts tested, all fail**. 15 checks total.
+
+`docs/sprites/ff1-map-objects.txt` now carries position + sprite + line for all
+287 objects.
+
 ## 1.8.11 — 2026-08-14
 
 ### Every Ur NPC sprite swept, and the bundle table re-verified on hardware
