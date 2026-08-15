@@ -18,6 +18,76 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.49 — 2026-08-15
+
+### FF2's shops — and what all 256 object types do
+
+A shop in FF2 is not a tile, it is an OBJECT TYPE. `tools/ff2-type-sweep.mjs`
+(NEW) established that the only honest way available: it stands each of the 256
+types on the tile next to the party, talks to it, and reads what appears. That
+also produced a complete map of the type space:
+
+| types | what talking to one does |
+|---|---|
+| 0-191 | dialogue, via the per-type handlers already decoded |
+| **192-219** (`0xC0-0xDB`) | **a shop** — 28 of them |
+| 220 (`0xDC`) | the ferry ("to Hoft, 32 gil") |
+| 221 (`0xDD`) | Cid's airship |
+| 222 (`0xDE`) | the inn |
+| 223 (`0xDF`) | "nothing happened" |
+| 224-255 | nothing at all |
+
+`0xC0` is not a coincidence — it is `NO_HANDLER_FIRST` in `ff2-text.mjs`, the
+point where types stop having a dialogue handler. `$CBD5 LDA $A0 / CMP #$60 /
+CMP #$C0` is the classifier.
+
+### The tables
+
+```
+$8E9B  ASL A x3                    ; shop index * 8
+$8E9E  CLC / ADC $8380 -> $80      ; + the base held at $8380 (= $860D)
+$8EAB  LDY #$0F
+$8EAD  LDA ($80),Y / STA $7B00,Y   ; ...into RAM $7B00
+```
+
+| table | CPU | file | per entry |
+|---|---|---|---|
+| shop record | `$860D` bank 14 | `0x3861D` | 8 bytes = 4 x (item, price code) |
+| price by code | `$8000` bank 14 | `0x38010` | 2 bytes LE |
+| item name ptr | `$8200` bank 10 | `0x28210` | 2 bytes LE |
+
+⛔ The copy is SIXTEEN bytes but the stride is EIGHT, so each shop's window also
+holds the NEXT shop's record — shop 1's RAM begins with shop 0's last 8 bytes.
+Only the first 8 are its own. Confirmed by holding DOWN in a Buy list, which
+never scrolls past four items.
+
+⛔ The second byte of an entry is a **price code, not a price**. The same code
+gives the same price for different items — `0xF2` is 500 G for both Axe and
+Mace, `0xF1` is 400 G for all three spellbooks — and it indexes a table of its
+own at the very start of bank 14.
+
+### Verified
+
+`tools/ff2-shop-probe.mjs --all` opens all 28 shops and compares **names and
+prices** against the drawn screen. **0 mismatches.** Full catalog with romaji:
+[`docs/FF2-SHOPS.md`](docs/FF2-SHOPS.md).
+
+### Changed
+
+- `tools/lib/ff2-shops.mjs` (NEW) — the three tables plus `shopAt` / `allShops`.
+- `tools/ff2-type-sweep.mjs`, `tools/ff2-shop-trace.mjs`,
+  `tools/ff2-shop-probe.mjs`, `tools/ff2-shop-catalog.mjs` (NEW).
+- `docs/FF2-SHOPS.md` (NEW).
+- `tools/check-ff2-shops.mjs` (NEW gate, in `deploy.sh`) — 39/39, **12 gate
+  reverts tested, all fail.** It also re-measures the shop RANGE live rather
+  than trusting it: 192 opens a shop, 191 does not, and `0xDE` is the inn.
+- `tools/states/ff2-outside.state.gz` — so the live half is reproducible.
+
+⛔ Two of this gate's own checks failed first time round because the screen
+reader only covered the item panel (rows 3-11, columns 14+) while the かう/うる
+menu is drawn bottom-left. A window that misses the menu reports every shop as
+"not a shop".
+
 ## 1.8.48 — 2026-08-15
 
 ### FF1's shop inventory tables — decoded end to end
