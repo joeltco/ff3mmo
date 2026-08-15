@@ -148,5 +148,89 @@ for (const id of [232, 239, 244, 250]) {
      [openShop(id).kind, S.SHOP_NPC_IDS.includes(id)], [null, false]);
 }
 
+// ── FF3's monster tables, checked against the game rather than a wiki ───────
+// ⛔ `gen-monsters-js.js` takes its layout from the Data Crystal ROM map. This
+// puts the parts that CAN be checked in front of the running game, and leaves
+// the rest labelled inherited.
+console.log('\nmonster tables — measured, not cited');
+{
+  const M3 = await import('./lib/ff3-monsters.mjs');
+  const D = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT,
+             Controller.BUTTON_UP, Controller.BUTTON_DOWN];
+  const fight = (patch, rounds) => {
+    const p2 = Uint8Array.from(rom);
+    for (const [o, v] of Object.entries(patch)) p2[Number(o)] = v;
+    const n = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    n.loadROM(Buffer.from(p2).toString('binary'));
+    n.fromJSON(JSON.parse(SNAP));
+    const r = (k) => { for (let i = 0; i < k; i++) n.frame(); };
+    r(30);
+    const tx = () => {
+      const v2 = n.ppu.vramMem, o = [];
+      for (let row = 0; row < 30; row++) {
+        let x = '';
+        for (let c = 0; c < 32; c++) { const g = glyph(v2[0x2000 + row * 32 + c]); x += (g === null ? ' ' : g); }
+        if (x.trim()) o.push(x.replace(/\s+/g, ' ').trim());
+      }
+      return o;
+    };
+    let inB = false;
+    for (let st = 0; st < 400 && !inB; st++) {
+      const b2 = D[Math.floor(st / 8) % 4];
+      n.buttonDown(1, b2); r(10); n.buttonUp(1, b2); r(12);
+      if (tx().some(l => /Guard|Item/i.test(l))) inB = true;
+    }
+    const php = () => { let t = 0; for (const l of tx()) for (const m of l.matchAll(/(\d+)\/\s*(\d+)/g)) t += Number(m[1]); return t; };
+    const p0 = php();
+    const ehp = n.cpu.mem[M3.ENEMY_RAM] | (n.cpu.mem[M3.ENEMY_RAM + 1] << 8);
+    for (let k = 0; k < rounds; k++) {
+      n.buttonDown(1, Controller.BUTTON_A); r(8); n.buttonUp(1, Controller.BUTTON_A); r(18);
+    }
+    const holding = [];
+    for (let ad = 0x6000; ad < 0x8000 - 1; ad++) {
+      if ((n.cpu.mem[ad] | (n.cpu.mem[ad + 1] << 8)) === ehp) holding.push(ad);
+    }
+    return { inB, enemyHP: ehp, taken: p0 - php(), holding };
+  };
+
+  // HP: patch it and the battle must load exactly that number
+  const hp300 = fight({ [M3.MONSTER_PROPS + 1]: 0x2C, [M3.MONSTER_PROPS + 2]: 0x01 }, 0);
+  eq('an encounter starts at all', hp300.inB, true);
+  eq('patching props +1/+2 sets the HP the battle loads', hp300.enemyHP, 300);
+  // ⛔ ENEMY_RAM cannot be pinned by "some address holds 300" — the second enemy
+  // slot at +0x40 holds it too, and moving the base by one stride passed. Pin it
+  // as the LOWEST address that does.
+  eq('ENEMY_RAM is the first slot, not the second',
+     Math.min(...hp300.holding), M3.ENEMY_RAM);
+  eq('...and the next slot is one stride on',
+     hp300.holding.includes(M3.ENEMY_RAM + M3.ENEMY_RAM_STRIDE), true);
+  const hp400 = fight({ [M3.MONSTER_PROPS + 1]: 0x90, [M3.MONSTER_PROPS + 2]: 0x01 }, 0);
+  eq('...and again at a different value', hp400.enemyHP, 400);
+  eq('the table agrees with the ROM for id 0', M3.monsterHP(rom, 0), 5);
+
+  // ATTACK: props +9 indexes the stat table; byte 2 of that entry is the damage
+  const atkIdx = rom[M3.MONSTER_PROPS + M3.VERIFIED_FIELDS.atkHitIdx];
+  const atkByteAddr = M3.STAT_TABLE + atkIdx * M3.STAT_ENTRY + M3.STAT_ATK_OFF;
+  const bigHP = { [M3.MONSTER_PROPS + 1]: 0xFF, [M3.MONSTER_PROPS + 2]: 0x0F };
+  const base = fight({ ...bigHP }, 90);
+  const weak = fight({ ...bigHP, [atkByteAddr]: 0 }, 90);
+  const strong = fight({ ...bigHP, [atkByteAddr]: 255 }, 90);
+  // ⛔ "raising it raises the damage" is NOT enough to pick byte 2 out of the
+  // entry — byte 0 raises it too, and the revert to STAT_ATK_OFF = 0 passed.
+  // What separates byte 2: zeroing it drops the damage BELOW baseline, while
+  // zeroing byte 0 pushes it ABOVE. Both halves are asserted.
+  eq('zeroing the ATTACK byte drops the damage BELOW baseline', weak.taken < base.taken, true);
+  eq('...and maxing it pushes it above', strong.taken > base.taken, true);
+  const rollAddr = M3.STAT_TABLE + atkIdx * M3.STAT_ENTRY + M3.STAT_ROLL_OFF;
+  eq('zeroing the ROLL byte does NOT drop it below baseline — that is what makes it a different field',
+     fight({ ...bigHP, [rollAddr]: 0 }, 90).taken >= base.taken, true);
+
+  // ⛔ defence and evade are NOT verified — the party cannot damage a Goblin, so
+  // there is no signal for them to move. Pinned as inherited so nobody reads the
+  // module as claiming more than was measured.
+  eq('defEvdIdx is still labelled inherited, not verified',
+     [M3.INHERITED_FIELDS.defEvdIdx, M3.VERIFIED_FIELDS.defEvdIdx], [12, undefined]);
+}
+
 console.log(`\n${checks - fails}/${checks} checks passed`);
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

@@ -18,6 +18,54 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.63 — 2026-08-15
+
+### FF3's monster stats — putting Data Crystal in front of the game
+
+FF3's bestiary was the one already "done": `gen-monsters-js.js` generates
+`src/data/monsters.js` and its header says the layout comes **"from Data Crystal
+ROM map"** — a secondary source. Every other bestiary here was measured, and this
+project's own rule is that the ROM beats a wiki. So the layout went in front of
+the running game.
+
+⭐ **The tables are real.** Tracing an actual encounter (a Goblin, bestiary id 0)
+and mapping every cartridge read back to a file offset shows the game reading
+exactly the claimed addresses: **all sixteen bytes of `0x60010`-`0x6001F`**, the
+gil pair at `0x61C68`, entries in the stat table at `0x61010`, and the EXP and CP
+tables. No longer a citation.
+
+⭐ **HP is props +1/+2** — patched to 300 and then 400, the battle loads exactly
+those numbers into the enemy block at `$7678` (slot 1 at `+0x40`).
+
+⭐ **Attack is byte 2 of the stat-table entry props +9 points at** — zeroing it
+drops the damage the party takes to 34, maxing it raises it to 118, against a
+baseline of 47.
+
+⛔ **Defence and evade are NOT verified and are still labelled inherited.** The
+party in the available savestate cannot damage a Goblin at all — every fight ends
+identically at round 11 with zero damage dealt — so there is no signal for those
+two to move. A limit of the harness, not a claim the labels are wrong. Level,
+weakness, elemental and status fields are likewise inherited, and the module says
+so at each one.
+
+### Two gate holes, both found by reverting
+
+- `STAT_ATK_OFF` could be moved from **2 to 0** and every check passed, because
+  byte 0 raises the damage too. What actually separates them: **zeroing byte 2
+  drops the damage BELOW baseline (34 vs 47), while zeroing byte 0 pushes it
+  ABOVE (60)**. Both halves are asserted now, plus the byte-0 control.
+- `ENEMY_RAM` could be moved a full stride, because the **second enemy slot holds
+  the same patched HP**. It is now pinned as the LOWEST address holding it.
+
+### Changed
+
+- `tools/lib/ff3-monsters.mjs` (NEW) — the table constants, split explicitly into
+  `VERIFIED_FIELDS` and `INHERITED_FIELDS` so nothing reads as measured that was
+  not.
+- `tools/check-ff3-shops.mjs` — fights real encounters to pin HP and attack, and
+  asserts `defEvdIdx` is still *not* in the verified set. 59/59, **6 gate reverts
+  tested, all fail** (two only after the holes above were closed).
+
 ## 1.8.62 — 2026-08-15
 
 ### FF2's leftovers — one more field named, two proven inert
