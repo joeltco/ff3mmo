@@ -308,15 +308,85 @@ const ctl = castFight({ patch: { [ME + M3.STAT_EVADE_OFF]: 0xFF } });
 ok('...but ONLY when byte 6 points at that entry — the control',
    ctl && ctl.dealt > 0, ctl ? `byte6 natural, same patch: ${ctl.dealt}` : '');
 
-// ⛔ byte 15 is READ — that much is measured. Its EFFECT is what is unknown, and
-// the gate records the distinction so nobody "re-discovers" it as dead.
-console.log('\nstill not isolated (recorded, not claimed)');
-ok('only byte 15 remains unexplained', 
-   JSON.stringify(Object.values(M3.NOT_ISOLATED)) === JSON.stringify([15]),
-   JSON.stringify(Object.values(M3.NOT_ISOLATED)));
+// ── byte 15: the Thief's Steal reads it ────────────────────────────────────
+// ⭐ Steal's roll fails at this level, so the read is never reached in an
+// ordinary fight. The guard and the roll are patched open, and the check is that
+// the read then FIRES and the index is `byte15 & $1F`. Bank-verified: counting PC
+// hits without checking the mapped bank reports 48 executions that are not real.
+console.log('\nbyte 15 — the STEAL-TABLE index');
+function steal(byte15, force = true) {
+  const p = Uint8Array.from(rom);
+  p[P + M3.FIELDS.hp[0]] = 0xFF; p[P + M3.FIELDS.hp[1]] = 0x7F;
+  p[P + 15] = byte15;
+  if (force) for (const [o, v] of M3.STEAL_FORCE_PATCHES) p[o] = v;
+  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  try { nes.loadROM(Buffer.from(p).toString('binary')); nes.fromJSON(JSON.parse(SNAP)); } catch { return null; }
+  let entry = 0, read = 0; const idx = new Set();
+  const cpu = nes.cpu, orig = cpu.emulate.bind(cpu);
+  cpu.emulate = () => {
+    const pc = cpu.REG_PC;
+    if ((pc === M3.BYTE15_ROUTINE_PC || pc === M3.BYTE15_ROUTINE_PC - 1)
+        && cpu.mem[M3.BYTE15_ROUTINE_PC] === 0xA9) entry++;
+    if ((pc === M3.BYTE15_READER_PC - 2 || pc === M3.BYTE15_READER_PC - 3)
+        && cpu.mem[M3.BYTE15_READER_PC - 2] === 0xA0
+        && cpu.mem[M3.BYTE15_READER_PC - 1] === M3.BYTE15_ENTRY_OFF) read++;
+    if ((pc === M3.BYTE15_READER_PC + 4 || pc === M3.BYTE15_READER_PC + 3)
+        && cpu.mem[M3.BYTE15_READER_PC + 4] === 0x85) idx.add(cpu.REG_ACC);
+    return orig();
+  };
+  const run = (n) => { for (let i = 0; i < n; i++) nes.frame(); };
+  const scr = () => {
+    const v = nes.ppu.vramMem, out = [];
+    for (let r = 0; r < 30; r++) {
+      let t = '';
+      for (let c = 0; c < 32; c++) { const g = glyph(v[0x2000 + r * 32 + c]); t += (g === null ? ' ' : g); }
+      if (t.trim()) out.push(t.replace(/\s+/g, ' ').trim());
+    }
+    return out;
+  };
+  const thief = () => { for (let i = 0; i < 4; i++) { nes.cpu.mem[M3.PARTY_A_BLOCK + i * M3.PARTY_B_STRIDE] = 8; } };
+  const tap = (b2, h = 10, g = 24) => { nes.buttonDown(1, b2); run(h); nes.buttonUp(1, b2); run(g); };
+  try {
+    run(30); thief();
+    let inB = false;
+    for (let s2 = 0; s2 < 400; s2++) {
+      thief(); const b2 = D[Math.floor(s2 / 8) % 4];
+      nes.buttonDown(1, b2); run(10); nes.buttonUp(1, b2); run(12);
+      if (scr().some(l => /Steal/i.test(l))) { inB = true; break; }
+    }
+    if (!inB) return null;
+    const words = new Set();
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        tap(Controller.BUTTON_DOWN);
+        tap(Controller.BUTTON_A, 10, 45); tap(Controller.BUTTON_A, 10, 45); tap(Controller.BUTTON_A, 10, 45);
+      }
+      run(300);
+      for (const l of scr()) for (const m of l.matchAll(/[A-Za-z][A-Za-z.']{2,}/g)) words.add(m[0]);
+    }
+    return { entry, read, idx: [...idx], words: [...words] };
+  } catch { return null; }
+}
+const stUn = steal(0x20, false);
+ok('the Thief\'s Steal reaches the routine', stUn && stUn.entry > 0, stUn ? `${stUn.entry} entries` : 'no battle');
+ok('...but the roll fails, so byte 15 is never read', stUn && stUn.read === 0, stUn ? `${stUn.read} reads` : '');
+const st20 = steal(0x20), st0A = steal(0x0A);
+ok('forcing the roll makes the byte-15 read FIRE', st20 && st20.read > 0, st20 ? `${st20.read} reads` : '');
+ok('the index is byte15 & 0x1F  (0x20 -> 0)',
+   st20 && st20.idx.length === 1 && st20.idx[0] === (0x20 & M3.BYTE15_INDEX_MASK), st20 ? `${st20.idx}` : '');
+ok('...and 0x0A -> 10', st0A && st0A.idx.includes(0x0A & M3.BYTE15_INDEX_MASK), st0A ? `${st0A.idx}` : '');
+// ⭐ the discriminator: a different index must steal a DIFFERENT item, or the byte
+// would only be "read" and not actually selecting anything.
+ok('a different index steals a DIFFERENT item',
+   st20 && st0A && JSON.stringify(st20.words.sort()) !== JSON.stringify(st0A.words.sort()),
+   st0A ? st0A.words.filter(w => !st20.words.includes(w)).join(' ') : '');
+
+console.log('\nthe record is fully accounted for');
 ok('nothing is labelled inherited any more', Object.keys(M3.INHERITED_FIELDS).length === 0);
 ok('byte 6 is recorded as an INDEX, like 9/12/14',
    M3.INDEX_FIELDS.magicDefIdx === 6 && M3.INDEX_FIELDS.defEvdIdx === 12);
+ok('byte 15 is recorded as the steal-table index',
+   M3.BYTE15_MEANING === 'steal-table index' && M3.ACTION_IDS.steal === M3.STEAL_ACTION_ID);
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

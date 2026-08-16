@@ -182,82 +182,67 @@
 //      the ice row is the good kind of surprise: fire armour is WEAK to ice, so
 //      the same bit map falls out of an inverted effect.
 //
-// ⭐ 15 IS A GRAPHICS/TABLE INDEX — read by ONE routine, and by no monster's
-//      script. Two separate searches, each answering half the question.
+// ⭐ 15 IS THE MONSTER'S STEAL-TABLE INDEX — read by the THIEF'S STEAL, and by
+//      nothing else. Chased down through four instruments, each one correcting
+//      the last.
 //
-//      NO MONSTER SCRIPT READS IT. `tools/ff3-diff-trace.mjs` runs two machines
-//      differing in exactly this byte, feeds them identical input and compares
-//      every instruction; anything using the value must diverge in control flow
-//      or a register. Run from the FIRST FRAME so encounter setup is included,
-//      ~22.1M instructions each, across EIGHT monsters chosen for script
-//      diversity (spAtkIdx 0/2/7/8/15/23/24/43, rates 0-99 — formation 0's
-//      monster id selects who spawns, confirmed by the name on screen):
+//      THE CHAIN. A battle action dispatcher in bank 52 turns a per-actor action
+//      id into a handler:
 //
-//        control flow parted:   NEVER, for any of them
-//        registers differed at: $A5EF $A5F1 $A5F3 $A5F4 — the setup copy, x2
-//                               because the encounter holds two monsters
+//        $99D9  BD 00 74  LDA $7400,X     ; the action id for this actor
+//        $99E1  0A        ASL A
+//        $99E3  69 16     ADC #$16        ; pointer = $9A16 + id*2
+//        $99E9  69 9A     ADC #$9A
+//        $99FA  6C 18 00  JMP ($0018)
 //
-// ⭐ BUT CODE THAT READS IT EXISTS. A dynamic trace only sees paths that RAN, so
-//      the ROM was scanned statically for every instruction able to reach entry
-//      offset $36 through a pointer. Exactly one reads it — bank 53, file 0x6ABF0.
-//      ⛔ v1.8.70 gave its CPU address as $8BE0. WRONG BY $2000: bank 53 sits in
-//      the $A000 window, proven because the routine's own `JMP $ABB7` and
-//      `JSR $AB66` only land on instruction boundaries under that mapping. It is
-//      $ABE0:
+//      That fixes the table at $9A16 (file 0x69A26), so the byte-15 routine
+//      ($AB9F, file 0x69A42) is ENTRY 14. Driving each job's menu rows and
+//      logging what the dispatcher jumps to maps the commands outright:
+//
+//        Thief   row1 -> entry 14 ($AB9F)   STEAL      <-- reads byte 15
+//        Scholar row1 -> entry 12 ($AB6E)   Study
+//        Dragoon row1 -> entry  8 ($A9AB)   Jump
+//        Attack       -> entries 4/5        Item -> entry 20, in every job
+//
+//      THE HANDLER, bank 53 (which the dispatcher confirms IS the $A000 bank):
 //
 //        $ABDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
-//        $ABE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
-//        $ABE2  29 1F     AND #$1F        ; low 5 bits only
-//        $ABE4  85 18     STA $18         ; ...as an index
-//        $ABE6  A9 80 / 85 20 / A9 9B / 85 21    ; source pointer $9B80
-//        $ABEE  A9 08 / 85 1A / A9 08 / A0 1A / A2 00 / 20 A6 FD  ; JSR $FDA6
+//        $ABE0  B1 70     LDA ($70),Y     ; from the TARGET — the monster robbed
+//        $ABE2  29 1F     AND #$1F        ; low 5 bits = the steal-table index
+//        $ABE4  85 18     STA $18
+//        $ABE6  ...pointer $9B80, count 8, JSR $FDA6   ; load that 8-byte entry
 //
-//      ⭐ `AND #$1F` is corroborated by the DATA, which is what makes this more
-//      than a plausible reading: 179 of 232 monsters have byte 15 = 0, and every
-//      nonzero value falls in 0x20-0x2E or is 0xFD/0xFE/0xFF. Masked, those are
-//      0x00-0x0E and 0x1D-0x1F. The low 5 bits are the payload and bit 5 is a
-//      separate flag — a magnitude would not cluster like that.
+//      ⭐ CONFIRMED BY WATCHING IT STEAL. Steal's roll fails at low level, so the
+//      read is never reached ("Couldn't steal"). ⛔ HEX PATCH THE ROM: force the
+//      guard and the roll (0x6ABC3 `B1 70` -> `A9 FF`, 0x6ABDF `C5 24` -> `C9 FF`)
+//      and the read fires — with the index exactly `byte15 & $1F`, and DIFFERENT
+//      ITEMS on screen:
 //
-//      The same $18 / $1A / ($20) / `JSR $FDA6` idiom repeats at $9B80, $9C80 and
-//      $9D80 with different destination indices, so $FDA6 is a loader and byte 15
-//      selects WHICH entry it loads.
+//        byte 15 = 0x00 -> index  0 -> "Potion"
+//        byte 15 = 0x20 -> index  0 -> "Potion"
+//        byte 15 = 0x29 -> index  9 -> "Potion"
+//        byte 15 = 0x0A -> index 10 -> "Bomb Arm" / "Tranquilizer"
 //
-//      It is guarded, which is why no ordinary battle reaches it: a random roll
-//      (`LDA #$FF / JSR $A564`) against a threshold built from the ATTACKER's
-//      entry+0 and entry+$0F, then a target-status test (`AND #$E8`).
+//      ⭐ And the DATA agrees, which is what makes the mask more than a reading:
+//      179 of 232 monsters have byte 15 = 0 (the default entry), and every nonzero
+//      value is 0x20-0x2E or 0xFD-0xFF — masked, 0x00-0x0E and 0x1D-0x1F. Bit 5 is
+//      a separate flag: 0x00 and 0x20 both give index 0 and both yield a Potion.
 //
-// ⛔ WHICH ability owns it is STILL NOT DETERMINED, after a real attempt.
-//      What was established:
-//        - The routine starts at $AB9F and is an entry in a POINTER TABLE in bank
-//          52 (the entry itself at file 0x69A42, table from file 0x69A26). Its
-//          siblings are handlers in banks 52 and 53, with $9A68 repeating as a
-//          default — the shape of an effect dispatch.
-//        - It reads offset $36 from ($70), the TARGET. A monster attacking the
-//          party therefore reads a PARTY member's byte, never its own; the
-//          monster's byte 15 can only be read when the monster IS the target.
-//        - It is guarded three ways: target entry+$2C bit 7 must be set, then an
-//          RNG roll against (attacker entry+0 + entry+$0F), then target status
-//          bits ($01 AND #$E8) clear.
-//        - ⛔ It NEVER EXECUTES. Verified with `tools/ff3-pc-probe.mjs` across
-//          physical battles, monster specials, party magic, all 23 spell
-//          effect-types forced onto a castable spell, and 8 different monsters.
-//      ⛔ And a warning about the obvious way to measure that: counting PC hits
-//      WITHOUT checking the mapped bank reported 48 executions of $AB9F and 20 of
-//      $ABDE. Verified against the opcode bytes, both are ZERO — every hit was a
-//      different bank's code at the same CPU address.
+// ⛔ FOUR EARLIER ANSWERS, each from an instrument that had not been controlled:
+//      v1.8.67  "a dedicated reader at $A5F3" — that is the second byte of the STA
+//               that WRITES it. A RAM hook counts the dummy read cycle of an
+//               indirect-indexed store.
+//      v1.8.68  "$AA06 genuinely loads it" — indirect-indexed LOADS also do a
+//               spurious read at the un-carried address when crossing a page.
+//      v1.8.69  "copied and never read" — true only of ordinary battle; the
+//               differential trace could not see a path that never ran.
+//      v1.8.70  reader at "$8BE0" — wrong by $2000; bank 53 is in the $A000 window.
+//      ⛔ Also nearly shipped: "the routine runs 48 times, so it is part of normal
+//      resolution". Counting PC hits WITHOUT verifying the mapped bank gave 48;
+//      verified against the opcode bytes it is ZERO.
 //
-// ⛔ TWO EARLIER ANSWERS, both from instruments that could not be trusted:
-//        v1.8.67  "a dedicated reader at $A5F3" — $A5F3 is the second byte of the
-//                 STA that WRITES it; a RAM hook counts the dummy read cycle an
-//                 indirect-indexed store performs on its target.
-//        v1.8.68  "$AA06 LDA ($82),Y genuinely loads it" — indirect-indexed LOADS
-//                 also perform a spurious read at the un-carried address when
-//                 they cross a page. Another addressing artifact.
-//      ⭐ The lesson: an address-watching hook reports the CPU's BUS TRAFFIC,
-//      which includes reads no instruction semantically makes. Differential
-//      execution reports what the program DEPENDS on — and a static scan reports
-//      what could run but did not. The three answer different questions, and
-//      byte 15 needed the last two together.
+//      ⭐ What finally worked was asking the game instead of the addresses: log
+//      what the DISPATCHER jumps to while driving each command.
 
 export const MONSTER_PROPS = 0x060010;   // 16 bytes per bestiary id
 export const PROPS_STRIDE = 16;
@@ -310,12 +295,18 @@ export const BYTE15_READER_PC = 0xABE0;        // bank 53, in the $A000 window
 export const BYTE15_READER_FILE_OFF = 0x6ABF0;
 export const BYTE15_INDEX_MASK = 0x1F;
 export const BYTE15_ROUTINE_PC = 0xAB9F;
-/** The pointer table the routine is an entry in (bank 52). */
-export const EFFECT_DISPATCH_FILE = 0x69A26;
-export const BYTE15_ROUTINE_PTR_FILE = 0x69A42;
-/** ⛔ Which ability reaches it is NOT determined. The routine never executes in
- *  any battle configuration driven so far — see the header. */
-export const BYTE15_OWNER_UNKNOWN = true;
+/** The battle-action dispatch table (bank 52) and the ids that reach each one. */
+export const ACTION_DISPATCH_PC = 0x9A16, ACTION_DISPATCH_FILE = 0x69A26;
+export const ACTION_DISPATCHER_PC = 0x99FA;
+export const ACTION_ID_RAM = 0x7400;
+export const STEAL_ACTION_ID = 14;
+export const ACTION_IDS = { steal: 14, study: 12, jump: 8, item: 20 };
+/** ⭐ Byte 15 is the monster's STEAL-TABLE index — the Thief's Steal reads it. */
+export const BYTE15_MEANING = 'steal-table index';
+export const STEAL_TABLE_PTR = 0x9B80, STEAL_ENTRY_LEN = 8;
+/** Forcing a steal to succeed, for harnesses: guard + roll. */
+export const STEAL_FORCE_PATCHES = [[0x6ABC3, 0xA9], [0x6ABC4, 0xFF],
+                                    [0x6ABDF, 0xC9], [0x6ABE0, 0xFF]];
 /** The party members' SRAM blocks, and the job that gains a Magic command. */
 export const PARTY_A_BLOCK = 0x6100, JOB_OFF = 0x00, MP_OFF = 0x30;
 export const SPELL_LIST_OFF = 0x07, BLACK_MAGE_JOB = 4;
@@ -340,7 +331,8 @@ export const SPECIAL_NAMES = {
 export const PARTY_B_BLOCK = 0x6200, PARTY_B_STRIDE = 0x40;
 export const WEAPON_SLOTS = [3, 5];
 /** ⛔ Read, but its effect is unknown. Do not fill it in from a wiki. */
-export const NOT_ISOLATED = { unknown15: 15 };
+/** ⭐ Empty: every byte of the record is now measured, byte 15 included. */
+export const NOT_ISOLATED = {};
 /** ⛔ Kept so older callers still resolve. Nothing is inherited any more —
  *  every byte of the record has been measured except 15's PURPOSE. */
 export const INHERITED_FIELDS = {};

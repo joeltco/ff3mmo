@@ -18,6 +18,69 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.72 — 2026-08-16
+
+### It is the Thief's STEAL — byte 15 is the monster's steal-table index
+
+⭐ **Solved.** The battle-action dispatcher in bank 52 turns a per-actor action id
+into a handler:
+
+```
+$99D9  BD 00 74  LDA $7400,X     ; the action id for this actor
+$99E1  0A        ASL A
+$99E3  69 16     ADC #$16        ; pointer = $9A16 + id*2
+$99E9  69 9A     ADC #$9A
+$99FA  6C 18 00  JMP ($0018)
+```
+
+That fixes the table at `$9A16`, making the byte-15 routine (`$AB9F`) **entry 14**.
+Driving each job's menu rows and logging what the dispatcher actually jumps to
+maps the commands outright:
+
+| command | dispatch entry |
+|---|---|
+| Thief — **Steal** | **14** (`$AB9F`) — reads byte 15 |
+| Scholar — Study | 12 (`$AB6E`) |
+| Dragoon — Jump | 8 (`$A9AB`) |
+| Attack | 4 / 5 |
+| Item | 20, in every job |
+
+⭐ **Confirmed by watching it steal.** Steal's roll fails at this level, so the
+read is never reached ("Couldn't steal") — which is exactly why every earlier
+search came up empty. ⛔ HEX PATCH THE ROM: force the guard and the roll open and
+the read fires, with the index exactly `byte15 & $1F` and **different items** on
+screen:
+
+```
+byte 15 = 0x00 -> index  0 -> "Potion"
+byte 15 = 0x20 -> index  0 -> "Potion"
+byte 15 = 0x29 -> index  9 -> "Potion"
+byte 15 = 0x0A -> index 10 -> "Bomb Arm" / "Tranquilizer"
+```
+
+The data agrees: 179 of 232 monsters have byte 15 = 0 (the default entry), every
+nonzero value is `0x20-0x2E` or `0xFD-0xFF` — masked, `0x00-0x0E` and `0x1D-0x1F`.
+Bit 5 is a separate flag; `0x00` and `0x20` both give index 0 and both yield a
+Potion.
+
+**The audit grows to 42/42**, with the steal chain pinned end to end: Steal
+reaches the routine, the roll blocks the read, forcing it makes the read fire, the
+index is the masked byte, and ⭐ a different index steals a **different item** —
+which is the check that makes it "selecting" rather than merely "read".
+Revert-proven: mask `0x1F` -> `0xFF` fails.
+
+**`NOT_ISOLATED` is now empty. Every byte of FF3's 16-byte monster record is
+measured.**
+
+⛔ Four earlier answers are superseded, each from an instrument that had not been
+controlled — v1.8.67 (a store's dummy read cycle), v1.8.68 (a page-crossing load's
+spurious read), v1.8.69 ("never read", true only of paths that ran), v1.8.70 (a
+CPU address off by `$2000`). And one nearly shipped: "the routine runs 48 times",
+from counting PC hits without verifying the mapped bank — verified, it is zero.
+
+What finally worked was asking the game rather than the addresses: log what the
+**dispatcher** jumps to while driving each command.
+
 ## 1.8.71 — 2026-08-16
 
 ### The ability was NOT identified — what was found instead, and two corrections

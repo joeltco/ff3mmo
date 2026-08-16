@@ -168,79 +168,76 @@ With byte 6 left at its natural 0, patching that SAME entry changes nothing
 (220/220/220) — the control could have disagreed and did not. The magic
 entry has the identical shape to the physical one, inert middle byte and all.
 
-## ⭐ Byte 15 — a graphics/table index, read by exactly one routine
+## ⭐ Byte 15 — the monster's STEAL-TABLE index
 
-Two searches, each answering half the question.
+Read by the **Thief's Steal**, and by nothing else.
 
-**No monster script reads it.** `tools/ff3-diff-trace.mjs` runs two machines
-differing in exactly this byte on identical input and compares every
-instruction — anything using the value must diverge in control flow or a
-register. Run from the first frame so setup is included, ~22.1M instructions
-each, across **eight monsters** chosen for script diversity (spAtkIdx
-0/2/7/8/15/23/24/43, rates 0-99):
+A battle-action dispatcher in bank 52 turns a per-actor action id into a
+handler:
 
 ```
-control flow parted:   NEVER, for any of them
-registers differed at: $A5EF $A5F1 $A5F3 $A5F4 — the setup copy, x2
+$99D9  BD 00 74  LDA $7400,X     ; the action id for this actor
+$99E1  0A        ASL A
+$99E3  69 16     ADC #$16        ; pointer = $9A16 + id*2
+$99E9  69 9A     ADC #$9A
+$99FA  6C 18 00  JMP ($0018)
 ```
 
-**But code that reads it exists.** A dynamic trace only sees paths that ran,
-so the ROM was scanned statically for every instruction able to reach entry
-offset `$36` through a pointer. Exactly one reads it — bank 53, file
-`0x6ABF0`. ⛔ v1.8.70 printed its CPU address as `$8BE0`; that was wrong by
-`$2000` — bank 53 sits in the `$A000` window, proven because the routine's
-own `JMP $ABB7` and `JSR $AB66` only land on instruction boundaries under
-that mapping. It is `$ABE0`:
+That fixes the table at `$9A16`, so the byte-15 routine (`$AB9F`) is **entry
+14**. Driving each job's menu rows and logging what the dispatcher jumps to
+maps the commands outright:
+
+| command | dispatch entry |
+|---|---|
+| Thief — **Steal** | **14** (`$AB9F`) — reads byte 15 |
+| Scholar — Study | 12 (`$AB6E`) |
+| Dragoon — Jump | 8 (`$A9AB`) |
+| Attack | 4 / 5 |
+| Item | 20, in every job |
+
+The handler, bank 53:
 
 ```
 $ABDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
-$ABE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
-$ABE2  29 1F     AND #$1F        ; low 5 bits only
-$ABE4  85 18     STA $18         ; ...as an index
-       ...pointer $9B80, count 8, JSR $FDA6   ; a loader
+$ABE0  B1 70     LDA ($70),Y     ; from the TARGET — the monster robbed
+$ABE2  29 1F     AND #$1F        ; low 5 bits = the steal-table index
+$ABE4  85 18     STA $18
+       ...pointer $9B80, count 8, JSR $FDA6   ; load that 8-byte entry
 ```
 
-⭐ **`AND #$1F` is corroborated by the data**, which is what makes this more
-than a plausible reading: 179 of 232 monsters have byte 15 = 0, and every
-nonzero value is either 0x20-0x2E or 0xFD/0xFE/0xFF. Masked, those become
-0x00-0x0E and 0x1D-0x1F. The low 5 bits are the payload and bit 5 is a
-separate flag — a magnitude would not cluster like that.
+⭐ **Confirmed by watching it steal.** Steal's roll fails at low level, so
+the read is never reached ("Couldn't steal"). Forcing the guard and the roll
+open makes it fire, with the index exactly `byte15 & $1F` and **different
+items** on screen:
 
-It is guarded, which is why no ordinary battle reaches it: a random roll
-against a threshold built from the attacker's stats, then a target-status
-test.
+```
+byte 15 = 0x00 -> index  0 -> "Potion"
+byte 15 = 0x20 -> index  0 -> "Potion"
+byte 15 = 0x29 -> index  9 -> "Potion"
+byte 15 = 0x0A -> index 10 -> "Bomb Arm" / "Tranquilizer"
+```
 
-⛔ **Which ability reaches it is still not determined**, after a real
-attempt. The routine starts at `$AB9F` and IS an entry in a pointer table in
-bank 52 (entry at file `0x69A42`), whose siblings are handlers in banks 52
-and 53 with `$9A68` repeating as a default — the shape of an effect
-dispatch. It reads offset `$36` from `($70)`, the **target**, so a monster
-attacking the party reads a PARTY member's byte; the monster's byte 15 is
-only readable when the monster IS the target. It is guarded three ways:
-target entry+`$2C` bit 7 set, an RNG roll against the attacker's stats, and
-target status bits clear.
+And the data agrees: 179 of 232 monsters have byte 15 = 0 (the default
+entry), and every nonzero value is 0x20-0x2E or 0xFD-0xFF — masked, 0x00-0x0E
+and 0x1D-0x1F. Bit 5 is a separate flag: 0x00 and 0x20 both give index 0 and
+both yield a Potion.
 
-⛔ **And it never executes** — verified with `tools/ff3-pc-probe.mjs` across
-physical battles, monster specials, party magic, all 23 spell effect-types
-forced onto a castable spell, and 8 different monsters.
-
-⛔ A warning about the obvious way to measure that: counting PC hits WITHOUT
-checking the mapped bank reported 48 executions of `$AB9F` and 20 of
-`$ABDE`. Verified against the opcode bytes, both are **zero** — every hit
-was a different bank's code at the same CPU address.
-
-### Two earlier answers, and why they were wrong
+### Four earlier answers, each from an uncontrolled instrument
 
 - v1.8.67 — "a dedicated reader at `$A5F3`". That is the second byte of the
-  `STA` that **writes** it; a RAM hook counts the dummy read cycle an
-  indirect-indexed store performs on its target.
-- v1.8.68 — "`$AA06 LDA ($82),Y` genuinely loads it". Indirect-indexed *loads*
-  also perform a spurious read at the un-carried address when crossing a page.
+  `STA` that writes it; a RAM hook counts an indexed store's dummy read cycle.
+- v1.8.68 — "`$AA06` genuinely loads it". Indexed *loads* also do a spurious
+  read at the un-carried address when crossing a page.
+- v1.8.69 — "copied and never read". True only of ordinary battle; a
+  differential trace cannot see a path that never runs.
+- v1.8.70 — reader at "`$8BE0`". Wrong by `$2000`; bank 53 is in the `$A000`
+  window.
 
-An address hook reports the CPU's **bus traffic**, including reads no
-instruction semantically makes. Differential execution reports what the
-program **depends on**. A static scan reports what **could** run but did not.
-Byte 15 needed the last two together.
+Also nearly shipped: "the routine runs 48 times". Counting PC hits without
+verifying the mapped bank gives 48; verified against the opcode bytes, zero.
+
+What finally worked was asking the game rather than the addresses: log what
+the **dispatcher** jumps to while driving each command.
 
 ## The bestiary — 225 monsters
 
