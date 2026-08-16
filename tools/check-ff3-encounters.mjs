@@ -117,6 +117,14 @@ console.log('\nENCOUNTER_SET — zone -> (species record, count pattern)');
 const [s0, c0] = EN.setEntry(rom, 0);
 ok('entry 0 holds the indices the expander used', s0 === 0 && (c0 & EN.COUNT_INDEX_MASK) === LIVE_COUNT_INDEX,
    `species ${s0}, count ${c0}`);
+// ⛔ Zone 0 cannot test the STRIDE — zone*stride is 0 whatever the stride is, so
+// a wrong stride sails through. Check a NONZERO zone against a file offset taken
+// from the disassembly (`ASL $7E / ROL $7F` = *2), not from the constant.
+ok('the entry stride is 2 — checked on a NONZERO zone',
+   JSON.stringify(EN.setEntry(rom, 1)) === JSON.stringify([rom[0x05C012], rom[0x05C013]]),
+   `zone 1 = ${EN.setEntry(rom, 1).join(',')} vs ROM ${rom[0x05C012]},${rom[0x05C013]}`);
+ok('...and zone 3 too', JSON.stringify(EN.setEntry(rom, 3)) === JSON.stringify([rom[0x05C016], rom[0x05C017]]),
+   `zone 3 = ${EN.setEntry(rom, 3).join(',')}`);
 for (const [v, want] of [[6, 9], [7, 10]]) {
   const r = fight({ [EN.ENCOUNTER_SET]: v });
   ok(`byte 0 = ${v} spawns species record ${v} (id ${want})`,
