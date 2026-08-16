@@ -40,7 +40,13 @@ const ok = (label, cond, detail) => {
 function fight(patch = {}) {
   const p = Uint8Array.from(rom);
   p[M3.MONSTER_PROPS + 1] = 0xFF; p[M3.MONSTER_PROPS + 2] = 0x0F;
-  for (const [o, v] of Object.entries(patch)) p[Number(o)] = v;
+  // ⛔ `p[NaN] = v` is a silent no-op, so a mistyped call (an options object
+  // instead of the patch map) would patch NOTHING and read as a real result.
+  for (const [o, v] of Object.entries(patch)) {
+    const off = Number(o);
+    if (!Number.isInteger(off)) throw new Error(`fight(): bad patch key ${JSON.stringify(o)} — pass a {offset: byte} map`);
+    p[off] = v;
+  }
   // ⛔ the frame callback has to be given at CONSTRUCTION — assigning
   // `nes.opts.onFrame` afterwards never fires, and the hash comes back all-zero.
   let fb = null;
@@ -56,18 +62,25 @@ function fight(patch = {}) {
     }
     return out;
   };
+  const words = new Set();
   try {
     run(30);
     for (let s = 0; s < 300; s++) {
       const b = D[Math.floor(s / 8) % 4];
       nes.buttonDown(1, b); run(10); nes.buttonUp(1, b); run(12);
+      for (const l of lines()) for (const m of (l.match(/[A-Za-z][A-Za-z.!'-]{2,}/g) || [])) words.add(m);
       if (lines().some(l => /Guard|Item/i.test(l))) {
         let bodies = 0;
         for (let i = 0; i < 4; i++) {
           const a = M3.enemyAddr(i);
           if ((nes.cpu.mem[a] | (nes.cpu.mem[a + 1] << 8)) > 0) bodies++;
         }
-        run(90);
+        // ⛔ a transient battle-start message ("Ambushed.") is gone by the time a
+        // single final frame is sampled — collect as we go.
+        for (let k = 0; k < 9; k++) {
+          run(10);
+          for (const l of lines()) for (const m of (l.match(/[A-Za-z][A-Za-z.!'-]{2,}/g) || [])) words.add(m);
+        }
         let fh = 0, lit = 0;
         if (fb) for (let y = 16; y < 120; y++) for (let x = 8; x < 128; x++) {
           const px = (fb[y * 256 + x] | 0) & 0xFFFFFF;
@@ -78,6 +91,11 @@ function fight(patch = {}) {
                  counts: [...nes.cpu.mem.slice(EN.RAM_COUNTS, EN.RAM_COUNTS + 4)],
                  pal: [...nes.ppu.vramMem.slice(0x3F00, 0x3F20)],
                  flagDest: nes.cpu.mem[EN.FLAG_DEST],
+                 ambush: nes.cpu.mem[EN.AMBUSH_FLAG],
+                 preempt: nes.cpu.mem[EN.PREEMPT_FLAG],
+                 partyHP: [0, 1, 2, 3].reduce((t, i) =>
+                   t + (nes.cpu.mem[M3.partyAddr(i)] | (nes.cpu.mem[M3.partyAddr(i) + 1] << 8)), 0),
+                 screenWords: [...words],
                  frame: fh, lit, screen: lines() };
       }
     }
@@ -202,6 +220,39 @@ for (const [flags, want] of Object.entries(EN.FLAG_DEST_VALUES)) {
   ok('the flags do not disturb the count index (0xC0|3 still puts 4 on the field)',
      r && r.bodies === 4, r ? `${r.bodies}` : 'no battle');
 }
+
+// ── the ambush contest, and what bit 6 actually means ──────────────────────
+// ⭐ Force the contest's outcome by replacing `LDA $2B` with an immediate, so the
+// verdict is deterministic instead of a coin flip.
+console.log('\nthe ambush contest — and bit 6 = "no surprise"');
+const forceAmbush = { [EN.AMBUSH_CMP_FILE]: 0xA9, [EN.AMBUSH_CMP_FILE + 1]: 0xFF };
+const forcePre = { [EN.AMBUSH_CMP_FILE]: 0xA9, [EN.AMBUSH_CMP_FILE + 1]: 0x00 };
+const amb = fight(forceAmbush);
+ok('forcing $2B > $2A ambushes the party', amb && amb.screenWords.includes('Ambushed.'),
+   amb ? amb.screenWords.filter(w => /Amb|Crit/.test(w)).join(' ') : 'no battle');
+ok('...and the party loses HP to the free round', amb && amb.partyHP < base.partyHP,
+   amb ? `${base.partyHP} -> ${amb.partyHP}` : '');
+ok('...and the ambush flag is set', amb && amb.ambush === EN.AMBUSH_FLAG_SET,
+   amb ? `0x${amb.ambush.toString(16)}` : '');
+const pre = fight(forcePre);
+ok('forcing $2B < $2A sets the pre-emptive flag instead', pre && pre.preempt > 0,
+   pre ? `$78BA=${pre.preempt}` : '');
+ok('...with no ambush and no HP lost', pre && pre.ambush === 0 && pre.partyHP === base.partyHP,
+   pre ? `HP ${pre.partyHP}` : '');
+// ⭐⭐ the discriminator: bit 6 must suppress even a FORCED ambush.
+// ⛔ Use the CONSTANT, not a literal — otherwise mislabelling which bit is the
+// no-surprise flag sails straight through, which is exactly what happened first.
+const NS = EN.COUNT_FLAG_NO_SURPRISE;
+const OTHER = 0xC0 & ~NS;
+const amb6 = fight({ ...forceAmbush, [EN.ENCOUNTER_SET + 1]: NS | LIVE_COUNT_INDEX });
+ok(`the no-surprise bit (0x${NS.toString(16)}) suppresses even a forced ambush`,
+   amb6 && amb6.ambush === 0 && !amb6.screenWords.includes('Ambushed.')
+   && amb6.partyHP === base.partyHP,
+   amb6 ? `flag=0x${amb6.ambush.toString(16)} HP=${amb6.partyHP}` : '');
+// ⛔ and the OTHER flag bit must NOT suppress it, or the check would pass for any bit.
+const amb7 = fight({ ...forceAmbush, [EN.ENCOUNTER_SET + 1]: OTHER | LIVE_COUNT_INDEX });
+ok(`the other bit (0x${OTHER.toString(16)}) does NOT suppress it`,
+   amb7 && amb7.ambush === EN.AMBUSH_FLAG_SET, amb7 ? `0x${amb7.ambush.toString(16)}` : '');
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

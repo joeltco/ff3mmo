@@ -18,6 +18,56 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.84 — 2026-08-16
+
+### $2A is the AMBUSH contest — and that is what bit 6 turns off
+
+⭐ **`$2A` and `$2B` are two tallies rolled against each other** at bank 52 `$8830`:
+
+```
+$8830  JSR $886F / STA $29     ; a per-side value
+$8835  LDA #$64 / JSR $A564    ; random 0..100
+$883A  CMP $29 / BCS $8840
+$883E  INC $2B                 ; one side scores
+$8840  INC $2A                 ; the other tally always advances
+$8844  LDA $2B / CMP $2A       ; compare them
+$8848  BEQ $886E               ; tie       -> an ordinary battle
+$884A  BCS $8852               ; $2B > $2A -> the party is AMBUSHED
+$884C  INC $78BA               ; $2B < $2A -> the party's advantage
+```
+
+Forcing each outcome (patching `LDA $2B` to an immediate) settles it on screen:
+
+```
+$2B > $2A -> "Ambushed.", the party loses a free round (HP 118 -> 108), $78C3 = 0x80
+$2B < $2A -> $78BA = 1, no message, no HP lost
+tie       -> nothing
+```
+
+⭐⭐ **So bit 6 means "this formation is never part of a surprise".** With it set,
+`BMI $886E` skips the contest outright and even a FORCED ambush does not
+happen — HP untouched, `$78C3 = 0x00`, no message. With the other flag bit set
+instead the ambush still fires, so it is bit 6 specifically. That closes the chain
+that started three questions ago: zone entry -> flag bit -> `$7ED8` -> the ambush
+contest.
+
+⛔ **Bit 7 is still unexplained.** It reaches `$7ED8` bit 0, and bit 0 is not what
+gates the contest. Bounded, not identified.
+
+**Gate now 39/39**, revert-proven: mislabel which bit is the no-surprise flag and
+2 checks fail.
+
+⛔ **Two silent-failure bugs found in my own harness while doing this**, both of
+the same family — a check that cannot disagree:
+- The new checks called `fight({ patch: ... })` but `fight` takes the patch
+  POSITIONALLY. `Number("patch")` is NaN, `p[NaN] = v` is a silent no-op, so the
+  ROM was never patched and the results read as real. `fight()` now throws on a
+  non-integer patch key.
+- The first revert proof PASSED because the checks used literal `0x40`/`0x80`
+  instead of `COUNT_FLAG_NO_SURPRISE`, so the constant under test was never
+  exercised — the identical mistake to the `ENCOUNTER_SET_STRIDE` proof in
+  v1.8.79. The checks now use the constant and derive the control from it.
+
 ## 1.8.83 — 2026-08-16
 
 ### Followed $7ED8 — and bit 7 IS used, correcting v1.8.82

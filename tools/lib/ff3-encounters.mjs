@@ -88,10 +88,33 @@
 // $7ED8 bit 7 is then what `BMI $886E` at bank 52 $880A tests, skipping a
 // percentage roll (`LDA #$64 / JSR $A564 / CMP $28 / BCS / INC $2A`).
 //
-// ⛔ WHAT THE ROLL ULTIMATELY DOES IS STILL NOT KNOWN. Eight encounters at each
-// of the four bit combinations produced no difference on screen — no extra
-// message, and the battle is byte-identical. The next link is `$2A`, which the
-// roll increments. Not chased, not guessed at.
+// ⭐ AND THE ROLL IS THE AMBUSH / PRE-EMPTIVE CONTEST. `$2A` and `$2B` are two
+// tallies, rolled against each other at bank 52 $8830:
+//
+//   $8830  JSR $886F / STA $29     ; a per-side value
+//   $8835  LDA #$64 / JSR $A564    ; random 0..100
+//   $883A  CMP $29 / BCS $8840
+//   $883E  INC $2B                 ; one side scores
+//   $8840  INC $2A                 ; the other tally always advances
+//   $8844  LDA $2B / CMP $2A       ; compare them
+//   $8848  BEQ $886E               ; tie      -> an ordinary battle
+//   $884A  BCS $8852               ; $2B > $2A -> the party is AMBUSHED
+//   $884C  INC $78BA               ; $2B < $2A -> the party's advantage
+//
+// ⭐ Measured by forcing each outcome (patching `LDA $2B` to an immediate):
+//
+//   $2B > $2A -> the screen says "Ambushed.", the party loses a free round
+//                (HP 118 -> 103) and $78C3 = 0x80
+//   $2B < $2A -> $78BA = 1, no message, no HP lost
+//   tie       -> nothing
+//
+// ⭐⭐ SO BIT 6 MEANS "THIS FORMATION IS NEVER PART OF A SURPRISE". With bit 6
+// set the `BMI $886E` skips the contest outright, and even a FORCED ambush does
+// not happen — party HP untouched at 118, $78C3 = 0x00, no message. With bit 7
+// set instead the ambush still fires, so it is bit 6 specifically.
+//
+// ⛔ BIT 7 remains unexplained. It reaches $7ED8 bit 0, and bit 0 is not what
+// gates the contest (bit 7 is). Bounded, not identified.
 export const COUNT_FLAG_BIT6 = 0x40;
 export const COUNT_FLAG_BIT7 = 0x80;
 export const COUNT_BIT6_TEST_SITES = [0x5DD7B, 0x5E3BB, 0x5F490, 0x5FB98];
@@ -103,6 +126,14 @@ export const FLAG_DEST_VALUES = { 0x00: 0x00, 0x40: 0x80, 0x80: 0x01, 0xC0: 0x81
 /** The exact instruction sequence that does the merge. */
 export const FLAG_MERGE_BYTES = [0xAD, 0x68, 0x7D, 0x4A, 0x4A, 0x4A, 0x4A, 0x4A, 0x4A,
                                  0x29, 0x03, 0x0D, 0xD8, 0x7E, 0x8D, 0xD8, 0x7E];
+/** ⭐ Count-byte bit 6 = "no surprise": the ambush/pre-emptive contest is skipped. */
+export const COUNT_FLAG_NO_SURPRISE = 0x40;
+/** The ambush contest's two tallies, and where its verdict lands. */
+export const AMBUSH_TALLY_A = 0x2A, AMBUSH_TALLY_B = 0x2B;
+export const AMBUSH_FLAG = 0x78C3, AMBUSH_FLAG_SET = 0x80;   // party was ambushed
+export const PREEMPT_FLAG = 0x78BA;                          // party's advantage
+/** `LDA $2B` immediately before the compare — patch it to force an outcome. */
+export const AMBUSH_CMP_FILE = 0x68854;
 
 // ── THE TWO HEADER BYTES ARE PALETTE INDICES ─────────────────────────────────
 //
