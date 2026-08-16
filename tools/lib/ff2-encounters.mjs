@@ -53,11 +53,30 @@
 // to clear menus runs all the way back to the TITLE SCREEN if it is done blindly.
 // Back out one press at a time and stop the moment no menu word is on screen.
 //
+// THE ff1-goto ROUTE WAS TRIED TOO — and FF2's warp table is not located.
+// `ff1-goto.mjs` works because FF1's entrance tables are known: three parallel
+// arrays at $AC00/$AC20/$AC40 (destination X, Y, MAP). Repoint the one door the
+// party can reach and you are anywhere. FF2 has no such table in this repo, and
+// two ways of finding it failed:
+//   * Hunting the MAP ID in RAM across boot-time screen changes returns only
+//     sprite bitmap rows ($0341-$0350, values like 3C/FF/C3) and stack bytes —
+//     the change detector fires on animation, so the snapshots are not map loads.
+//   * `MAPOBJ_TABLE` (0x3510), the one FF2 map table the repo does have, is
+//     3-byte `type/x/y` records — NPCs and objects. There is no destination
+//     field in it, so it is not the warp table.
+//
+// ⛔ THREE APPROACHES HAVE NOW DEAD-ENDED: walking from `ff2-outside` (blocked,
+// no encounter in 3000 steps), driving from boot (reaches the game but lands in
+// an auto-move sequence whose state will not replay on the stock rom), and
+// locating a warp table (above). Each is recorded so a fourth attempt does not
+// re-run them.
+//
 // WHERE TO START NEXT
-// The remaining problem is navigation, not tooling: something has to steer the
-// party from wherever the intro leaves it out onto the world map. Either drive it
-// there properly, or copy `ff1-goto.mjs` — find FF2's entrance/warp table and
-// repoint a reachable door at an encounter map.
+// The cheapest unblock is external: FF2 map/warp documentation — which map ids
+// are overworld, and what the starting area connects to. With a destination map
+// id and the warp table's shape, the ff1-goto trick is a short job. Without one,
+// the next honest step is tracing a REAL map transition, which needs the party
+// under player control, which is the thing that is blocked.
 export const NOT_DECODED = true;
 export const PARTY_Y_ZP = 0x0069;
 export const PARTY_X_ZP = 0x0068;          // by convention, NOT confirmed

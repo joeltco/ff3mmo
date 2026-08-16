@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.91 — 2026-08-16
+
+### FF2 warp table: not located. Third approach to dead-end; stopping.
+
+`ff1-goto.mjs` works because FF1's entrance tables are known — three parallel
+arrays at `$AC00`/`$AC20`/`$AC40` (destination X, Y, MAP). Repoint the one door
+the party can reach and you are anywhere. FF2 has no such table in this repo, and
+two ways of finding it failed:
+
+- **Hunting the map id in RAM** across boot-time screen changes returns only
+  sprite bitmap rows (`$0341`-`$0350`, values like `3C`/`FF`/`C3`) and stack
+  bytes. The change detector fires on animation, so those snapshots are not map
+  loads.
+- **`MAPOBJ_TABLE` (0x3510)**, the one FF2 map table the repo does have, is 3-byte
+  `type/x/y` records — NPCs and objects. No destination field, so not the warp
+  table.
+
+⛔ **Three approaches have now dead-ended** on the same goal: walking from
+`ff2-outside` (blocked, no encounter in 3000 steps), driving from boot (reaches
+the game, but lands in an auto-move sequence whose state will not replay on the
+stock rom), and locating a warp table (above). All three are recorded in
+`tools/lib/ff2-encounters.mjs` so a fourth attempt starts fresh rather than
+re-running them.
+
+⚠ **Unrelated, but recorded because it will recur:** this deploy first aborted on
+`pvp-wire-sim`'s "v1.7.750 P-4 battle ends with victor delta on side defeat" —
+`timeout waiting for predicate after 1500ms`. It passes 3/3 when re-run on its
+own, and this change touched only a comment and the changelog, so it is a FLAKY
+timeout under deploy load, not a regression. The 1500ms predicate wait is tight
+when the machine is busy running every other gate.
+
+**I am stopping this thread rather than spending more on it.** The remaining
+blocker is circular: tracing a real map transition needs the party under player
+control, and getting the party under player control is what is blocked. FF1 and
+FF3 encounters are both fully decoded and gated; FF2's are not, and I would
+rather say so than keep producing negative results.
+
 ## 1.8.90 — 2026-08-16
 
 ### FF2 overworld savestate: NOT produced. The boot harness works; the state does not.
