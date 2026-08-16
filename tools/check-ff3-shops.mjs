@@ -151,7 +151,8 @@ for (const id of [232, 239, 244, 250]) {
 // ── FF3's monster tables, checked against the game rather than a wiki ───────
 // ⛔ `gen-monsters-js.js` takes its layout from the Data Crystal ROM map. This
 // puts the parts that CAN be checked in front of the running game, and leaves
-// the rest labelled inherited.
+// the rest labelled inherited. Defence and evade moved to the measured side in
+// v1.8.64 and are pinned behaviourally by `check-ff3-monsters.mjs`.
 console.log('\nmonster tables — measured, not cited');
 {
   const M3 = await import('./lib/ff3-monsters.mjs');
@@ -200,7 +201,9 @@ console.log('\nmonster tables — measured, not cited');
   // ⛔ ENEMY_RAM cannot be pinned by "some address holds 300" — the second enemy
   // slot at +0x40 holds it too, and moving the base by one stride passed. Pin it
   // as the LOWEST address that does.
-  eq('ENEMY_RAM is the first slot, not the second',
+  // ⛔ ...and being the lowest address that HOLDS it does not make it the LIVE
+  // hp. It is not — see ENEMY_CUR_HP. This pins where HP lands, nothing more.
+  eq('ENEMY_RAM is the first slot HP lands in, not the second',
      Math.min(...hp300.holding), M3.ENEMY_RAM);
   eq('...and the next slot is one stride on',
      hp300.holding.includes(M3.ENEMY_RAM + M3.ENEMY_RAM_STRIDE), true);
@@ -225,11 +228,12 @@ console.log('\nmonster tables — measured, not cited');
   eq('zeroing the ROLL byte does NOT drop it below baseline — that is what makes it a different field',
      fight({ ...bigHP, [rollAddr]: 0 }, 90).taken >= base.taken, true);
 
-  // ⛔ defence and evade are NOT verified — the party cannot damage a Goblin, so
-  // there is no signal for them to move. Pinned as inherited so nobody reads the
-  // module as claiming more than was measured.
-  eq('defEvdIdx is still labelled inherited, not verified',
-     [M3.INHERITED_FIELDS.defEvdIdx, M3.VERIFIED_FIELDS.defEvdIdx], [12, undefined]);
+  // defence and evade WERE measured in v1.8.64, once the harness stopped reading
+  // damage off a copy that never moves. The behavioural pinning lives in
+  // `check-ff3-monsters.mjs`; all that belongs here is that the label moved with
+  // the evidence and did not end up in both places at once.
+  eq('defEvdIdx is labelled verified, not inherited',
+     [M3.INHERITED_FIELDS.defEvdIdx, M3.VERIFIED_FIELDS.defEvdIdx], [undefined, 12]);
 }
 
 console.log(`\n${checks - fails}/${checks} checks passed`);

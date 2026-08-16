@@ -18,6 +18,69 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.64 — 2026-08-15
+
+### The Goblin was hurtable the whole time — a retraction, and two fields
+
+v1.8.63 reported that defence and evade could not be verified because "the party
+in the available savestate cannot damage a Goblin at all — every fight ends the
+same way at round 11 with zero damage dealt." That was wrong, and the way it was
+wrong is the useful part.
+
+⛔ **`$7678` IS NOT THE MONSTER'S CURRENT HP.** It is a copy HP is *loaded* into
+that never moves again. Every "0 dealt" measurement in v1.8.63 was reading an
+address that cannot change. The battle screen was printing `1xHit` and `2xHit`
+the entire time — the party was landing hits and the harness could not see them.
+Patching HP to 500 and scanning **every** address that held it:
+
+```
+$7678: 500 -> 500     $76B8: 500 -> 485   <-- the only one that moves
+$767A: 500 -> 500     $76BA: 500 -> 500
+```
+
+Current HP is `$76B8`; `$76BA` is the max beside it. ⛔ **The lesson: an address
+that merely HOLDS the right value at battle start has not been shown to be the
+live one — make it move first.** `ENEMY_RAM` is kept and re-labelled as the load
+copy rather than deleted, because where HP lands is still a true measurement.
+
+⭐ **DEFENCE and EVADE are now both measured**, off the entry props `+12` points
+at (Goblin: idx 0, bytes `[0,10,1]`). Both cut damage, so "damage fell" pins
+neither; they separate on the same signature FF1's do — **evasion drives damage
+to ZERO, defence FLOORS it above zero**:
+
+```
+byte 0 = 0/32/64/128/192/255  ->  99  0  0  0  0  0     floor ZERO
+byte 2 = 0/32/64/128/192/255  -> 111 12 12 12 12 12     floor TWELVE
+```
+
+and the battle text settles it outright. At byte 0 = 255 the screen prints
+**"Miss" x26**, a word appearing nowhere at baseline or with defence maxed; at
+byte 2 = 255 the hit counts are identical to baseline (`1xHit` x28, `2xHit` x12,
+`3xHit` x2) and only the damage collapses. Byte 0 makes the party miss; byte 2
+lets them land and soaks it.
+
+⛔ **Byte 1 of that entry does nothing measurable** — 0 and 255 both leave the
+damage at exactly 99, on a measurement sensitive enough to catch both of its
+neighbours. It is NOT the evade byte, whatever Data Crystal calls it. Left
+unnamed rather than guessed at.
+
+**New gate — `tools/check-ff3-monsters.mjs`, 18/18**, the first monster gate in
+the repo (FF1's and FF2's shipped as docs only). It fights a real Goblin for
+every claim and reads the words off the battle screen. Revert-proven twice:
+
+- swap `STAT_EVADE_OFF` / `STAT_DEF_OFF` -> **6 failures**
+- point `ENEMY_CUR_HP` back at `0x7678` -> **4 failures**, reproducing the exact
+  v1.8.63 symptom (`dealt 0`)
+
+It also pins `gen-monsters-js.js`'s **duplicate copies** of the four table
+addresses against the module's, so a correction can't land in one file and not
+the other.
+
+**New catalog — `docs/FF3-MONSTERS.md`**, 225 monsters with the measured columns
+only (HP, attack, defence, evade, gil). The rest of the 16-byte record stays
+labelled inherited-from-Data-Crystal; printing it beside measured columns would
+launder a citation into a measurement.
+
 ## 1.8.63 — 2026-08-15
 
 ### FF3's monster stats — putting Data Crystal in front of the game
