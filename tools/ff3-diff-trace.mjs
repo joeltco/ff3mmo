@@ -38,6 +38,12 @@ const OFF = Number(flag('off', '15'));
 const VA = Number(flag('a', '0'));
 const VB = Number(flag('b', '255'));
 const SHIELD = args.includes('--shield');
+// ⛔ The byte-15 routine reads offset $36 from ($70) — the TARGET. A monster
+// attacking the party therefore reads a PARTY member's byte, never its own. To
+// make the monster the target, the PARTY has to act on it, so --cast turns the
+// party into Black Mages and drives the level-1 black spell at the monster.
+const CAST = args.includes('--cast');
+const FIRE_SPELL = Number(flag('spell', '0x31'));
 const FRAMES = Number(flag('frames', '900'));
 // ⛔ spAtkRate decides WHICH path runs. At 0xFF the monster casts its special
 // every turn and never swings — so a field that only matters to the PHYSICAL
@@ -50,6 +56,12 @@ const RATE = flag('rate', null);
 // exercised; monsters differ in data, not code, so the script is the variable.
 const ENCOUNTER_MON = 0x05C410;
 const MON = Number(flag('monster', '0'));
+// --set 0x618D6=15 : extra ROM patches applied to BOTH machines, so a code path
+// can be forced open without itself becoming the variable under test.
+const SETS = [];
+for (let i = 0; i < args.length; i++) if (args[i] === '--set') {
+  const [o, v] = args[i + 1].split('='); SETS.push([Number(o), Number(v)]);
+}
 const TOPN = Number(flag('top', '12'));
 // ⛔ Comparing only AFTER the battle has begun throws away encounter SETUP —
 // which is exactly where the record is copied into the combatant entry. Without
@@ -71,6 +83,7 @@ function build(val) {
   if (RATE !== null) p[props + M3.FIELDS.spAtkRate] = Number(RATE);
   p[M3.STAT_TABLE + rom[props + M3.FIELDS.atkHitIdx] * M3.STAT_ENTRY
     + M3.STAT_ATK_OFF] = 0xFF;                           // and it hits hard
+  for (const [o, v] of SETS) p[o] = v;
   p[props + OFF] = val;
   const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
   nes.loadROM(Buffer.from(p).toString('binary'));
@@ -84,7 +97,27 @@ function build(val) {
 
 const A = build(VA), B = build(VB);
 const step = (m, n) => { for (let i = 0; i < n; i++) m.nes.frame(); };
-const arm = (m) => { if (SHIELD) for (let i = 0; i < 4; i++) m.nes.cpu.mem[M3.PARTY_B_BLOCK + i * M3.PARTY_B_STRIDE] = 0x5B; };
+const arm = (m) => {
+  if (SHIELD) for (let i = 0; i < 4; i++) m.nes.cpu.mem[M3.PARTY_B_BLOCK + i * M3.PARTY_B_STRIDE] = 0x5B;
+  if (CAST) for (let i = 0; i < 4; i++) {
+    const a2 = M3.PARTY_A_BLOCK + i * M3.PARTY_B_STRIDE;
+    const b2 = M3.PARTY_B_BLOCK + i * M3.PARTY_B_STRIDE;
+    m.nes.cpu.mem[a2 + M3.JOB_OFF] = M3.BLACK_MAGE_JOB;
+    // ⛔ without a SPELL LIST the magic menu has nothing to pick and every A press
+    // is refused — the harness then "casts" nothing and any result is vacuous.
+    for (let k = 0; k < 8; k++) m.nes.cpu.mem[b2 + M3.SPELL_LIST_OFF + k] = FIRE_SPELL;
+    for (let k = 0; k < 16; k++) m.nes.cpu.mem[a2 + M3.MP_OFF + k] = 99;
+  }
+};
+/** One character's whole cast: Magic -> scroll to level 1 -> spell -> target. */
+const castOne = (m) => {
+  const tap = (btn, h = 10, g = 24) => { m.nes.buttonDown(1, btn); step(m, h); m.nes.buttonUp(1, btn); step(m, g); };
+  tap(Controller.BUTTON_DOWN);
+  tap(Controller.BUTTON_A, 10, 45);
+  for (let k = 0; k < 6; k++) tap(Controller.BUTTON_DOWN, 10, 18);
+  tap(Controller.BUTTON_A, 10, 45);
+  tap(Controller.BUTTON_A, 10, 45);
+};
 const screen = (m) => {
   const v = m.nes.ppu.vramMem, out = [];
   for (let r = 0; r < 30; r++) {
@@ -130,7 +163,7 @@ for (let s = 0; s < 400 && !started; s++) {
     m.nes.buttonDown(1, b); step(m, 10); m.nes.buttonUp(1, b); step(m, 12);
   }
   if (FROM_START) compare(-1); else clear();
-  if (screen(A).some(l => /Guard|Item/i.test(l))) started = true;
+  if (screen(A).some(l => new RegExp(CAST ? 'Magic' : 'Guard|Item', 'i').test(l))) started = true;
 }
 if (!started) { console.error('never reached a battle'); process.exit(1); }
 if (FROM_START && (pcDiff.size || regDiff.size))
@@ -145,7 +178,8 @@ console.log(`differential trace — monster record byte ${OFF}: ${VA} vs ${VB}` 
 for (let f = 0; f < FRAMES; f++) {
   const press = (f % 6 === 0);
   for (const m of [A, B]) {
-    if (press) { m.nes.buttonDown(1, Controller.BUTTON_A); step(m, 4); m.nes.buttonUp(1, Controller.BUTTON_A); step(m, 1); }
+    if (CAST && f % 40 === 0) { for (let c2 = 0; c2 < 4; c2++) castOne(m); step(m, 60); }
+    else if (press) { m.nes.buttonDown(1, Controller.BUTTON_A); step(m, 4); m.nes.buttonUp(1, Controller.BUTTON_A); step(m, 1); }
     else step(m, 1);
   }
   frames++;

@@ -186,14 +186,17 @@ registers differed at: $A5EF $A5F1 $A5F3 $A5F4 — the setup copy, x2
 
 **But code that reads it exists.** A dynamic trace only sees paths that ran,
 so the ROM was scanned statically for every instruction able to reach entry
-offset `$36` through a pointer. Exactly one reads it — bank 53, `$8BE0`,
-file `0x6ABF0`:
+offset `$36` through a pointer. Exactly one reads it — bank 53, file
+`0x6ABF0`. ⛔ v1.8.70 printed its CPU address as `$8BE0`; that was wrong by
+`$2000` — bank 53 sits in the `$A000` window, proven because the routine's
+own `JMP $ABB7` and `JSR $AB66` only land on instruction boundaries under
+that mapping. It is `$ABE0`:
 
 ```
-$8BDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
-$8BE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
-$8BE2  29 1F     AND #$1F        ; low 5 bits only
-$8BE4  85 18     STA $18         ; ...as an index
+$ABDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
+$ABE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
+$ABE2  29 1F     AND #$1F        ; low 5 bits only
+$ABE4  85 18     STA $18         ; ...as an index
        ...pointer $9B80, count 8, JSR $FDA6   ; a loader
 ```
 
@@ -207,9 +210,24 @@ It is guarded, which is why no ordinary battle reaches it: a random roll
 against a threshold built from the attacker's stats, then a target-status
 test.
 
-⛔ **Which ability owns that routine is not determined.** It is entered by
-fall-through; no JSR, JMP or RTS-dispatch pointer to it exists in banks
-48-56. Naming it would be a guess.
+⛔ **Which ability reaches it is still not determined**, after a real
+attempt. The routine starts at `$AB9F` and IS an entry in a pointer table in
+bank 52 (entry at file `0x69A42`), whose siblings are handlers in banks 52
+and 53 with `$9A68` repeating as a default — the shape of an effect
+dispatch. It reads offset `$36` from `($70)`, the **target**, so a monster
+attacking the party reads a PARTY member's byte; the monster's byte 15 is
+only readable when the monster IS the target. It is guarded three ways:
+target entry+`$2C` bit 7 set, an RNG roll against the attacker's stats, and
+target status bits clear.
+
+⛔ **And it never executes** — verified with `tools/ff3-pc-probe.mjs` across
+physical battles, monster specials, party magic, all 23 spell effect-types
+forced onto a castable spell, and 8 different monsters.
+
+⛔ A warning about the obvious way to measure that: counting PC hits WITHOUT
+checking the mapped bank reported 48 executions of `$AB9F` and 20 of
+`$ABDE`. Verified against the opcode bytes, both are **zero** — every hit
+was a different bank's code at the same CPU address.
 
 ### Two earlier answers, and why they were wrong
 

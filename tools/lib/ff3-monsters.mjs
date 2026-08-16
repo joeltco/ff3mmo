@@ -199,15 +199,18 @@
 //
 // ⭐ BUT CODE THAT READS IT EXISTS. A dynamic trace only sees paths that RAN, so
 //      the ROM was scanned statically for every instruction able to reach entry
-//      offset $36 through a pointer. Exactly one reads it — bank 53, CPU $8BE0,
-//      file 0x6ABF0:
+//      offset $36 through a pointer. Exactly one reads it — bank 53, file 0x6ABF0.
+//      ⛔ v1.8.70 gave its CPU address as $8BE0. WRONG BY $2000: bank 53 sits in
+//      the $A000 window, proven because the routine's own `JMP $ABB7` and
+//      `JSR $AB66` only land on instruction boundaries under that mapping. It is
+//      $ABE0:
 //
-//        $8BDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
-//        $8BE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
-//        $8BE2  29 1F     AND #$1F        ; low 5 bits only
-//        $8BE4  85 18     STA $18         ; ...as an index
-//        $8BE6  A9 80 / 85 20 / A9 9B / 85 21    ; source pointer $9B80
-//        $8BEE  A9 08 / 85 1A / A9 08 / A0 1A / A2 00 / 20 A6 FD  ; JSR $FDA6
+//        $ABDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
+//        $ABE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
+//        $ABE2  29 1F     AND #$1F        ; low 5 bits only
+//        $ABE4  85 18     STA $18         ; ...as an index
+//        $ABE6  A9 80 / 85 20 / A9 9B / 85 21    ; source pointer $9B80
+//        $ABEE  A9 08 / 85 1A / A9 08 / A0 1A / A2 00 / 20 A6 FD  ; JSR $FDA6
 //
 //      ⭐ `AND #$1F` is corroborated by the DATA, which is what makes this more
 //      than a plausible reading: 179 of 232 monsters have byte 15 = 0, and every
@@ -223,10 +226,25 @@
 //      (`LDA #$FF / JSR $A564`) against a threshold built from the ATTACKER's
 //      entry+0 and entry+$0F, then a target-status test (`AND #$E8`).
 //
-// ⛔ WHICH ability owns that routine is NOT determined. It is entered by
-//      fall-through from earlier code in bank 53; no JSR/JMP and no
-//      RTS-dispatch pointer to it exists in banks 48-56. Naming it would be a
-//      guess, so it is left unnamed.
+// ⛔ WHICH ability owns it is STILL NOT DETERMINED, after a real attempt.
+//      What was established:
+//        - The routine starts at $AB9F and is an entry in a POINTER TABLE in bank
+//          52 (the entry itself at file 0x69A42, table from file 0x69A26). Its
+//          siblings are handlers in banks 52 and 53, with $9A68 repeating as a
+//          default — the shape of an effect dispatch.
+//        - It reads offset $36 from ($70), the TARGET. A monster attacking the
+//          party therefore reads a PARTY member's byte, never its own; the
+//          monster's byte 15 can only be read when the monster IS the target.
+//        - It is guarded three ways: target entry+$2C bit 7 must be set, then an
+//          RNG roll against (attacker entry+0 + entry+$0F), then target status
+//          bits ($01 AND #$E8) clear.
+//        - ⛔ It NEVER EXECUTES. Verified with `tools/ff3-pc-probe.mjs` across
+//          physical battles, monster specials, party magic, all 23 spell
+//          effect-types forced onto a castable spell, and 8 different monsters.
+//      ⛔ And a warning about the obvious way to measure that: counting PC hits
+//      WITHOUT checking the mapped bank reported 48 executions of $AB9F and 20 of
+//      $ABDE. Verified against the opcode bytes, both are ZERO — every hit was a
+//      different bank's code at the same CPU address.
 //
 // ⛔ TWO EARLIER ANSWERS, both from instruments that could not be trusted:
 //        v1.8.67  "a dedicated reader at $A5F3" — $A5F3 is the second byte of the
@@ -288,11 +306,15 @@ export const BYTE15_HOME_OFF = 0x33;
 export const BYTE15_ENTRY_OFF = 0x36;          // as the code addresses it, via ($70)
 export const BYTE15_WRITER_PC = 0xA5F2;
 export const BYTE15_WRITER_FILE_OFF = 0x625FC;
-export const BYTE15_READER_PC = 0x8BE0;        // bank 53
+export const BYTE15_READER_PC = 0xABE0;        // bank 53, in the $A000 window
 export const BYTE15_READER_FILE_OFF = 0x6ABF0;
 export const BYTE15_INDEX_MASK = 0x1F;
-/** ⛔ Which ability calls that routine is NOT determined — it is entered by
- *  fall-through and has no dispatch pointer anywhere in banks 48-56. */
+export const BYTE15_ROUTINE_PC = 0xAB9F;
+/** The pointer table the routine is an entry in (bank 52). */
+export const EFFECT_DISPATCH_FILE = 0x69A26;
+export const BYTE15_ROUTINE_PTR_FILE = 0x69A42;
+/** ⛔ Which ability reaches it is NOT determined. The routine never executes in
+ *  any battle configuration driven so far — see the header. */
 export const BYTE15_OWNER_UNKNOWN = true;
 /** The party members' SRAM blocks, and the job that gains a Magic command. */
 export const PARTY_A_BLOCK = 0x6100, JOB_OFF = 0x00, MP_OFF = 0x30;

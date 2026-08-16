@@ -18,6 +18,57 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.71 — 2026-08-16
+
+### The ability was NOT identified — what was found instead, and two corrections
+
+Asked to find which ability calls the byte-15 routine. I did not find it. What
+the search did establish is worth having, and it corrects v1.8.70 twice.
+
+⛔ **The CPU address in v1.8.70 was wrong by `$2000`.** Bank 53 sits in the
+`$A000` window, not `$8000` — proven because the routine's own `JMP $ABB7` and
+`JSR $AB66` only land on instruction boundaries under that mapping. The reader is
+at **`$ABE0`** (file `0x6ABF0` was always right), the routine starts at `$AB9F`.
+
+**What was established:**
+
+- The routine IS an entry in a **pointer table** in bank 52 (its entry at file
+  `0x69A42`, table from `0x69A26`). Its siblings are handlers in banks 52 and 53
+  with `$9A68` repeating as a default — the shape of an effect dispatch.
+- It reads offset `$36` from `($70)`, the **TARGET**. So a monster attacking the
+  party reads a PARTY member's byte, never its own; a monster's byte 15 can only
+  be read when the monster IS the target. That rules out monster scripts by
+  construction, not just by measurement.
+- It is guarded three ways: target entry+`$2C` bit 7 set, an RNG roll against
+  (attacker entry+0 + entry+`$0F`), and target status bits (`$01` AND `#$E8`)
+  clear.
+- ⛔ **It never executes.** Checked across physical battles, monster specials,
+  party magic (the party driven as Black Mages casting at the monster), **all 23
+  spell effect-types forced onto a castable spell**, and 8 different monsters.
+- Spell effect-type (SPELL_DATA byte 6) ranges 0-18 and no spell carries the
+  index that would reach it, which is consistent.
+
+⛔ **The second correction, caught before it shipped.** Counting PC hits WITHOUT
+checking the mapped bank reported the routine entry executing **48 times** and
+the byte-15 read **20 times**, which read like "it is part of normal battle
+resolution". Verified against the opcode bytes at those addresses, both are
+**ZERO** — every hit was a different bank's code sitting at the same CPU address.
+`$8000-$DFFF` is MMC3-banked; a CPU address does not identify code.
+
+**New tool — `tools/ff3-pc-probe.mjs`**: did an instruction actually execute, in
+the bank we mean? It carries its own control (`$A5F2`, the byte-15 store, which
+the differential tracer independently proves runs twice — raw 2, verified 2). A
+probe whose control does not fire cannot support a negative.
+
+`ff3-diff-trace.mjs` also gained `--cast` (party as Black Mages, driving the
+level-1 spell at the monster) and `--set`. ⛔ Its first version set job and MP but
+not the SPELL LIST, so the menu had nothing to select and it silently cast
+nothing — the elemResist control caught it.
+
+**Still open:** which ability sets target entry+`$2C` bit 7 and reaches the
+handler. It is likely a job command or item effect rather than a spell, since the
+spell dispatch does not reach it. Not guessed at here.
+
 ## 1.8.70 — 2026-08-16
 
 ### No monster script reads byte 15 — but one routine does
