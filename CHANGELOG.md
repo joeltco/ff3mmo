@@ -18,6 +18,53 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.79 — 2026-08-16
+
+### ENCOUNTER_SET decoded — a zone maps to a PAIR of indices
+
+```
+$A02A  LDA $7CED / STA $7E      ; a 16-bit ZONE id
+$A034  ASL $7E / ROL $7F        ; zone * 2
+$A041  ADC #$80                 ; pointer = $8000 + zone*2
+$A047  LDA ($7E),Y / STA $7D67  ; byte 0 = the SPECIES record index
+$A04D  LDA ($7E),Y / STA $7D68  ; byte 1 = the COUNT index (+ 2 flag bits)
+$A052  LDA $7D67 / LDX #$06 / JSR $F8EA    ; index * 6 -> the species record
+```
+
+⭐ **An entry is a pair of indices**, and that is the answer to the puzzle left
+open in v1.8.78: the species record and the count record come out at different
+offsets because the zone entry chooses them **separately**. Verified by patching
+entry 0 of the freeroam zone:
+
+```
+byte 0 = 6 -> Zombie          byte 1 = 0 -> 1 Goblin
+byte 0 = 7 -> Mummy           byte 1 = 2 -> 3 Goblins
+byte 0 = 3 -> Eye Fang, a THREE-species record (ids 2,3,1)
+byte 1 = 3 -> 4 Goblins
+```
+
+⭐ **And `COUNT_TABLE` is a shared library of count PATTERNS**, not per-formation
+data — index 0 is `1..1`, 1 is `2..2`, 2 is `3..3`, 3 is `4..4`, 6 is `1..2`,
+7 is `2..4` (the freeroam zone), 9 is `4..8`. A zone picks "which monsters" and
+"how many of them" from two independent tables, which is a tidier design than the
+per-formation counts I had assumed.
+
+The chain, end to end:
+
+```
+zone id ($7CED, 16-bit)
+  -> ENCOUNTER_SET[zone]  (2 bytes, 0x05C010)
+       byte 0 -> SPECIES_TABLE + idx*6   (0x05C410) : 2 header + 4 species ids
+       byte 1 -> COUNT_TABLE   + idx*4   (0x05CA10) : 4 nibble-packed min/max
+  -> counts rolled per battle, random in [min, max]
+```
+
+**Gate now 17/17**, revert-proven: `ENCOUNTER_SET_STRIDE` 2 -> 4 fails.
+
+⛔ **Still not identified:** the two header bytes of each species record
+(`0x89 0xA0` for the freeroam one) and the top two bits of the count byte, which
+survive the `AND #$3F`. Both recorded as unknown.
+
 ## 1.8.78 — 2026-08-16
 
 ### The encounter formation tables — species, and a nibble-packed count range

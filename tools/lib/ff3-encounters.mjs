@@ -38,8 +38,8 @@
 // which is exactly the wrong conclusion an earlier pass drew from it.
 //
 // ⛔ NOT identified: the two header bytes of the species record (`0x89 0xA0` for
-// the freeroam formation), what `ENCOUNTER_SET` selects, and how either index is
-// chosen. Recorded as unknown rather than guessed.
+// the freeroam formation) and the top two bits of ENCOUNTER_SET's second byte,
+// which survive the `AND #$3F`. Recorded as unknown rather than guessed.
 
 /** 6 bytes per formation: 2 header, then 4 species ids. */
 export const SPECIES_TABLE = 0x05C410;
@@ -54,9 +54,38 @@ export const COUNT_STRIDE = 4;
 export const COUNT_INDEX_MASK = 0x3F;      // $A08E AND #$3F
 export const COUNT_INDEX_ZP = 0x7D68;      // the byte it is taken from
 
-/** ⛔ Purpose not identified — 2 bytes x 512, and contiguous with SPECIES_TABLE. */
+// ── ENCOUNTER_SET: zone -> (species record, count pattern) ───────────────────
+//
+//   $A02A  LDA $7CED / STA $7E      ; a 16-bit ZONE id
+//   $A02F  LDA $7CEE / STA $7F
+//   $A034  ASL $7E / ROL $7F        ; zone * 2
+//   $A041  ADC #$80                 ; pointer = $8000 + zone*2
+//   $A047  LDA ($7E),Y / STA $7D67  ; byte 0 = the SPECIES record index
+//   $A04D  LDA ($7E),Y / STA $7D68  ; byte 1 = the COUNT index (+ 2 flag bits)
+//   $A052  LDA $7D67 / LDX #$06 / JSR $F8EA    ; index * 6 -> the species record
+//
+// ⭐ So an entry is a PAIR of indices, and that is why the species record and the
+// count record are looked up at different offsets — they are chosen separately.
+// Verified by patching entry 0 of the freeroam zone:
+//
+//   byte 0 = 6 -> Zombie      byte 1 = 0 -> 1 Goblin
+//   byte 0 = 7 -> Mummy       byte 1 = 2 -> 3 Goblins
+//   byte 0 = 3 -> Eye Fang, a THREE-species record (ids 2,3,1)
+//   byte 1 = 3 -> 4 Goblins
+//
+// ⭐ And COUNT_TABLE turns out to be a shared library of count PATTERNS rather
+// than per-formation data — index 0 is 1..1, 1 is 2..2, 2 is 3..3, 3 is 4..4,
+// 6 is 1..2, 7 is 2..4 (the freeroam zone), 9 is 4..8.
 export const ENCOUNTER_SET = 0x05C010;
 export const ENCOUNTER_SET_ENTRIES = 512;
+export const ENCOUNTER_SET_STRIDE = 2;
+export const ZONE_ID_ZP = 0x7CED;          // 16-bit, little-endian
+export const SPECIES_INDEX_ZP = 0x7D67;
+/** ⛔ The top TWO bits of byte 1 survive the `AND #$3F` — purpose unidentified. */
+export const COUNT_INDEX_FLAG_BITS = 0xC0;
+export const setEntry = (rom, zone) => [
+  rom[ENCOUNTER_SET + zone * ENCOUNTER_SET_STRIDE],
+  rom[ENCOUNTER_SET + zone * ENCOUNTER_SET_STRIDE + 1]];
 
 /** Where the expander leaves its work. */
 export const RAM_RECORD = 0x7D69;          // 6 bytes

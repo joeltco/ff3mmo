@@ -110,5 +110,28 @@ const wrongIdx = fight({ [EN.COUNT_TABLE + 0 * EN.COUNT_STRIDE]: 0x44 });
 ok('patching index 0 does NOT change the field — the indices differ',
    wrongIdx && wrongIdx.bodies === base.bodies, wrongIdx ? `${wrongIdx.bodies}` : 'no battle');
 
+// ── ENCOUNTER_SET: the pair of indices ──────────────────────────────────────
+// ⭐ This is what explains the two different offsets: the zone entry picks the
+// species record and the count pattern SEPARATELY.
+console.log('\nENCOUNTER_SET — zone -> (species record, count pattern)');
+const [s0, c0] = EN.setEntry(rom, 0);
+ok('entry 0 holds the indices the expander used', s0 === 0 && (c0 & EN.COUNT_INDEX_MASK) === LIVE_COUNT_INDEX,
+   `species ${s0}, count ${c0}`);
+for (const [v, want] of [[6, 9], [7, 10]]) {
+  const r = fight({ [EN.ENCOUNTER_SET]: v });
+  ok(`byte 0 = ${v} spawns species record ${v} (id ${want})`,
+     r && r.species[0] === want, r ? `species ${r.species[0]}` : 'no battle');
+}
+for (const [v, want] of [[0, 1], [2, 3], [3, 4]]) {
+  const r = fight({ [EN.ENCOUNTER_SET + 1]: v });
+  ok(`byte 1 = ${v} puts ${want} on the field`, r && r.bodies === want,
+     r ? `${r.bodies}` : 'no battle');
+}
+// ⭐ the count table is a SHARED library of patterns, not per-formation data.
+ok('COUNT_TABLE is a library of ranges (0=1..1, 3=4..4, 9=4..8)',
+   EN.countRange(EN.countsOf(rom, 0)[0]).join() === '1,1'
+   && EN.countRange(EN.countsOf(rom, 3)[0]).join() === '4,4'
+   && EN.countRange(EN.countsOf(rom, 9)[0]).join() === '4,8');
+
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);
