@@ -19,7 +19,13 @@
 //
 //   node tools/check-ff3-monster-fields.mjs
 //
-// ⛔ Slow — every assertion fights a real battle. Budget ~25 min.
+// ⛔ A MANUAL AUDIT, deliberately NOT in `deploy.sh`. All 27 assertions fight real
+// battles and cost ~17 min, which is too much to pay on every deploy. Run it by
+// hand after touching `lib/ff3-monsters.mjs` — nothing else re-checks these
+// fields, so if you change an offset, a bit value or a nibble split, this is what
+// tells you. (`check-ff3-monsters.mjs` IS still gated, and covers HP, attack,
+// defence, evade and the combatant array.)
+//
 // ⛔ Offsets and bit values come FROM the shipped module, so a revert really does
 // fail rather than quietly testing a hardcoded copy of itself.
 

@@ -70,6 +70,11 @@
 //
 // ─── THE REST OF THE RECORD, measured ────────────────────────────────────────
 //
+// ⛔ Everything below is checked by `tools/check-ff3-monster-fields.mjs`, which is
+// a MANUAL audit — it is NOT in `deploy.sh` (27 real battles, ~17 min). If you
+// change an offset, a bit value or a nibble split down here, nothing on the
+// deploy path will notice. Run it by hand.
+//
 // Two instruments made the rest reachable, and both matter more than any single
 // field below:
 //
