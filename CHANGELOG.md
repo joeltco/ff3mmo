@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.86 — 2026-08-16
+
+### A boss savestate — `tools/states/ff3-boss.state.gz`
+
+Every FF3 probe in this repo has run from one starting point: `ff3-freeroam`, which
+produces two Goblins against four level-0 Onion Knights. `ff3-make-boss-state.mjs`
+builds a second one — a **Land Turtle** fight — by repointing the freeroam zone's
+species record at the boss, forcing the count pattern to exactly one, and saving
+mid-battle.
+
+⭐ **The state stands on its own.** jsnes savestates carry RAM and mapper state,
+not the ROM, and by the time it is taken the boss is already in the combatant
+array — so it replays against the UNPATCHED rom. The generator verifies exactly
+that before writing rather than assuming it (`replay on the UNPATCHED rom: enemy
+HP 120 — OK`), and refuses to write if it fails.
+
+⛔ **Bosses were spawnable all along.** An earlier pass reported "no battle" for
+boss ids; that was the `/Guard|Item/` menu detector, not the game. Land Turtle,
+Xande and the dragons all spawn and fight. Land Turtle is the default because it
+is the one that RENDERS — Xande (21000 HP) and the dragons (10000) come up with
+garbled tiles, since this map never loaded their graphics. Usable for code
+probes, useless for anything visual.
+
+⛔ **It did NOT crack bit 7.** The three `$7ED8` bit-0 sites still execute zero
+times in a boss fight, with the bit clear or forced set, and the fight is
+otherwise identical (boss HP 65, party damage 30 either way). So "boss battle" is
+not what those paths are gated on. The savestate is worth having regardless — it
+is a second starting point the next probe can use — but it did not answer the
+question it was made for.
+
 ## 1.8.85 — 2026-08-16
 
 ### Bit 7: bounded to three instructions, one reading DISPROVED, still unnamed

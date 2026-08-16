@@ -196,6 +196,7 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-ff2-sfx` / `check-ff2-sfx-audio` | the ripped blips execute AND render audible PCM through libgme |
 | `check-pve-claim` | the end-of-battle claim describes the battle it came from |
 | `ur-audit` (manual) | sweeps every Ur interior: spawn, exits, chests, NPC rooms |
+| `ff3-make-boss-state` (generator) | rebuilds `tools/states/ff3-boss.state.gz` — a LAND TURTLE boss fight, the second FF3 starting point next to `ff3-freeroam` (two Goblins, level-0 Onion Knights). Use it when a probe needs code the freeroam encounter never reaches. ⭐ The state stands alone: the generator verifies it replays against the UNPATCHED rom before writing. ⛔ Xande/dragons spawn but render garbled — their graphics are not loaded on this map |
 | `check-ff3-monster-fields` (manual) | the rest of FF3's 16-byte monster record — special rate/id, status-on-hit, weakness/resist element bits, status resist, and the three NIBBLE-PACKED fields. Kept OUT of `deploy.sh`: 27 real battles, ~17 min. Run after touching `tools/lib/ff3-monsters.mjs`. Catalog: `docs/FF3-MONSTERS.md` |
 
 `deploy.sh` runs `npm run lint:errors` + `node tools/encounter-sim.js` + `node tools/wire-stats-diag.js` + `node tools/pvp-wire-sim.js` as pre-flight gates before commit; failure aborts the deploy. (The `tools/coop-*-sim.js` harnesses were deleted in v1.7.500 along with the co-op battle system.)
