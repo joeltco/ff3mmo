@@ -18,6 +18,51 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.87 — 2026-08-16
+
+### Bit 7 = the Bard cannot sing in this encounter
+
+The last unknown in the encounter chain, found by driving all 22 job commands.
+
+⭐ **The Bard is the ONLY job that reaches `$AD20`**, via its Sing/Scare/Cheer row.
+Every other job's command row misses all three `$7ED8` bit-0 sites — and so does a
+boss fight, which is why the boss savestate did not crack it.
+
+⭐ **The effect, driven from the encounter data alone with nothing poked** — a Bard
+party, row 1 (Scare):
+
+```
+count byte 0x07 (bit 7 clear) -> $7ED8 bit 0 = 0 -> "Intimidated monsters"
+count byte 0x87 (bit 7 SET)   -> $7ED8 bit 0 = 1 -> "Need harp sing."
+```
+
+⭐ **The party carries no harp in either run**, yet the command only fails when the
+bit is set — so bit 0 is genuinely the gate and the "need harp" line is just the
+message it reuses. That control is what separates "the bit blocks songs" from
+"the party was missing an instrument all along".
+
+⚠ **One thing stays a reading, not a measurement:** whether the designers meant
+bit 7 as "songs do not work in this encounter", or whether `$7ED8` bit 0 is a
+shared "cannot sing" condition that the encounter flag happens to feed. The
+observable is measured; the intent is not.
+
+⛔ **Two earlier readings of this bit were tested and disproved rather than left
+standing:** "you cannot escape" (with bit 7 set the party still fled 4 of 4) and
+"it needs a boss formation" (zero executions in a Land Turtle fight).
+
+**Gate now 44/44**, revert-proven: call bit 6 the no-song flag and 2 checks fail.
+
+**The encounter chain is now fully decoded:**
+
+```
+zone id ($7CED)
+  -> ENCOUNTER_SET[zone]                       (0x05C010, 2 bytes)
+       byte 0 -> SPECIES_TABLE + idx*6         (0x05C410) 2 palette indices + 4 species
+       byte 1 -> COUNT_TABLE   + (idx&$3F)*4   (0x05CA10) 4 nibble-packed min/max
+                 bit 6 -> no ambush / pre-emptive contest
+                 bit 7 -> the Bard cannot sing
+```
+
 ## 1.8.86 — 2026-08-16
 
 ### A boss savestate — `tools/states/ff3-boss.state.gz`

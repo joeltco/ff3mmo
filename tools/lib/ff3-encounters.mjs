@@ -113,7 +113,7 @@
 // not happen — party HP untouched at 118, $78C3 = 0x00, no message. With bit 7
 // set instead the ambush still fires, so it is bit 6 specifically.
 //
-// ⛔ BIT 7 — bounded, and one reading DISPROVED, but not identified.
+// ⭐ BIT 7 = THE BARD CANNOT SING IN THIS ENCOUNTER.
 //
 // The plumbing is settled: the merge at $9F46 puts it in $7ED8 bit 1, then
 // `LDA $7ED8 / LSR A / ROR $7ED8` at bank 52 $87EC shifts it down to BIT 0 (and
@@ -126,17 +126,37 @@
 //   bank 53 $A948  AND #$01 / BEQ  -> set takes JMP $A935
 //   bank 53 $AD20  AND #$01 / BEQ  -> set stores message $3B in $78DA and RTSs
 //
-// ⛔ NONE OF THE THREE EXECUTES in an ordinary encounter — bank-verified, with
-// the $87EC rotate as a passing control (1 execution) so the probe demonstrably
-// works. Whatever bit 0 changes lives on a path this battle never reaches.
+// ⛔ None of the three runs in an ordinary Goblin encounter, and none runs in a
+// BOSS fight either — both checked bank-verified. What reaches $AD20 is a JOB
+// COMMAND: driving every one of the 22 jobs through its command row, the Bard is
+// the ONLY job that gets there, via Sing/Scare/Cheer.
 //
-// ⛔ AND THE OBVIOUS READING IS WRONG. $AD20 storing a message and returning early
-// looks exactly like "you cannot escape", so that was tested: with bit 7 set the
-// party still fled 4 of 4 battles, same as with it clear. It is not a no-flee
-// flag. Recorded as disproved rather than left as a plausible guess.
+// ⭐ And then the effect is plain, driven from the encounter data alone with no
+// RAM poking — a Bard party, row 1 (Scare):
+//
+//   count byte 0x07 (bit 7 clear) -> $7ED8 bit 0 = 0 -> "Intimidated monsters"
+//   count byte 0x87 (bit 7 SET)   -> $7ED8 bit 0 = 1 -> "Need harp sing."
+//
+// ⭐ The party carries NO harp in either run, yet the command only fails when the
+// bit is set — so bit 0 is genuinely the gate and the "need harp" line is just the
+// message it reuses.
+//
+// ⚠ Which leaves one thing a reading rather than a measurement: whether the
+// designers meant bit 7 as "songs do not work in this encounter", or whether
+// $7ED8 bit 0 is a shared "cannot sing" condition that the encounter flag happens
+// to feed. The OBSERVABLE is measured; the intent is not.
+//
+// ⛔ Two earlier readings of this bit were tested and DISPROVED rather than left
+// standing: "you cannot escape" (with bit 7 set the party still fled 4 of 4) and
+// "it needs a boss formation" (the sites execute zero times in a Land Turtle
+// fight).
 export const FLAG_BIT7_DEST_BIT = 0x01;    // $7ED8 bit 0
 export const FLAG_ROTATE_FILE = 0x687FC;   // LDA $7ED8 / LSR A / ROR $7ED8
 export const BIT0_TEST_SITES = [0x627BE, 0x6A958, 0x6AD30];
+/** ⭐ Bit 7 -> $7ED8 bit 0 -> the Bard's song commands are refused. */
+export const COUNT_FLAG_NO_SONG = 0x80;
+export const BARD_JOB = 16, BARD_SONG_ROW = 1;
+export const BARD_OK_WORD = 'Intimidated', BARD_BLOCKED_WORD = 'harp';
 export const COUNT_FLAG_BIT6 = 0x40;
 export const COUNT_FLAG_BIT7 = 0x80;
 export const COUNT_BIT6_TEST_SITES = [0x5DD7B, 0x5E3BB, 0x5F490, 0x5FB98];

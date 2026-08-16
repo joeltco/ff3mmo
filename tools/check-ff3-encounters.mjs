@@ -29,6 +29,9 @@ const D = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT,
            Controller.BUTTON_UP, Controller.BUTTON_DOWN];
 const LIVE_COUNT_INDEX = 7;          // measured off $7D68 & 0x3F
 
+const P_HP0 = M3.MONSTER_PROPS + M3.FIELDS.hp[0];
+const P_HP1 = M3.MONSTER_PROPS + M3.FIELDS.hp[1];
+
 let bad = 0, n = 0;
 const ok = (label, cond, detail) => {
   n++;
@@ -264,6 +267,61 @@ ok('the rotate that moves the flags is where the lib says',
    JSON.stringify([...rom.slice(EN.FLAG_ROTATE_FILE, EN.FLAG_ROTATE_FILE + 6)])
    === JSON.stringify([0xAD, 0xD8, 0x7E, 0x4A, 0x6E, 0xD8]),
    'LDA $7ED8 / LSR A / ROR $7ED8');
+
+// ── bit 7: the Bard cannot sing ─────────────────────────────────────────────
+// ⭐ Driven from the ENCOUNTER data — a Bard party, the song row, nothing poked.
+console.log('\nbit 7 — the Bard cannot sing in this encounter');
+function bardFight(setByte) {
+  const p = Uint8Array.from(rom);
+  p[P_HP0] = 0xFF; p[P_HP1] = 0x0F;
+  p[EN.ENCOUNTER_SET + 1] = setByte;
+  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  try { nes.loadROM(Buffer.from(p).toString('binary')); nes.fromJSON(JSON.parse(SNAP)); } catch { return null; }
+  const run = (k) => { for (let i = 0; i < k; i++) nes.frame(); };
+  const scr = () => {
+    const v = nes.ppu.vramMem, out = [];
+    for (let r = 0; r < 30; r++) {
+      let t = '';
+      for (let c = 0; c < 32; c++) { const g = glyph(v[0x2000 + r * 32 + c]); t += (g === null ? ' ' : g); }
+      if (t.trim()) out.push(t.replace(/\s+/g, ' ').trim());
+    }
+    return out;
+  };
+  const setjob = () => { for (let i = 0; i < 4; i++) {
+    const a2 = M3.PARTY_A_BLOCK + i * M3.PARTY_B_STRIDE;
+    nes.cpu.mem[a2] = EN.BARD_JOB; nes.cpu.mem[a2 + 1] = 20; } };
+  const tap = (b2, h = 10, g = 26) => { nes.buttonDown(1, b2); run(h); nes.buttonUp(1, b2); run(g); };
+  const words = new Set();
+  try {
+    run(30); setjob();
+    let inB = false;
+    for (let s2 = 0; s2 < 300; s2++) {
+      setjob(); const b2 = D[Math.floor(s2 / 8) % 4];
+      nes.buttonDown(1, b2); run(10); nes.buttonUp(1, b2); run(12);
+      if (scr().some(l => /Sing|Scare|Cheer/i.test(l))) { inB = true; break; }
+    }
+    if (!inB) return null;
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        for (let d = 0; d < EN.BARD_SONG_ROW; d++) tap(Controller.BUTTON_DOWN);
+        tap(Controller.BUTTON_A, 10, 45); tap(Controller.BUTTON_A, 10, 45); tap(Controller.BUTTON_A, 10, 45);
+      }
+      run(260);
+      for (const l of scr()) for (const m of (l.match(/[A-Za-z][A-Za-z.!'-]{2,}/g) || [])) words.add(m);
+    }
+    return { words: [...words], bit0: nes.cpu.mem[EN.FLAG_DEST] & 1 };
+  } catch { return null; }
+}
+const NS2 = EN.COUNT_FLAG_NO_SONG;
+const songOk = bardFight(LIVE_COUNT_INDEX);
+const songNo = bardFight(NS2 | LIVE_COUNT_INDEX);
+ok('with the bit clear the Bard\'s Scare works', songOk && songOk.words.includes(EN.BARD_OK_WORD),
+   songOk ? `bit0=${songOk.bit0}` : 'no battle');
+ok(`with the no-song bit (0x${NS2.toString(16)}) it is refused`,
+   songNo && songNo.words.some(w => w.includes(EN.BARD_BLOCKED_WORD))
+   && !songNo.words.includes(EN.BARD_OK_WORD),
+   songNo ? `bit0=${songNo.bit0}` : '');
+ok('...and the bit really reached $7ED8 bit 0', songNo && songNo.bit0 === 1 && songOk.bit0 === 0);
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);
