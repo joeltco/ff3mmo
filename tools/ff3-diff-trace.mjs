@@ -35,6 +35,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : args[i + 1]; };
 const OFF = Number(flag('off', '15'));
+// --abs <file offset> : make the variable an ARBITRARY ROM byte rather than one
+// of the monster record's. Needed for tables that are not the bestiary.
+const ABS = flag('abs', null);
 const VA = Number(flag('a', '0'));
 const VB = Number(flag('b', '255'));
 const SHIELD = args.includes('--shield');
@@ -84,7 +87,7 @@ function build(val) {
   p[M3.STAT_TABLE + rom[props + M3.FIELDS.atkHitIdx] * M3.STAT_ENTRY
     + M3.STAT_ATK_OFF] = 0xFF;                           // and it hits hard
   for (const [o, v] of SETS) p[o] = v;
-  p[props + OFF] = val;
+  if (ABS !== null) p[Number(ABS)] = val; else p[props + OFF] = val;
   const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
   nes.loadROM(Buffer.from(p).toString('binary'));
   nes.fromJSON(JSON.parse(SNAP));                        // ⛔ replaces nes.cpu
@@ -170,7 +173,7 @@ if (FROM_START && (pcDiff.size || regDiff.size))
   console.log('⭐ divergence seen during the WALK-IN / SETUP phase (before the menu)\n');
 if (!FROM_START) clear();
 
-console.log(`differential trace — monster record byte ${OFF}: ${VA} vs ${VB}` +
+console.log(`differential trace — ${ABS !== null ? `ROM 0x${Number(ABS).toString(16)}` : `record byte ${OFF}`}: ${VA} vs ${VB}` +
             `${SHIELD ? ' + fire-resist shield' : ''}` +
             `, spAtkRate=${RATE === null ? 'natural' : RATE}, monster 0x${MON.toString(16).toUpperCase()}\n`);
 

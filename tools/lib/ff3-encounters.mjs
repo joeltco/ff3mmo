@@ -37,11 +37,46 @@
 // `COUNT_TABLE + 0*4` therefore does nothing and looks like the table is inert —
 // which is exactly the wrong conclusion an earlier pass drew from it.
 //
-// ⛔ NOT identified: the two header bytes of the species record (`0x89 0xA0` for
-// the freeroam formation) and the top two bits of ENCOUNTER_SET's second byte,
-// which survive the `AND #$3F`. Recorded as unknown rather than guessed.
+// ⛔ NOT identified: the top two bits of ENCOUNTER_SET's second byte, which
+// survive the `AND #$3F`. Recorded as unknown rather than guessed.
 
-/** 6 bytes per formation: 2 header, then 4 species ids. */
+// ── THE TWO HEADER BYTES ARE PALETTE INDICES ─────────────────────────────────
+//
+//   $9E28  LDX #$03 / JSR $F8EA      ; index * 3
+//   $9E33  ADC #$8C / STA $83        ; pointer = $8C00 + index*3
+//   $9E3F  LDA ($82),Y / STA $7F,X   ; copy the THREE colours
+//
+// The table at `$8C00` (bank 46, file 0x5CC10) is 256 entries of 3 bytes, and
+// ⭐ EVERY ONE of those 768 bytes is <= 0x3F — a valid NES colour. The entries
+// read like palettes too: `00 10 13`, `00 10 16`, `00 10 17`.
+//
+// ⭐ Confirmed against the hardware. Patching each header byte writes a different
+// PPU palette, and the bytes written ARE the table entry:
+//
+//   byte 0 = 0x00 -> $3F01..$3F03 = 00 10 13   (entry 0)
+//   byte 0 = 0x0F -> $3F01..$3F03 = 02 12 16   (entry 15)
+//   byte 1 = 0x00 -> $3F05..$3F07 = 00 10 13
+//   byte 1 = 0x0F -> $3F05..$3F07 = 02 12 16
+//
+// So byte 0 is BG palette 0 and byte 1 is BG palette 1 — and FF3 draws battle
+// monsters as BG tiles, so these are the FORMATION'S MONSTER PALETTES. That is
+// why formations sharing monsters share a header (records 1-3 all `35 5e`).
+//
+// ⛔ The framebuffer is what settled it. A nametable hash showed NOTHING — not
+// even for the control that swaps the species — so it could not have supported
+// any conclusion. Hashing the drawn frame shows every header value changing the
+// image while the LIT-PIXEL COUNT stays at exactly 1753: the same silhouette in
+// different colours, which is the signature of a palette and not of a sprite.
+export const PALETTE_TABLE = 0x05CC10;     // bank 46, CPU $8C00
+export const PALETTE_STRIDE = 3;
+export const PALETTE_ENTRIES = 256;
+export const PALETTE_MAX_COLOUR = 0x3F;
+/** Header byte 0 -> BG palette 0, byte 1 -> BG palette 1. */
+export const HEADER_PPU_SLOTS = [0x3F01, 0x3F05];
+export const paletteOf = (rom, idx) => [...rom.slice(
+  PALETTE_TABLE + idx * PALETTE_STRIDE, PALETTE_TABLE + (idx + 1) * PALETTE_STRIDE)];
+
+/** 6 bytes per formation: 2 header PALETTE INDICES, then 4 species ids. */
 export const SPECIES_TABLE = 0x05C410;
 export const SPECIES_STRIDE = 6;
 export const SPECIES_ID_OFF = 2;

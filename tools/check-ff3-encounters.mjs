@@ -41,7 +41,10 @@ function fight(patch = {}) {
   const p = Uint8Array.from(rom);
   p[M3.MONSTER_PROPS + 1] = 0xFF; p[M3.MONSTER_PROPS + 2] = 0x0F;
   for (const [o, v] of Object.entries(patch)) p[Number(o)] = v;
-  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  // ⛔ the frame callback has to be given at CONSTRUCTION — assigning
+  // `nes.opts.onFrame` afterwards never fires, and the hash comes back all-zero.
+  let fb = null;
+  const nes = new NES({ onFrame: (b2) => { fb = b2; }, onAudioSample: () => {} });
   try { nes.loadROM(Buffer.from(p).toString('binary')); nes.fromJSON(JSON.parse(SNAP)); } catch { return null; }
   const run = (k) => { for (let i = 0; i < k; i++) nes.frame(); };
   const lines = () => {
@@ -64,10 +67,17 @@ function fight(patch = {}) {
           const a = M3.enemyAddr(i);
           if ((nes.cpu.mem[a] | (nes.cpu.mem[a + 1] << 8)) > 0) bodies++;
         }
+        run(90);
+        let fh = 0, lit = 0;
+        if (fb) for (let y = 16; y < 120; y++) for (let x = 8; x < 128; x++) {
+          const px = (fb[y * 256 + x] | 0) & 0xFFFFFF;
+          fh = ((fh * 31) + px) >>> 0; if (px) lit++;
+        }
         return { bodies,
                  species: [...nes.cpu.mem.slice(EN.RAM_SPECIES, EN.RAM_SPECIES + 4)],
                  counts: [...nes.cpu.mem.slice(EN.RAM_COUNTS, EN.RAM_COUNTS + 4)],
-                 screen: lines() };
+                 pal: [...nes.ppu.vramMem.slice(0x3F00, 0x3F20)],
+                 frame: fh, lit, screen: lines() };
       }
     }
   } catch { /* fall through */ }
@@ -140,6 +150,38 @@ ok('COUNT_TABLE is a library of ranges (0=1..1, 3=4..4, 9=4..8)',
    EN.countRange(EN.countsOf(rom, 0)[0]).join() === '1,1'
    && EN.countRange(EN.countsOf(rom, 3)[0]).join() === '4,4'
    && EN.countRange(EN.countsOf(rom, 9)[0]).join() === '4,8');
+
+// ── the header bytes are palette indices ────────────────────────────────────
+// ⭐ Checked against the PPU's own palette RAM, which is as close to "what the
+// player sees" as this gets.
+console.log('\nthe species record header — two PALETTE indices');
+{
+  let allColours = true;
+  for (let i = 0; i < EN.PALETTE_ENTRIES; i++)
+    if (EN.paletteOf(rom, i).some(v => v > EN.PALETTE_MAX_COLOUR)) allColours = false;
+  ok('every byte of the palette table is a valid NES colour', allColours,
+     `${EN.PALETTE_ENTRIES} entries x ${EN.PALETTE_STRIDE}`);
+}
+for (const [byteIdx, slot] of EN.HEADER_PPU_SLOTS.entries()) {
+  for (const idx of [0x00, 0x0F]) {
+    const r = fight({ [EN.SPECIES_TABLE + byteIdx]: idx });
+    const want = EN.paletteOf(rom, idx);
+    const got = r ? r.pal.slice(slot - 0x3F00, slot - 0x3F00 + 3) : [];
+    ok(`header byte ${byteIdx} = 0x${idx.toString(16)} loads palette ${idx} at $${slot.toString(16).toUpperCase()}`,
+       r && JSON.stringify(got) === JSON.stringify(want),
+       `${got.join(',')} vs ${want.join(',')}`);
+  }
+}
+// ⛔ the discriminator: a palette must change the COLOURS without changing the
+// SHAPE. A nametable hash showed nothing at all here — even for the species
+// control — so the frame is what gets measured.
+{
+  const a2 = fight({ [EN.SPECIES_TABLE]: 0x00 });
+  const b2 = fight({ [EN.SPECIES_TABLE]: 0x0F });
+  ok('two palettes draw a DIFFERENT image...', a2 && b2 && a2.frame !== b2.frame);
+  ok('...with exactly the same lit-pixel count — colour, not shape',
+     a2 && b2 && a2.lit === b2.lit, a2 && b2 ? `${a2.lit} vs ${b2.lit}` : '');
+}
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

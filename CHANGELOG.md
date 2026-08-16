@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.81 — 2026-08-16
+
+### The species record's header bytes are PALETTE indices
+
+The last unknown in the encounter chain. Both bytes index a table at `$8C00`:
+
+```
+$9E28  LDX #$03 / JSR $F8EA      ; index * 3
+$9E33  ADC #$8C / STA $83        ; pointer = $8C00 + index*3
+$9E3F  LDA ($82),Y / STA $7F,X   ; copy the THREE colours
+```
+
+That table (bank 46, file `0x5CC10`) is 256 entries of 3 bytes, and ⭐ **every one
+of those 768 bytes is <= 0x3F — a valid NES colour**. The entries read like
+palettes too: `00 10 13`, `00 10 16`, `00 10 17`.
+
+⭐ **Confirmed against the PPU's own palette RAM.** Patching each header byte
+writes a different hardware palette, and the bytes written ARE the table entry:
+
+```
+byte 0 = 0x00 -> $3F01..$3F03 = 00 10 13   (entry 0)
+byte 0 = 0x0F -> $3F01..$3F03 = 02 12 16   (entry 15)
+byte 1 = 0x00 -> $3F05..$3F07 = 00 10 13
+byte 1 = 0x0F -> $3F05..$3F07 = 02 12 16
+```
+
+So byte 0 is BG palette 0 and byte 1 is BG palette 1 — and FF3 draws battle
+monsters as BG tiles, so these are the **formation's monster palettes**. That is
+why formations sharing monsters share a header (records 1-3 are all `35 5e`).
+
+⛔ **The framebuffer is what settled it, and the first instrument was useless.** A
+nametable hash showed no change at all — not even for the control that swaps the
+species for a Flyer — so it could not have supported any conclusion in either
+direction. Hashing the drawn frame shows every header value changing the image
+while the LIT-PIXEL COUNT stays at exactly 1753: the same silhouette in different
+colours, which is the signature of a palette rather than a sprite. Both halves are
+asserted.
+
+**Gate now 26/26**, revert-proven twice: swapping which header byte drives which
+PPU palette -> 4 failures; palette stride 3 -> 4 -> 5 failures.
+
+⛔ One unknown remains in the encounter chain: the top two bits of
+`ENCOUNTER_SET`'s second byte, which survive the `AND #$3F`.
+
 ## 1.8.80 — 2026-08-16
 
 ### ENCOUNTER_SET decoded — a zone maps to a PAIR of indices
