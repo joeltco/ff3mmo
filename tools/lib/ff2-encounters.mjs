@@ -35,11 +35,29 @@
 //   ⛔ There is also no step counter in zero page: no byte decreases as the party
 //      walks, so FF2 appears to roll per step rather than count down to one.
 //
+// THE BOOT ROUTE WAS TRIED — `tools/ff2-make-field-state.mjs`
+// It drives FF2 from boot headlessly and DOES reach the game: past the title, the
+// opening crawl and the kana name grid (using `ff2-build-playable-rom.mjs`'s
+// one-byte gate patch), out to a party with real HP and gil and no menu up.
+//
+// ⛔ It still does not produce a usable overworld state, for two measured reasons:
+//   * the map NEVER redraws — 0 of 240 walking steps changed the nametable, and
+//     only ~5 distinct tiles are visited, so the party is not under player control
+//     there; it is an auto-moving sequence, not the field;
+//   * the state does NOT replay on the stock rom — reloaded against it the party
+//     drifts to a different position (138,34 -> 170,35) with no input at all.
+//     The generator REFUSES to write in that case rather than shipping a state
+//     that only works under its own patch.
+//
+// ⛔ Mashing past the intro is also load-bearing in a way that bites: pressing B
+// to clear menus runs all the way back to the TITLE SCREEN if it is done blindly.
+// Back out one press at a time and stop the moment no menu word is on screen.
+//
 // WHERE TO START NEXT
-// The savestate is the problem, not the search. `tools/states/ff2-outside.state.gz`
-// is somewhere without random encounters. Either drive FF2 from boot to the
-// overworld and save there, or do what `ff1-goto.mjs` does — find the entrance
-// table, repoint a reachable door at an encounter map, and walk through it.
+// The remaining problem is navigation, not tooling: something has to steer the
+// party from wherever the intro leaves it out onto the world map. Either drive it
+// there properly, or copy `ff1-goto.mjs` — find FF2's entrance/warp table and
+// repoint a reachable door at an encounter map.
 export const NOT_DECODED = true;
 export const PARTY_Y_ZP = 0x0069;
 export const PARTY_X_ZP = 0x0068;          // by convention, NOT confirmed

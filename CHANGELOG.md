@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.90 — 2026-08-16
+
+### FF2 overworld savestate: NOT produced. The boot harness works; the state does not.
+
+`tools/ff2-make-field-state.mjs` drives FF2 from boot headlessly and genuinely
+reaches the game — past the title, the opening crawl and the kana name grid (via
+`ff2-build-playable-rom.mjs`'s one-byte gate patch), out to a party with real HP
+and gil and no menu up, at position 138,34.
+
+⛔ **It still refuses to write a state, on its own evidence:**
+- **The map never redraws.** 0 of 240 walking steps changed the nametable and only
+  ~5 distinct tiles are visited — the party is not under player control there. It
+  is an auto-moving sequence, not the field.
+- **The state does not replay on the stock rom.** Reloaded against it with no
+  input at all, the party drifts 138,34 -> 170,35. The generator checks this and
+  ⭐ **refuses to write rather than ship a state that only works under its own
+  patch** — the same guard that passed for `ff3-boss.state.gz` and, this time,
+  correctly failed.
+
+⛔ Also worth recording, because it cost a cycle: clearing menus with B **blindly
+runs all the way back to the TITLE SCREEN**. Back out one press at a time and stop
+the moment no menu word is on screen.
+
+**What is now available regardless:** a working headless FF2 boot to in-game, and
+a self-verifying state writer. What is missing is navigation — steering the party
+from where the intro leaves it out onto the world map. That is the whole remaining
+job, and it is a game-driving problem, not a decoding one. The alternative is to
+copy `ff1-goto.mjs`: find FF2's entrance/warp table and repoint a reachable door
+at an encounter map.
+
+⛔ I am not shipping a state I cannot show stands on its own, and FF2's encounter
+tables stay undecoded behind it.
+
 ## 1.8.89 — 2026-08-16
 
 ### FF2 battle detector: NOT built. The savestate cannot reach a battle.
