@@ -18,6 +18,58 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.77 — 2026-08-16
+
+### $2E is byte 15 >> 5 — the drop RATE. Byte 15 is packed.
+
+⭐ **`$2E` is derived from byte 15 itself**, so byte 15 carries two fields:
+
+```
+$BC7E  LDA $7412        ; the record's byte 15
+$BC81  JSR $FD44        ; = LSR A x5   (>> 5)
+$BC84  STA $2E
+$BC86  LDA #$06 / JSR $A564 / CMP $2E / BCS   ; roll 0..6 >= rate -> nothing
+```
+
+**bits 0-4 = the steal/drop table index; bits 5-7 = the DROP RATE**, chance
+`rate/7`. Across the bestiary that is startlingly clean:
+
+| rate | chance | monsters |
+|---|---|---|
+| 0 | never | 180 |
+| 1 | 14.3% | 49 |
+| 7 | **always** | 3 — and it is exactly the DRAGONS |
+
+⭐ **The dragons' Onion gear is a GUARANTEED drop.** That is the real shape of the
+famous farm, and it fell out of the byte rather than being looked up.
+
+⛔ **This corrects v1.8.76, which shipped a flat 25% gate** — wrong in both
+directions: it handed the 180 rate-0 monsters a drop they should never have, and
+capped the dragons at 25%. `battle-update.js` now rolls the canon
+`random(0..6) < dropRate`, and monsters with rate 0 carry **no `drops` array at
+all**, which also shrinks what the PvE arbiter will accept (52 monsters have loot,
+not 231 — tightening the concern flagged in v1.8.76).
+
+**Verified on the running game.** The dragons cannot be spawned from the freeroam
+savestate, so rather than assert rate 7 from the code alone, a spawnable monster
+was patched to each rate:
+
+```
+byte15 = 0xFE (rate 7, index 30) -> 6/6 dropped: Elixir x3, OnionArmor, Onion Helm x2
+byte15 = 0x20 (rate 1, index  0) -> 2/6 dropped: Potion
+byte15 = 0x0A (rate 0, index 10) -> 0/6 — never, despite a NON-EMPTY table
+```
+
+That last line is the one that matters: a full table plus rate 0 still drops
+nothing, which is what separates the two halves of the byte. It also retroactively
+explains the v1.8.74 observation that a Bomb (byte 15 = `0x0A`) dropped nothing
+while a Goblin dropped a Potion.
+
+**Gate now 16/16**, revert-proven: shift 5 -> 4 fails the rate check. New checks —
+only the 52 droppers carry a table, every table has a nonzero rate, the dragons are
+rate 7, the rates match the ROM, a rate-7 monster drops every battle and a rate-1
+one ~1 in 7.
+
 ## 1.8.76 — 2026-08-16
 
 ### Drops are ROM-canon now — all 231 monsters, with the canon odds

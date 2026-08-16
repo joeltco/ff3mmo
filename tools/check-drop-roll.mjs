@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 // check-drop-roll.mjs — the shipped drop data and roll stay ROM-canon.
 //
-// v1.8.76 replaced the hand-maintained `drops:` (50 monsters, 30 of them naming
-// items the ROM entry does not contain) with the ROM's eight steal/drop slots for
-// all 231. The slots are ORDERED and the roll weights them 48/48/48/48/24/24/12/4
-// in 256ths, so two things can silently break:
+// v1.8.76-77 replaced the hand-maintained `drops:` with the ROM's own data:
+// byte 15 packs a TABLE INDEX (bits 0-4) and a DROP RATE (bits 5-7). Only the 52
+// monsters with a nonzero rate carry a table — 49 at rate 1 (14.3%) and the three
+// dragons at rate 7, which is a GUARANTEED drop. Four things can silently break:
 //
 //   ⛔ de-duplicating or null-filtering `drops` before the pick collapses the
 //      array and destroys the slot -> weight correspondence, which makes the rare
-//      tail (the dragons' Onion gear) four times too likely;
+//      tail (the dragons' Onion gear) twice too likely;
+//   ⛔ replacing the per-monster rate with a flat chance, which both hands the 180
+//      rate-0 monsters a drop they should never have AND caps the dragons;
+//   ⛔ giving a rate-0 monster a `drops` array, which lets the PvE arbiter accept
+//      loot the game would never award;
 //   ⛔ regenerating `monsters.js` from stale data silently reverts the table.
 //
 //   node tools/check-drop-roll.mjs
@@ -19,7 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as M3 from './lib/ff3-monsters.mjs';
-import { MONSTERS, DROP_SLOT_WEIGHTS, DROP_SLOT_WEIGHT_TOTAL } from '../src/data/monsters.js';
+import { MONSTERS, DROP_SLOT_WEIGHTS, DROP_SLOT_WEIGHT_TOTAL, DROP_GATE_DIE } from '../src/data/monsters.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const rom = new Uint8Array(fs.readFileSync(path.join(HERE, '..', 'FF3-English.nes')));
@@ -38,7 +42,7 @@ let matched = 0, missing = 0, mismatched = [];
 for (const [id, m] of MONSTERS) {
   if (id >= 232) continue;
   const slots = M3.stealSlots(rom, id);
-  if (!slots.some(v => v)) { if (!m.drops) matched++; continue; }
+  if (!slots.some(v => v) || M3.dropRate(rom, id) === 0) { if (!m.drops) matched++; else missing++; continue; }
   if (!m.drops) { missing++; continue; }
   const want = slots.map(v => v || null);
   if (JSON.stringify(m.drops.map(v => v ?? null)) === JSON.stringify(want)) matched++;
@@ -46,8 +50,18 @@ for (const [id, m] of MONSTERS) {
 }
 ok('every monster carries the ROM slots, in order', mismatched.length === 0 && missing === 0,
    `${matched} matched, ${missing} missing, ${mismatched.length} differing`);
-ok('all 231 monsters have drop data', [...MONSTERS].filter(([, m]) => m.drops).length === 231,
-   `${[...MONSTERS].filter(([, m]) => m.drops).length}`);
+// ⛔ NOT all monsters: a rate-0 monster never drops and must carry no `drops`,
+// so the PvE arbiter cannot be talked into accepting loot the game never awards.
+ok('only the monsters that can actually drop carry a table',
+   [...MONSTERS].filter(([, m]) => m.drops).length === 52,
+   `${[...MONSTERS].filter(([, m]) => m.drops).length} of 231`);
+ok('every monster with a table has a nonzero rate',
+   [...MONSTERS].every(([, m]) => !m.drops || m.dropRate > 0));
+ok('the three dragons are rate 7 — a GUARANTEED drop',
+   [0xAE, 0xC8, 0xDF].every(id => MONSTERS.get(id).dropRate === 7));
+ok('the rates match the ROM (byte 15 >> 5)',
+   [...MONSTERS].every(([id, m]) => id >= 232 || (m.dropRate | 0) === M3.dropRate(rom, id)));
+ok('the gate die is 7 (a random 0..6)', DROP_GATE_DIE === M3.DROP_GATE_DIE);
 // ⛔ duplicates carry the weighting — collapsing them changes the odds.
 const goblin = MONSTERS.get(0x00).drops;
 ok('duplicate slots are preserved (they ARE the weighting)',
@@ -94,6 +108,21 @@ function rollSlot(rand, slots) {
      `${(pct * 100).toFixed(1)}%`);
   ok('...and a uniform pick would NOT — that is the bug this guards',
      Math.abs(0.5 - 0.25) > 0.01, 'uniform over 8 slots would give 50%');
+}
+
+// ⭐ the gate: a dragon must drop EVERY time, a rate-1 monster ~1 in 7.
+{
+  let seed = 4242;
+  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF; return seed / 0x80000000; };
+  const N = 100000;
+  const fires = (rate) => {
+    let n2 = 0;
+    for (let i = 0; i < N; i++) if (Math.floor(rand() * DROP_GATE_DIE) < rate) n2++;
+    return n2 / N;
+  };
+  const dragon = fires(7), common = fires(1);
+  ok('a rate-7 dragon drops EVERY battle', dragon > 0.999, `${(dragon * 100).toFixed(1)}%`);
+  ok('a rate-1 monster drops ~1 in 7', Math.abs(common - 1 / 7) < 0.01, `${(common * 100).toFixed(1)}%`);
 }
 
 // ── the server still accepts the rare tail ──────────────────────────────────

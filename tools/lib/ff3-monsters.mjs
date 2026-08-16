@@ -182,9 +182,12 @@
 //      the ice row is the good kind of surprise: fire armour is WEAK to ice, so
 //      the same bit map falls out of an inverted effect.
 //
-// ⭐ 15 IS THE MONSTER'S STEAL-TABLE INDEX — read by the THIEF'S STEAL, and by
-//      nothing else. Chased down through four instruments, each one correcting
-//      the last.
+// ⭐ 15 IS PACKED: bits 0-4 the steal/drop TABLE INDEX, bits 5-7 the DROP RATE.
+//      The index half is read by the Thief's Steal; the rate half gates the
+//      victory drop (`>> 5`, compared against a random 0..6, so chance = rate/7).
+//      180 monsters are rate 0 and NEVER drop; 49 are rate 1 (14.3%); rate 7 is
+//      exactly the three DRAGONS, whose Onion gear is therefore GUARANTEED.
+//      Chased down through four instruments, each one correcting the last.
 //
 //      THE CHAIN. A battle action dispatcher in bank 52 turns a per-actor action
 //      id into a handler:
@@ -366,6 +369,22 @@ export const DROP_SLOT_THRESHOLDS = [0x30, 0x60, 0x90, 0xC0, 0xD8, 0xF0, 0xFC];
 export const DROP_LADDER_FILE = 0x6BCA4;   // the CMP #$30 that starts the ladder
 export const DROP_ADD_ITEM_PC = 0xBFB3;    // add-to-bag, item id in A
 export const DROP_GATE_ZP = 0x2E;          // the roll is compared against this
+/** ⭐ BYTE 15 IS PACKED. Bits 0-4 are the table index; bits 5-7 are the DROP
+ *  RATE, compared against a random 0..6 — so the chance is rate/7, with 0 meaning
+ *  "never drops" and 7 meaning ALWAYS. The gate is:
+ *
+ *    $BC7E  LDA $7412        ; the record's byte 15
+ *    $BC81  JSR $FD44        ; = LSR A x5  (>> 5)
+ *    $BC84  STA $2E
+ *    $BC86  LDA #$06 / JSR $A564 / CMP $2E / BCS   ; random 0..6 >= rate -> nothing
+ *
+ *  Across the bestiary: 180 monsters are rate 0 (never), 49 are rate 1 (14.3%),
+ *  and rate 7 is exactly the three DRAGONS — their Onion gear is a GUARANTEED
+ *  drop, which is the real shape of the famous farm. */
+export const BYTE15_RATE_SHIFT = 5;
+export const DROP_GATE_DIE = 7;            // LDA #$06 / JSR $A564 -> 0..6
+export const dropRate = (rom, id) =>
+  rom[MONSTER_PROPS + id * PROPS_STRIDE + 15] >> BYTE15_RATE_SHIFT;
 /** Slot odds in 256ths, from the thresholds above. */
 export const dropSlotOdds = () => {
   const t = [0, ...DROP_SLOT_THRESHOLDS, 0x100];

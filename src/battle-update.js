@@ -44,7 +44,7 @@ import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, 
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum, DMG_SHOW_MS } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
-import { MONSTERS, DROP_SLOT_WEIGHTS, DROP_SLOT_WEIGHT_TOTAL } from './data/monsters.js';
+import { MONSTERS, DROP_SLOT_WEIGHTS, DROP_SLOT_WEIGHT_TOTAL, DROP_GATE_DIE } from './data/monsters.js';
 import { PLAYER_POOL, generateAllyStats } from './data/players.js';
 import { BATTLE_ROAR, BATTLE_CANT_ESCAPE, BATTLE_CRITICAL, BATTLE_SLAIN } from './data/strings.js';
 import { showMsgBox } from './message-box.js';
@@ -917,7 +917,13 @@ function _updateMonsterDeath() {
         // A null/zero slot means canon "nothing drops" — same as the ROM's
         // `LDA $7413,Y / BEQ`.
         const slots = mData?.drops || [];
-        if (slots.length && _dropRand() < 0.25) {
+        // ⭐ v1.8.77 — the drop GATE is canon too: byte 15's top three bits are a
+        // rate 0-7 and the ROM compares a random 0..6 against it, so the chance is
+        // rate/7. ⛔ The old flat 25% was wrong in BOTH directions — it gave the
+        // 180 rate-0 monsters a drop they should never have, and capped the three
+        // dragons at 25% when their Onion gear is a GUARANTEED drop.
+        const dropRate = mData?.dropRate | 0;
+        if (slots.length && dropRate > 0 && Math.floor(_dropRand() * DROP_GATE_DIE) < dropRate) {
           let r = Math.floor(_dropRand() * DROP_SLOT_WEIGHT_TOTAL);
           let slot = 0;
           const last = Math.min(DROP_SLOT_WEIGHTS.length, slots.length) - 1;

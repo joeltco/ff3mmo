@@ -239,6 +239,29 @@ verifying the mapped bank gives 48; verified against the opcode bytes, zero.
 What finally worked was asking the game rather than the addresses: log what
 the **dispatcher** jumps to while driving each command.
 
+### ⭐ Byte 15 is PACKED: a table index AND a drop rate
+
+Bits 0-4 are the steal/drop table index. Bits 5-7 are the **drop rate**,
+compared against a random 0..6 — so the chance is `rate/7`:
+
+```
+$BC7E  LDA $7412        ; the record's byte 15
+$BC81  JSR $FD44        ; = LSR A x5   (>> 5)
+$BC84  STA $2E
+$BC86  LDA #$06 / JSR $A564 / CMP $2E / BCS   ; roll >= rate -> nothing
+```
+
+| rate | chance | monsters |
+|---|---|---|
+| 0 | never | 180 |
+| 1 | 14.3% | 49 |
+| 7 | **always** | 3 — the dragons |
+
+⭐ So the dragons' Onion gear is a **guaranteed** drop, which is the real
+shape of the famous farm. Verified by patching a spawnable monster to each
+rate: `0xFE` (rate 7) dropped 6/6 and yielded OnionArmor and Onion Helm;
+`0x20` (rate 1) dropped 2/6; `0x0A` (rate 0, non-empty table) dropped 0/6.
+
 ### ⭐ The drop table IS the steal table
 
 Victory does not consult a table of its own. The record loader parks the same

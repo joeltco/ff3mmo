@@ -172,8 +172,12 @@ for (let id = 0; id < 232; id++) {
   // the roll weights slot 0-7 as 48/48/48/48/24/24/12/4 in 256ths, so the rare
   // tail (the dragons' Onion gear) only stays rare if the order is preserved.
   // ⛔ Duplicates are meaningful too and must NOT be de-duplicated.
-  if (dropSlots.some(v => v)) {
+  // ⛔ A rate-0 monster NEVER drops, so it gets no `drops` at all — that keeps the
+  // PvE arbiter's union check from accepting loot the game would never award.
+  const dRate = M3.dropRate(rom, id);
+  if (dRate > 0 && dropSlots.some(v => v)) {
     props.push(`drops: [${dropSlots.map(d => d ? `0x${d.toString(16).toUpperCase()}` : 'null').join(',')}]`);
+    props.push(`dropRate: ${dRate}`);
   }
   // ⛔ `steal:` is GONE. The ROM has no separate steal item — steal and drop roll
   // the same eight slots — and nothing in src/ ever read the field.
@@ -192,4 +196,10 @@ lines.push('// the eight slots is NOT the same distribution and makes the rare t
 lines.push('// (Onion gear) four times too likely.');
 lines.push(`export const DROP_SLOT_WEIGHTS = [${M3.dropSlotOdds().join(', ')}];`);
 lines.push(`export const DROP_SLOT_WEIGHT_TOTAL = ${M3.dropSlotOdds().reduce((a2, b2) => a2 + b2, 0)};`);
+lines.push('');
+lines.push('// ⭐ `dropRate` is byte 15 >> 5, and the game gates on a random 0..6 being');
+lines.push('// BELOW it — so the chance is dropRate/7. Rate 0 never drops (those monsters');
+lines.push('// carry no `drops` at all); rate 7 ALWAYS drops, which is only the three');
+lines.push('// dragons and is why their Onion gear is a guaranteed farm.');
+lines.push(`export const DROP_GATE_DIE = ${M3.DROP_GATE_DIE};`);
 console.log(lines.join('\n'));
