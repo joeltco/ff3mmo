@@ -239,6 +239,31 @@ verifying the mapped bank gives 48; verified against the opcode bytes, zero.
 What finally worked was asking the game rather than the addresses: log what
 the **dispatcher** jumps to while driving each command.
 
+### ⭐ The drop table IS the steal table
+
+Victory does not consult a table of its own. The record loader parks the same
+8-slot entry at `$7413`, and the victory code picks a slot with its own roll
+(bank 53, `$BC86` onward):
+
+```
+LDA #$06 / JSR $A564 / CMP $2E / BCS   ; a gate - fail and nothing drops
+LDA #$FF / JSR $A564                   ; then random 0..255 picks the slot
+  < 0x30 -> 0   < 0x60 -> 1   < 0x90 -> 2   < 0xC0 -> 3
+  < 0xD8 -> 4   < 0xF0 -> 5   < 0xFC -> 6   else  -> 7
+LDA $7413,Y / BEQ (0 = nothing) / JSR $BFB3   ; add to the bag
+```
+
+| slot | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| odds /256 | 48 | 48 | 48 | 48 | 24 | 24 | 12 | 4 |
+
+⭐ Slots 0-3 are ~18.75% each and the tail is 9.4 / 9.4 / 4.7 / 1.6% — which
+is why the **dragons' Onion gear, sitting in slots 4-7, is the famous rare
+farm**, and why it is a DROP rather than only a steal.
+
+Confirmed live: beating a Goblin prints **"Treasure: Potion"** and puts `0xA6`
+in the bag — and Potion occupies slots 0-3 of its entry.
+
 ### The steal table, decoded
 
 Bank 16, `$9B80`, file `0x21B90` — 32 entries of 8 item ids, one of which the steal rolls.

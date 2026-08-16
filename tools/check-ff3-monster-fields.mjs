@@ -401,6 +401,67 @@ ok('the Onion entries really hold Onion gear',
 ok('no monster points at a dead steal entry',
    !Array.from({ length: 232 }, (_, i) => M3.stealIndex(rom, i)).some(i => M3.STEAL_DEAD_ENTRIES.includes(i)));
 
+// ── the drop: the SAME table, a different roll ─────────────────────────────
+// ⭐ Victory has no drop table of its own. The ladder thresholds are asserted
+// against the actual CMP operands in the ROM, so changing one in the module
+// fails here rather than quietly describing different code.
+console.log('\nthe drop — the steal table again, rolled differently');
+{
+  let off = M3.DROP_LADDER_FILE, okAll = true, found = [];
+  for (const want of M3.DROP_SLOT_THRESHOLDS) {
+    // each rung is CMP #imm (C9 nn) followed by a BCS
+    let hit = -1;
+    for (let i = off; i < off + 0x14; i++) if (rom[i] === 0xC9 && rom[i + 2] === 0xB0) { hit = i; break; }
+    if (hit < 0) { okAll = false; break; }
+    found.push(rom[hit + 1]);
+    if (rom[hit + 1] !== want) okAll = false;
+    off = hit + 2;
+  }
+  ok('the drop ladder in the ROM matches the recorded thresholds', okAll,
+     found.map(v => '0x' + v.toString(16)).join(' '));
+}
+ok('the slot odds sum to 256', M3.dropSlotOdds().reduce((a2, b2) => a2 + b2, 0) === 256,
+   M3.dropSlotOdds().join('/'));
+ok('the drop reads the same 8 slots the steal table supplies',
+   M3.DROP_USES_STEAL_TABLE && M3.DROP_SLOT_RAM === 0x7413);
+// ⭐ behavioural: whatever the game drops must BE in the monster's decoded entry.
+{
+  const wins = [];
+  for (let t = 0; t < 3; t++) {
+    const p2 = Uint8Array.from(rom);
+    p2[P + M3.FIELDS.hp[0]] = 1; p2[P + M3.FIELDS.hp[1]] = 0;
+    const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+    try { nes.loadROM(Buffer.from(p2).toString('binary')); nes.fromJSON(JSON.parse(SNAP)); } catch { continue; }
+    const run = (n2) => { for (let i = 0; i < n2; i++) nes.frame(); };
+    const scr = () => {
+      const v = nes.ppu.vramMem, out = [];
+      for (let r = 0; r < 30; r++) {
+        let t2 = '';
+        for (let c = 0; c < 32; c++) { const g = glyph(v[0x2000 + r * 32 + c]); t2 += (g === null ? ' ' : g); }
+        if (t2.trim()) out.push(t2.replace(/\s+/g, ' ').trim());
+      }
+      return out;
+    };
+    run(30 + t * 11);
+    for (let i = 0; i < 32; i++) { nes.cpu.mem[0x60C0 + i] = 0; nes.cpu.mem[0x60E0 + i] = 0; }
+    let inB = false;
+    for (let s2 = 0; s2 < 300; s2++) {
+      const b2 = D[Math.floor(s2 / 8) % 4];
+      nes.buttonDown(1, b2); run(10); nes.buttonUp(1, b2); run(12);
+      if (scr().some(l => /Guard|Item/i.test(l))) { inB = true; break; }
+    }
+    if (!inB) continue;
+    for (let k = 0; k < 70; k++) { nes.buttonDown(1, Controller.BUTTON_A); run(8); nes.buttonUp(1, Controller.BUTTON_A); run(20); }
+    run(300);
+    if (nes.cpu.mem[0x60C0]) wins.push(nes.cpu.mem[0x60C0]);
+  }
+  const slots = M3.stealSlots(rom, 0);   // the Goblin
+  ok('a Goblin victory drops something', wins.length > 0, `${wins.length} drops`);
+  ok('...and every dropped item is in its decoded entry',
+     wins.length > 0 && wins.every(v => slots.includes(v)),
+     `dropped ${wins.map(v => '0x' + v.toString(16)).join(',')} vs entry ${[...new Set(slots)].map(v => '0x' + v.toString(16)).join(',')}`);
+}
+
 console.log('\nthe record is fully accounted for');
 ok('nothing is labelled inherited any more', Object.keys(M3.INHERITED_FIELDS).length === 0);
 ok('byte 6 is recorded as an INDEX, like 9/12/14',

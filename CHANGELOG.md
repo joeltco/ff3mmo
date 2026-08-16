@@ -18,6 +18,48 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.74 — 2026-08-16
+
+### The drop table IS the steal table
+
+⭐ **FF3 has no separate drop table.** Victory rolls a slot out of the same 8-slot
+entry the steal uses. The record loader parks it at `$7413`, and the victory code
+(bank 53, `$BC86`) does:
+
+```
+LDA #$06 / JSR $A564 / CMP $2E / BCS   ; a gate - fail and nothing drops
+LDA #$FF / JSR $A564                   ; then random 0..255 picks the slot
+  < 0x30 -> 0   < 0x60 -> 1   < 0x90 -> 2   < 0xC0 -> 3
+  < 0xD8 -> 4   < 0xF0 -> 5   < 0xFC -> 6   else  -> 7
+LDA $7413,Y / BEQ (0 = nothing) / JSR $BFB3   ; add to the bag
+```
+
+Slot odds in 256ths: **48 48 48 48 24 24 12 4**. ⭐ Slots 0-3 are ~18.75% each and
+the tail is 9.4 / 9.4 / 4.7 / 1.6% — which is why the **dragons' Onion gear,
+sitting in slots 4-7, is the famous rare farm**, and why it is a DROP rather than
+only a steal. That the odds explain a well-known behaviour nobody was aiming at
+is the check worth having.
+
+**Confirmed live**: beating a Goblin prints **"Treasure: Potion"** and puts `0xA6`
+in the bag; Potion occupies slots 0-3 of its entry. A Bomb drops nothing.
+
+**Two tables ruled OUT along the way**, both already known and neither a drop:
+`$9C80`/`$9D80` (bank 16) are the EXP id -> EXP value chain — re-derived from code
+and matching `MONSTER_EXP_ID`/`MONSTER_EXP_VAL`, with the Goblin's 16 EXP agreeing
+with `src/data/monsters.js`. `$9C58` resolves to `MONSTER_GIL` (3 for a Goblin) and
+`$B2AE` to `MONSTER_CP` (1 Capacity). ⛔ Reading them as item ids first produced a
+plausible-looking nonsense table ("Goblin drops an Ice Staff") — they are
+monotonic 16-bit values, which is what gave it away.
+
+⛔ Also worth recording: `src/data/monsters.js` `drops:` is **hand-maintained**,
+flagged as such in `gen-monsters-js.js` ("preserved from previous manual data").
+It is a secondary source and is not what the game reads.
+
+**Audit 54/54**, revert-proven: change one ladder threshold and the check against
+the actual `CMP` operands in the ROM fails. New checks — the ROM ladder matches the
+recorded thresholds, the odds sum to 256, the drop reads the steal slots, a Goblin
+victory drops something, and every dropped item is in its decoded entry.
+
 ## 1.8.73 — 2026-08-16
 
 ### The steal table, decoded — 32 entries of eight item ids

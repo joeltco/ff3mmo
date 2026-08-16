@@ -239,6 +239,14 @@
 //        [30]  Elixir x4, Onion Shield/Helm/Armor/Sword <- Green Dragon  (0xFE)
 //        [31]  Elixir x4, Onion Gloves/Armor/Helm/Sword <- Yellow Dragon (0xFF)
 //
+//      ⭐ AND IT IS ALSO THE DROP TABLE. Victory has no table of its own — the
+//      record loader parks this same entry at $7413 and the victory code rolls a
+//      slot (see DROP_SLOT_THRESHOLDS). Slots 0-3 are ~18.75% each; the tail is
+//      9.4 / 9.4 / 4.7 / 1.6%. That is why the dragons' Onion gear — sitting in
+//      slots 4-7 — is the famous rare farm, and it is a DROP, not only a steal.
+//      Confirmed live: beating a Goblin prints "Treasure: Potion" and puts 0xA6
+//      in the bag, and Potion occupies slots 0-3 of its entry.
+//
 //      ⭐ Entry 10 lists Bomb Arm and Tranquilizer — precisely the items watched
 //      being stolen. And the three "sentinel-looking" byte-15 values 0xFD/FE/FF
 //      turn out to be the ONION EQUIPMENT entries, reached only by the three
@@ -340,6 +348,29 @@ export const STEAL_ENTRIES = 32;
  *  monster points at them. */
 export const STEAL_ONION_ENTRIES = [29, 30, 31];
 export const STEAL_DEAD_ENTRIES = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+/** ⭐ THE DROP TABLE IS THE STEAL TABLE. Victory does not consult a table of its
+ *  own: the record loader parks the same 8-slot entry at $7413, and the victory
+ *  code picks a slot with its own weighted roll (bank 53, $BC86 onward):
+ *
+ *    LDA #$06 / JSR $A564 / CMP $2E / BCS   ; a gate — fail and nothing drops
+ *    LDA #$FF / JSR $A564                   ; then random 0..255 picks the slot
+ *      < 0x30 -> 0   < 0x60 -> 1   < 0x90 -> 2   < 0xC0 -> 3
+ *      < 0xD8 -> 4   < 0xF0 -> 5   < 0xFC -> 6   else  -> 7
+ *    LDA $7413,Y / BEQ (0 = nothing) / JSR $BFB3   ; add to the bag
+ *
+ *  So slots 0-3 are ~18.75% each and the tail 4-7 is 9.4/9.4/4.7/1.6% — which is
+ *  why the DRAGONS' Onion gear, sitting in slots 4-7, is the famous rare farm. */
+export const DROP_USES_STEAL_TABLE = true;
+export const DROP_SLOT_RAM = 0x7413;
+export const DROP_SLOT_THRESHOLDS = [0x30, 0x60, 0x90, 0xC0, 0xD8, 0xF0, 0xFC];
+export const DROP_LADDER_FILE = 0x6BCA4;   // the CMP #$30 that starts the ladder
+export const DROP_ADD_ITEM_PC = 0xBFB3;    // add-to-bag, item id in A
+export const DROP_GATE_ZP = 0x2E;          // the roll is compared against this
+/** Slot odds in 256ths, from the thresholds above. */
+export const dropSlotOdds = () => {
+  const t = [0, ...DROP_SLOT_THRESHOLDS, 0x100];
+  return t.slice(1).map((v, i) => v - t[i]);
+};
 /** The index a monster resolves to, and its eight steal slots (one is rolled). */
 export const stealIndex = (rom, id) =>
   rom[MONSTER_PROPS + id * PROPS_STRIDE + 15] & BYTE15_INDEX_MASK;
