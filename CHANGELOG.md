@@ -18,6 +18,53 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.78 — 2026-08-16
+
+### The encounter formation tables — species, and a nibble-packed count range
+
+The addresses were sitting in `tools/monscan/*.cjs` as bare literals with no
+account of what the bytes mean. New lib `tools/lib/ff3-encounters.mjs`, traced
+through the expander that actually builds a battle (bank 47, `$A064`):
+
+```
+$A066  LDA ($7E),Y / STA $7D69,Y / CPY #$06   ; a formation RECORD is SIX bytes
+                                              ; -> 2 header + 4 SPECIES IDS at +2
+$A08B  LDA $7D68 / AND #$3F                   ; the COUNT index — only 6 bits
+$A0A7  ADC #$8A                               ; pointer = $8A00 + idx*4
+$A0AD  LDA ($7E),Y / STA $7D6F,Y / CPY #$04   ; FOUR count bytes, one per species
+$A0B9  LDA $7D6F,X / JSR $A0C8                ; ...each one resolved:
+$A0C8    AND #$F0 / LSR x4 / TAX              ;   X = HIGH nibble
+         AND #$0F / JSR $FBEF                 ;   A = LOW nibble
+$FBEF    random in [X, A]; if A is 0 or A == X, just X
+```
+
+⭐ **The count byte is nibble-packed: high = MIN, low = MAX**, rolled per battle.
+Verified by patching the live record and counting bodies on the field:
+
+```
+0x24 (natural) -> 2      0x33 -> 3      0x11 -> 1
+0x44 -> 4                0x00 -> no battle at all
+```
+
+⛔ **The two records use DIFFERENT indices.** Captured live, the species record
+came from index 0 while the count record came from `$7D68 & 0x3F` = **7**. So
+patching `COUNT_TABLE + 0*4` changes nothing and reads as "this table is inert" —
+which is precisely the wrong conclusion an earlier pass drew from exactly that
+experiment. The gate asserts both halves: the right index changes the field, and
+index 0 does not.
+
+`SPECIES_TABLE` is `0x05C410` (6 bytes each, ids at `+2`, `0xFF` = empty) and
+`COUNT_TABLE` is `0x05CA10` (4 bytes each) — the same two addresses monscan used,
+now with meanings attached and pinned.
+
+**New gate — `tools/check-ff3-encounters.mjs`, 10/10, in `deploy.sh`.**
+Revert-proven twice: species ids at `+1` -> 2 failures; swapping the min/max
+nibbles -> 2 failures.
+
+⛔ **Not identified, and recorded as such:** the two header bytes of the species
+record (`0x89 0xA0` here), what `ENCOUNTER_SET` (`0x05C010`, 512 x 2) selects, and
+how either index is chosen. Not guessed at.
+
 ## 1.8.77 — 2026-08-16
 
 ### $2E is byte 15 >> 5 — the drop RATE. Byte 15 is packed.
