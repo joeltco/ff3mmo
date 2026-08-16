@@ -2,8 +2,11 @@
 // Generate monsters.js from FF3 NES ROM data
 // Preserves steal/drops/location from existing monsters.js where available
 //
-// Output is the WHOLE file — `node tools/gen-monsters-js.js > src/data/monsters.js`
-// overwrites it. Nothing hand-maintained may live in monsters.js as a result.
+// Output is the WHOLE file. ⛔ NEVER redirect straight onto the target: this
+// script IMPORTS `src/data/monsters.js` (for `location`), and the shell truncates
+// the redirect target BEFORE node runs, so the import fails. Write to a temp file
+// and move it:
+//   node tools/gen-monsters-js.js > /tmp/m.js && mv /tmp/m.js src/data/monsters.js Nothing hand-maintained may live in monsters.js as a result.
 // The short-name overrides used to sit below the MONSTERS map in that same file
 // and were silently destroyed by regenerating; they now live in
 // src/data/monster-names.js. Keep hand-maintained data out of here.
@@ -11,6 +14,7 @@
 import { readFileSync } from 'fs';
 import { initTextDecoder, getSpellName, getMonsterName } from '../src/text-decoder.js';
 import { MONSTERS as OLD_MONSTERS } from '../src/data/monsters.js';
+import * as M3 from './lib/ff3-monsters.mjs';
 
 const rom = readFileSync('FF3-English.nes');
 initTextDecoder(rom);
@@ -76,7 +80,7 @@ const lines = [];
 lines.push(`// Monster Catalog — keyed by ROM bestiary ID`);
 lines.push(`// AUTO-GENERATED from FF3 NES ROM via tools/gen-monsters-js.js`);
 lines.push(`// Stats from Data Crystal ROM map ($60010 properties, $61010 stat table, $61210 attack scripts)`);
-lines.push(`// Steal/drops/location preserved from previous manual data where available`);
+lines.push(`// drops = the ROM's eight steal/drop slots IN ORDER; location is hand data`);
 lines.push(`// Hand-maintained short names live in monster-names.js — this file is overwritten wholesale.`);
 lines.push(``);
 lines.push(`export const MONSTERS = new Map([`);
@@ -135,8 +139,9 @@ for (let id = 0; id < 232; id++) {
   // Status resist (bitmask, same decoding as statusOnAtk)
   const statusResistArr = statusVal(statusResist);
 
-  // Preserve steal/drops/location from old data
+  // ⭐ `drops` now comes from the ROM (v1.8.76). `location` is still hand data.
   const old = OLD_MONSTERS.get(id);
+  const dropSlots = M3.stealSlots(rom, id);
 
   const hex = `0x${id.toString(16).padStart(2, '0').toUpperCase()}`;
   const props = [];
@@ -163,16 +168,28 @@ for (let id = 0; id < 232; id++) {
   if (spiritInt > 0) props.push(`spiritInt: ${spiritInt}`);
   if (isBoss) props.push(`boss: true`);
 
-  // Preserve old fields
-  if (old) {
-    if (old.steal != null) props.push(`steal: 0x${old.steal.toString(16).toUpperCase()}`);
-    if (old.drops && old.drops.length) props.push(`drops: [${old.drops.map(d => d != null ? `0x${d.toString(16).toUpperCase()}` : 'null').join(',')}]`);
-    if (old.location) props.push(`location: [${old.location.map(l => `'${l}'`).join(',')}]`);
+  // ⭐ ROM CANON: the eight steal/drop slots, IN ORDER. Order is load-bearing —
+  // the roll weights slot 0-7 as 48/48/48/48/24/24/12/4 in 256ths, so the rare
+  // tail (the dragons' Onion gear) only stays rare if the order is preserved.
+  // ⛔ Duplicates are meaningful too and must NOT be de-duplicated.
+  if (dropSlots.some(v => v)) {
+    props.push(`drops: [${dropSlots.map(d => d ? `0x${d.toString(16).toUpperCase()}` : 'null').join(',')}]`);
   }
+  // ⛔ `steal:` is GONE. The ROM has no separate steal item — steal and drop roll
+  // the same eight slots — and nothing in src/ ever read the field.
+  if (old && old.location) props.push(`location: [${old.location.map(l => `'${l}'`).join(',')}]`);
 
   const name = monStr(id);
   lines.push(`  [${hex}, { ${props.join(', ')} }], // ${name}`);
 }
 
 lines.push(`]);`);
+lines.push('');
+lines.push('// ⭐ Canon drop-slot weights, in 256ths, for slots 0-7 of `drops`.');
+lines.push('// Measured off the victory roll in bank 53 ($BC94 onward): a random');
+lines.push('// 0..255 picks the slot through a threshold ladder. A UNIFORM pick over');
+lines.push('// the eight slots is NOT the same distribution and makes the rare tail');
+lines.push('// (Onion gear) four times too likely.');
+lines.push(`export const DROP_SLOT_WEIGHTS = [${M3.dropSlotOdds().join(', ')}];`);
+lines.push(`export const DROP_SLOT_WEIGHT_TOTAL = ${M3.dropSlotOdds().reduce((a2, b2) => a2 + b2, 0)};`);
 console.log(lines.join('\n'));

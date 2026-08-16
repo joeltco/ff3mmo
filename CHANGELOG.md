@@ -18,6 +18,56 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.76 — 2026-08-16
+
+### Drops are ROM-canon now — all 231 monsters, with the canon odds
+
+`gen-monsters-js.js` now emits `drops:` as the ROM's **eight steal/drop slots in
+order** for every monster, replacing the hand-maintained data that disagreed on 30
+of the 50 monsters that had any and left 181 with none.
+`node tools/ff3-drop-audit.mjs` now reports **231/231 agree, 0 incomplete**.
+
+⭐ **The dragons' Onion gear is reachable again** — Sword, Shield, Helm, Armor and
+Gloves, in the rare tail of each dragon's entry, exactly as in FF3.
+
+⛔ **`steal:` is removed.** The ROM has no separate steal item — steal and drop
+roll the same eight slots — and nothing in `src/` ever read the field.
+
+⭐ **The roll is weighted, and that is the load-bearing part.** Slots 0-7 are
+48/48/48/48/24/24/12/4 in 256ths, exported as `DROP_SLOT_WEIGHTS`.
+`battle-update.js` now rolls the slot and treats a null slot as canon "nothing
+drops", instead of null-filtering the array and picking uniformly. ⛔ The old
+filter would have collapsed the eight slots and destroyed the slot -> weight
+correspondence: a uniform pick puts the Onion gear at **49%** instead of 25%.
+That is measured, not asserted — it is what the revert proof prints.
+
+**New gate — `tools/check-drop-roll.mjs`, 10/10, in `deploy.sh`** (fast, no
+emulator). It pins the slots against the ROM, that duplicates survive, that the
+weights match the decoded ladder, that a simulated roll reproduces the
+distribution, and that the server's union check still accepts a rare-tail claim.
+Revert-proven twice: uniform weights -> 2 failures (Onion at 48.9%);
+de-duplicating one monster's slots -> 3 failures.
+
+⛔ **Left as ff3mmo's own, not canon:** the flat 25% per-encounter drop gate. The
+ROM gates on `random(0..6) < $2E` and `$2E`'s source was not identified, so the
+existing behaviour stands rather than being replaced by a guess.
+
+⛔ **A gate caught a real consequence.** `pvp-wire-sim`'s "PvE battle-end rejects
+drop not in monster pool" started PASSING THE CHEAT: it probed with a Hi-Potion
+(`0xA7`) on the premise that "Goblin drops Potion only", and Hi-Potion is now a
+legitimate Goblin slot — it is in 207 monsters' tables. Re-pointed at an OnionSword
+(`0x39`), which is in the three dragons' tables and nowhere else. 154/154.
+
+⚠️ **Worth knowing:** because the server validates a claimed drop against the union
+of the battle monsters' tables, widening every monster from 1-2 items to 8 widens
+what a modded client can successfully claim. Still bounded to that monster's real
+loot — an OnionSword claim from a Goblin is still rejected — but the accepted set
+is genuinely larger than before.
+
+⛔ Generator footgun, now documented in its header: `gen-monsters-js.js` IMPORTS
+`src/data/monsters.js` (for `location`), so redirecting its output straight onto
+that file truncates it before node runs. Write to a temp file and move.
+
 ## 1.8.75 — 2026-08-16
 
 ### The shipped drop/steal data disagrees with the ROM — audited, not changed

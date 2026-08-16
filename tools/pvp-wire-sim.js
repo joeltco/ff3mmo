@@ -3070,7 +3070,12 @@ async function suiteWire() {
     ws.send(JSON.stringify({ type: 'pve-encounter-request',
       zoneKey: 'grasslands_valley', mapId: 0 }));
     const start = await once(ws, m => m.type === 'pve-battle-start', 2000);
-    // Goblin drops Potion (0xA6) only; claiming a Hi-Potion (0xA7) = cheat.
+    // ⛔ v1.8.76 — drops went ROM-canon, so every monster now has EIGHT slots and
+    // a grasslands Goblin legitimately drops Potion, Hi-Potion, PhoenixDown AND
+    // Elixir. The old probe (0xA7 Hi-Potion) became a VALID claim and this test
+    // started passing the cheat. Probe with an OnionSword (0x39) instead — it is
+    // in the three dragons' tables and nowhere else, so it can never be in a
+    // grasslands pool. Verified by `tools/check-drop-roll.mjs`.
     const expSum = start.monsters.reduce((s, m) => s + (m.exp | 0), 0);
     const gilSum = start.monsters.reduce((s, m) => s + (m.gil | 0), 0);
     const cpSum = start.monsters.reduce((s, m) => s + ((m.cp != null ? m.cp : 1) | 0), 0);
@@ -3079,7 +3084,7 @@ async function suiteWire() {
         expGained: Math.max(1, Math.floor(expSum / 4)),
         gilGained: Math.max(1, Math.floor(gilSum / 4)),
         cpGained:  Math.max(1, Math.floor(cpSum  / 4)),
-        drop: 0xA7 } }));
+        drop: 0x39 } }));
     const result = await once(ws, m => m.type === 'pve-battle-result', 1000);
     assertEqual(result.status, 'rejected', 'fake drop accepted');
     assertTrue(result.reason && result.reason.startsWith('drop-not-in-pool'),

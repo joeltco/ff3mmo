@@ -264,27 +264,28 @@ farm**, and why it is a DROP rather than only a steal.
 Confirmed live: beating a Goblin prints **"Treasure: Potion"** and puts `0xA6`
 in the bag — and Potion occupies slots 0-3 of its entry.
 
-### ⛔ The shipped hand-maintained data disagrees
+### ⭐ The shipped data is now ROM-canon (v1.8.76)
 
-`src/data/monsters.js` carries `steal:` and `drops:` fields that
-`gen-monsters-js.js` "preserves from previous manual data". The game reads
-them, so the disagreement is behavioural, not cosmetic
-(`node tools/ff3-drop-audit.mjs`):
+`src/data/monsters.js` used to carry hand-maintained `steal:`/`drops:`
+"preserved from previous manual data". It disagreed badly — 30 of the 50
+monsters with drop data named items their ROM entry does not contain, 181
+had no drop data at all, and the dragons had none, so **FF3's most famous
+farm was unreachable**.
 
-| field | agrees with the ROM entry | names an item NOT in it | absent |
-|---|---|---|---|
-| `steal:` | 184 | 35 | 12 |
-| `drops:` | 20 | 30 | 181 |
+`gen-monsters-js.js` now emits `drops:` as the ROM's eight slots **in
+order**, for all 231 monsters, and `steal:` is gone (the ROM has no separate
+steal item, and nothing in `src/` read the field). Verify with
+`node tools/ff3-drop-audit.mjs` — 231/231 agree, 0 incomplete.
 
-52 monsters name an item their ROM entry does not contain, and 16 of the
-agreeing ones list fewer items than the entry offers.
+⛔ **Order and duplicates are load-bearing.** The roll weights slots 0-7 as
+48/48/48/48/24/24/12/4 in 256ths, exported as `DROP_SLOT_WEIGHTS`. Filtering
+nulls or de-duplicating before the pick collapses the array and destroys the
+slot -> weight correspondence — a uniform pick over eight slots would put the
+dragons' Onion gear at **49%** instead of 25%. `tools/check-drop-roll.mjs`
+guards exactly that.
 
-⭐ The starkest case is the **dragons**, whose hand data has no `drops:` at
-all and a `steal:` of Potion — while the ROM entry is Elixir x4 plus the full
-**Onion equipment**. As shipped, FF3's most famous farm is not reachable.
-
-⛔ Recorded, not "fixed": ff3mmo is its own game, so whether to follow ROM
-canon here is a design call.
+⛔ Still ff3mmo's own, not canon: the flat 25% per-encounter drop gate. The
+ROM gates on `random(0..6) < $2E`, and `$2E`'s source was not identified.
 
 ### The steal table, decoded
 
