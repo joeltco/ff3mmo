@@ -63,6 +63,9 @@ for (let id = 0; id < MONSTER_COUNT; id++) {
     weak: bits(pr[M3.FIELDS.weakness], ELEM_NAMES),
     resist: bits(pr[M3.FIELDS.elemResist], ELEM_NAMES),
     onHit: bits(pr[M3.FIELDS.statusOnAtk], M3.STATUS_BITS),
+    mdef: M3.monsterMagicDefence(rom, id),
+    mevd: M3.monsterMagicEvade(rom, id),
+    atkEl: bits(M3.monsterAtkElem(rom, id), ELEM_NAMES),
   });
 }
 
@@ -206,13 +209,57 @@ L.push('Byte 4 tracks byte 0 at half weight, so the two feed the same damage ter
 L.push('⛔ Reading either as a plain 0-255 magnitude is wrong, and a coarse sweep that');
 L.push('lands on multiples of 16 never notices.');
 L.push('');
-L.push('## ⛔ Still not isolated');
+L.push('**Byte 8 is the attack\'s element**, in the same bit vocabulary — measured');
+L.push('from the ARMOUR side, independently of how those bits were derived from the');
+L.push('monster side. With a fire-resisting shield equipped:');
 L.push('');
-L.push('Byte 6 (mEvadeIdx) — nothing moved it; the party never casts magic at it.');
-L.push('Byte 8 (atkElem) — flat across all 8 bits; the party has no elemental');
-L.push('resistance for an attack element to show up against.');
-L.push('Byte 15 — flat across its entire range in every configuration tried.');
-L.push('These are recorded as unknown, **not** filled in from a wiki.');
+L.push('```');
+L.push('                        no shield   fire-resist shield');
+L.push('  atkElem = 0 (none)         2785                 2722');
+L.push('  atkElem = 0x10 FIRE        2785                 1308   <- halved');
+L.push('  atkElem = 0x08 ICE         2785                 7992   <- TRIPLED');
+L.push('```');
+L.push('');
+L.push('The no-shield column is flat for every value — the control. The ice row is');
+L.push('the good kind of surprise: fire armour is WEAK to ice, so the same bit map');
+L.push('falls out of an inverted effect.');
+L.push('');
+L.push('**Byte 6 is the MAGIC defence/evade index.** Reaching it needed a third');
+L.push('instrument — the party had to actually CAST, via job 4 (Black Mage) poked');
+L.push('into SRAM. ⛔ They are level 0, so the spell grid opens on levels 8-5 where');
+L.push('every keypress is refused; it must be scrolled to level 1 first. Byte 6');
+L.push('indexes the same stat table bytes 9 and 12 do, which is why it is never');
+L.push('copied into RAM. Pointed at entry 5 and then patching that entry:');
+L.push('');
+L.push('```');
+L.push('  byte 6 = 5, entry untouched      magic dealt 220');
+L.push('  byte 6 = 5, entry byte 0 = 255   magic dealt   0    <- evade, to ZERO');
+L.push('  byte 6 = 5, entry byte 1 = 255   magic dealt 220    <- inert');
+L.push('  byte 6 = 5, entry byte 2 = 255   magic dealt  14    <- FLOORS');
+L.push('```');
+L.push('');
+L.push('With byte 6 left at its natural 0, patching that SAME entry changes nothing');
+L.push('(220/220/220) — the control could have disagreed and did not. The magic');
+L.push('entry has the identical shape to the physical one, inert middle byte and all.');
+L.push('');
+L.push('## ⛔ Byte 15 — read, but its effect is unknown');
+L.push('');
+L.push('It is live data: copied to slot `+0x33` and read 5 times across an encounter,');
+L.push('in line with fields that are certainly used (spAtkRate 8, atkElem 6,');
+L.push('statusOnAtk 4). Most reads come from bulk loops every field sees (`$A407`,');
+L.push('`$AA2C`, `$AA07`, `$CEE8`) — but **`$A5F3` reads byte 15 and nothing else**,');
+L.push('so it has a dedicated consumer.');
+L.push('');
+L.push('⛔ An earlier pass concluded "written and never read back". That was an');
+L.push('artifact of installing the read hook AFTER battle setup. The reads are real;');
+L.push('what they DO is what remains unknown. Every value 0-255 was tried, with the');
+L.push('special active and inactive, and nothing observable moved. Recorded as');
+L.push('unknown, **not** filled in from a wiki.');
+L.push('');
+L.push('A cross-check worth keeping: the reading PCs group the way the measured');
+L.push('meanings do. `$A61D` reads atkElem AND elemResist (the elemental term);');
+L.push('`$A65C` reads atkElem, statusOnAtk AND statusResist (the status term). The');
+L.push('code agrees with the labels.');
 L.push('');
 L.push(`## The bestiary — ${rows.length} monsters`);
 L.push('');
@@ -220,11 +267,15 @@ L.push('`lvl` and `pwr` are the HIGH nibbles of bytes 0 and 4; `spirit` is the L
 L.push('nibble of byte 7. The other nibble of each is inert — printing the raw byte');
 L.push('would be printing a number the game never reads.');
 L.push('');
-L.push('| id | name | HP | attack | defence | evade | lvl | pwr | spirit | rate | special | weak | resist | on-hit | gil |');
-L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+L.push('`m.def` / `m.evade` are the MAGIC entry, reached through byte 6 — the same');
+L.push('three-byte shape as the physical one. `atk elem` is byte 8.');
+L.push('');
+L.push('| id | name | HP | attack | defence | evade | m.def | m.evade | lvl | pwr | spirit | rate | special | atk elem | weak | resist | on-hit | gil |');
+L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 for (const r of rows) {
-  L.push(`| \`${hex(r.id)}\` | ${r.name} | ${r.hp} | ${r.atk} | ${r.def} | ${r.evd} | ${r.lvl} | ` +
-         `${r.pwr} | ${r.spirit} | ${r.rate} | ${r.special} | ${r.weak} | ${r.resist} | ${r.onHit} | ${r.gil} |`);
+  L.push(`| \`${hex(r.id)}\` | ${r.name} | ${r.hp} | ${r.atk} | ${r.def} | ${r.evd} | ${r.mdef} | ` +
+         `${r.mevd} | ${r.lvl} | ${r.pwr} | ${r.spirit} | ${r.rate} | ${r.special} | ${r.atkEl} | ` +
+         `${r.weak} | ${r.resist} | ${r.onHit} | ${r.gil} |`);
 }
 L.push('');
 

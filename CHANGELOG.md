@@ -18,6 +18,73 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.67 — 2026-08-15
+
+### Bytes 6, 8 and 15 — two solved, one honestly half-solved
+
+⭐ **Byte 8 is the element of the monster's ATTACK**, in the same bit vocabulary
+as weakness and resistance — and measured from the **armour** side, independently
+of how those bits were derived from the monster side. With a fire-resisting
+shield equipped:
+
+```
+                        no shield   fire-resist shield
+  atkElem = 0 (none)         2785                 2722
+  atkElem = 0x10 FIRE        2785                 1308   <- halved
+  atkElem = 0x08 ICE         2785                 7992   <- TRIPLED
+```
+
+The no-shield column is flat at 2785 for every value — the control. The ice row
+is the good kind of surprise: **fire armour is weak to ice**, so the same bit map
+falls out of an inverted effect.
+
+⭐ **Byte 6 is the MAGIC defence/evade index.** Reaching it needed a third
+instrument: the party had to actually CAST. Poking job 4 (Black Mage) plus MP
+into each character's SRAM turns the "Guard" command row into "Magic". ⛔ They
+are LEVEL 0, so the spell grid opens on levels 8-5 where every keypress is
+refused — it must be scrolled to level 1 first, which is precisely what made this
+look impossible on the first three attempts.
+
+Byte 6 indexes the same stat table bytes 9 and 12 do — which is why, like them,
+it is never copied into RAM. Pointed at entry 5, then patching that entry:
+
+```
+  byte 6 = 5, entry untouched      magic dealt 220
+  byte 6 = 5, entry byte 0 = 255   magic dealt   0    <- evade, to ZERO
+  byte 6 = 5, entry byte 1 = 255   magic dealt 220    <- inert
+  byte 6 = 5, entry byte 2 = 255   magic dealt  14    <- FLOORS
+```
+
+⭐ **The control could have disagreed and did not:** with byte 6 left at its
+natural 0, patching that same entry changes nothing (220/220/220). The magic
+entry has the identical three-byte shape as the physical one — evade to zero,
+defence floors, middle byte inert. That inert middle byte turning up in **both**
+entries is its own small confirmation.
+
+⛔ **Byte 15 is READ — its effect is what is unknown.** It is copied to slot
+`+0x33` and read 5 times an encounter, in line with fields that are certainly
+used (spAtkRate 8, atkElem 6, statusOnAtk 4). Most reads come from bulk loops
+every field sees (`$A407`, `$AA2C`, `$AA07`, `$CEE8`) — but **`$A5F3` reads byte
+15 and nothing else**, so it has a dedicated consumer. Every value 0-255 was
+tried, special active and inactive, and nothing observable moved.
+
+⛔ A retraction inside this one: an earlier pass here concluded byte 15 was
+"written and never read back". That was an artifact of installing the read hook
+AFTER battle setup — with a working control ($76AC fired, $76AB did not) it
+looked conclusive. Hooking from before the encounter shows the reads are real.
+
+⭐ **A cross-check worth keeping:** the reading PCs group the way the measured
+meanings do. `$A61D` reads atkElem AND elemResist (the elemental term); `$A65C`
+reads atkElem, statusOnAtk AND statusResist (the status term). The code agrees
+with the labels, derived from a completely different direction.
+
+**Every byte of the 16-byte record is now measured except byte 15's purpose.**
+`INHERITED_FIELDS` is empty — nothing is taken on Data Crystal's word any more.
+The audit grows to **36/36**, revert-proven two more ways: point `atkElem` at
+byte 11 -> 2 failures; make `magicDefIdx` the physical index -> 2 failures
+(213/214 instead of 0/14, pinning byte 6 specifically rather than "some index").
+`docs/FF3-MONSTERS.md` gains `m.def`, `m.evade` and `atk elem` columns.
+
 ## 1.8.66 — 2026-08-15
 
 ### `check-ff3-monster-fields` is a manual audit, not a deploy gate

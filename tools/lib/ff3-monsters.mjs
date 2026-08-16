@@ -144,12 +144,59 @@
 //      ⛔ Reading either as a plain 0-255 magnitude is wrong, and a coarse sweep
 //      that happens to land on multiples of 16 will never notice.
 //
-// ⛔ STILL NOT ISOLATED — say so, do not fill these in from a wiki:
-//      byte 6  (mEvadeIdx)   nothing moved it; the party never casts magic at it
-//      byte 8  (atkElem)     flat across all 8 bits — the party has no elemental
-//                            resistance for an attack element to show up against
-//      byte 15               flat across its ENTIRE range in every configuration
-//                            tried, including with the special active
+// ⭐ 6  MAGIC DEFENCE INDEX. A third instrument was needed: the party had to
+//      actually CAST. Poking job 4 (Black Mage) into every char's SRAM block plus
+//      MP turns the "Guard" command row into "Magic", and the level-1 black spell
+//      can then be driven from the menu. ⛔ The party is LEVEL 0, so the spell
+//      grid opens on levels 8-5 and every A press is refused — it must be
+//      scrolled to level 1 first, which is what made this look impossible.
+//
+//      Byte 6 is an INDEX into the same STAT_TABLE bytes 9 and 12 index — which
+//      is why it is never copied into RAM, exactly like them. Pointed at entry 5
+//      and then patching that entry:
+//
+//        byte 6 = 5, entry untouched      magic dealt 220
+//        byte 6 = 5, entry byte 0 = 255   magic dealt   0    <- evade, to ZERO
+//        byte 6 = 5, entry byte 1 = 255   magic dealt 220    <- inert
+//        byte 6 = 5, entry byte 2 = 255   magic dealt  14    <- FLOORS
+//
+//      ⭐ THE CONTROL, and it could have disagreed: with byte 6 left at its
+//      natural 0, patching that SAME entry changes nothing at all (220/220/220).
+//      The entry only matters when byte 6 points at it.
+//
+//      So the magic entry has the IDENTICAL shape to the physical one at byte 12
+//      — byte 0 evades to zero, byte 2 floors above it, byte 1 does nothing. The
+//      inert middle byte turning up in both is its own small confirmation.
+//
+// ⭐ 8  ATTACK ELEMENT, in the same bit vocabulary as weakness and resistance.
+//      Measured from the ARMOUR side, which is independent of how those bits were
+//      derived from the monster side. With a fire-resisting shield equipped:
+//
+//                              no shield   fire-resist shield
+//        atkElem = 0 (none)         2785                 2722
+//        atkElem = 0x10 FIRE        2785                 1308   <- halved
+//        atkElem = 0x08 ICE         2785                 7992   <- TRIPLED
+//        atkElem = 0x02 physical    2785                 2722
+//
+//      ⭐ The no-shield column is flat at 2785 for every value — the control. And
+//      the ice row is the good kind of surprise: fire armour is WEAK to ice, so
+//      the same bit map falls out of an inverted effect.
+//
+// ⛔ 15 READ, BUT ITS EFFECT IS UNKNOWN. Do not fill it in from a wiki.
+//      It IS live data: it is copied to slot `+0x33` and read 5 times across an
+//      encounter, in line with fields that are certainly used (spAtkRate 8,
+//      atkElem 6, statusOnAtk 4). Most of those reads come from bulk loops every
+//      field sees ($A407, $AA2C, $AA07, $CEE8) — but ⭐ `$A5F3` reads byte 15 and
+//      NOTHING ELSE, so it has a dedicated consumer.
+//      ⛔ An earlier pass concluded "written and never read back". That was an
+//      artifact of installing the hook AFTER battle setup. The reads are real.
+//      What is NOT known is what they DO: every value 0-255 was tried, with the
+//      special active and inactive, and nothing observable moved.
+//
+// ⭐ A cross-check worth keeping: the reading PCs group the way the measured
+//      meanings do. `$A61D` reads atkElem AND elemResist (the elemental term);
+//      `$A65C` reads atkElem, statusOnAtk AND statusResist (the status term).
+//      The code agrees with the labels.
 
 export const MONSTER_PROPS = 0x060010;   // 16 bytes per bestiary id
 export const PROPS_STRIDE = 16;
@@ -185,10 +232,20 @@ export const STAT_EVADE_OFF = 0, STAT_DEF_OFF = 2;
 export const STAT_DEF_ENTRY_UNKNOWN = 1;
 /** Measured fields — see the header for the experiment behind each one. */
 export const FIELDS = {
-  levelHi: 0, hp: [1, 2], spAtkRate: 3, powerHi: 4, weakness: 5, spiritLo: 7,
-  atkHitIdx: 9, statusOnAtk: 10, elemResist: 11, defEvdIdx: 12, statusResist: 13,
-  spAtkIdx: 14,
+  levelHi: 0, hp: [1, 2], spAtkRate: 3, powerHi: 4, weakness: 5, magicDefIdx: 6,
+  spiritLo: 7, atkElem: 8, atkHitIdx: 9, statusOnAtk: 10, elemResist: 11,
+  defEvdIdx: 12, statusResist: 13, spAtkIdx: 14,
 };
+/** Bytes that INDEX the stat table rather than holding a value. None of them is
+ *  copied into RAM — that is how byte 6 was spotted as an index at all. */
+export const INDEX_FIELDS = { atkHitIdx: 9, defEvdIdx: 12, magicDefIdx: 6, spAtkIdx: 14 };
+/** ⛔ Byte 15 IS read (5x an encounter, dedicated reader at $A5F3) — its EFFECT
+ *  is what is unknown. "Not read" was an earlier, wrong conclusion. */
+export const BYTE15_HOME_OFF = 0x33;
+export const BYTE15_READER_PC = 0xA5F3;
+/** The party members' SRAM blocks, and the job that gains a Magic command. */
+export const PARTY_A_BLOCK = 0x6100, JOB_OFF = 0x00, MP_OFF = 0x30;
+export const SPELL_LIST_OFF = 0x07, BLACK_MAGE_JOB = 4;
 /** ⛔ Bytes 0 and 4 carry their value in the HIGH nibble, byte 7 in the LOW one.
  *  The other nibble is inert. Reading any of them as a plain 0-255 is wrong. */
 export const HIGH_NIBBLE_FIELDS = [0, 4];
@@ -209,11 +266,11 @@ export const SPECIAL_NAMES = {
 /** The party's two weapon hands, within the char-B block. Measured. */
 export const PARTY_B_BLOCK = 0x6200, PARTY_B_STRIDE = 0x40;
 export const WEAPON_SLOTS = [3, 5];
-/** ⛔ Nothing moved these. Do not fill them in from a wiki. */
-export const NOT_ISOLATED = { mEvadeIdx: 6, atkElem: 8, unknown15: 15 };
-/** ⛔ Kept so older callers still resolve; every entry is now measured except
- *  the three in NOT_ISOLATED. */
-export const INHERITED_FIELDS = { mEvadeIdx: 6, atkElem: 8 };
+/** ⛔ Read, but its effect is unknown. Do not fill it in from a wiki. */
+export const NOT_ISOLATED = { unknown15: 15 };
+/** ⛔ Kept so older callers still resolve. Nothing is inherited any more —
+ *  every byte of the record has been measured except 15's PURPOSE. */
+export const INHERITED_FIELDS = {};
 
 export const props = (rom, id) =>
   [...rom.slice(MONSTER_PROPS + id * PROPS_STRIDE, MONSTER_PROPS + (id + 1) * PROPS_STRIDE)];
@@ -228,5 +285,11 @@ export const defEntry = (rom, id) =>
   statEntry(rom, rom[MONSTER_PROPS + id * PROPS_STRIDE + VERIFIED_FIELDS.defEvdIdx]);
 export const monsterDefence = (rom, id) => defEntry(rom, id)[STAT_DEF_OFF];
 export const monsterEvade = (rom, id) => defEntry(rom, id)[STAT_EVADE_OFF];
+/** The MAGIC defence/evade entry — same shape, reached through byte 6. */
+export const magicEntry = (rom, id) =>
+  statEntry(rom, rom[MONSTER_PROPS + id * PROPS_STRIDE + FIELDS.magicDefIdx]);
+export const monsterMagicDefence = (rom, id) => magicEntry(rom, id)[STAT_DEF_OFF];
+export const monsterMagicEvade = (rom, id) => magicEntry(rom, id)[STAT_EVADE_OFF];
+export const monsterAtkElem = (rom, id) => rom[MONSTER_PROPS + id * PROPS_STRIDE + FIELDS.atkElem];
 export const monsterGil = (rom, id) =>
   rom[MONSTER_GIL + id * 2] | (rom[MONSTER_GIL + id * 2 + 1] << 8);

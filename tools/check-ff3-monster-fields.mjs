@@ -46,6 +46,7 @@ const P = M3.MONSTER_PROPS;          // Goblin, bestiary id 0
 const TOP = 999;                     // what the party is held at
 const ROUNDS = 100;
 const ICE_SWORD = 0x3B, FLAME_SWORD = 0x3A, STATUS_ROD = 0x0D;
+const FIRE_SHIELD = 0x5B, SHIELD_SLOT = 0, FIRE_SPELL = 0x31;
 const D = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT,
            Controller.BUTTON_UP, Controller.BUTTON_DOWN];
 
@@ -53,7 +54,7 @@ const D = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT,
  * Fight the Goblin. `patch` goes into the ROM, `weapon` into both of the party's
  * measured weapon slots, and the party is kept alive so damage stays a gradient.
  */
-function fight({ patch = {}, weapon = null, immortal = false, rounds = ROUNDS } = {}) {
+function fight({ patch = {}, weapon = null, shield = false, immortal = false, rounds = ROUNDS } = {}) {
   const p = Uint8Array.from(rom);
   p[P + M3.FIELDS.hp[0]] = 0xFF; p[P + M3.FIELDS.hp[1]] = 0x0F;   // unkillable
   for (const [off, val] of Object.entries(patch)) p[Number(off)] = val;
@@ -76,9 +77,10 @@ function fight({ patch = {}, weapon = null, immortal = false, rounds = ROUNDS } 
   const w = (a) => nes.cpu.mem[a] | (nes.cpu.mem[a + 1] << 8);
   const setw = (a, v) => { nes.cpu.mem[a] = v & 0xFF; nes.cpu.mem[a + 1] = v >> 8; };
   const arm = () => {
-    if (weapon === null) return;
     for (let i = 0; i < 4; i++) {
-      for (const s of M3.WEAPON_SLOTS) nes.cpu.mem[M3.PARTY_B_BLOCK + i * M3.PARTY_B_STRIDE + s] = weapon;
+      const base = M3.PARTY_B_BLOCK + i * M3.PARTY_B_STRIDE;
+      if (weapon !== null) for (const s of M3.WEAPON_SLOTS) nes.cpu.mem[base + s] = weapon;
+      if (shield) nes.cpu.mem[base + SHIELD_SLOT] = FIRE_SHIELD;
     }
   };
 
@@ -109,6 +111,68 @@ function fight({ patch = {}, weapon = null, immortal = false, rounds = ROUNDS } 
       for (const l of lines()) for (const m of l.matchAll(/[A-Za-z][A-Za-z.']{2,}/g)) words.add(m[0]);
     }
     return { dealt: e0 - eLo, taken, words: [...words] };
+  } catch { return null; }
+}
+
+/**
+ * Same, but every party member CASTS the level-1 black spell each round.
+ * ⛔ The party is level 0, so the spell grid opens on levels 8-5 where every A
+ * press is refused — it has to be scrolled to level 1 first. That is the whole
+ * reason this looked impossible on the first few attempts.
+ */
+function castFight({ patch = {}, rounds = 3 } = {}) {
+  const p = Uint8Array.from(rom);
+  p[P + M3.FIELDS.hp[0]] = 0xFF; p[P + M3.FIELDS.hp[1]] = 0xFF;   // survives the mages
+  for (const [off, val] of Object.entries(patch)) p[Number(off)] = val;
+  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  try {
+    nes.loadROM(Buffer.from(p).toString('binary'));
+    nes.fromJSON(JSON.parse(SNAP));
+  } catch { return null; }
+  const run = (k) => { for (let i = 0; i < k; i++) nes.frame(); };
+  const lines = () => {
+    const v = nes.ppu.vramMem, out = [];
+    for (let r = 0; r < 30; r++) {
+      let t = '';
+      for (let c = 0; c < 32; c++) { const g = glyph(v[0x2000 + r * 32 + c]); t += (g === null ? ' ' : g); }
+      if (t.trim()) out.push(t.replace(/\s+/g, ' ').trim());
+    }
+    return out;
+  };
+  const w = (a2) => nes.cpu.mem[a2] | (nes.cpu.mem[a2 + 1] << 8);
+  const mage = () => {
+    for (let i = 0; i < 4; i++) {
+      const a2 = M3.PARTY_A_BLOCK + i * M3.PARTY_B_STRIDE;
+      const b2 = M3.PARTY_B_BLOCK + i * M3.PARTY_B_STRIDE;
+      nes.cpu.mem[a2 + M3.JOB_OFF] = M3.BLACK_MAGE_JOB;
+      for (let k = 0; k < 8; k++) nes.cpu.mem[b2 + M3.SPELL_LIST_OFF + k] = FIRE_SPELL;
+      for (let k = 0; k < 16; k++) nes.cpu.mem[a2 + M3.MP_OFF + k] = 99;
+    }
+  };
+  const press = (btn, h = 10, g = 24) => { nes.buttonDown(1, btn); run(h); nes.buttonUp(1, btn); run(g); };
+  try {
+    run(30); mage();
+    let inBattle = false;
+    for (let s = 0; s < 400; s++) {
+      mage();
+      const b2 = D[Math.floor(s / 8) % 4];
+      nes.buttonDown(1, b2); run(10); nes.buttonUp(1, b2); run(12);
+      if (lines().some(l => /Magic/i.test(l))) { inBattle = true; break; }
+    }
+    if (!inBattle) return null;
+    const e0 = w(M3.ENEMY_CUR_HP); let eLo = e0;
+    for (let r = 0; r < rounds; r++) {
+      for (let c = 0; c < 4; c++) {
+        press(Controller.BUTTON_DOWN);              // Attack -> Magic
+        press(Controller.BUTTON_A, 10, 45);         // open the grid
+        for (let k = 0; k < 6; k++) press(Controller.BUTTON_DOWN, 10, 18);   // ...down to level 1
+        press(Controller.BUTTON_A, 10, 45);         // pick the spell
+        press(Controller.BUTTON_A, 10, 45);         // confirm the target
+      }
+      run(300);
+      const e = w(M3.ENEMY_CUR_HP); if (e <= e0 && e < eLo) eLo = e;
+    }
+    return { dealt: e0 - eLo };
   } catch { return null; }
 }
 
@@ -211,12 +275,48 @@ for (const off of M3.HIGH_NIBBLE_FIELDS) {
      hi ? `${flat.taken} -> ${hi.taken}` : '');
 }
 
-// ⛔ these are NOT claims about what the bytes do — they record that nothing
-// moved them, so a later pass does not re-run the same dead ends.
+// ── byte 8: the attack's element, measured from the ARMOUR side ────────────
+console.log('\nbyte 8 — the element of the monster\'s attack');
+const strong = { [M3.STAT_TABLE + rom[P + M3.FIELDS.atkHitIdx] * M3.STAT_ENTRY + M3.STAT_ATK_OFF]: 0xFF };
+const el = (v) => fight({ patch: { ...strong, [P + M3.FIELDS.atkElem]: v }, immortal: true });
+const elShield = (v) =>
+  fight({ patch: { ...strong, [P + M3.FIELDS.atkElem]: v }, immortal: true, shield: true });
+const bareNone = el(0), bareFire = el(M3.ELEM_BITS.fire);
+ok('with NO resistance, the attack element changes nothing',
+   bareNone && bareFire && Math.abs(bareNone.taken - bareFire.taken) < bareNone.taken * 0.15,
+   bareNone && bareFire ? `${bareNone.taken} vs ${bareFire.taken}` : 'no battle');
+const shNone = elShield(0), shFire = elShield(M3.ELEM_BITS.fire), shIce = elShield(M3.ELEM_BITS.ice);
+ok('fire-resist armour BLUNTS an atkElem=FIRE attack', shFire && shNone && shFire.taken < shNone.taken * 0.7,
+   shFire && shNone ? `${shNone.taken} -> ${shFire.taken}` : '');
+// ⭐ fire armour is WEAK to ice — an inverted effect from the same bit map.
+ok('...and AMPLIFIES an atkElem=ICE one', shIce && shNone && shIce.taken > shNone.taken * 1.5,
+   shIce && shNone ? `${shNone.taken} -> ${shIce.taken}` : '');
+
+// ── byte 6: an INDEX, for the magic side ───────────────────────────────────
+console.log('\nbyte 6 — the MAGIC defence/evade index (the party actually casts)');
+const IDX = 5, ME = M3.STAT_TABLE + IDX * M3.STAT_ENTRY;
+const mBase = castFight({ patch: { [P + M3.FIELDS.magicDefIdx]: IDX } });
+ok('the party can cast at all', mBase && mBase.dealt > 0, mBase ? `magic dealt ${mBase.dealt}` : 'no cast');
+const mEv = castFight({ patch: { [P + M3.FIELDS.magicDefIdx]: IDX, [ME + M3.STAT_EVADE_OFF]: 0xFF } });
+const mDf = castFight({ patch: { [P + M3.FIELDS.magicDefIdx]: IDX, [ME + M3.STAT_DEF_OFF]: 0xFF } });
+ok('entry byte 0 drives MAGIC damage to ZERO', mEv && mEv.dealt === 0, mEv ? `${mEv.dealt}` : '');
+ok('entry byte 2 FLOORS it above zero', mDf && mDf.dealt > 0 && mDf.dealt < mBase.dealt * 0.5,
+   mDf ? `${mBase.dealt} -> ${mDf.dealt}` : '');
+// ⭐ THE CONTROL, and it could have disagreed: with byte 6 at its natural value
+// the very same entry is not consulted at all.
+const ctl = castFight({ patch: { [ME + M3.STAT_EVADE_OFF]: 0xFF } });
+ok('...but ONLY when byte 6 points at that entry — the control',
+   ctl && ctl.dealt > 0, ctl ? `byte6 natural, same patch: ${ctl.dealt}` : '');
+
+// ⛔ byte 15 is READ — that much is measured. Its EFFECT is what is unknown, and
+// the gate records the distinction so nobody "re-discovers" it as dead.
 console.log('\nstill not isolated (recorded, not claimed)');
-ok('byte 6, 8 and 15 are listed as NOT isolated',
-   JSON.stringify(Object.values(M3.NOT_ISOLATED)) === JSON.stringify([6, 8, 15]),
+ok('only byte 15 remains unexplained', 
+   JSON.stringify(Object.values(M3.NOT_ISOLATED)) === JSON.stringify([15]),
    JSON.stringify(Object.values(M3.NOT_ISOLATED)));
+ok('nothing is labelled inherited any more', Object.keys(M3.INHERITED_FIELDS).length === 0);
+ok('byte 6 is recorded as an INDEX, like 9/12/14',
+   M3.INDEX_FIELDS.magicDefIdx === 6 && M3.INDEX_FIELDS.defEvdIdx === 12);
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);
