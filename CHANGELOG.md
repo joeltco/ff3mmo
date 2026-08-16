@@ -18,6 +18,42 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.85 — 2026-08-16
+
+### Bit 7: bounded to three instructions, one reading DISPROVED, still unnamed
+
+The plumbing is settled. The merge at `$9F46` puts bit 7 in `$7ED8` bit 1, then
+`LDA $7ED8 / LSR A / ROR $7ED8` at bank 52 `$87EC` shifts it down to **bit 0**
+(and rotates bit 6's copy up into bit 7 — which is exactly the mapping measured
+live in v1.8.83).
+
+An exhaustive scan for absolute references to `$7ED8` finds bit 0 tested at
+**exactly three places**:
+
+```
+bank 49 $A7AE  AND #$01 / BNE  -> set skips a `LDA #$64` roll vs ($24)+$22
+bank 53 $A948  AND #$01 / BEQ  -> set takes JMP $A935
+bank 53 $AD20  AND #$01 / BEQ  -> set stores message $3B in $78DA and RTSs
+```
+
+⛔ **None of the three executes in an ordinary encounter** — bank-verified, with
+the `$87EC` rotate as a passing control (1 execution) so the probe demonstrably
+works. Whatever bit 0 changes lives on a path this battle never reaches.
+
+⛔ **And the obvious reading is wrong, which is worth more than a guess.** `$AD20`
+storing a message and returning early looks exactly like "you cannot escape", so
+I tested it: with bit 7 set the party still fled **4 of 4** battles, identical to
+bit 7 clear. It is not a no-flee flag. Recorded as disproved.
+
+**Gate now 41/41** — the three test sites and the rotate are pinned statically, so
+the record cannot drift even though none of that code runs on the deploy path.
+
+**Where this goes next, if it goes anywhere:** the three sites sit in the
+monster-action and command-handler regions of banks 49/53, so reaching one means
+an encounter or action this savestate does not produce — a boss formation, or a
+command the Onion Knight party has no access to. That is a different setup
+problem, not another step on this thread.
+
 ## 1.8.84 — 2026-08-16
 
 ### $2A is the AMBUSH contest — and that is what bit 6 turns off

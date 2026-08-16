@@ -254,5 +254,16 @@ const amb7 = fight({ ...forceAmbush, [EN.ENCOUNTER_SET + 1]: OTHER | LIVE_COUNT_
 ok(`the other bit (0x${OTHER.toString(16)}) does NOT suppress it`,
    amb7 && amb7.ambush === EN.AMBUSH_FLAG_SET, amb7 ? `0x${amb7.ambush.toString(16)}` : '');
 
+// ⛔ bit 7's destination bit is READ at exactly three places — pinned statically
+// so the record cannot drift, since none of them runs in an ordinary battle.
+ok('the three $7ED8 bit-0 test sites are where the lib says',
+   EN.BIT0_TEST_SITES.every(f =>
+     JSON.stringify([...rom.slice(f, f + 5)]) === JSON.stringify([0xAD, 0xD8, 0x7E, 0x29, 0x01])),
+   EN.BIT0_TEST_SITES.map(f => '0x' + f.toString(16)).join(' '));
+ok('the rotate that moves the flags is where the lib says',
+   JSON.stringify([...rom.slice(EN.FLAG_ROTATE_FILE, EN.FLAG_ROTATE_FILE + 6)])
+   === JSON.stringify([0xAD, 0xD8, 0x7E, 0x4A, 0x6E, 0xD8]),
+   'LDA $7ED8 / LSR A / ROR $7ED8');
+
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

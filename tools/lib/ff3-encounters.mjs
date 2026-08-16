@@ -113,8 +113,30 @@
 // not happen — party HP untouched at 118, $78C3 = 0x00, no message. With bit 7
 // set instead the ambush still fires, so it is bit 6 specifically.
 //
-// ⛔ BIT 7 remains unexplained. It reaches $7ED8 bit 0, and bit 0 is not what
-// gates the contest (bit 7 is). Bounded, not identified.
+// ⛔ BIT 7 — bounded, and one reading DISPROVED, but not identified.
+//
+// The plumbing is settled: the merge at $9F46 puts it in $7ED8 bit 1, then
+// `LDA $7ED8 / LSR A / ROR $7ED8` at bank 52 $87EC shifts it down to BIT 0 (and
+// rotates bit 6's copy up into bit 7 — which is the mapping measured live).
+//
+// An exhaustive scan for absolute references to $7ED8 finds bit 0 tested at
+// EXACTLY three places:
+//
+//   bank 49 $A7AE  AND #$01 / BNE  -> set skips a `LDA #$64` roll vs ($24)+$22
+//   bank 53 $A948  AND #$01 / BEQ  -> set takes JMP $A935
+//   bank 53 $AD20  AND #$01 / BEQ  -> set stores message $3B in $78DA and RTSs
+//
+// ⛔ NONE OF THE THREE EXECUTES in an ordinary encounter — bank-verified, with
+// the $87EC rotate as a passing control (1 execution) so the probe demonstrably
+// works. Whatever bit 0 changes lives on a path this battle never reaches.
+//
+// ⛔ AND THE OBVIOUS READING IS WRONG. $AD20 storing a message and returning early
+// looks exactly like "you cannot escape", so that was tested: with bit 7 set the
+// party still fled 4 of 4 battles, same as with it clear. It is not a no-flee
+// flag. Recorded as disproved rather than left as a plausible guess.
+export const FLAG_BIT7_DEST_BIT = 0x01;    // $7ED8 bit 0
+export const FLAG_ROTATE_FILE = 0x687FC;   // LDA $7ED8 / LSR A / ROR $7ED8
+export const BIT0_TEST_SITES = [0x627BE, 0x6A958, 0x6AD30];
 export const COUNT_FLAG_BIT6 = 0x40;
 export const COUNT_FLAG_BIT7 = 0x80;
 export const COUNT_BIT6_TEST_SITES = [0x5DD7B, 0x5E3BB, 0x5F490, 0x5FB98];
