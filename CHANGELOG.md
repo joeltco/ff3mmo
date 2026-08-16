@@ -18,6 +18,41 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.89 — 2026-08-16
+
+### FF2 battle detector: NOT built. The savestate cannot reach a battle.
+
+I did not build it, because the blocker turned out to be upstream of the detector:
+**no FF2 battle can be reached from `ff2-outside.state.gz` at all**, so there is
+nothing to calibrate a detector against. New `tools/lib/ff2-encounters.mjs`
+records the dead ends rather than leaving them to be rediscovered.
+
+⛔ **Two false tells, both of which would have "worked":**
+- *"the enemy RAM is nonzero"* — `$7E3A` already holds nonzero bytes while
+  standing on the MAP, so it reports a battle from frame one. Stale data.
+- *"the nametable changed and settled"* — map scrolling moves up to ~42% of the
+  nametable, and the screen that settled after 16 steps was more map: the decoded
+  tiles are terrain (ベボボ...) and the enemy RAM was byte-identical to its map
+  contents.
+
+⭐ **What was established:**
+- `$0069` is the party's Y — it steps `0x1B -> 0x14` walking UP, in lockstep with
+  `$2A`, `$2C`, `$2F`, `$30`, `$F5`, then sticks against blocked terrain.
+- The party genuinely moves: 74 RAM bytes change while walking, ~31 distinct
+  tiles covered. It is not frozen; there is nothing to fight where it stands.
+- ⛔ No encounter in **3000 steps** in every direction, from its own position or
+  after poking `$68/$69` to eight different coordinates — all eight gave an
+  IDENTICAL result, so the poke is not taking. FF1 has exactly this trap: its
+  `$68/$69` are not writable and only the overworld's `$27/$28` are.
+- ⛔ No step counter in zero page — no byte decreases while walking, so FF2 looks
+  like it rolls per step rather than counting down.
+
+**Where this goes next:** the savestate is the problem, not the search. Either
+drive FF2 from boot to the overworld and save there, or do what `ff1-goto.mjs`
+does — find the entrance table, repoint a reachable door at an encounter map, and
+walk through it. That is a self-contained piece of work and I would rather name it
+than half-build a detector against a battle I never saw.
+
 ## 1.8.88 — 2026-08-16
 
 ### FF1's formation record decoded — the same shape as FF3's. FF2 NOT done.
