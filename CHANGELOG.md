@@ -18,6 +18,62 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.70 — 2026-08-16
+
+### No monster script reads byte 15 — but one routine does
+
+Two searches, because a dynamic trace only sees code that RAN and a static scan
+only sees code that EXISTS.
+
+⭐ **No monster script reads it.** `ff3-diff-trace.mjs` gained `--monster`:
+formation 0's first monster id selects who spawns (confirmed by watching the name
+on the battle screen follow — Gobl -> Flye -> Peti -> Bomb). Eight monsters were
+traced, chosen for script diversity (spAtkIdx 0/2/7/8/15/23/24/43, rates 0-99),
+~22.1M instructions each, from the first frame so setup is included:
+
+```
+control flow parted:   NEVER, for any of them
+registers differed at: $A5EF $A5F1 $A5F3 $A5F4 — the setup copy, x2
+```
+
+⭐ **But code that reads it exists**, and v1.8.69's "copied and never read" was
+therefore too strong. Scanning the ROM for every instruction able to reach entry
+offset `$36` through a pointer found exactly one read — bank 53, `$8BE0`, file
+`0x6ABF0`:
+
+```
+$8BDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
+$8BE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
+$8BE2  29 1F     AND #$1F        ; low 5 bits only
+$8BE4  85 18     STA $18         ; ...as an index
+       ...pointer $9B80, count 8, JSR $FDA6   ; a loader
+```
+
+⭐ **`AND #$1F` is corroborated by the data**, which is what lifts this above a
+plausible reading: 179 of 232 monsters have byte 15 = 0, and every nonzero value
+is either `0x20-0x2E` or `0xFD`/`0xFE`/`0xFF`. Masked, those become `0x00-0x0E`
+and `0x1D-0x1F`. The low 5 bits are the payload, bit 5 is a separate flag — a
+magnitude would not cluster like that. The same `$18` / `$1A` / `($20)` /
+`JSR $FDA6` idiom repeats at `$9B80`, `$9C80` and `$9D80` with different
+destination indices, so `$FDA6` is a loader and byte 15 picks which entry.
+
+It is guarded — a random roll against a threshold from the attacker's entry+0 and
+entry+`$0F`, then a target-status test (`AND #$E8`) — which is why no ordinary
+battle reaches it.
+
+⛔ **Which ability owns that routine is NOT determined.** It is entered by
+fall-through from earlier code in bank 53; no JSR, JMP or RTS-dispatch pointer to
+it exists anywhere in banks 48-56. Naming it would be a guess, so it stays
+unnamed.
+
+**New tools, and one de-duplication.** `tools/lib/m6502.mjs` — the 6502
+disassembler, extracted from `ff3-code-trace.mjs` so the opcode table has exactly
+ONE home; a second copy is how a correction lands in one file and not the other.
+`tools/ff3-rom-disasm.mjs` — static disassembly of a ROM range, with the bank and
+CPU address worked out from the file offset.
+
+The audit is unchanged at 36/36.
+
 ## 1.8.69 — 2026-08-16
 
 ### Nothing reads byte 15 — settled by differential execution

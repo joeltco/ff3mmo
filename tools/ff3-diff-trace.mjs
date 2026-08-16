@@ -44,6 +44,12 @@ const FRAMES = Number(flag('frames', '900'));
 // attack (atkElem) is never exercised and the trace shows nothing. That is not
 // the method failing; it is the harness testing the wrong code path.
 const RATE = flag('rate', null);
+// ⭐ Formation 0's first monster id is what the freeroam encounter spawns —
+// measured by patching it and watching the NAME on the battle screen follow
+// (Gobl -> Flye -> Peti -> Bomb). That is how a different monster's SCRIPT gets
+// exercised; monsters differ in data, not code, so the script is the variable.
+const ENCOUNTER_MON = 0x05C410;
+const MON = Number(flag('monster', '0'));
 const TOPN = Number(flag('top', '12'));
 // ⛔ Comparing only AFTER the battle has begun throws away encounter SETUP —
 // which is exactly where the record is copied into the combatant entry. Without
@@ -58,12 +64,14 @@ const hx = (v, w = 4) => v.toString(16).toUpperCase().padStart(w, '0');
 
 function build(val) {
   const p = Uint8Array.from(rom);
-  p[M3.MONSTER_PROPS + M3.FIELDS.hp[0]] = 0xFF;
-  p[M3.MONSTER_PROPS + M3.FIELDS.hp[1]] = 0x0F;          // survives the whole trace
-  if (RATE !== null) p[M3.MONSTER_PROPS + M3.FIELDS.spAtkRate] = Number(RATE);
-  p[M3.STAT_TABLE + rom[M3.MONSTER_PROPS + M3.FIELDS.atkHitIdx] * M3.STAT_ENTRY
+  p[ENCOUNTER_MON + 2] = MON;                            // formation 0 spawns MON
+  const props = M3.MONSTER_PROPS + MON * M3.PROPS_STRIDE;
+  p[props + M3.FIELDS.hp[0]] = 0xFF;
+  p[props + M3.FIELDS.hp[1]] = 0x0F;                     // survives the whole trace
+  if (RATE !== null) p[props + M3.FIELDS.spAtkRate] = Number(RATE);
+  p[M3.STAT_TABLE + rom[props + M3.FIELDS.atkHitIdx] * M3.STAT_ENTRY
     + M3.STAT_ATK_OFF] = 0xFF;                           // and it hits hard
-  p[M3.MONSTER_PROPS + OFF] = val;
+  p[props + OFF] = val;
   const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
   nes.loadROM(Buffer.from(p).toString('binary'));
   nes.fromJSON(JSON.parse(SNAP));                        // ⛔ replaces nes.cpu
@@ -131,7 +139,7 @@ if (!FROM_START) clear();
 
 console.log(`differential trace — monster record byte ${OFF}: ${VA} vs ${VB}` +
             `${SHIELD ? ' + fire-resist shield' : ''}` +
-            `, spAtkRate=${RATE === null ? 'natural' : RATE}\n`);
+            `, spAtkRate=${RATE === null ? 'natural' : RATE}, monster 0x${MON.toString(16).toUpperCase()}\n`);
 
 // ── run in lockstep, comparing after every frame ────────────────────────────
 for (let f = 0; f < FRAMES; f++) {

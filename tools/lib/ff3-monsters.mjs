@@ -182,58 +182,64 @@
 //      the ice row is the good kind of surprise: fire armour is WEAK to ice, so
 //      the same bit map falls out of an inverted effect.
 //
-// ⭐ 15 IS COPIED AND NEVER READ. Settled by DIFFERENTIAL EXECUTION, after two
-//      weaker instruments gave two wrong answers.
+// ⭐ 15 IS A GRAPHICS/TABLE INDEX — read by ONE routine, and by no monster's
+//      script. Two separate searches, each answering half the question.
 //
-//      `tools/ff3-diff-trace.mjs` runs two machines that differ in exactly one
-//      ROM byte, feeds them identical input, and compares every instruction.
-//      Anything that USES the value must diverge — in control flow if it
-//      branched, in a register if it computed. It needs no idea where the value
-//      lives, which is what defeated the earlier attempts.
+//      NO MONSTER SCRIPT READS IT. `tools/ff3-diff-trace.mjs` runs two machines
+//      differing in exactly this byte, feeds them identical input and compares
+//      every instruction; anything using the value must diverge in control flow
+//      or a register. Run from the FIRST FRAME so encounter setup is included,
+//      ~22.1M instructions each, across EIGHT monsters chosen for script
+//      diversity (spAtkIdx 0/2/7/8/15/23/24/43, rates 0-99 — formation 0's
+//      monster id selects who spawns, confirmed by the name on screen):
 //
-//      Byte 15 = 0 vs 255, compared from the FIRST FRAME so encounter setup is
-//      included, ~22.1M instructions:
+//        control flow parted:   NEVER, for any of them
+//        registers differed at: $A5EF $A5F1 $A5F3 $A5F4 — the setup copy, x2
+//                               because the encounter holds two monsters
 //
-//        control flow parted:   NEVER
-//        registers differed at: $A5EF x2  $A5F1 x2  $A5F3 x2  $A5F4 x2
+// ⭐ BUT CODE THAT READS IT EXISTS. A dynamic trace only sees paths that RAN, so
+//      the ROM was scanned statically for every instruction able to reach entry
+//      offset $36 through a pointer. Exactly one reads it — bank 53, CPU $8BE0,
+//      file 0x6ABF0:
 //
-//      Those four PCs are the setup copy and nothing else — `LDA ($24),Y` puts
-//      byte 15 in A at $A5EE, `STA ($5D),Y` writes it at $A5F2, and the
-//      difference disappears at $A5F5 where A is overwritten. ⭐ x2 because the
-//      encounter has TWO Goblins: it is the per-combatant copy.
+//        $8BDE  A0 36     LDY #$36        ; entry offset $36 = byte 15
+//        $8BE0  B1 70     LDA ($70),Y     ; from the TARGET combatant
+//        $8BE2  29 1F     AND #$1F        ; low 5 bits only
+//        $8BE4  85 18     STA $18         ; ...as an index
+//        $8BE6  A9 80 / 85 20 / A9 9B / 85 21    ; source pointer $9B80
+//        $8BEE  A9 08 / 85 1A / A9 08 / A0 1A / A2 00 / 20 A6 FD  ; JSR $FDA6
 //
-//      So the value is written into the combatant entry and then never loaded by
-//      anything, on either code path (physical attacks and special-every-turn
-//      were both traced).
+//      ⭐ `AND #$1F` is corroborated by the DATA, which is what makes this more
+//      than a plausible reading: 179 of 232 monsters have byte 15 = 0, and every
+//      nonzero value falls in 0x20-0x2E or is 0xFD/0xFE/0xFF. Masked, those are
+//      0x00-0x0E and 0x1D-0x1F. The low 5 bits are the payload and bit 5 is a
+//      separate flag — a magnitude would not cluster like that.
 //
-// ⭐ THE NEGATIVE IS CALIBRATED, which is the only reason it is worth anything.
-//      The same tool, pointed at atkElem (0 vs FIRE with a fire-resisting
-//      shield), parts control flow mid-battle at $A00D and shows the value
-//      flowing through $9F43-$9F4F. A tool that finds a consumer known to exist
-//      is entitled to report when there is none.
-//      ⛔ And it only passes that control with the monster making PHYSICAL
-//      attacks. Set spAtkRate to 0xFF and it casts every turn, never swings,
-//      atkElem is never consulted, and the control silently fails — the harness
-//      testing the wrong path, not the method breaking.
+//      The same $18 / $1A / ($20) / `JSR $FDA6` idiom repeats at $9B80, $9C80 and
+//      $9D80 with different destination indices, so $FDA6 is a loader and byte 15
+//      selects WHICH entry it loads.
 //
-// ⛔ SCOPE, stated honestly: this is a full Goblin encounter, setup included,
-//      on both paths. A path not exercised here — another monster's script, a
-//      scan/Libra effect, a bestiary screen — could still read byte 15. What is
-//      established is that nothing in an ordinary battle does.
+//      It is guarded, which is why no ordinary battle reaches it: a random roll
+//      (`LDA #$FF / JSR $A564`) against a threshold built from the ATTACKER's
+//      entry+0 and entry+$0F, then a target-status test (`AND #$E8`).
 //
-// ⛔ TWO EARLIER ANSWERS, both wrong, both from instruments that could not have
-//      been trusted:
+// ⛔ WHICH ability owns that routine is NOT determined. It is entered by
+//      fall-through from earlier code in bank 53; no JSR/JMP and no
+//      RTS-dispatch pointer to it exists in banks 48-56. Naming it would be a
+//      guess, so it is left unnamed.
+//
+// ⛔ TWO EARLIER ANSWERS, both from instruments that could not be trusted:
 //        v1.8.67  "a dedicated reader at $A5F3" — $A5F3 is the second byte of the
 //                 STA that WRITES it; a RAM hook counts the dummy read cycle an
 //                 indirect-indexed store performs on its target.
 //        v1.8.68  "$AA06 LDA ($82),Y genuinely loads it" — indirect-indexed LOADS
-//                 also perform a spurious read at the un-carried address when they
-//                 cross a page, so that too was an addressing artifact. The
-//                 differential trace shows $AA06 never receives a different value.
-//
-//      ⭐ The lesson under all three: an address-watching hook reports the CPU's
-//      bus traffic, which includes reads no instruction semantically makes.
-//      Differential execution reports what the program actually depends on.
+//                 also perform a spurious read at the un-carried address when
+//                 they cross a page. Another addressing artifact.
+//      ⭐ The lesson: an address-watching hook reports the CPU's BUS TRAFFIC,
+//      which includes reads no instruction semantically makes. Differential
+//      execution reports what the program DEPENDS on — and a static scan reports
+//      what could run but did not. The three answer different questions, and
+//      byte 15 needed the last two together.
 
 export const MONSTER_PROPS = 0x060010;   // 16 bytes per bestiary id
 export const PROPS_STRIDE = 16;
@@ -276,12 +282,18 @@ export const FIELDS = {
 /** Bytes that INDEX the stat table rather than holding a value. None of them is
  *  copied into RAM — that is how byte 6 was spotted as an index at all. */
 export const INDEX_FIELDS = { atkHitIdx: 9, defEvdIdx: 12, magicDefIdx: 6, spAtkIdx: 14 };
-/** ⭐ Byte 15 is COPIED here and never read again — proven by differential
- *  execution over ~22.1M instructions, with a passing positive control. */
+/** Byte 15: written at setup, read by exactly one routine, never by a monster
+ *  script. Its low 5 bits are an index; bit 5 is a separate flag. */
 export const BYTE15_HOME_OFF = 0x33;
+export const BYTE15_ENTRY_OFF = 0x36;          // as the code addresses it, via ($70)
 export const BYTE15_WRITER_PC = 0xA5F2;
 export const BYTE15_WRITER_FILE_OFF = 0x625FC;
-export const BYTE15_IS_DEAD_DATA = true;
+export const BYTE15_READER_PC = 0x8BE0;        // bank 53
+export const BYTE15_READER_FILE_OFF = 0x6ABF0;
+export const BYTE15_INDEX_MASK = 0x1F;
+/** ⛔ Which ability calls that routine is NOT determined — it is entered by
+ *  fall-through and has no dispatch pointer anywhere in banks 48-56. */
+export const BYTE15_OWNER_UNKNOWN = true;
 /** The party members' SRAM blocks, and the job that gains a Magic command. */
 export const PARTY_A_BLOCK = 0x6100, JOB_OFF = 0x00, MP_OFF = 0x30;
 export const SPELL_LIST_OFF = 0x07, BLACK_MAGE_JOB = 4;
