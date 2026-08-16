@@ -264,6 +264,28 @@ farm**, and why it is a DROP rather than only a steal.
 Confirmed live: beating a Goblin prints **"Treasure: Potion"** and puts `0xA6`
 in the bag — and Potion occupies slots 0-3 of its entry.
 
+### ⛔ The shipped hand-maintained data disagrees
+
+`src/data/monsters.js` carries `steal:` and `drops:` fields that
+`gen-monsters-js.js` "preserves from previous manual data". The game reads
+them, so the disagreement is behavioural, not cosmetic
+(`node tools/ff3-drop-audit.mjs`):
+
+| field | agrees with the ROM entry | names an item NOT in it | absent |
+|---|---|---|---|
+| `steal:` | 184 | 35 | 12 |
+| `drops:` | 20 | 30 | 181 |
+
+52 monsters name an item their ROM entry does not contain, and 16 of the
+agreeing ones list fewer items than the entry offers.
+
+⭐ The starkest case is the **dragons**, whose hand data has no `drops:` at
+all and a `steal:` of Potion — while the ROM entry is Elixir x4 plus the full
+**Onion equipment**. As shipped, FF3's most famous farm is not reachable.
+
+⛔ Recorded, not "fixed": ff3mmo is its own game, so whether to follow ROM
+canon here is a design call.
+
 ### The steal table, decoded
 
 Bank 16, `$9B80`, file `0x21B90` — 32 entries of 8 item ids, one of which the steal rolls.

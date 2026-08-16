@@ -18,6 +18,39 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.75 — 2026-08-16
+
+### The shipped drop/steal data disagrees with the ROM — audited, not changed
+
+`src/data/monsters.js` carries `steal:` and `drops:` that `gen-monsters-js.js`
+"preserves from previous manual data". `battle-update.js` rolls `mData.drops`, so
+this is a behavioural difference, not a documentation nit. New tool:
+`node tools/ff3-drop-audit.mjs`.
+
+| field | agrees with the ROM entry | names an item NOT in it | absent |
+|---|---|---|---|
+| `steal:` | 184 | 35 | 12 |
+| `drops:` | 20 | 30 | 181 |
+
+52 monsters name an item their ROM entry does not contain, and 16 of the agreeing
+ones list fewer items than the entry offers. **181 of 231 monsters have no
+`drops:` data at all**, while the ROM gives every monster an 8-slot entry.
+
+⭐ **The starkest case is the dragons.** Hand data: Green and Red Dragon "steal:
+Potion", `drops:` none; Yellow Dragon nothing at all. The ROM entry for each is
+**Elixir x4 plus the full Onion equipment** — Sword, Shield, Helm, Armor,
+Gloves — in the rare tail (slots 4-7, 9.4/9.4/4.7/1.6%). **As shipped, FF3's most
+famous farm is not reachable in ff3mmo.**
+
+Typical smaller divergences: every low-tier monster's hand `drops:` lists only the
+common Potion and omits the Hi-Potion / PhoenixDown / Elixir tail; and some entries
+name items from an unrelated slot set entirely (Darkface "drops Bomb Shard, Zeus's
+Wrath, South Wind" against a ROM entry of Potion/Hi-Potion/PhoenixDown/Elixir).
+
+⛔ **Reported, not rewritten.** ff3mmo is its own game — whether to follow ROM
+canon on loot is a design call, not a correctness one. Regenerating `drops:` from
+`M3.stealSlots()` is a small change to `gen-monsters-js.js` if wanted.
+
 ## 1.8.74 — 2026-08-16
 
 ### The drop table IS the steal table
