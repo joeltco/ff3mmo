@@ -168,38 +168,53 @@ With byte 6 left at its natural 0, patching that SAME entry changes nothing
 (220/220/220) — the control could have disagreed and did not. The magic
 entry has the identical shape to the physical one, inert middle byte and all.
 
-## ⛔ Byte 15 — still unknown, and the last explanation was wrong
+## ⭐ Byte 15 — copied, and never read
 
-v1.8.67 claimed byte 15 had "a dedicated reader at `$A5F3` that touches no
-other field". **`$A5F3` is not a reader.** Disassembling it — the sequence is
-unique in the ROM, file `0x625FC`, bank 49 — shows the battle-setup copy:
+Settled by **differential execution** (`tools/ff3-diff-trace.mjs`) after two
+weaker instruments gave two wrong answers. Two machines differing in exactly
+one ROM byte, identical input, compared instruction by instruction: anything
+that uses the value must diverge, in control flow if it branched or in a
+register if it computed. No knowledge of where the value lives is needed —
+which is precisely what defeated the earlier attempts.
+
+Byte 15 = 0 vs 255, compared from the **first frame** so setup is included,
+~22.1M instructions:
 
 ```
-$A5EC  A0 0F     LDY #$0F        ; record offset 15
-$A5EE  B1 24     LDA ($24),Y     ; A = monster record byte 15
-$A5F0  A0 36     LDY #$36        ; combatant-entry offset $36
-$A5F2  91 5D     STA ($5D),Y     ; ...store it
+control flow parted:   NEVER
+registers differed at: $A5EF x2  $A5F1 x2  $A5F3 x2  $A5F4 x2
 ```
 
-`$A5F3` is the second byte of that `STA`, and the "read" a RAM hook sees there
-is the **dummy read cycle** an indirect-indexed store performs on its target.
-It is the code that PUTS byte 15 into RAM, not code that uses it.
+Those four PCs are the setup copy and nothing else — `LDA ($24),Y` puts byte
+15 in A at `$A5EE`, `STA ($5D),Y` writes it at `$A5F2`, and the difference
+vanishes at `$A5F5` where A is overwritten. **×2 because the encounter has two
+Goblins**: it is the per-combatant copy. The value is written into the
+combatant entry and then never loaded by anything, on either code path.
 
-The v1.8.67 cross-check goes with it: `$A61D` and `$A65C` were cited as
-reading atkElem/elemResist/statusResist, "so the code agrees with the labels".
-They are `$A61C` and `$A65B`, both `STA ($5D),Y` — the same setup copy. They
-group by which fields are written together, not by what consumes them.
+**The negative is calibrated**, which is the only reason it counts. The same
+tool pointed at atkElem (0 vs FIRE, fire-resist shield) parts control flow
+mid-battle at `$A00D` and shows the value flowing through `$9F43`-`$9F4F`.
+⛔ It only passes that control with the monster making PHYSICAL attacks —
+set spAtkRate to 0xFF and it casts every turn, never swings, atkElem is never
+consulted, and the control silently fails.
 
-**The method also fails its own positive control.** atkElem provably halves
-damage against a fire-resisting shield, yet tracing its RAM home with that
-effect active still shows no genuine load except a bulk block-move and one
-coincidental hit from a map routine. Whatever consumes atkElem reads it from
-somewhere else — so "nothing reads byte 15" is not a conclusion that is
-available, because the instrument cannot find a consumer known to exist.
+⛔ **Scope:** a full Goblin encounter, setup included, both paths. A path not
+exercised here — another monster's script, a scan effect, a bestiary screen —
+could still read it. What is established is that nothing in an ordinary
+battle does.
 
-Byte 15 is simply still unknown: no behavioural effect across its whole
-range, and the code-side approach inconclusive until it passes its control.
-Recorded as unknown, **not** filled in from a wiki.
+### The two wrong answers, and why
+
+- v1.8.67 — "a dedicated reader at `$A5F3`". `$A5F3` is the second byte of the
+  `STA` that **writes** it; a RAM hook counts the dummy read cycle an
+  indirect-indexed store performs on its target.
+- v1.8.68 — "`$AA06 LDA ($82),Y` genuinely loads it". Indirect-indexed *loads*
+  also perform a spurious read at the un-carried address when they cross a
+  page, so that was an addressing artifact too.
+
+The lesson under all three: an address-watching hook reports the CPU's **bus
+traffic**, which includes reads no instruction semantically makes.
+Differential execution reports what the program actually **depends on**.
 
 ## The bestiary — 225 monsters
 

@@ -18,6 +18,60 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.69 — 2026-08-16
+
+### Nothing reads byte 15 — settled by differential execution
+
+Two instruments gave two wrong answers about byte 15 because both watched a RAM
+address, and an address-watching hook reports the CPU's **bus traffic** — which
+includes reads no instruction semantically makes. `tools/ff3-diff-trace.mjs`
+takes the other approach: run two machines differing in exactly one ROM byte,
+feed them identical input, and compare every instruction. Anything that USES the
+value must diverge — control flow if it branched, a register if it computed. It
+needs no idea where the value lives, which is exactly what defeated the earlier
+attempts.
+
+Byte 15 = 0 vs 255, compared from the **first frame** so encounter setup is
+included, ~22.1M instructions:
+
+```
+control flow parted:   NEVER
+registers differed at: $A5EF x2  $A5F1 x2  $A5F3 x2  $A5F4 x2
+```
+
+Those four PCs are the setup copy and nothing else — `LDA ($24),Y` puts byte 15
+in A at `$A5EE`, `STA ($5D),Y` writes it at `$A5F2`, and the difference vanishes
+at `$A5F5` where A is overwritten. ⭐ **×2 because the encounter has two
+Goblins** — it is the per-combatant copy. The value is written into the combatant
+entry and then never loaded by anything, on either code path (physical attacks
+and special-every-turn were both traced).
+
+⭐ **The negative is calibrated, which is the only reason it is worth anything.**
+The same tool pointed at atkElem (0 vs FIRE with a fire-resisting shield) parts
+control flow mid-battle at `$A00D` and shows the value flowing through
+`$9F43`-`$9F4F`. ⛔ And it only passes that control with the monster making
+PHYSICAL attacks — set spAtkRate to 0xFF and it casts every turn, never swings,
+atkElem is never consulted, and the control silently fails. That was my harness
+testing the wrong path, not the method breaking, and it is the same shape of
+mistake as the two before it.
+
+⛔ **Scope, stated plainly:** a full Goblin encounter, setup included, both paths.
+A path not exercised here — another monster's script, a scan effect, a bestiary
+screen — could still read byte 15. What is established is that nothing in an
+ordinary battle does.
+
+**The two earlier answers, retracted:**
+
+- v1.8.67 — "a dedicated reader at `$A5F3`". It is the second byte of the `STA`
+  that WRITES it; the hook counted the dummy read cycle of an indirect-indexed
+  store.
+- v1.8.68 — "`$AA06 LDA ($82),Y` genuinely loads it". Indirect-indexed *loads*
+  also perform a spurious read at the un-carried address when crossing a page —
+  an addressing artifact as well. The differential trace shows `$AA06` never
+  receives a different value.
+
+The audit is unchanged at 36/36; this settles a question the audit never asserted.
+
 ## 1.8.68 — 2026-08-15
 
 ### $A5F3 is the WRITER, not a reader — and two v1.8.67 claims withdrawn
