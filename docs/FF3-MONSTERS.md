@@ -168,24 +168,38 @@ With byte 6 left at its natural 0, patching that SAME entry changes nothing
 (220/220/220) — the control could have disagreed and did not. The magic
 entry has the identical shape to the physical one, inert middle byte and all.
 
-## ⛔ Byte 15 — read, but its effect is unknown
+## ⛔ Byte 15 — still unknown, and the last explanation was wrong
 
-It is live data: copied to slot `+0x33` and read 5 times across an encounter,
-in line with fields that are certainly used (spAtkRate 8, atkElem 6,
-statusOnAtk 4). Most reads come from bulk loops every field sees (`$A407`,
-`$AA2C`, `$AA07`, `$CEE8`) — but **`$A5F3` reads byte 15 and nothing else**,
-so it has a dedicated consumer.
+v1.8.67 claimed byte 15 had "a dedicated reader at `$A5F3` that touches no
+other field". **`$A5F3` is not a reader.** Disassembling it — the sequence is
+unique in the ROM, file `0x625FC`, bank 49 — shows the battle-setup copy:
 
-⛔ An earlier pass concluded "written and never read back". That was an
-artifact of installing the read hook AFTER battle setup. The reads are real;
-what they DO is what remains unknown. Every value 0-255 was tried, with the
-special active and inactive, and nothing observable moved. Recorded as
-unknown, **not** filled in from a wiki.
+```
+$A5EC  A0 0F     LDY #$0F        ; record offset 15
+$A5EE  B1 24     LDA ($24),Y     ; A = monster record byte 15
+$A5F0  A0 36     LDY #$36        ; combatant-entry offset $36
+$A5F2  91 5D     STA ($5D),Y     ; ...store it
+```
 
-A cross-check worth keeping: the reading PCs group the way the measured
-meanings do. `$A61D` reads atkElem AND elemResist (the elemental term);
-`$A65C` reads atkElem, statusOnAtk AND statusResist (the status term). The
-code agrees with the labels.
+`$A5F3` is the second byte of that `STA`, and the "read" a RAM hook sees there
+is the **dummy read cycle** an indirect-indexed store performs on its target.
+It is the code that PUTS byte 15 into RAM, not code that uses it.
+
+The v1.8.67 cross-check goes with it: `$A61D` and `$A65C` were cited as
+reading atkElem/elemResist/statusResist, "so the code agrees with the labels".
+They are `$A61C` and `$A65B`, both `STA ($5D),Y` — the same setup copy. They
+group by which fields are written together, not by what consumes them.
+
+**The method also fails its own positive control.** atkElem provably halves
+damage against a fire-resisting shield, yet tracing its RAM home with that
+effect active still shows no genuine load except a bulk block-move and one
+coincidental hit from a map routine. Whatever consumes atkElem reads it from
+somewhere else — so "nothing reads byte 15" is not a conclusion that is
+available, because the instrument cannot find a consumer known to exist.
+
+Byte 15 is simply still unknown: no behavioural effect across its whole
+range, and the code-side approach inconclusive until it passes its control.
+Recorded as unknown, **not** filled in from a wiki.
 
 ## The bestiary — 225 monsters
 

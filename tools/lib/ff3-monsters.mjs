@@ -182,21 +182,48 @@
 //      the ice row is the good kind of surprise: fire armour is WEAK to ice, so
 //      the same bit map falls out of an inverted effect.
 //
-// ⛔ 15 READ, BUT ITS EFFECT IS UNKNOWN. Do not fill it in from a wiki.
-//      It IS live data: it is copied to slot `+0x33` and read 5 times across an
-//      encounter, in line with fields that are certainly used (spAtkRate 8,
-//      atkElem 6, statusOnAtk 4). Most of those reads come from bulk loops every
-//      field sees ($A407, $AA2C, $AA07, $CEE8) — but ⭐ `$A5F3` reads byte 15 and
-//      NOTHING ELSE, so it has a dedicated consumer.
-//      ⛔ An earlier pass concluded "written and never read back". That was an
-//      artifact of installing the hook AFTER battle setup. The reads are real.
-//      What is NOT known is what they DO: every value 0-255 was tried, with the
-//      special active and inactive, and nothing observable moved.
+// ⛔ 15 STILL UNKNOWN — and the previous explanation of it was wrong twice.
 //
-// ⭐ A cross-check worth keeping: the reading PCs group the way the measured
-//      meanings do. `$A61D` reads atkElem AND elemResist (the elemental term);
-//      `$A65C` reads atkElem, statusOnAtk AND statusResist (the status term).
-//      The code agrees with the labels.
+//      v1.8.67 said byte 15 had "a dedicated reader at $A5F3 that touches no
+//      other field". ⛔ $A5F3 IS NOT A READER. Disassembling it (the sequence is
+//      UNIQUE in the ROM, file 0x625FC, bank 49, CPU $A5EC) shows the
+//      battle-setup COPY:
+//
+//        $A5EC  A0 0F     LDY #$0F        ; record offset 15
+//        $A5EE  B1 24     LDA ($24),Y     ; A = monster record byte 15
+//        $A5F0  A0 36     LDY #$36        ; combatant-entry offset $36
+//        $A5F2  91 5D     STA ($5D),Y     ; ...store it
+//
+//      $A5F3 is the second byte of that STA, and the "read" a RAM hook sees
+//      there is the DUMMY READ CYCLE an indirect-indexed store performs on its
+//      target. It is the code that PUTS byte 15 into RAM, not code that uses it.
+//      (($5D) = $7675 for enemy slot 0 — 3 below the HP field — so the code's
+//      +$36 and this file's +0x33 name the same byte.)
+//
+//      ⛔ The v1.8.67 "cross-check" is withdrawn with it. It claimed $A61D read
+//      atkElem AND elemResist and $A65C read atkElem, statusOnAtk AND
+//      statusResist, so "the code agrees with the labels". Those are $A61C and
+//      $A65B, both `STA ($5D),Y` — the SAME setup copy. They group by which
+//      fields are written together, not by which calculation consumes them. The
+//      corroboration was an artifact of counting stores as reads.
+//
+// ⛔ AND THE METHOD FAILS ITS OWN POSITIVE CONTROL. Watching one RAM address
+//      cannot find consumers at all. atkElem provably halves damage against a
+//      fire-resisting shield — yet tracing its home $768B with that effect ACTIVE
+//      still shows no genuine load except a bulk block-move ($AA06 `LDA ($82),Y`,
+//      which touches every field alike) and one coincidental hit from a map/tile
+//      routine ($CEE7, whose pointer happens to land in the same page). Whatever
+//      consumes atkElem reads it from somewhere else.
+//
+//      So no "nothing reads it, therefore it is unused" conclusion is available
+//      for byte 15: the instrument that would have to support it demonstrably
+//      cannot detect a consumer that is KNOWN to exist. Byte 15 is simply still
+//      unknown — no behavioural effect across its whole range, and the code-side
+//      approach is inconclusive until it can pass its own control.
+//
+//      ⭐ What IS settled: `tools/ff3-code-trace.mjs` disassembles the routine
+//      any RAM address is touched from, and classifies each hit as a real LOAD or
+//      the dummy cycle of a STORE. That distinction is the whole lesson here.
 
 export const MONSTER_PROPS = 0x060010;   // 16 bytes per bestiary id
 export const PROPS_STRIDE = 16;
@@ -239,10 +266,11 @@ export const FIELDS = {
 /** Bytes that INDEX the stat table rather than holding a value. None of them is
  *  copied into RAM — that is how byte 6 was spotted as an index at all. */
 export const INDEX_FIELDS = { atkHitIdx: 9, defEvdIdx: 12, magicDefIdx: 6, spAtkIdx: 14 };
-/** ⛔ Byte 15 IS read (5x an encounter, dedicated reader at $A5F3) — its EFFECT
- *  is what is unknown. "Not read" was an earlier, wrong conclusion. */
+/** ⛔ $A5F2 is the STA that COPIES byte 15 into the entry — not a consumer.
+ *  No consumer has been found, and the search method fails its own control. */
 export const BYTE15_HOME_OFF = 0x33;
-export const BYTE15_READER_PC = 0xA5F3;
+export const BYTE15_WRITER_PC = 0xA5F2;
+export const BYTE15_WRITER_FILE_OFF = 0x625FC;
 /** The party members' SRAM blocks, and the job that gains a Magic command. */
 export const PARTY_A_BLOCK = 0x6100, JOB_OFF = 0x00, MP_OFF = 0x30;
 export const SPELL_LIST_OFF = 0x07, BLACK_MAGE_JOB = 4;

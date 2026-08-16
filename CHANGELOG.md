@@ -18,6 +18,53 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.68 — 2026-08-15
+
+### $A5F3 is the WRITER, not a reader — and two v1.8.67 claims withdrawn
+
+Built `tools/ff3-code-trace.mjs` (a 6502 disassembler + a RAM-access hook that
+reports the routine each hit comes from) to answer what `$A5F3` does. It does not
+consume byte 15. It stores it. The sequence is **unique in the ROM** at file
+`0x625FC`, bank 49:
+
+```
+$A5EC  A0 0F     LDY #$0F        ; record offset 15
+$A5EE  B1 24     LDA ($24),Y     ; A = monster record byte 15
+$A5F0  A0 36     LDY #$36        ; combatant-entry offset $36
+$A5F2  91 5D     STA ($5D),Y     ; ...store it
+```
+
+`$A5F3` is the second byte of that `STA`. ⛔ **The "read" a RAM hook sees there is
+the DUMMY READ CYCLE an indirect-indexed store performs on its target** — the
+6502 always reads before it writes. It is the code that PUTS byte 15 into RAM.
+(`($5D)` = `$7675` for enemy slot 0, three below the HP field, so the code's
+`+$36` and this repo's `+0x33` name the same byte.)
+
+⛔ **Withdrawn: v1.8.67's cross-check.** It claimed `$A61D` read atkElem AND
+elemResist and `$A65C` read atkElem, statusOnAtk AND statusResist, so "the code
+agrees with the labels". Those are `$A61C` and `$A65B`, both `STA ($5D),Y` — the
+same setup copy. They group by which fields are **written together**, not by what
+consumes them. The corroboration was an artifact of counting stores as reads, and
+it was the more seductive error because it appeared to confirm results derived
+independently.
+
+⛔ **Withdrawn: "byte 15 has a dedicated consumer."** With stores excluded, the
+only genuine loads of its home are a bulk block-move (`$AA06 LDA ($82),Y`, which
+touches every field alike) and one coincidental hit from a map/tile routine
+(`$CEE7`, whose pointer happens to land in the same page).
+
+⭐ **But the opposite conclusion is not available either, because the method fails
+its own positive control.** atkElem provably halves damage against a
+fire-resisting shield — yet tracing its RAM home with that effect ACTIVE shows no
+genuine load beyond the same bulk move. Whatever consumes atkElem reads it from
+somewhere other than that address. So watching one RAM address cannot detect a
+consumer that is known to exist, and "nothing reads byte 15, therefore it is
+unused" is not something this instrument can support.
+
+**Byte 15 remains unknown** — no behavioural effect across its whole range, and
+the code-side approach inconclusive until it can pass its control. Everything
+else in the record stands; the audit is unchanged at 36/36.
+
 ## 1.8.67 — 2026-08-15
 
 ### Bytes 6, 8 and 15 — two solved, one honestly half-solved
