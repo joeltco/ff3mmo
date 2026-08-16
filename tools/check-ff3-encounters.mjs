@@ -77,6 +77,7 @@ function fight(patch = {}) {
                  species: [...nes.cpu.mem.slice(EN.RAM_SPECIES, EN.RAM_SPECIES + 4)],
                  counts: [...nes.cpu.mem.slice(EN.RAM_COUNTS, EN.RAM_COUNTS + 4)],
                  pal: [...nes.ppu.vramMem.slice(0x3F00, 0x3F20)],
+                 flagDest: nes.cpu.mem[EN.FLAG_DEST],
                  frame: fh, lit, screen: lines() };
       }
     }
@@ -181,6 +182,25 @@ for (const [byteIdx, slot] of EN.HEADER_PPU_SLOTS.entries()) {
   ok('two palettes draw a DIFFERENT image...', a2 && b2 && a2.frame !== b2.frame);
   ok('...with exactly the same lit-pixel count — colour, not shape',
      a2 && b2 && a2.lit === b2.lit, a2 && b2 ? `${a2.lit} vs ${b2.lit}` : '');
+}
+
+// ── the count byte's top two bits, followed to $7ED8 ───────────────────────
+console.log('\nthe count byte flags -> $7ED8');
+ok('the merge instructions are where the lib says',
+   JSON.stringify([...rom.slice(EN.FLAG_MERGE_FILE, EN.FLAG_MERGE_FILE + EN.FLAG_MERGE_BYTES.length)])
+   === JSON.stringify(EN.FLAG_MERGE_BYTES),
+   `LDA $7D68 / LSR x6 / AND #$03 / ORA $7ED8 / STA $7ED8`);
+// ⭐ and the measured mapping — bit 6 becomes $7ED8 bit 7, bit 7 becomes bit 0.
+for (const [flags, want] of Object.entries(EN.FLAG_DEST_VALUES)) {
+  const r = fight({ [EN.ENCOUNTER_SET + 1]: Number(flags) | LIVE_COUNT_INDEX });
+  ok(`count byte flags 0x${Number(flags).toString(16)} -> $7ED8 = 0x${want.toString(16)}`,
+     r && r.flagDest === want, r ? `0x${r.flagDest.toString(16)}` : 'no battle');
+}
+// ⛔ and the count index must still work with the flags set — they are separate.
+{
+  const r = fight({ [EN.ENCOUNTER_SET + 1]: 0xC0 | 3 });
+  ok('the flags do not disturb the count index (0xC0|3 still puts 4 on the field)',
+     r && r.bodies === 4, r ? `${r.bodies}` : 'no battle');
 }
 
 console.log(`\n${n - bad}/${n} checks passed`);

@@ -18,6 +18,47 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.83 — 2026-08-16
+
+### Followed $7ED8 — and bit 7 IS used, correcting v1.8.82
+
+⭐ **The two flag bits are merged into `$7ED8`.** Bank 46 `$9F46`:
+
+```
+$9F46  AD 68 7D  LDA $7D68
+$9F49  4A x6     LSR A         ; the top TWO bits...
+$9F4F  29 03     AND #$03
+$9F51  0D D8 7E  ORA $7ED8
+$9F54  8D D8 7E  STA $7ED8     ; ...merged in
+```
+
+Measured end to end by patching the zone's count byte and reading `$7ED8` back out
+of a live encounter:
+
+```
+0x07 (neither) -> $7ED8 = 0x00
+0x47 (bit 6)   -> $7ED8 = 0x80     ; count bit 6 -> $7ED8 BIT 7
+0x87 (bit 7)   -> $7ED8 = 0x01     ; count bit 7 -> $7ED8 BIT 0
+0xC7 (both)    -> $7ED8 = 0x81
+```
+
+⛔ **This corrects v1.8.82, which said bit 7 was probably unused.** It is used —
+and the claim was wrong for an instructive reason: the only site I had found
+touching the top nibble masked it, so "no test of bit 7 in place" got quietly
+generalised to "not used". It travels rather than being tested where it sits.
+
+`$7ED8` bit 7 is then what `BMI $886E` at bank 52 `$880A` tests, skipping a
+percentage roll (`LDA #$64 / JSR $A564 / CMP $28 / BCS / INC $2A`).
+
+⛔ **What that roll ultimately does is still unknown.** Eight encounters at each of
+the four bit combinations produced no on-screen difference — no extra message, and
+a byte-identical battle. The next link is `$2A`, which the roll increments. Not
+chased here, and not guessed at.
+
+**Gate now 32/32**, revert-proven: swapping which flag bit lands where in `$7ED8`
+fails 2 checks. Also asserts the merge instruction bytes are where the lib says,
+and that setting the flags does not disturb the count index.
+
 ## 1.8.82 — 2026-08-16
 
 ### The count byte's top bits — bit 6 is live, its meaning is NOT determined

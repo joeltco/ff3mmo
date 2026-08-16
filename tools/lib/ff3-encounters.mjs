@@ -63,12 +63,46 @@
 // like a monster SIZE or LAYOUT mode. That is a reading of the code, and this
 // file does not record readings as facts.
 //
-// ⛔ BIT 7: no evidence it is read at all. The only instruction touching the top
-// nibble is a `LSR A x4` at bank 46 $9F46, and that mixes in index bits 4-5, so
-// it is not a test of bit 7. Setting it changed nothing observable.
-export const COUNT_FLAG_BIT6 = 0x40;       // live — read at 4 sites, meaning open
-export const COUNT_FLAG_BIT7 = 0x80;       // no evidence it is read
+// ⛔ (An earlier note here said bit 7 was probably unused. It is not — see the
+// merge below. The claim was made from a site that masked the top nibble.)
+// ⭐ WHERE THEY GO — followed to the byte they land in. Bank 46 $9F46:
+//
+//   $9F46  AD 68 7D  LDA $7D68
+//   $9F49  4A x6     LSR A         ; the top TWO bits...
+//   $9F4F  29 03     AND #$03
+//   $9F51  0D D8 7E  ORA $7ED8
+//   $9F54  8D D8 7E  STA $7ED8     ; ...merged into $7ED8
+//
+// and measured end to end, patching the zone's count byte and reading $7ED8 back
+// out of a live encounter:
+//
+//   0x07 (neither) -> $7ED8 = 0x00
+//   0x47 (bit 6)   -> $7ED8 = 0x80     ; ⭐ count bit 6 -> $7ED8 BIT 7
+//   0x87 (bit 7)   -> $7ED8 = 0x01     ; ⭐ count bit 7 -> $7ED8 BIT 0
+//   0xC7 (both)    -> $7ED8 = 0x81
+//
+// ⭐ So bit 7 IS used after all — the earlier "no evidence it is read" was wrong,
+// and it was wrong because the only site I had found masked the top nibble. It
+// travels; it just travels through $7ED8 rather than being tested in place.
+//
+// $7ED8 bit 7 is then what `BMI $886E` at bank 52 $880A tests, skipping a
+// percentage roll (`LDA #$64 / JSR $A564 / CMP $28 / BCS / INC $2A`).
+//
+// ⛔ WHAT THE ROLL ULTIMATELY DOES IS STILL NOT KNOWN. Eight encounters at each
+// of the four bit combinations produced no difference on screen — no extra
+// message, and the battle is byte-identical. The next link is `$2A`, which the
+// roll increments. Not chased, not guessed at.
+export const COUNT_FLAG_BIT6 = 0x40;
+export const COUNT_FLAG_BIT7 = 0x80;
 export const COUNT_BIT6_TEST_SITES = [0x5DD7B, 0x5E3BB, 0x5F490, 0x5FB98];
+/** Where the two flag bits are merged, and where they end up. */
+export const FLAG_MERGE_FILE = 0x5DF56;    // bank 46, CPU $9F46
+export const FLAG_DEST = 0x7ED8;
+/** count byte -> the $7ED8 value it produces, measured live. */
+export const FLAG_DEST_VALUES = { 0x00: 0x00, 0x40: 0x80, 0x80: 0x01, 0xC0: 0x81 };
+/** The exact instruction sequence that does the merge. */
+export const FLAG_MERGE_BYTES = [0xAD, 0x68, 0x7D, 0x4A, 0x4A, 0x4A, 0x4A, 0x4A, 0x4A,
+                                 0x29, 0x03, 0x0D, 0xD8, 0x7E, 0x8D, 0xD8, 0x7E];
 
 // ── THE TWO HEADER BYTES ARE PALETTE INDICES ─────────────────────────────────
 //
