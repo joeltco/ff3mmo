@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.82 — 2026-08-16
+
+### The count byte's top bits — bit 6 is live, its meaning is NOT determined
+
+⭐ **Bit 6 is read at four sites**, all with the same idiom (`ASL A` moves bit 6
+into the sign, then a branch):
+
+```
+bank 46 $9D6B  LDA $7D68 / ASL A / BMI  -> clear: LDA #$20
+                                          set:   $7D73 & $1F vs 8, LDA #$28
+bank 47 $A3AB  LDA $7D68 / ASL A / BMI  -> clear: JSR $A3B8 / JSR $A40B
+bank 47 $B480  LDA $7D68 / ASL A / BPL  -> set:   JSR $BE97
+bank 47 $BB88  LDA $7D68 / ASL A / BPL  -> set:   JSR $BEA4 / JMP $BB44
+```
+
+and setting it really does change execution — a differential trace over 12.6M
+instructions parts control flow during encounter SETUP.
+
+⛔ **But what it selects is NOT determined, and I stopped rather than guess.**
+With bit 6 set on the freeroam zone the battle comes out byte-for-byte identical:
+same body count, same layout, same palettes, same framebuffer hash, the same 2792
+lit pixels. The first divergence is a `BMI` on `$7ED8` — the flag has already
+propagated into other state by then, so naming it means following that chain
+instead of this one, and that is a different piece of work.
+
+⚠ **A hypothesis, explicitly not a measurement:** the `#$20`/`#$28` constants (32
+and 40) at `$9D6B` and the two different draw routines at `$B480`/`$BB88` read
+like a monster SIZE or LAYOUT mode. That is an inference from the code, and the
+lib records it as a hypothesis rather than a fact.
+
+⛔ **Bit 7: no evidence it is read at all.** The only instruction touching the top
+nibble is a `LSR A x4` at bank 46 `$9F46`, and that mixes in index bits 4-5, so it
+is not a test of bit 7. Setting it changed nothing observable.
+
+No new gate assertions — nothing new was proven about behaviour, and a gate that
+pinned the hypothesis would be pinning a guess.
+
 ## 1.8.81 — 2026-08-16
 
 ### The species record's header bytes are PALETTE indices

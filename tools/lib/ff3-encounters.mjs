@@ -37,8 +37,38 @@
 // `COUNT_TABLE + 0*4` therefore does nothing and looks like the table is inert —
 // which is exactly the wrong conclusion an earlier pass drew from it.
 //
-// ⛔ NOT identified: the top two bits of ENCOUNTER_SET's second byte, which
-// survive the `AND #$3F`. Recorded as unknown rather than guessed.
+// ── THE TOP TWO BITS OF THE COUNT BYTE — partially answered ──────────────────
+//
+// ⭐ BIT 6 IS LIVE. It is read at four sites, all with the same idiom (`ASL A`
+// moves bit 6 into the sign, then a branch):
+//
+//   bank 46 $9D6B  LDA $7D68 / ASL A / BMI  -> clear: LDA #$20
+//                                             set:   $7D73 & $1F vs 8, LDA #$28
+//   bank 47 $A3AB  LDA $7D68 / ASL A / BMI  -> clear: JSR $A3B8 / JSR $A40B
+//   bank 47 $B480  LDA $7D68 / ASL A / BPL  -> set:   JSR $BE97
+//   bank 47 $BB88  LDA $7D68 / ASL A / BPL  -> set:   JSR $BEA4 / JMP $BB44
+//
+// and setting it really does change execution: a differential trace over 12.6M
+// instructions parts control flow during encounter SETUP.
+//
+// ⛔ BUT ITS MEANING IS NOT DETERMINED, and this is where the chase was stopped.
+// With bit 6 set on the freeroam zone the battle is byte-for-byte the same —
+// same body count, same layout, same palettes, same framebuffer hash and the same
+// 2792 lit pixels. The first divergence is a `BMI` on `$7ED8`, i.e. the flag has
+// already propagated into other state by then, so naming it means following that
+// chain rather than this one.
+//
+// ⚠ A HYPOTHESIS, explicitly NOT a measurement: the `#$20` / `#$28` constants
+// (32 and 40) at $9D6B and the two different draw routines at $B480/$BB88 look
+// like a monster SIZE or LAYOUT mode. That is a reading of the code, and this
+// file does not record readings as facts.
+//
+// ⛔ BIT 7: no evidence it is read at all. The only instruction touching the top
+// nibble is a `LSR A x4` at bank 46 $9F46, and that mixes in index bits 4-5, so
+// it is not a test of bit 7. Setting it changed nothing observable.
+export const COUNT_FLAG_BIT6 = 0x40;       // live — read at 4 sites, meaning open
+export const COUNT_FLAG_BIT7 = 0x80;       // no evidence it is read
+export const COUNT_BIT6_TEST_SITES = [0x5DD7B, 0x5E3BB, 0x5F490, 0x5FB98];
 
 // ── THE TWO HEADER BYTES ARE PALETTE INDICES ─────────────────────────────────
 //
