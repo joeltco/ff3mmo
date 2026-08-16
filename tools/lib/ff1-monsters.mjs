@@ -24,6 +24,43 @@ export const FORMATION_TABLE = 0x10 + 11 * 0x4000 + 0x400;   // CPU $8400, bank 
 export const FORMATION_STRIDE = 16;      // $F2B8 LDX #$10
 export const FORMATION_MONSTER_OFF = 2;  // measured, see above
 
+// ── THE REST OF THE 16-BYTE FORMATION RECORD ────────────────────────────────
+// Byte 2 was pinned long ago as "a" monster id. It is the first of FOUR, each
+// with its own COUNT — and the counts are NIBBLE-PACKED min..max, exactly the
+// shape FF3 uses. Measured by patching the record and counting bodies:
+//
+//   count byte  0x11 0x22 0x33 0x44 0x55 0x66 0x88 0x99
+//   bodies         1    2    3    4    5    6    8    9
+//   and a range rolls inside itself: 0x35 -> 5, 0x39 -> 7, 0x19 -> 7
+//
+// ⭐ The PAIRING is what makes it more than a guess. Patching byte 3 alone does
+// nothing at all — its species never appears, because its count (byte 7) is 0 in
+// this formation. Patch byte 7 and byte 3's species shows up; byte 8 brings in
+// byte 4's, byte 9 brings in byte 5's. Each id is inert until its own count says
+// otherwise.
+//
+// ⛔ Counting bodies by CURRENT hp (RAM 13) reads one short — a just-spawned
+// enemy has not had it filled in. MAX hp (RAM 9) is set for every live body, and
+// switching to it turned a ragged off-by-one into the clean table above.
+export const FORMATION_SPECIES_OFF = [2, 3, 4, 5];
+export const FORMATION_COUNT_OFF = [6, 7, 8, 9];
+export const FORMATION_MAX_SPECIES = 4;
+export const ENEMY_RAM = 0x6BDC, ENEMY_RAM_STRIDE = 20;
+export const ENEMY_MAXHP_OFF = 9, ENEMY_CURHP_OFF = 13;
+/** A raw count byte as the game reads it: [min, max]. */
+export const countRange = (b) => [(b >> 4) & 0x0F, b & 0x0F];
+export const formationOf = (rom, f) =>
+  [...rom.slice(FORMATION_TABLE + f * FORMATION_STRIDE,
+                FORMATION_TABLE + (f + 1) * FORMATION_STRIDE)];
+export const formationSpecies = (rom, f) => {
+  const r = formationOf(rom, f);
+  return FORMATION_SPECIES_OFF.map((o, i) => ({ id: r[o], count: countRange(r[FORMATION_COUNT_OFF[i]]) }))
+    .filter(e => e.count[0] > 0 || e.count[1] > 0);
+};
+/** ⛔ Bytes 0, 1 and 10-15 are NOT identified — patching them moved neither the
+ *  species nor the body count. Recorded as unknown rather than guessed. */
+export const FORMATION_UNKNOWN_OFF = [0, 1, 10, 11, 12, 13, 14, 15];
+
 // The 20-byte STAT record per monster. Located by hooking the source read of the
 // copy loop ($AFB6 LDA ($9C),Y): monster 0 reads from $8520, monster 58 from
 // $89A8 — exactly 58 * 20 further on, in bank 12.

@@ -18,6 +18,51 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.88 — 2026-08-16
+
+### FF1's formation record decoded — the same shape as FF3's. FF2 NOT done.
+
+**FF1.** Byte 2 had long been pinned as "a monster id". It is the first of FOUR,
+each with its own count, and ⭐ **the counts are nibble-packed min..max — exactly
+the shape FF3 uses**:
+
+```
+species ids  bytes 2, 3, 4, 5
+counts       bytes 6, 7, 8, 9      (high nibble = min, low = max)
+
+count byte  0x11 0x22 0x33 0x44 0x55 0x66 0x88 0x99
+bodies         1    2    3    4    5    6    8    9
+and a range rolls inside itself: 0x35 -> 5, 0x39 -> 7, 0x19 -> 7
+```
+
+⭐ **The pairing is what makes it more than a guess.** Patching byte 3 alone does
+nothing — its species never appears, because its count (byte 7) is 0 in this
+formation. Set byte 7 and byte 3's species shows up; byte 8 brings in byte 4's,
+byte 9 brings in byte 5's. Each id is inert until its own count says otherwise,
+and the gate asserts both halves for all three pairs.
+
+⛔ **An off-by-one that would have muddied the whole table:** counting bodies by
+CURRENT hp (RAM 13) reads one short, because a just-spawned enemy has not had it
+filled in. MAX hp (RAM 9) is set for every live body, and switching to it turned a
+ragged `0x11 -> 0` into the clean run above.
+
+⛔ Bytes 0, 1 and 10-15 are NOT identified — patching them moved neither the
+species nor the body count. Recorded as unknown.
+
+**New gate — `tools/check-ff1-encounters.mjs`, 12/12, in `deploy.sh`.**
+Revert-proven twice: swap the id/count pairing -> 7 failures; swap the min/max
+nibbles -> 1 failure.
+
+⛔ **FF2 IS NOT DONE, and I am not going to pretend otherwise.** The blocker is
+upstream of the tables: there is no verified way to tell when FF2 is IN a battle.
+The obvious tell (nonzero enemy RAM at `$7E3A`) is stale map data and fires
+instantly on the savestate; a screen-change detector settles on something after 16
+steps, but the enemy RAM is byte-identical to its map contents, so I cannot show
+that is a battle rather than a menu or a map transition. FF1 and FF3 each have a
+verified tell ("RUN", "Guard|Item"); FF2 needs the equivalent — its battle menu is
+kana, so it means decoding the battle screen with the FF2 glyph table first. That
+is the next piece of work, not a step I skipped.
+
 ## 1.8.87 — 2026-08-16
 
 ### Bit 7 = the Bard cannot sing in this encounter
