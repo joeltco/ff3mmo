@@ -18,6 +18,51 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.73 — 2026-08-16
+
+### The steal table, decoded — 32 entries of eight item ids
+
+⭐ **Bank 16, `$9B80`, file `0x21B90`** — 32 entries of **8 item ids**, one of
+which the steal rolls.
+
+⛔ **The bank is the whole trap.** `$9B80` is NOT in the bank that sets the
+pointer: `$FDA6` switches to bank 16 first (`JSR $FB87` / multiply index x 8 /
+add base / copy into `$7400,X` / `JMP $FB87` to restore). Dumping `$9B80` out of
+the calling bank yields that bank's **code**, which is exactly what a first pass
+dumped and nearly wrote up. The bank was settled by capturing the RESOLVED
+pointer inside the copy loop instead of computing it — and `$FDA6` is a shared
+helper, so the capture had to be armed by the steal handler or it caught an
+unrelated call (index 98) instead.
+
+```
+[ 0]  Potion x4, Hi-Potion x2, PhoenixDown, Elixir      <- 185 monsters
+[ 5]  Wood/Holy/Iron/Bolt/Fire/Ice/Medusa/Yoichi Arrow
+[ 6]  GoldNeedle x8
+[ 7]  Eye Drops x4, Antidote x4
+[10]  Hi-Potion, Bomb Arm x2, Tranquilizer, ...
+[29]  Elixir x4, OnionSword x3, Onion Shield   <- Red Dragon    (0xFD)
+[30]  Elixir x4, Onion Shield/Helm/Armor/Sword <- Green Dragon  (0xFE)
+[31]  Elixir x4, Onion Gloves/Armor/Helm/Sword <- Yellow Dragon (0xFF)
+```
+
+⭐ **Two checks that were not aimed for.** Entry 10 lists **Bomb Arm** and
+**Tranquilizer** — precisely the items watched being stolen in v1.8.72. And the
+three "sentinel-looking" byte-15 values `0xFD`/`0xFE`/`0xFF` turn out to be the
+**Onion equipment** entries, reached only by the three DRAGONS. That the famous
+Onion gear falls out of the decode, on the monsters it is famously stolen from,
+is the strongest confirmation available.
+
+⛔ Entries 15-28 are all-zero and **no monster points at them**.
+
+**Audit 49/49**, revert-proven: point the table at the calling bank and the Onion
+check fails. New in the audit — the table resolves to real item ids, an item the
+game PRINTED appears in the decoded entry (tying table to behaviour), each dragon
+resolves to its Onion entry, and no monster reaches a dead entry.
+
+`docs/FF3-MONSTERS.md` gains the decoded steal table and a per-monster `steal`
+column. ⛔ Some names show glyph gaps ("Tranquizr", "Gulgpokfatly,") — the known
+unmapped-glyph issue in the name table, not a decode error.
+
 ## 1.8.72 — 2026-08-16
 
 ### It is the Thief's STEAL — byte 15 is the monster's steal-table index

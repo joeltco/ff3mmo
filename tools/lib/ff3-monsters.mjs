@@ -223,6 +223,28 @@
 //        byte 15 = 0x29 -> index  9 -> "Potion"
 //        byte 15 = 0x0A -> index 10 -> "Bomb Arm" / "Tranquilizer"
 //
+//      ⭐ THE TABLE ITSELF: bank 16, `$9B80`, file 0x21B90 — 32 entries of EIGHT
+//      ITEM IDS, one of which the steal rolls. ⛔ `$9B80` is not in the bank that
+//      sets the pointer: `$FDA6` switches to bank 16 first, so reading it out of
+//      the calling bank yields that bank's CODE (which a first pass duly dumped).
+//      The bank was settled by capturing the RESOLVED pointer inside the copy
+//      loop instead of computing it.
+//
+//        [ 0]  Potion x4, Hi-Potion x2, PhoenixDown, Elixir      <- 185 monsters
+//        [ 5]  Wood/Holy/Iron/Bolt/Fire/Ice/Medusa/Yoichi Arrow
+//        [ 6]  GoldNeedle x8
+//        [10]  Hi-Potion, Bomb Arm x2, Tranquilizer, ...         <- what was seen
+//        [15..28]  all zero, and NO monster points at them
+//        [29]  Elixir x4, OnionSword x3, Onion Shield   <- Red Dragon    (0xFD)
+//        [30]  Elixir x4, Onion Shield/Helm/Armor/Sword <- Green Dragon  (0xFE)
+//        [31]  Elixir x4, Onion Gloves/Armor/Helm/Sword <- Yellow Dragon (0xFF)
+//
+//      ⭐ Entry 10 lists Bomb Arm and Tranquilizer — precisely the items watched
+//      being stolen. And the three "sentinel-looking" byte-15 values 0xFD/FE/FF
+//      turn out to be the ONION EQUIPMENT entries, reached only by the three
+//      DRAGONS. That the famous Onion gear falls out of the decode, on the
+//      monsters it is famously stolen from, is the strongest check available.
+//
 //      ⭐ And the DATA agrees, which is what makes the mask more than a reading:
 //      179 of 232 monsters have byte 15 = 0 (the default entry), and every nonzero
 //      value is 0x20-0x2E or 0xFD-0xFF — masked, 0x00-0x0E and 0x1D-0x1F. Bit 5 is
@@ -303,7 +325,28 @@ export const STEAL_ACTION_ID = 14;
 export const ACTION_IDS = { steal: 14, study: 12, jump: 8, item: 20 };
 /** ⭐ Byte 15 is the monster's STEAL-TABLE index — the Thief's Steal reads it. */
 export const BYTE15_MEANING = 'steal-table index';
-export const STEAL_TABLE_PTR = 0x9B80, STEAL_ENTRY_LEN = 8;
+/** The steal table itself. ⛔ `$9B80` is NOT in the bank that sets the pointer —
+ *  `$FDA6` switches to bank 16 first, so the table is file 0x21B90. Reading it
+ *  out of the calling bank yields that bank's CODE, which is what a first pass
+ *  dumped. The bank was settled by capturing the RESOLVED pointer inside the
+ *  copy loop rather than by arithmetic. */
+export const STEAL_TABLE_PTR = 0x9B80;
+export const STEAL_TABLE_BANK = 16;
+export const STEAL_TABLE_FILE = 0x21B90;
+export const STEAL_ENTRY_LEN = 8;
+export const STEAL_ENTRIES = 32;
+/** Entries 29-31 are the Onion equipment, and only the three DRAGONS reach them
+ *  (byte 15 = 0xFD/0xFE/0xFF -> 29/30/31). Entries 15-28 are all-zero and no
+ *  monster points at them. */
+export const STEAL_ONION_ENTRIES = [29, 30, 31];
+export const STEAL_DEAD_ENTRIES = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+/** The index a monster resolves to, and its eight steal slots (one is rolled). */
+export const stealIndex = (rom, id) =>
+  rom[MONSTER_PROPS + id * PROPS_STRIDE + 15] & BYTE15_INDEX_MASK;
+export const stealSlots = (rom, id) => stealEntry(rom, stealIndex(rom, id));
+export const stealEntry = (rom, idx) =>
+  [...rom.slice(STEAL_TABLE_FILE + idx * STEAL_ENTRY_LEN,
+                STEAL_TABLE_FILE + (idx + 1) * STEAL_ENTRY_LEN)];
 /** Forcing a steal to succeed, for harnesses: guard + roll. */
 export const STEAL_FORCE_PATCHES = [[0x6ABC3, 0xA9], [0x6ABC4, 0xFF],
                                     [0x6ABDF, 0xC9], [0x6ABE0, 0xFF]];

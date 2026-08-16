@@ -16,6 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initTextDecoder, getMonsterName } from '../src/text-decoder.js';
 import * as M3 from './lib/ff3-monsters.mjs';
+import * as SH from './lib/ff3-shops.mjs';
+import { glyph } from './lib/ff3-text.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROMP = path.join(HERE, '..', 'FF3-English.nes');
@@ -39,6 +41,7 @@ const nameOf = (id) => { try { return nesText(getMonsterName(id)); } catch { ret
 
 const hex = (n, w = 2) => `0x${n.toString(16).toUpperCase().padStart(w, '0')}`;
 // ⛔ only the three element bits that were actually pinned get a name here.
+const itemName = (id) => { try { const n = SH.itemName(rom, id, glyph); return n && n.trim() ? n.trim() : `#${hex(id)}`; } catch { return `#${hex(id)}`; } };
 const ELEM_NAMES = Object.fromEntries(
   Object.entries(M3.ELEM_BITS).map(([nm, bit]) => [bit, nm]));
 const rows = [];
@@ -63,6 +66,8 @@ for (let id = 0; id < MONSTER_COUNT; id++) {
     weak: bits(pr[M3.FIELDS.weakness], ELEM_NAMES),
     resist: bits(pr[M3.FIELDS.elemResist], ELEM_NAMES),
     onHit: bits(pr[M3.FIELDS.statusOnAtk], M3.STATUS_BITS),
+    stealIdx: M3.stealIndex(rom, id),
+    steals: [...new Set(M3.stealSlots(rom, id))].filter(v => v).map(itemName).join(' ') || '-',
     mdef: M3.monsterMagicDefence(rom, id),
     mevd: M3.monsterMagicEvade(rom, id),
     atkEl: bits(M3.monsterAtkElem(rom, id), ELEM_NAMES),
@@ -313,6 +318,37 @@ L.push('');
 L.push('What finally worked was asking the game rather than the addresses: log what');
 L.push('the **dispatcher** jumps to while driving each command.');
 L.push('');
+L.push('### The steal table, decoded');
+L.push('');
+L.push(`Bank ${M3.STEAL_TABLE_BANK}, \`$${M3.STEAL_TABLE_PTR.toString(16).toUpperCase()}\`, file \`0x${M3.STEAL_TABLE_FILE.toString(16).toUpperCase()}\` — ` +
+       `${M3.STEAL_ENTRIES} entries of ${M3.STEAL_ENTRY_LEN} item ids, one of which the steal rolls.`);
+L.push('');
+L.push('| entry | monsters | the eight slots |');
+L.push('|---|---|---|');
+{
+  const users = {};
+  for (const r of rows) users[r.stealIdx] = (users[r.stealIdx] || 0) + 1;
+  for (let i = 0; i < M3.STEAL_ENTRIES; i++) {
+    const slots = M3.stealEntry(rom, i);
+    if (!slots.some(v => v)) continue;              // the all-zero entries
+    const counted = {};
+    for (const v of slots) counted[v] = (counted[v] || 0) + 1;
+    const txt = Object.entries(counted)
+      .map(([v, n]) => `${itemName(Number(v))}${n > 1 ? ` x${n}` : ''}`).join(', ');
+    L.push(`| ${i} | ${users[i] || 0} | ${txt} |`);
+  }
+}
+L.push('');
+L.push(`⛔ Entries ${M3.STEAL_DEAD_ENTRIES[0]}-${M3.STEAL_DEAD_ENTRIES.at(-1)} are all-zero and **no monster points at them**.`);
+L.push('');
+L.push('⭐ Entries 29-31 are the **Onion equipment**, and only the three DRAGONS');
+L.push('reach them (byte 15 = `0xFD`/`0xFE`/`0xFF`). That the famous Onion gear falls');
+L.push('out of the decode, on the monsters it is famously stolen from, is the');
+L.push('strongest check available — and it was not aimed for.');
+L.push('');
+L.push('⛔ Some item names show glyph gaps ("Tranquizr", "Gulgpokfatly,") — the');
+L.push('known unmapped-glyph issue in the name table, not a decode error.');
+L.push('');
 L.push(`## The bestiary — ${rows.length} monsters`);
 L.push('');
 L.push('`lvl` and `pwr` are the HIGH nibbles of bytes 0 and 4; `spirit` is the LOW');
@@ -322,12 +358,12 @@ L.push('');
 L.push('`m.def` / `m.evade` are the MAGIC entry, reached through byte 6 — the same');
 L.push('three-byte shape as the physical one. `atk elem` is byte 8.');
 L.push('');
-L.push('| id | name | HP | attack | defence | evade | m.def | m.evade | lvl | pwr | spirit | rate | special | atk elem | weak | resist | on-hit | gil |');
-L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+L.push('| id | name | HP | attack | defence | evade | m.def | m.evade | lvl | pwr | spirit | rate | special | atk elem | weak | resist | on-hit | steal | gil |');
+L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 for (const r of rows) {
   L.push(`| \`${hex(r.id)}\` | ${r.name} | ${r.hp} | ${r.atk} | ${r.def} | ${r.evd} | ${r.mdef} | ` +
          `${r.mevd} | ${r.lvl} | ${r.pwr} | ${r.spirit} | ${r.rate} | ${r.special} | ${r.atkEl} | ` +
-         `${r.weak} | ${r.resist} | ${r.onHit} | ${r.gil} |`);
+         `${r.weak} | ${r.resist} | ${r.onHit} | ${r.steals} | ${r.gil} |`);
 }
 L.push('');
 

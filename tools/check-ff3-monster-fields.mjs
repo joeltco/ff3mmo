@@ -381,6 +381,26 @@ ok('a different index steals a DIFFERENT item',
    st20 && st0A && JSON.stringify(st20.words.sort()) !== JSON.stringify(st0A.words.sort()),
    st0A ? st0A.words.filter(w => !st20.words.includes(w)).join(' ') : '');
 
+// ⭐ the table itself, tied back to what the game actually handed over.
+const SH = await import('./lib/ff3-shops.mjs');
+const iname = (id) => { try { return (SH.itemName(rom, id, glyph) || '').trim(); } catch { return ''; } };
+const e10 = M3.stealEntry(rom, 0x0A & M3.BYTE15_INDEX_MASK);
+ok('the steal table resolves to real item ids', e10.some(v => iname(v).length > 2), e10.map(v => iname(v)).join(','));
+// the item the game printed must BE in the decoded entry — table and behaviour agree
+const printed = st0A ? st0A.words.filter(w => w.length > 2) : [];
+ok('an item the game printed appears in the decoded entry 10',
+   e10.some(v => { const n = iname(v).replace(/\s/g, ''); return n && printed.some(w => n.includes(w) || w.includes(n.slice(0, 4))); }),
+   `entry: ${[...new Set(e10)].map(iname).join(', ')}`);
+// ⭐ the Onion gear, on the dragons — not aimed for, which is why it is worth asserting
+for (const [id, entry] of [[0xDF, 29], [0xAE, 30], [0xC8, 31]]) {
+  ok(`monster 0x${id.toString(16).toUpperCase()} resolves to Onion entry ${entry}`,
+     M3.stealIndex(rom, id) === entry, `${M3.stealIndex(rom, id)}`);
+}
+ok('the Onion entries really hold Onion gear',
+   M3.STEAL_ONION_ENTRIES.every(e => M3.stealEntry(rom, e).some(v => /Onion|Oon/i.test(iname(v)))));
+ok('no monster points at a dead steal entry',
+   !Array.from({ length: 232 }, (_, i) => M3.stealIndex(rom, i)).some(i => M3.STEAL_DEAD_ENTRIES.includes(i)));
+
 console.log('\nthe record is fully accounted for');
 ok('nothing is labelled inherited any more', Object.keys(M3.INHERITED_FIELDS).length === 0);
 ok('byte 6 is recorded as an INDEX, like 9/12/14',

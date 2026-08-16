@@ -239,6 +239,41 @@ verifying the mapped bank gives 48; verified against the opcode bytes, zero.
 What finally worked was asking the game rather than the addresses: log what
 the **dispatcher** jumps to while driving each command.
 
+### The steal table, decoded
+
+Bank 16, `$9B80`, file `0x21B90` — 32 entries of 8 item ids, one of which the steal rolls.
+
+| entry | monsters | the eight slots |
+|---|---|---|
+| 0 | 178 | Potion x4, Hi-Potion x2, Elixir, PhoexDown |
+| 1 | 2 | Potion, Oershroom, Bomb Shard x2, Bomb Arm x2, LamiaScale, SheepPiow |
+| 2 | 1 | GnomeBread, Potion, Oershroom, South Wind x2, ArcticWind x2, BachusWine |
+| 3 | 2 | Potion, Oershroom, Zeus'sWrath x2, God's Wrath x2, Devil Note, Gulgpokfatly, |
+| 4 | 3 | Potion, Bomb Shard, South Wind, Zeus'sWrath, Devil Note x2, Tranquizr, Gulgpokfatly, |
+| 5 | 2 | Wood Arrow, Holy Arrow, Iron Arrow, Bolt Arrow, Fire Arrow, Ice Arrow, Medusaow, Yoichiow |
+| 6 | 3 | GoldNeedle x8 |
+| 7 | 4 | Eye Drops x4, Antidote x4 |
+| 8 | 2 | Potion, Hi-Potion, MaidenKiss x2, Echo Herbs x2, Mallet x2 |
+| 9 | 7 | Hi-Potion x4, Elixir x2, PhoexDown x2 |
+| 10 | 4 | Hi-Potion, Oershroom, Bomb Arm x2, Lith'sKiss x2, Tranquizr, Gulgpokfatly, |
+| 11 | 3 | Hi-Potion, Oershroom, ArcticWind x2, TurtleShe, Black Hole, Raven'sYawn x2 |
+| 12 | 4 | Hi-Potion, Oershroom, God's Wrath x2, Black Musk, Tranquizr, Curtain, Chcbo. Rage |
+| 13 | 4 | Potion, Bomb Arm, ArcticWind, God's Wrath, Earth Drum, LamiaScale, BachusWine, TurtleShe |
+| 14 | 3 | Hi-Potion, Black Hole, Black Musk, Lith'sKiss, Raven'sYawn, Gulgpokfatly,, Curtain, Chcbo. Rage |
+| 29 | 1 | OnionSword x3, Onion Sh, Elixir x4 |
+| 30 | 1 | OnionSword, Onion Sh, Onion Helm, OnionArmor, Elixir x4 |
+| 31 | 1 | OnionSword, Onion Helm, OnionArmor, OonGloves, Elixir x4 |
+
+⛔ Entries 15-28 are all-zero and **no monster points at them**.
+
+⭐ Entries 29-31 are the **Onion equipment**, and only the three DRAGONS
+reach them (byte 15 = `0xFD`/`0xFE`/`0xFF`). That the famous Onion gear falls
+out of the decode, on the monsters it is famously stolen from, is the
+strongest check available — and it was not aimed for.
+
+⛔ Some item names show glyph gaps ("Tranquizr", "Gulgpokfatly,") — the
+known unmapped-glyph issue in the name table, not a decode error.
+
 ## The bestiary — 225 monsters
 
 `lvl` and `pwr` are the HIGH nibbles of bytes 0 and 4; `spirit` is the LOW
@@ -248,230 +283,230 @@ would be printing a number the game never reads.
 `m.def` / `m.evade` are the MAGIC entry, reached through byte 6 — the same
 three-byte shape as the physical one. `atk elem` is byte 8.
 
-| id | name | HP | attack | defence | evade | m.def | m.evade | lvl | pwr | spirit | rate | special | atk elem | weak | resist | on-hit | gil |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `0x00` | Goblin | 5 | 5 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 3 |
-| `0x01` | Carbuncle | 7 | 5 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | Glare | - | - | - | - | 5 |
-| `0x02` | Eye Fang | 8 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 7 |
-| `0x03` | Blue Wisp | 10 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | - | - | - | 10 |
-| `0x04` | Killer Bee | 20 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 12 |
-| `0x05` | Werewolf | 24 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 14 |
-| `0x06` | Berserker | 30 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 16 |
-| `0x07` | Red Wisp | 34 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | Fire | - | fire | - | - | 18 |
-| `0x08` | Dark Eye | 38 | 12 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 20 | BLIND | - | fire | - | - | 20 |
-| `0x09` | Zombie | 42 | 12 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | fire | - | - | 22 |
-| `0x0A` | Mummy | 48 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 20 | #33 | - | fire | - | - | 24 |
-| `0x0B` | Skeleton | 54 | 13 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | fire | - | - | 26 |
-| `0x0C` | CursdCopper | 35 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 20 | Glare | - | fire | - | - | 28 |
-| `0x0D` | Larva | 38 | 13 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 20 | BLIND | - | fire | - | - | 30 |
-| `0x0E` | Shadow | 65 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 3 | 20 | BLIND | - | fire | - | - | 32 |
-| `0x0F` | Revenant | 70 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | fire | - | - | 34 |
-| `0x10` | Firefly | 72 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 60 | #27 | fire | ice | fire | - | 36 |
-| `0x11` | Helldiver | 85 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. SLNC. | 38 |
-| `0x12` | Rust Bird | 92 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 30 | #9 | - | - | - | - | 40 |
-| `0x13` | Rukh | 120 | 18 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 42 |
-| `0x14` | Basilisk | 100 | 17 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 44 |
-| `0x15` | Bugbear | 110 | 17 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 46 |
-| `0x16` | Mandrake | 120 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 20 | #10 | - | - | - | STONE | 48 |
-| `0x17` | Unei Clone | 1500 | 110 | 9 | 3 | 48 | 2 | 1 | 2 | 7 | 99 | #22 | - | - | physical ice fire | - | 50 |
-| `0x18` | Leprechaun | 36 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 52 |
-| `0x19` | Darkface | 55 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 53 |
-| `0x1A` | Petit | 45 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 80 | #23 | - | - | - | STONE | 54 |
-| `0x1B` | Poison Bat | 60 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 56 |
-| `0x1C` | Lilliputian | 58 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 50 | #23 | - | - | - | - | 58 |
-| `0x1D` | Wererat | 72 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 60 |
-| `0x1E` | Blood Worm | 98 | 9 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 62 |
-| `0x1F` | Killer Fish | 85 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 64 |
-| `0x20` | Hermit | 105 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 66 |
-| `0x21` | SeaElementl | 123 | 19 | 2 | 1 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | - | - | - | 67 |
-| `0x22` | Tangie | 125 | 20 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 40 | Glare | - | - | - | - | 68 |
-| `0x23` | Sahagin | 140 | 20 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 70 |
-| `0x24` | Parademon | 145 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 40 | #10 | - | - | - | SLNC. Died. | 72 |
-| `0x25` | Griffon | 150 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 74 |
-| `0x26` | Lynx | 165 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 76 |
-| `0x27` | Hornet | 160 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 78 |
-| `0x28` | Knocker | 185 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 80 |
-| `0x29` | Flyer | 190 | 22 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 50 | Glare | - | - | - | - | 82 |
-| `0x2A` | Lizardman | 200 | 22 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 84 |
-| `0x2B` | Gorgon | 200 | 23 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 86 |
-| `0x2C` | Red Cap | 210 | 23 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 50 | Glare | - | - | - | - | 87 |
-| `0x2D` | Barometz | 220 | 26 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 50 | #10 | - | - | - | SLNC. Died. | 88 |
-| `0x2E` | Slime | 200 | 23 | 4 | 2 | 4 | 2 | 0 | 0 | 1 | 0 | Fire | - | - | - | - | 90 |
-| `0x2F` | Tarantula | 200 | 24 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 92 |
-| `0x30` | Cuphgel | 200 | 24 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 94 |
-| `0x31` | Pugman | 109 | 16 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 45 | #25 | - | - | - | - | 96 |
-| `0x32` | Far Darrig | 111 | 13 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 45 | #30 | - | - | - | - | 98 |
-| `0x33` | Blood Bat | 114 | 26 | 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 100 |
-| `0x34` | Petit Mage | 118 | 14 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 45 | #31 | - | - | - | - | 101 |
-| `0x36` | Aughisky | 122 | 27 | 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 105 |
-| `0x37` | Bomb | 125 | 28 | 3 | 1 | 1 | 0 | 0 | 0 | 0 | 50 | #7 | fire | fire | - | - | 110 |
-| `0x38` | Manticore | 128 | 28 | 3 | 1 | 1 | 0 | 1 | 0 | 0 | 60 | #28 | ice | - | - | - | 112 |
-| `0x39` | Stalagmite | 130 | 26 | 3 | 1 | 1 | 0 | 0 | 0 | 1 | 35 | Glare | - | - | - | PSN. SLNC. | 115 |
-| `0x3A` | Sea Devil | 133 | 29 | 3 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 116 |
-| `0x3B` | Merman | 136 | 30 | 3 | 1 | 1 | 0 | 1 | 0 | 2 | 65 | #28 | - | - | - | - | 118 |
-| `0x3C` | RuinousWave | 140 | 32 | 3 | 1 | 1 | 0 | 0 | 0 | 1 | 40 | #10 | - | - | - | SLNC. Died. | 120 |
-| `0x3D` | Balloon | 143 | 30 | 3 | 1 | 2 | 1 | 0 | 0 | 1 | 60 | #7 | fire | fire | - | - | 125 |
-| `0x3E` | Myrmecoleon | 147 | 32 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | ice | - | PSN. SLNC. | 130 |
-| `0x3F` | Crocotta | 150 | 31 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | ice | - | - | 135 |
-| `0x40` | Adamantoise | 153 | 31 | 4 | 2 | 2 | 1 | 0 | 0 | 1 | 0 | #13 | - | ice | - | - | 135 |
-| `0x41` | RMarshmao | 155 | 32 | 4 | 2 | 4 | 2 | 1 | 0 | 0 | 0 | Fire | - | fire | - | - | 140 |
-| `0x42` | Pharaoh | 160 | 32 | 3 | 1 | 2 | 1 | 0 | 0 | 2 | 30 | Glare | - | fire | - | SLNC. TOAD | 145 |
-| `0x43` | Lemur | 164 | 32 | 3 | 1 | 2 | 1 | 1 | 0 | 3 | 0 | Fire | - | fire | - | - | 150 |
-| `0x44` | Lamia | 168 | 33 | 3 | 1 | 2 | 1 | 0 | 0 | 3 | 30 | #9 | - | - | - | - | 155 |
-| `0x45` | Demon | 171 | 33 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 158 |
-| `0x46` | Dullahan | 350 | 40 | 3 | 1 | 2 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | - | 160 |
-| `0x47` | Anet | 179 | 34 | 3 | 1 | 2 | 1 | 1 | 0 | 3 | 0 | Fire | - | - | - | - | 165 |
-| `0x48` | Mermaid | 182 | 35 | 3 | 1 | 2 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | - | 170 |
-| `0x49` | Seahorse | 185 | 35 | 3 | 1 | 2 | 1 | 1 | 0 | 3 | 0 | Fire | - | - | - | - | 175 |
-| `0x4A` | Sea Serpent | 190 | 36 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 180 |
-| `0x4B` | Cockatrice | 195 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 185 |
-| `0x4C` | Poison Toad | 200 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | fire | - | PSN. | 190 |
-| `0x4D` | Twin Heads | 205 | 36 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 195 |
-| `0x4E` | Roper | 210 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | SLNC. Died. | 200 |
-| `0x4F` | Agaliarept | 215 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 210 |
-| `0x50` | Darklegs | 220 | 37 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 220 |
-| `0x51` | Gigantoad | 225 | 38 | 3 | 2 | 2 | 1 | 1 | 0 | 5 | 0 | Fire | - | - | - | - | 230 |
-| `0x52` | Twin Liger | 230 | 38 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 240 |
-| `0x53` | Stroper | 400 | 64 | 3 | 2 | 2 | 1 | 1 | 0 | 5 | 40 | #9 | - | - | - | SLNC. Died. | 250 |
-| `0x54` | Black Flan | 240 | 39 | 5 | 2 | 8 | 3 | 1 | 0 | 0 | 60 | #10 | - | - | - | - | 260 |
-| `0x55` | Hellgaroo | 245 | 39 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 15 | BLIND | - | - | - | - | 270 |
-| `0x56` | Vulcan | 250 | 40 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 50 | #24 | fire | ice | fire | - | 280 |
-| `0x57` | Dracrocotta | 255 | 42 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | STONE | 290 |
-| `0x58` | Magician | 260 | 24 | 3 | 2 | 2 | 1 | 0 | 1 | 3 | 50 | #24 | - | - | - | - | 300 |
-| `0x5A` | Gold Eagle | 270 | 42 | 4 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | 320 |
-| `0x5B` | GoldWarrior | 275 | 44 | 4 | 2 | 2 | 1 | 1 | 0 | 0 | 40 | #29 | - | - | - | - | 330 |
-| `0x5C` | Gold Bear | 280 | 44 | 4 | 2 | 2 | 1 | 1 | 0 | 0 | 30 | #34 | - | - | - | - | 340 |
-| `0x5D` | Gold Knight | 285 | 46 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 350 |
-| `0x5E` | Nightmare | 290 | 42 | 4 | 2 | 2 | 1 | 2 | 0 | 5 | 50 | #9 | - | - | - | TOAD | 360 |
-| `0x5F` | HelgaruMage | 295 | 46 | 4 | 2 | 2 | 1 | 2 | 0 | 4 | 99 | #26 | - | - | - | - | 370 |
-| `0x60` | NeedlMonkey | 300 | 42 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 380 |
-| `0x61` | Catoblepas | 305 | 48 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 390 |
-| `0x62` | Sorcerer | 310 | 29 | 4 | 2 | 2 | 1 | 1 | 1 | 3 | 99 | #24 | - | - | - | - | 400 |
-| `0x64` | Sand Worm | 320 | 52 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 420 |
-| `0x65` | Frostfly | 325 | 52 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 90 | #41 | ice | fire | ice | - | 430 |
-| `0x67` | Simurgh | 335 | 54 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 450 |
-| `0x68` | Harpy | 1000 | 56 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 460 |
-| `0x69` | Gargoyle | 345 | 56 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 470 |
-| `0x6A` | Chimera | 350 | 48 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 475 |
-| `0x6B` | Demon Horse | 355 | 37 | 4 | 2 | 2 | 1 | 2 | 0 | 5 | 0 | Fire | - | - | - | STONE | 480 |
-| `0x6C` | RokGargoyle | 360 | 42 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 32 | #43 | - | - | - | BLIND | 490 |
-| `0x6D` | Bovian | 365 | 30 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 500 |
-| `0x6E` | DreadKnight | 370 | 30 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 510 |
-| `0x6F` | Flyer Mage | 555 | 34 | 4 | 2 | 3 | 1 | 1 | 0 | 2 | 64 | #24 | - | - | - | - | 520 |
-| `0x70` | Noggle | 380 | 60 | 4 | 2 | 3 | 1 | 2 | 0 | 2 | 0 | Fire | - | - | - | - | 540 |
-| `0x71` | Abtu | 385 | 62 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 550 |
-| `0x72` | NeptoDragon | 60000 | 62 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 560 |
-| `0x73` | Kagura | 395 | 64 | 4 | 2 | 3 | 1 | 2 | 0 | 4 | 0 | Fire | - | - | - | - | 580 |
-| `0x74` | Charybdis | 650 | 64 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 600 |
-| `0x75` | Dira | 1250 | 66 | 4 | 2 | 3 | 1 | 2 | 0 | 3 | 0 | #36 | - | - | - | - | 610 |
-| `0x76` | ChimeraMage | 420 | 66 | 4 | 2 | 3 | 1 | 2 | 0 | 2 | 50 | Thunder | - | - | - | - | 615 |
-| `0x77` | King Lizard | 430 | 68 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 620 |
-| `0x78` | Pterodactyl | 440 | 68 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 640 |
-| `0x79` | Wyvern | 450 | 70 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 650 |
-| `0x7A` | Behemoth | 1550 | 70 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 660 |
-| `0x7B` | KingSeahors | 470 | 72 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 680 |
-| `0x7C` | Dragon | 480 | 72 | 4 | 2 | 3 | 1 | 2 | 0 | 3 | 80 | Fire | - | - | - | - | 700 |
-| `0x7D` | Kyklops | 490 | 74 | 4 | 2 | 3 | 1 | 2 | 1 | 0 | 0 | Fire | - | - | - | - | 720 |
-| `0x7E` | Boss Troll | 500 | 74 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 740 |
-| `0x7F` | Fachan | 510 | 76 | 4 | 2 | 3 | 1 | 2 | 1 | 0 | 21 | #43 | - | - | - | - | 745 |
-| `0x80` | Cenchos | 1120 | 76 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 750 |
-| `0x81` | Balor | 530 | 78 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 760 |
-| `0x82` | Dozmare | 540 | 78 | 4 | 2 | 3 | 1 | 2 | 0 | 8 | 0 | Fire | - | - | - | - | 780 |
-| `0x83` | Sea Witch | 550 | 80 | 4 | 2 | 3 | 1 | 2 | 0 | 7 | 0 | Fire | - | - | - | - | 800 |
-| `0x84` | KierHermit | 560 | 80 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 820 |
-| `0x85` | Ologhai | 570 | 83 | 4 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 840 |
-| `0x86` | Kelpie | 580 | 83 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 850 |
-| `0x87` | Aegir | 590 | 85 | 5 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 860 |
-| `0x88` | Pyralis | 1500 | 85 | 5 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | 880 |
-| `0x89` | Silenus | 910 | 87 | 5 | 2 | 3 | 1 | 2 | 1 | 8 | 0 | #16 | - | physical | ice fire | - | 900 |
-| `0x8A` | Gaap | 1000 | 87 | 5 | 2 | 3 | 1 | 2 | 1 | 10 | 0 | #16 | - | physical | ice fire | - | 920 |
-| `0x8B` | Azrael | 1100 | 90 | 5 | 2 | 3 | 1 | 2 | 1 | 10 | 40 | #15 | - | physical | ice fire | - | 940 |
-| `0x8C` | Eater | 1150 | 90 | 5 | 2 | 3 | 1 | 2 | 0 | 0 | 40 | #15 | - | - | - | - | 945 |
-| `0x8E` | ZombDragon | 2000 | 93 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | fire | - | - | 960 |
-| `0x8F` | Death Claw | 1400 | 95 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | #16 | - | - | - | - | 980 |
-| `0x90` | HeishHorse | 680 | 95 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 990 |
-| `0x91` | Chronos | 1550 | 97 | 5 | 2 | 5 | 2 | 3 | 0 | 9 | 0 | #16 | - | physical | ice fire | - | 1000 |
-| `0x92` | Valefor | 1620 | 97 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | #16 | - | physical | ice fire | - | 1050 |
-| `0x93` | Haniel | 1600 | 100 | 5 | 2 | 5 | 2 | 3 | 1 | 0 | 0 | #16 | - | physical | ice fire | - | 1100 |
-| `0x94` | Vassago | 720 | 100 | 5 | 2 | 5 | 2 | 3 | 1 | 6 | 0 | #16 | - | physical | ice fire | - | 1150 |
-| `0x95` | Peryton | 730 | 103 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 1200 |
-| `0x96` | Ogre | 740 | 103 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 1250 |
-| `0x97` | Cyclops | 750 | 105 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 1300 |
-| `0x98` | Nemesis | 760 | 48 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 30 | #9 | - | - | - | Died. | 1350 |
-| `0x99` | Humbaba | 770 | 105 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 1400 |
-| `0x9A` | DeathNeedle | 780 | 48 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 1450 |
-| `0x9B` | Liger | 790 | 107 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 1500 |
-| `0x9C` | XandeClone | 10000 | 175 | 11 | 5 | 48 | 2 | 6 | 5 | 10 | 99 | #35 | - | - | physical ice fire | - | 1550 |
-| `0x9D` | Aeon | 1200 | 110 | 5 | 2 | 3 | 1 | 3 | 0 | 4 | 30 | #4 | - | - | - | - | 1600 |
-| `0x9E` | Minotaur | 820 | 110 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 1640 |
-| `0x9F` | Ouroboros | 830 | 48 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | PSN. | 1680 |
-| `0xA0` | Plancti | 840 | 113 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 40 | Glare | - | - | - | - | 1700 |
-| `0xA1` | Sea Lion | 850 | 113 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 1750 |
-| `0xA2` | Remora | 860 | 115 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 1800 |
-| `0xA3` | Grenade | 870 | 115 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 50 | #7 | - | - | - | - | 1900 |
-| `0xA4` | Drake | 880 | 117 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 1950 |
-| `0xA5` | Great Boros | 890 | 64 | 7 | 2 | 3 | 1 | 3 | 0 | 9 | 0 | Fire | - | - | - | PSN. | 2000 |
-| `0xA6` | Saber Liger | 900 | 117 | 7 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | 2100 |
-| `0xA7` | Queen Lamia | 1280 | 64 | 7 | 2 | 3 | 1 | 3 | 0 | 10 | 90 | #9 | - | - | - | STONE | 2200 |
-| `0xA8` | Iron Claws | 920 | 123 | 7 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 2300 |
-| `0xA9` | Great Demon | 2250 | 123 | 7 | 2 | 3 | 2 | 3 | 2 | 7 | 20 | #20 | - | - | - | - | 2400 |
-| `0xAA` | Thanatos | 2200 | 125 | 7 | 3 | 3 | 2 | 3 | 2 | 8 | 21 | #43 | - | - | - | - | 2500 |
-| `0xAB` | Bone Dragon | 2500 | 125 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | fire | - | - | 2600 |
-| `0xAC` | KingBehemth | 3000 | 127 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 2700 |
-| `0xAD` | Doga Clone | 1500 | 110 | 9 | 3 | 48 | 2 | 2 | 2 | 5 | 99 | #21 | - | - | physical ice fire | - | 2800 |
-| `0xAE` | GreenDragon | 10000 | 170 | 10 | 4 | 4 | 2 | 5 | 3 | 10 | 0 | Fire | - | - | - | - | 2900 |
-| `0xAF` | Abaia | 990 | 130 | 7 | 3 | 3 | 2 | 3 | 2 | 10 | 0 | Fire | - | - | - | - | 3000 |
-| `0xB0` | Sleipnir | 1000 | 133 | 7 | 3 | 3 | 2 | 3 | 2 | 7 | 30 | #30 | - | - | - | - | 3100 |
-| `0xB1` | Haokah | 1010 | 133 | 7 | 3 | 3 | 2 | 3 | 3 | 6 | 70 | Thunder | - | - | - | - | 3200 |
-| `0xB2` | Archeron | 1020 | 135 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 3300 |
-| `0xB3` | Oceanus | 1030 | 135 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | 3400 |
-| `0xB4` | Amon | 7040 | 137 | 11 | 5 | 7 | 2 | 3 | 2 | 11 | 70 | Fire | - | - | - | - | 3450 |
-| `0xB5` | Gomory | 4050 | 137 | 9 | 3 | 3 | 2 | 3 | 2 | 0 | 30 | #36 | - | - | - | - | 3500 |
-| `0xB6` | Bluck | 1760 | 140 | 9 | 3 | 3 | 2 | 3 | 0 | 3 | 25 | #12 | - | - | - | - | 3600 |
-| `0xB7` | Azer | 1570 | 140 | 9 | 3 | 3 | 2 | 3 | 3 | 13 | 90 | Fire | fire | ice | fire | - | 3700 |
-| `0xB8` | Platinal | 4580 | 143 | 10 | 4 | 3 | 2 | 3 | 4 | 9 | 26 | #43 | - | - | - | - | 3800 |
-| `0xB9` | Kum Kum | 2090 | 64 | 9 | 3 | 7 | 2 | 3 | 0 | 14 | 80 | #42 | - | - | - | BLIND | 3900 |
-| `0xBA` | Shinobi | 1100 | 145 | 9 | 3 | 3 | 2 | 3 | 2 | 0 | 0 | Fire | - | - | physical ice fire | - | 4000 |
-| `0xBB` | ShadwMaster | 2110 | 145 | 10 | 4 | 4 | 2 | 3 | 3 | 0 | 20 | #38 | - | - | physical ice fire | - | 4100 |
-| `0xBC` | Kage | 2520 | 147 | 10 | 4 | 9 | 3 | 3 | 3 | 0 | 15 | BLIND | - | - | - | - | 4200 |
-| `0xBD` | DarkGeneral | 1130 | 147 | 7 | 3 | 4 | 2 | 4 | 2 | 5 | 0 | Fire | - | - | - | - | 4300 |
-| `0xC0` | GlasLabolas | 2160 | 153 | 9 | 3 | 4 | 2 | 4 | 4 | 0 | 0 | Fire | - | - | - | - | 4600 |
-| `0xC1` | Yormungand | 2570 | 153 | 9 | 3 | 4 | 2 | 4 | 1 | 0 | 30 | #38 | - | - | - | - | 4700 |
-| `0xC2` | Thor | 2180 | 155 | 9 | 3 | 4 | 2 | 4 | 5 | 0 | 90 | Thunder | - | - | - | - | 4800 |
-| `0xC3` | Hecatncheir | 6500 | 150 | 9 | 3 | 4 | 2 | 4 | 4 | 0 | 0 | Fire | - | - | - | - | 4900 |
-| `0xC4` | Hydra | 3600 | 157 | 9 | 3 | 4 | 2 | 4 | 0 | 0 | 20 | #37 | - | - | - | - | 5000 |
-| `0xC5` | QueenScylla | 6220 | 157 | 10 | 4 | 4 | 2 | 4 | 0 | 0 | 0 | Fire | - | - | - | - | 5100 |
-| `0xC6` | Garm | 4240 | 64 | 10 | 4 | 4 | 2 | 4 | 3 | 0 | 40 | #36 | - | - | - | TOAD | 5200 |
-| `0xC7` | Twin Dragon | 4960 | 160 | 10 | 4 | 4 | 2 | 4 | 3 | 10 | 0 | Fire | - | - | - | - | 5300 |
-| `0xC8` | YeowDragon | 10000 | 170 | 10 | 4 | 4 | 2 | 5 | 3 | 10 | 0 | Fire | - | - | - | - | 5400 |
-| `0xC9` | Bahamut | 60000 | 7 | 8 | 3 | 7 | 3 | 0 | 3 | 10 | 0 | Fire | - | - | - | - | 5500 |
-| `0xCA` | Odin | 7000 | 157 | 10 | 4 | 4 | 2 | 4 | 2 | 10 | 65 | #17 | - | - | - | - | 5600 |
-| `0xCB` | Leviathan | 7000 | 160 | 10 | 4 | 8 | 3 | 4 | 3 | 11 | 70 | #18 | - | - | - | - | 5700 |
-| `0xCC` | Land Turtle | 120 | 9 | 1 | 0 | 40 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 500 |
-| `0xCD` | Djinn | 480 | 16 | 1 | 0 | 32 | 1 | 0 | 0 | 0 | 85 | #27 | fire | ice | fire | - | 700 |
-| `0xCE` | Giant Rat | 450 | 18 | 3 | 1 | 32 | 1 | 0 | 0 | 1 | 50 | #24 | - | - | - | - | 1000 |
-| `0xCF` | Medusa | 980 | 24 | 3 | 2 | 48 | 2 | 2 | 0 | 5 | 80 | #34 | - | - | - | PSN. | 1200 |
-| `0xD0` | Gutsco | 1400 | 36 | 3 | 1 | 48 | 2 | 0 | 0 | 2 | 80 | #40 | - | - | - | - | 1500 |
-| `0xD1` | Salamander | 2100 | 39 | 3 | 2 | 48 | 2 | 1 | 0 | 4 | 80 | Fire | fire | ice | fire | - | 1800 |
-| `0xD2` | Hein | 1600 | 40 | 11 | 4 | 5 | 2 | 0 | 0 | 5 | 99 | #24 | - | - | - | - | 2100 |
-| `0xD3` | Kraken | 1950 | 50 | 5 | 2 | 40 | 1 | 1 | 0 | 6 | 80 | #24 | - | - | - | - | 2500 |
-| `0xD4` | Goldor | 2250 | 60 | 7 | 3 | 80 | 3 | 1 | 0 | 8 | 80 | #24 | - | - | - | - | 3300 |
-| `0xD5` | Garuda | 5000 | 107 | 9 | 3 | 80 | 3 | 1 | 0 | 9 | 99 | Thunder | - | - | - | - | 3400 |
-| `0xD6` | Bahamut | 7500 | 143 | 10 | 4 | 48 | 2 | 3 | 3 | 11 | 80 | #19 | - | - | physical ice fire | - | 3500 |
-| `0xD7` | Doga | 4500 | 110 | 10 | 4 | 48 | 2 | 1 | 2 | 7 | 99 | #21 | - | - | physical ice fire | - | 4000 |
-| `0xD8` | Unei | 4500 | 110 | 10 | 4 | 48 | 2 | 1 | 2 | 8 | 99 | #22 | - | - | physical ice fire | - | 4200 |
-| `0xD9` | Titan | 7800 | 135 | 10 | 4 | 48 | 2 | 3 | 1 | 2 | 99 | #44 | - | - | physical ice fire | - | 4500 |
-| `0xDA` | Ninja | 5500 | 163 | 11 | 4 | 48 | 2 | 3 | 2 | 0 | 15 | BLIND | - | - | physical ice fire | - | 4800 |
-| `0xDB` | Kunoichi | 9000 | 150 | 11 | 5 | 48 | 2 | 4 | 2 | 0 | 60 | #11 | - | - | physical ice fire | - | 5000 |
-| `0xDC` | General | 12000 | 165 | 11 | 5 | 48 | 2 | 4 | 2 | 0 | 0 | Fire | - | - | physical ice fire | - | 5200 |
-| `0xDD` | Scylla | 10000 | 160 | 11 | 5 | 48 | 2 | 4 | 0 | 8 | 99 | #62 | - | - | - | TOAD | 5400 |
-| `0xDE` | Guardian | 12000 | 163 | 11 | 5 | 48 | 2 | 5 | 0 | 7 | 99 | #45 | - | - | - | - | 5600 |
-| `0xDF` | Red Dragon | 15000 | 170 | 11 | 5 | 48 | 2 | 5 | 3 | 11 | 0 | Fire | - | - | physical ice fire | - | 5800 |
-| `0xE0` | Demon Xande | 21000 | 175 | 11 | 5 | 48 | 2 | 7 | 6 | 12 | 99 | #35 | - | - | physical ice fire | - | 0 |
-| `0xE1` | Cerberus | 23000 | 40 | 11 | 5 | 96 | 5 | 5 | 2 | 15 | 99 | Thunder | - | - | physical ice fire | BLIND | 6400 |
-| `0xE2` | 2HeadDragon | 29000 | 255 | 11 | 5 | 80 | 3 | 5 | 4 | 8 | 0 | Fire | - | - | physical ice fire | - | 6800 |
-| `0xE3` | Echidna | 32000 | 185 | 11 | 5 | 80 | 3 | 5 | 6 | 11 | 99 | #47 | - | - | physical ice fire | SLNC. | 7000 |
-| `0xE4` | Ahriman | 35000 | 185 | 11 | 5 | 80 | 3 | 6 | 6 | 11 | 99 | #48 | - | - | physical ice fire | - | 7200 |
-| `0xE5` | C | 45000 | 185 | 11 | 5 | 96 | 5 | 6 | 7 | 15 | 100 | #6 | - | - | physical ice fire | - | 0 |
-| `0xE6` | C | 65000 | 240 | 255 | 32 | 255 | 32 | 6 | 9 | 15 | 99 | #6 | - | - | physical ice fire | - | 0 |
-| `0xE7` | Chocobo | 0 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | 0 |
+| id | name | HP | attack | defence | evade | m.def | m.evade | lvl | pwr | spirit | rate | special | atk elem | weak | resist | on-hit | steal | gil |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `0x00` | Goblin | 5 | 5 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3 |
+| `0x01` | Carbuncle | 7 | 5 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | Glare | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5 |
+| `0x02` | Eye Fang | 8 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 7 |
+| `0x03` | Blue Wisp | 10 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 10 |
+| `0x04` | Killer Bee | 20 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 12 |
+| `0x05` | Werewolf | 24 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 14 |
+| `0x06` | Berserker | 30 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 16 |
+| `0x07` | Red Wisp | 34 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 18 |
+| `0x08` | Dark Eye | 38 | 12 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 20 | BLIND | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 20 |
+| `0x09` | Zombie | 42 | 12 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 22 |
+| `0x0A` | Mummy | 48 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 20 | #33 | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 24 |
+| `0x0B` | Skeleton | 54 | 13 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 26 |
+| `0x0C` | CursdCopper | 35 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 20 | Glare | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 28 |
+| `0x0D` | Larva | 38 | 13 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 20 | BLIND | - | fire | - | - | Eye Drops Antidote | 30 |
+| `0x0E` | Shadow | 65 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 3 | 20 | BLIND | - | fire | - | - | Eye Drops Antidote | 32 |
+| `0x0F` | Revenant | 70 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | fire | - | - | Eye Drops Antidote | 34 |
+| `0x10` | Firefly | 72 | 14 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 60 | #27 | fire | ice | fire | - | Potion Hi-Potion PhoexDown Elixir | 36 |
+| `0x11` | Helldiver | 85 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. SLNC. | GoldNeedle | 38 |
+| `0x12` | Rust Bird | 92 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 30 | #9 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 40 |
+| `0x13` | Rukh | 120 | 18 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 42 |
+| `0x14` | Basilisk | 100 | 17 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 44 |
+| `0x15` | Bugbear | 110 | 17 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 46 |
+| `0x16` | Mandrake | 120 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 20 | #10 | - | - | - | STONE | Potion Hi-Potion PhoexDown Elixir | 48 |
+| `0x17` | Unei Clone | 1500 | 110 | 9 | 3 | 48 | 2 | 1 | 2 | 7 | 99 | #22 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 50 |
+| `0x18` | Leprechaun | 36 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Bomb Shard SheepPiow Oershroom LamiaScale Bomb Arm | 52 |
+| `0x19` | Darkface | 55 | 10 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 53 |
+| `0x1A` | Petit | 45 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 80 | #23 | - | - | - | STONE | Bomb Shard South Wind Zeus'sWrath Potion Gulgpokfatly, Tranquizr Devil Note | 54 |
+| `0x1B` | Poison Bat | 60 | 16 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 56 |
+| `0x1C` | Lilliputian | 58 | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 50 | #23 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 58 |
+| `0x1D` | Wererat | 72 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 60 |
+| `0x1E` | Blood Worm | 98 | 9 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 62 |
+| `0x1F` | Killer Fish | 85 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 64 |
+| `0x20` | Hermit | 105 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 66 |
+| `0x21` | SeaElementl | 123 | 19 | 2 | 1 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 67 |
+| `0x22` | Tangie | 125 | 20 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 40 | Glare | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 68 |
+| `0x23` | Sahagin | 140 | 20 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 70 |
+| `0x24` | Parademon | 145 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 40 | #10 | - | - | - | SLNC. Died. | Wood Arrow Holy Arrow Iron Arrow Bolt Arrow Fire Arrow Ice Arrow Medusaow Yoichiow | 72 |
+| `0x25` | Griffon | 150 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Bomb Shard South Wind Zeus'sWrath Potion Gulgpokfatly, Tranquizr Devil Note | 74 |
+| `0x26` | Lynx | 165 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 76 |
+| `0x27` | Hornet | 160 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 78 |
+| `0x28` | Knocker | 185 | 21 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Zeus'sWrath Devil Note Oershroom Gulgpokfatly, God's Wrath | 80 |
+| `0x29` | Flyer | 190 | 22 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 50 | Glare | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 82 |
+| `0x2A` | Lizardman | 200 | 22 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 84 |
+| `0x2B` | Gorgon | 200 | 23 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 86 |
+| `0x2C` | Red Cap | 210 | 23 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 50 | Glare | - | - | - | - | Potion Zeus'sWrath Devil Note Oershroom Gulgpokfatly, God's Wrath | 87 |
+| `0x2D` | Barometz | 220 | 26 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 50 | #10 | - | - | - | SLNC. Died. | Potion Hi-Potion PhoexDown Elixir | 88 |
+| `0x2E` | Slime | 200 | 23 | 4 | 2 | 4 | 2 | 0 | 0 | 1 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 90 |
+| `0x2F` | Tarantula | 200 | 24 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 92 |
+| `0x30` | Cuphgel | 200 | 24 | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 94 |
+| `0x31` | Pugman | 109 | 16 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 45 | #25 | - | - | - | - | Potion MaidenKiss Echo Herbs Mallet Hi-Potion | 96 |
+| `0x32` | Far Darrig | 111 | 13 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 45 | #30 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 98 |
+| `0x33` | Blood Bat | 114 | 26 | 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 100 |
+| `0x34` | Petit Mage | 118 | 14 | 2 | 1 | 1 | 0 | 0 | 0 | 1 | 45 | #31 | - | - | - | - | Potion MaidenKiss Echo Herbs Mallet Hi-Potion | 101 |
+| `0x36` | Aughisky | 122 | 27 | 2 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 105 |
+| `0x37` | Bomb | 125 | 28 | 3 | 1 | 1 | 0 | 0 | 0 | 0 | 50 | #7 | fire | fire | - | - | Hi-Potion Bomb Arm Tranquizr Oershroom Gulgpokfatly, Lith'sKiss | 110 |
+| `0x38` | Manticore | 128 | 28 | 3 | 1 | 1 | 0 | 1 | 0 | 0 | 60 | #28 | ice | - | - | - | Potion Hi-Potion PhoexDown Elixir | 112 |
+| `0x39` | Stalagmite | 130 | 26 | 3 | 1 | 1 | 0 | 0 | 0 | 1 | 35 | Glare | - | - | - | PSN. SLNC. | GoldNeedle | 115 |
+| `0x3A` | Sea Devil | 133 | 29 | 3 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 116 |
+| `0x3B` | Merman | 136 | 30 | 3 | 1 | 1 | 0 | 1 | 0 | 2 | 65 | #28 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 118 |
+| `0x3C` | RuinousWave | 140 | 32 | 3 | 1 | 1 | 0 | 0 | 0 | 1 | 40 | #10 | - | - | - | SLNC. Died. | Potion Hi-Potion PhoexDown Elixir | 120 |
+| `0x3D` | Balloon | 143 | 30 | 3 | 1 | 2 | 1 | 0 | 0 | 1 | 60 | #7 | fire | fire | - | - | Potion Bomb Shard SheepPiow Oershroom LamiaScale Bomb Arm | 125 |
+| `0x3E` | Myrmecoleon | 147 | 32 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | ice | - | PSN. SLNC. | Potion Hi-Potion PhoexDown Elixir | 130 |
+| `0x3F` | Crocotta | 150 | 31 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | ice | - | - | Potion Hi-Potion PhoexDown Elixir | 135 |
+| `0x40` | Adamantoise | 153 | 31 | 4 | 2 | 2 | 1 | 0 | 0 | 1 | 0 | #13 | - | ice | - | - | Potion South Wind GnomeBread Oershroom BachusWine ArcticWind | 135 |
+| `0x41` | RMarshmao | 155 | 32 | 4 | 2 | 4 | 2 | 1 | 0 | 0 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 140 |
+| `0x42` | Pharaoh | 160 | 32 | 3 | 1 | 2 | 1 | 0 | 0 | 2 | 30 | Glare | - | fire | - | SLNC. TOAD | Eye Drops Antidote | 145 |
+| `0x43` | Lemur | 164 | 32 | 3 | 1 | 2 | 1 | 1 | 0 | 3 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 150 |
+| `0x44` | Lamia | 168 | 33 | 3 | 1 | 2 | 1 | 0 | 0 | 3 | 30 | #9 | - | - | - | - | Bomb Shard South Wind Zeus'sWrath Potion Gulgpokfatly, Tranquizr Devil Note | 155 |
+| `0x45` | Demon | 171 | 33 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Wood Arrow Holy Arrow Iron Arrow Bolt Arrow Fire Arrow Ice Arrow Medusaow Yoichiow | 158 |
+| `0x46` | Dullahan | 350 | 40 | 3 | 1 | 2 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 160 |
+| `0x47` | Anet | 179 | 34 | 3 | 1 | 2 | 1 | 1 | 0 | 3 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 165 |
+| `0x48` | Mermaid | 182 | 35 | 3 | 1 | 2 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 170 |
+| `0x49` | Seahorse | 185 | 35 | 3 | 1 | 2 | 1 | 1 | 0 | 3 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 175 |
+| `0x4A` | Sea Serpent | 190 | 36 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 180 |
+| `0x4B` | Cockatrice | 195 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | PSN. | GoldNeedle | 185 |
+| `0x4C` | Poison Toad | 200 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | fire | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 190 |
+| `0x4D` | Twin Heads | 205 | 36 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 195 |
+| `0x4E` | Roper | 210 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | SLNC. Died. | Bomb Arm ArcticWind God's Wrath Potion LamiaScale BachusWine TurtleShe Earth Drum | 200 |
+| `0x4F` | Agaliarept | 215 | 37 | 3 | 1 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 210 |
+| `0x50` | Darklegs | 220 | 37 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 220 |
+| `0x51` | Gigantoad | 225 | 38 | 3 | 2 | 2 | 1 | 1 | 0 | 5 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 230 |
+| `0x52` | Twin Liger | 230 | 38 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 240 |
+| `0x53` | Stroper | 400 | 64 | 3 | 2 | 2 | 1 | 1 | 0 | 5 | 40 | #9 | - | - | - | SLNC. Died. | Hi-Potion God's Wrath Tranquizr Oershroom Curtain Chcbo. Rage Black Musk | 250 |
+| `0x54` | Black Flan | 240 | 39 | 5 | 2 | 8 | 3 | 1 | 0 | 0 | 60 | #10 | - | - | - | - | Bomb Arm ArcticWind God's Wrath Potion LamiaScale BachusWine TurtleShe Earth Drum | 260 |
+| `0x55` | Hellgaroo | 245 | 39 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 15 | BLIND | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 270 |
+| `0x56` | Vulcan | 250 | 40 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 50 | #24 | fire | ice | fire | - | Hi-Potion Bomb Arm Tranquizr Oershroom Gulgpokfatly, Lith'sKiss | 280 |
+| `0x57` | Dracrocotta | 255 | 42 | 3 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | STONE | Potion Hi-Potion PhoexDown Elixir | 290 |
+| `0x58` | Magician | 260 | 24 | 3 | 2 | 2 | 1 | 0 | 1 | 3 | 50 | #24 | - | - | - | - | Hi-Potion God's Wrath Tranquizr Oershroom Curtain Chcbo. Rage Black Musk | 300 |
+| `0x5A` | Gold Eagle | 270 | 42 | 4 | 2 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 320 |
+| `0x5B` | GoldWarrior | 275 | 44 | 4 | 2 | 2 | 1 | 1 | 0 | 0 | 40 | #29 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 330 |
+| `0x5C` | Gold Bear | 280 | 44 | 4 | 2 | 2 | 1 | 1 | 0 | 0 | 30 | #34 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 340 |
+| `0x5D` | Gold Knight | 285 | 46 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 350 |
+| `0x5E` | Nightmare | 290 | 42 | 4 | 2 | 2 | 1 | 2 | 0 | 5 | 50 | #9 | - | - | - | TOAD | Potion Hi-Potion PhoexDown Elixir | 360 |
+| `0x5F` | HelgaruMage | 295 | 46 | 4 | 2 | 2 | 1 | 2 | 0 | 4 | 99 | #26 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 370 |
+| `0x60` | NeedlMonkey | 300 | 42 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Hi-Potion Black Hole Lith'sKiss Raven'sYawn Curtain Gulgpokfatly, Black Musk Chcbo. Rage | 380 |
+| `0x61` | Catoblepas | 305 | 48 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 390 |
+| `0x62` | Sorcerer | 310 | 29 | 4 | 2 | 2 | 1 | 1 | 1 | 3 | 99 | #24 | - | - | - | - | Hi-Potion ArcticWind TurtleShe Oershroom Black Hole Raven'sYawn | 400 |
+| `0x64` | Sand Worm | 320 | 52 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 420 |
+| `0x65` | Frostfly | 325 | 52 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 90 | #41 | ice | fire | ice | - | Potion Hi-Potion PhoexDown Elixir | 430 |
+| `0x67` | Simurgh | 335 | 54 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 450 |
+| `0x68` | Harpy | 1000 | 56 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 460 |
+| `0x69` | Gargoyle | 345 | 56 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 470 |
+| `0x6A` | Chimera | 350 | 48 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 475 |
+| `0x6B` | Demon Horse | 355 | 37 | 4 | 2 | 2 | 1 | 2 | 0 | 5 | 0 | Fire | - | - | - | STONE | Hi-Potion PhoexDown Elixir | 480 |
+| `0x6C` | RokGargoyle | 360 | 42 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 32 | #43 | - | - | - | BLIND | Hi-Potion Bomb Arm Tranquizr Oershroom Gulgpokfatly, Lith'sKiss | 490 |
+| `0x6D` | Bovian | 365 | 30 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Hi-Potion PhoexDown Elixir | 500 |
+| `0x6E` | DreadKnight | 370 | 30 | 4 | 2 | 2 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Bomb Arm ArcticWind God's Wrath Potion LamiaScale BachusWine TurtleShe Earth Drum | 510 |
+| `0x6F` | Flyer Mage | 555 | 34 | 4 | 2 | 3 | 1 | 1 | 0 | 2 | 64 | #24 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 520 |
+| `0x70` | Noggle | 380 | 60 | 4 | 2 | 3 | 1 | 2 | 0 | 2 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 540 |
+| `0x71` | Abtu | 385 | 62 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 550 |
+| `0x72` | NeptoDragon | 60000 | 62 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 560 |
+| `0x73` | Kagura | 395 | 64 | 4 | 2 | 3 | 1 | 2 | 0 | 4 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 580 |
+| `0x74` | Charybdis | 650 | 64 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 600 |
+| `0x75` | Dira | 1250 | 66 | 4 | 2 | 3 | 1 | 2 | 0 | 3 | 0 | #36 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 610 |
+| `0x76` | ChimeraMage | 420 | 66 | 4 | 2 | 3 | 1 | 2 | 0 | 2 | 50 | Thunder | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 615 |
+| `0x77` | King Lizard | 430 | 68 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Hi-Potion PhoexDown Elixir | 620 |
+| `0x78` | Pterodactyl | 440 | 68 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 640 |
+| `0x79` | Wyvern | 450 | 70 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 650 |
+| `0x7A` | Behemoth | 1550 | 70 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 660 |
+| `0x7B` | KingSeahors | 470 | 72 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 680 |
+| `0x7C` | Dragon | 480 | 72 | 4 | 2 | 3 | 1 | 2 | 0 | 3 | 80 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 700 |
+| `0x7D` | Kyklops | 490 | 74 | 4 | 2 | 3 | 1 | 2 | 1 | 0 | 0 | Fire | - | - | - | - | Hi-Potion God's Wrath Tranquizr Oershroom Curtain Chcbo. Rage Black Musk | 720 |
+| `0x7E` | Boss Troll | 500 | 74 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Hi-Potion ArcticWind TurtleShe Oershroom Black Hole Raven'sYawn | 740 |
+| `0x7F` | Fachan | 510 | 76 | 4 | 2 | 3 | 1 | 2 | 1 | 0 | 21 | #43 | - | - | - | - | Hi-Potion Bomb Arm Tranquizr Oershroom Gulgpokfatly, Lith'sKiss | 745 |
+| `0x80` | Cenchos | 1120 | 76 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 750 |
+| `0x81` | Balor | 530 | 78 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 760 |
+| `0x82` | Dozmare | 540 | 78 | 4 | 2 | 3 | 1 | 2 | 0 | 8 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 780 |
+| `0x83` | Sea Witch | 550 | 80 | 4 | 2 | 3 | 1 | 2 | 0 | 7 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 800 |
+| `0x84` | KierHermit | 560 | 80 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 820 |
+| `0x85` | Ologhai | 570 | 83 | 4 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 840 |
+| `0x86` | Kelpie | 580 | 83 | 4 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 850 |
+| `0x87` | Aegir | 590 | 85 | 5 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 860 |
+| `0x88` | Pyralis | 1500 | 85 | 5 | 2 | 3 | 1 | 2 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 880 |
+| `0x89` | Silenus | 910 | 87 | 5 | 2 | 3 | 1 | 2 | 1 | 8 | 0 | #16 | - | physical | ice fire | - | Potion Hi-Potion PhoexDown Elixir | 900 |
+| `0x8A` | Gaap | 1000 | 87 | 5 | 2 | 3 | 1 | 2 | 1 | 10 | 0 | #16 | - | physical | ice fire | - | Hi-Potion PhoexDown Elixir | 920 |
+| `0x8B` | Azrael | 1100 | 90 | 5 | 2 | 3 | 1 | 2 | 1 | 10 | 40 | #15 | - | physical | ice fire | - | Bomb Arm ArcticWind God's Wrath Potion LamiaScale BachusWine TurtleShe Earth Drum | 940 |
+| `0x8C` | Eater | 1150 | 90 | 5 | 2 | 3 | 1 | 2 | 0 | 0 | 40 | #15 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 945 |
+| `0x8E` | ZombDragon | 2000 | 93 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 960 |
+| `0x8F` | Death Claw | 1400 | 95 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | #16 | - | - | - | - | Hi-Potion Black Hole Lith'sKiss Raven'sYawn Curtain Gulgpokfatly, Black Musk Chcbo. Rage | 980 |
+| `0x90` | HeishHorse | 680 | 95 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 990 |
+| `0x91` | Chronos | 1550 | 97 | 5 | 2 | 5 | 2 | 3 | 0 | 9 | 0 | #16 | - | physical | ice fire | - | Potion Hi-Potion PhoexDown Elixir | 1000 |
+| `0x92` | Valefor | 1620 | 97 | 5 | 2 | 5 | 2 | 3 | 0 | 0 | 0 | #16 | - | physical | ice fire | - | Potion Hi-Potion PhoexDown Elixir | 1050 |
+| `0x93` | Haniel | 1600 | 100 | 5 | 2 | 5 | 2 | 3 | 1 | 0 | 0 | #16 | - | physical | ice fire | - | Potion Hi-Potion PhoexDown Elixir | 1100 |
+| `0x94` | Vassago | 720 | 100 | 5 | 2 | 5 | 2 | 3 | 1 | 6 | 0 | #16 | - | physical | ice fire | - | Hi-Potion PhoexDown Elixir | 1150 |
+| `0x95` | Peryton | 730 | 103 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1200 |
+| `0x96` | Ogre | 740 | 103 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1250 |
+| `0x97` | Cyclops | 750 | 105 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1300 |
+| `0x98` | Nemesis | 760 | 48 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 30 | #9 | - | - | - | Died. | Potion Hi-Potion PhoexDown Elixir | 1350 |
+| `0x99` | Humbaba | 770 | 105 | 5 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1400 |
+| `0x9A` | DeathNeedle | 780 | 48 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 1450 |
+| `0x9B` | Liger | 790 | 107 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1500 |
+| `0x9C` | XandeClone | 10000 | 175 | 11 | 5 | 48 | 2 | 6 | 5 | 10 | 99 | #35 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 1550 |
+| `0x9D` | Aeon | 1200 | 110 | 5 | 2 | 3 | 1 | 3 | 0 | 4 | 30 | #4 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1600 |
+| `0x9E` | Minotaur | 820 | 110 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1640 |
+| `0x9F` | Ouroboros | 830 | 48 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 1680 |
+| `0xA0` | Plancti | 840 | 113 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 40 | Glare | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1700 |
+| `0xA1` | Sea Lion | 850 | 113 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1750 |
+| `0xA2` | Remora | 860 | 115 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1800 |
+| `0xA3` | Grenade | 870 | 115 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 50 | #7 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1900 |
+| `0xA4` | Drake | 880 | 117 | 5 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1950 |
+| `0xA5` | Great Boros | 890 | 64 | 7 | 2 | 3 | 1 | 3 | 0 | 9 | 0 | Fire | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 2000 |
+| `0xA6` | Saber Liger | 900 | 117 | 7 | 2 | 3 | 1 | 3 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2100 |
+| `0xA7` | Queen Lamia | 1280 | 64 | 7 | 2 | 3 | 1 | 3 | 0 | 10 | 90 | #9 | - | - | - | STONE | Potion Hi-Potion PhoexDown Elixir | 2200 |
+| `0xA8` | Iron Claws | 920 | 123 | 7 | 2 | 3 | 1 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2300 |
+| `0xA9` | Great Demon | 2250 | 123 | 7 | 2 | 3 | 2 | 3 | 2 | 7 | 20 | #20 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2400 |
+| `0xAA` | Thanatos | 2200 | 125 | 7 | 3 | 3 | 2 | 3 | 2 | 8 | 21 | #43 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2500 |
+| `0xAB` | Bone Dragon | 2500 | 125 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | fire | - | - | Potion Hi-Potion PhoexDown Elixir | 2600 |
+| `0xAC` | KingBehemth | 3000 | 127 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2700 |
+| `0xAD` | Doga Clone | 1500 | 110 | 9 | 3 | 48 | 2 | 2 | 2 | 5 | 99 | #21 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 2800 |
+| `0xAE` | GreenDragon | 10000 | 170 | 10 | 4 | 4 | 2 | 5 | 3 | 10 | 0 | Fire | - | - | - | - | Elixir Onion Sh Onion Helm OnionArmor OnionSword | 2900 |
+| `0xAF` | Abaia | 990 | 130 | 7 | 3 | 3 | 2 | 3 | 2 | 10 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3000 |
+| `0xB0` | Sleipnir | 1000 | 133 | 7 | 3 | 3 | 2 | 3 | 2 | 7 | 30 | #30 | - | - | - | - | Hi-Potion PhoexDown Elixir | 3100 |
+| `0xB1` | Haokah | 1010 | 133 | 7 | 3 | 3 | 2 | 3 | 3 | 6 | 70 | Thunder | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3200 |
+| `0xB2` | Archeron | 1020 | 135 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3300 |
+| `0xB3` | Oceanus | 1030 | 135 | 7 | 3 | 3 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3400 |
+| `0xB4` | Amon | 7040 | 137 | 11 | 5 | 7 | 2 | 3 | 2 | 11 | 70 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3450 |
+| `0xB5` | Gomory | 4050 | 137 | 9 | 3 | 3 | 2 | 3 | 2 | 0 | 30 | #36 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3500 |
+| `0xB6` | Bluck | 1760 | 140 | 9 | 3 | 3 | 2 | 3 | 0 | 3 | 25 | #12 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3600 |
+| `0xB7` | Azer | 1570 | 140 | 9 | 3 | 3 | 2 | 3 | 3 | 13 | 90 | Fire | fire | ice | fire | - | Potion Hi-Potion PhoexDown Elixir | 3700 |
+| `0xB8` | Platinal | 4580 | 143 | 10 | 4 | 3 | 2 | 3 | 4 | 9 | 26 | #43 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3800 |
+| `0xB9` | Kum Kum | 2090 | 64 | 9 | 3 | 7 | 2 | 3 | 0 | 14 | 80 | #42 | - | - | - | BLIND | Potion Hi-Potion PhoexDown Elixir | 3900 |
+| `0xBA` | Shinobi | 1100 | 145 | 9 | 3 | 3 | 2 | 3 | 2 | 0 | 0 | Fire | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 4000 |
+| `0xBB` | ShadwMaster | 2110 | 145 | 10 | 4 | 4 | 2 | 3 | 3 | 0 | 20 | #38 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 4100 |
+| `0xBC` | Kage | 2520 | 147 | 10 | 4 | 9 | 3 | 3 | 3 | 0 | 15 | BLIND | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 4200 |
+| `0xBD` | DarkGeneral | 1130 | 147 | 7 | 3 | 4 | 2 | 4 | 2 | 5 | 0 | Fire | - | - | - | - | Hi-Potion PhoexDown Elixir | 4300 |
+| `0xC0` | GlasLabolas | 2160 | 153 | 9 | 3 | 4 | 2 | 4 | 4 | 0 | 0 | Fire | - | - | - | - | Hi-Potion Black Hole Lith'sKiss Raven'sYawn Curtain Gulgpokfatly, Black Musk Chcbo. Rage | 4600 |
+| `0xC1` | Yormungand | 2570 | 153 | 9 | 3 | 4 | 2 | 4 | 1 | 0 | 30 | #38 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 4700 |
+| `0xC2` | Thor | 2180 | 155 | 9 | 3 | 4 | 2 | 4 | 5 | 0 | 90 | Thunder | - | - | - | - | Hi-Potion God's Wrath Tranquizr Oershroom Curtain Chcbo. Rage Black Musk | 4800 |
+| `0xC3` | Hecatncheir | 6500 | 150 | 9 | 3 | 4 | 2 | 4 | 4 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 4900 |
+| `0xC4` | Hydra | 3600 | 157 | 9 | 3 | 4 | 2 | 4 | 0 | 0 | 20 | #37 | - | - | - | - | Hi-Potion ArcticWind TurtleShe Oershroom Black Hole Raven'sYawn | 5000 |
+| `0xC5` | QueenScylla | 6220 | 157 | 10 | 4 | 4 | 2 | 4 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5100 |
+| `0xC6` | Garm | 4240 | 64 | 10 | 4 | 4 | 2 | 4 | 3 | 0 | 40 | #36 | - | - | - | TOAD | Potion Hi-Potion PhoexDown Elixir | 5200 |
+| `0xC7` | Twin Dragon | 4960 | 160 | 10 | 4 | 4 | 2 | 4 | 3 | 10 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5300 |
+| `0xC8` | YeowDragon | 10000 | 170 | 10 | 4 | 4 | 2 | 5 | 3 | 10 | 0 | Fire | - | - | - | - | Elixir OonGloves OnionArmor Onion Helm OnionSword | 5400 |
+| `0xC9` | Bahamut | 60000 | 7 | 8 | 3 | 7 | 3 | 0 | 3 | 10 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5500 |
+| `0xCA` | Odin | 7000 | 157 | 10 | 4 | 4 | 2 | 4 | 2 | 10 | 65 | #17 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5600 |
+| `0xCB` | Leviathan | 7000 | 160 | 10 | 4 | 8 | 3 | 4 | 3 | 11 | 70 | #18 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5700 |
+| `0xCC` | Land Turtle | 120 | 9 | 1 | 0 | 40 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 500 |
+| `0xCD` | Djinn | 480 | 16 | 1 | 0 | 32 | 1 | 0 | 0 | 0 | 85 | #27 | fire | ice | fire | - | Potion Hi-Potion PhoexDown Elixir | 700 |
+| `0xCE` | Giant Rat | 450 | 18 | 3 | 1 | 32 | 1 | 0 | 0 | 1 | 50 | #24 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1000 |
+| `0xCF` | Medusa | 980 | 24 | 3 | 2 | 48 | 2 | 2 | 0 | 5 | 80 | #34 | - | - | - | PSN. | Potion Hi-Potion PhoexDown Elixir | 1200 |
+| `0xD0` | Gutsco | 1400 | 36 | 3 | 1 | 48 | 2 | 0 | 0 | 2 | 80 | #40 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 1500 |
+| `0xD1` | Salamander | 2100 | 39 | 3 | 2 | 48 | 2 | 1 | 0 | 4 | 80 | Fire | fire | ice | fire | - | Potion Hi-Potion PhoexDown Elixir | 1800 |
+| `0xD2` | Hein | 1600 | 40 | 11 | 4 | 5 | 2 | 0 | 0 | 5 | 99 | #24 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2100 |
+| `0xD3` | Kraken | 1950 | 50 | 5 | 2 | 40 | 1 | 1 | 0 | 6 | 80 | #24 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 2500 |
+| `0xD4` | Goldor | 2250 | 60 | 7 | 3 | 80 | 3 | 1 | 0 | 8 | 80 | #24 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3300 |
+| `0xD5` | Garuda | 5000 | 107 | 9 | 3 | 80 | 3 | 1 | 0 | 9 | 99 | Thunder | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 3400 |
+| `0xD6` | Bahamut | 7500 | 143 | 10 | 4 | 48 | 2 | 3 | 3 | 11 | 80 | #19 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 3500 |
+| `0xD7` | Doga | 4500 | 110 | 10 | 4 | 48 | 2 | 1 | 2 | 7 | 99 | #21 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 4000 |
+| `0xD8` | Unei | 4500 | 110 | 10 | 4 | 48 | 2 | 1 | 2 | 8 | 99 | #22 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 4200 |
+| `0xD9` | Titan | 7800 | 135 | 10 | 4 | 48 | 2 | 3 | 1 | 2 | 99 | #44 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 4500 |
+| `0xDA` | Ninja | 5500 | 163 | 11 | 4 | 48 | 2 | 3 | 2 | 0 | 15 | BLIND | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 4800 |
+| `0xDB` | Kunoichi | 9000 | 150 | 11 | 5 | 48 | 2 | 4 | 2 | 0 | 60 | #11 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 5000 |
+| `0xDC` | General | 12000 | 165 | 11 | 5 | 48 | 2 | 4 | 2 | 0 | 0 | Fire | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 5200 |
+| `0xDD` | Scylla | 10000 | 160 | 11 | 5 | 48 | 2 | 4 | 0 | 8 | 99 | #62 | - | - | - | TOAD | Potion Hi-Potion PhoexDown Elixir | 5400 |
+| `0xDE` | Guardian | 12000 | 163 | 11 | 5 | 48 | 2 | 5 | 0 | 7 | 99 | #45 | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 5600 |
+| `0xDF` | Red Dragon | 15000 | 170 | 11 | 5 | 48 | 2 | 5 | 3 | 11 | 0 | Fire | - | - | physical ice fire | - | Elixir OnionSword Onion Sh | 5800 |
+| `0xE0` | Demon Xande | 21000 | 175 | 11 | 5 | 48 | 2 | 7 | 6 | 12 | 99 | #35 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 0 |
+| `0xE1` | Cerberus | 23000 | 40 | 11 | 5 | 96 | 5 | 5 | 2 | 15 | 99 | Thunder | - | - | physical ice fire | BLIND | Potion Hi-Potion PhoexDown Elixir | 6400 |
+| `0xE2` | 2HeadDragon | 29000 | 255 | 11 | 5 | 80 | 3 | 5 | 4 | 8 | 0 | Fire | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 6800 |
+| `0xE3` | Echidna | 32000 | 185 | 11 | 5 | 80 | 3 | 5 | 6 | 11 | 99 | #47 | - | - | physical ice fire | SLNC. | Potion Hi-Potion PhoexDown Elixir | 7000 |
+| `0xE4` | Ahriman | 35000 | 185 | 11 | 5 | 80 | 3 | 6 | 6 | 11 | 99 | #48 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 7200 |
+| `0xE5` | C | 45000 | 185 | 11 | 5 | 96 | 5 | 6 | 7 | 15 | 100 | #6 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 0 |
+| `0xE6` | C | 65000 | 240 | 255 | 32 | 255 | 32 | 6 | 9 | 15 | 99 | #6 | - | - | physical ice fire | - | Potion Hi-Potion PhoexDown Elixir | 0 |
+| `0xE7` | Chocobo | 0 | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | - | Potion Hi-Potion PhoexDown Elixir | 0 |
