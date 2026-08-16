@@ -2,9 +2,14 @@
 // check-ff3-monsters.mjs — pin FF3's measured monster fields to a real battle.
 //
 // WHAT THIS HOLDS IN PLACE
-//   ENEMY_CUR_HP   the live hp. ⛔ $7678 merely HOLDS hp at battle start and
-//                  never moves; measuring damage there is what made an earlier
-//                  pass conclude the party could not hurt a Goblin at all.
+//   COMBATANT_BASE one array holds party AND monsters, stride 0x40, `+0` current
+//                  hp and `+2` max. Slots 0-3 are checked against the party HP
+//                  the battle screen DRAWS.
+//   ENEMY_CUR_HP   enemy slot 1 — the one the party swings at first, so damage
+//                  shows up there. ⛔ Slot 0 ($7678) is a SECOND GOBLIN, not a
+//                  dead copy: kill slot 1 and slot 0 starts taking hits. Two
+//                  releases got this wrong in opposite directions, so the check
+//                  below makes slot 0 move rather than asserting it cannot.
 //   STAT_EVADE_OFF byte 0 of the `props +12` entry — drives damage to ZERO and
 //                  makes the game print "Miss".
 //   STAT_DEF_OFF   byte 2 of it — hits still LAND, damage floors above zero.
@@ -47,11 +52,11 @@ const defEntryAt = (id) =>
  * damage dealt (at the LIVE hp address), whether the max copy moved at all, and
  * every hit/miss word the battle printed.
  */
-function fight(patch = {}) {
+function fight(patch = {}, hp = HP, rounds = ROUNDS) {
   const p = Uint8Array.from(rom);
   const props = M3.MONSTER_PROPS + GOBLIN * M3.PROPS_STRIDE;
-  p[props + M3.VERIFIED_FIELDS.hp[0]] = HP & 0xFF;
-  p[props + M3.VERIFIED_FIELDS.hp[1]] = HP >> 8;
+  p[props + M3.VERIFIED_FIELDS.hp[0]] = hp & 0xFF;
+  p[props + M3.VERIFIED_FIELDS.hp[1]] = hp >> 8;
   for (const [off, val] of Object.entries(patch)) p[Number(off)] = val;
 
   const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
@@ -79,19 +84,26 @@ function fight(patch = {}) {
   if (!inBattle) return null;
 
   const cur0 = word16(M3.ENEMY_CUR_HP), load0 = word16(M3.ENEMY_RAM);
-  let curLo = cur0, loadMoved = false, miss = 0, hit = 0;
-  for (let k = 0; k < ROUNDS; k++) {
+  const party0 = [0, 1, 2, 3].map(i => word16(M3.partyAddr(i)));
+  const partyMax = [0, 1, 2, 3].map(i => word16(M3.partyAddr(i) + M3.HP_MAX_OFF));
+  // ⛔ at battle START — by the end of the fight the drawn HP has moved on.
+  const screen0 = lines();
+  let curLo = cur0, loadMoved = false, miss = 0, hit = 0, loadLo = load0;
+  for (let k = 0; k < rounds; k++) {
     nes.buttonDown(1, Controller.BUTTON_A); run(8);
     nes.buttonUp(1, Controller.BUTTON_A); run(18);
     const c = word16(M3.ENEMY_CUR_HP);
     if (c <= cur0 && c < curLo) curLo = c;
-    if (word16(M3.ENEMY_RAM) !== load0) loadMoved = true;
+    const l = word16(M3.ENEMY_RAM);
+    if (l !== load0) loadMoved = true;
+    if (l <= load0 && l < loadLo) loadLo = l;
     for (const l of lines()) {
       for (const _ of l.matchAll(/\bMiss\b/gi)) miss++;
       for (const _ of l.matchAll(/\b\d+xHit\b/gi)) hit++;
     }
   }
-  return { dealt: cur0 - curLo, startHp: cur0, loadMoved, miss, hit };
+  return { dealt: cur0 - curLo, startHp: cur0, loadMoved, miss, hit,
+           slot0Dealt: load0 - loadLo, party0, partyMax, screen: screen0 };
 }
 
 let bad = 0, n = 0;
@@ -112,7 +124,12 @@ if (!base) { console.error('the baseline battle never started'); process.exit(1)
 // ── the live hp address ────────────────────────────────────────────────────
 ok('ENEMY_CUR_HP starts at the patched hp', base.startHp === HP, `${base.startHp}`);
 ok('ENEMY_CUR_HP goes DOWN when the party attacks', base.dealt > 0, `dealt ${base.dealt}`);
-ok('ENEMY_RAM is the load copy and never moves', !base.loadMoved);
+// ⭐ this is what proves slots 0-3 really are the party: their HP is the HP the
+// battle screen is DRAWING, read at the same instant.
+ok('the party slots hold the HP the screen draws',
+   base.party0.every((v, i) => base.screen.some(l => l.replace(/\s+/g, '').includes(`${v}/${base.partyMax[i]}`))),
+   `${base.party0.map((v, i) => `${v}/${base.partyMax[i]}`).join(' ')}  vs screen: ` +
+   base.screen.filter(l => /\d+\/ ?\d+/.test(l)).join(' | '));
 ok('the party lands hits at baseline', base.hit > 0, `${base.hit} hits`);
 ok('nothing MISSES at baseline', base.miss === 0, `${base.miss} misses`);
 
@@ -128,6 +145,16 @@ ok('DEFENCE maxed prints NO "Miss"', df && df.miss === 0, df ? `${df.miss} misse
 ok('DEFENCE maxed floors damage ABOVE zero', df && df.dealt > 0, df ? `dealt ${df.dealt}` : '');
 ok('DEFENCE maxed floors damage BELOW baseline', df && df.dealt < base.dealt,
    df ? `${df.dealt} vs ${base.dealt}` : '');
+
+// ⭐ enemy slot 0 is a SECOND MONSTER, not a copy. Two releases described it
+// wrongly — first as the live hp, then as a dead copy — because in a 160-round
+// fight it never moves. Give the Goblins killable HP and it does: slot 1 dies,
+// the battle carries on, and slot 0 starts taking the hits. Asserting it MOVES
+// is the check that could have caught both mistakes.
+const kill = fight({}, 25, 220);
+ok('enemy slot 1 can be killed outright', kill && kill.dealt >= 25, kill ? `dealt ${kill.dealt}` : 'no battle');
+ok('...and then enemy slot 0 takes damage too — it is a monster, not a copy',
+   kill && kill.slot0Dealt > 0, kill ? `slot 0 dealt ${kill.slot0Dealt}` : '');
 
 // ⭐ the discriminator. Defence and evade both cut damage, so "damage fell" pins
 // neither. Only this separates them, and it is what fails if they are swapped.

@@ -44,257 +44,331 @@ At byte 2 = 255 the hit counts are identical to baseline (`1xHit ×28,
 `2xHit ×12`, `3xHit ×2`) and only the damage collapses. Byte 0 makes the party
 miss; byte 2 lets them land and soaks it.
 
-## ⛔ What was retracted
+## The combatant array
 
-`$7678` **is not the monster's current HP.** It is a copy HP is loaded into
-that never moves again. An earlier pass measured damage there, read "0 dealt"
-every time, and concluded the party simply could not hurt a Goblin — so
-defence and evade were reported as unverifiable. Patching HP to 500 and
-scanning every address holding it:
+One array at `$7578`, stride `0x40`, holds EVERY fighter: slots 0-3 are the
+party, slots 4-7 the monsters, each entry `+0` current HP and `+2` max.
+Confirmed against the party HP the battle screen draws.
+
+## ⛔ What was retracted, twice
+
+v1.8.63 measured damage at `$7678`, read "0 dealt" every time, and concluded
+the party could not hurt a Goblin — so defence and evade shipped as
+unverifiable. v1.8.64 found damage does land at `$76B8` and called `$7678` a
+dead copy. **That was also wrong.** `$7678` is enemy slot 0 and `$76B8` is
+enemy slot 1 — this encounter spawns TWO Goblins, and the party targets the
+second first. Kill it and slot 0 starts taking hits:
 
 ```
-$7678: 500 -> 500     $76B8: 500 -> 485   <-- the only one that moves
-$767A: 500 -> 500     $76BA: 500 -> 500
+round 31   slot4 = 25   slot5 =  2
+round 36   slot4 = 25   slot5 =  0   "Enemy defeated."
+round 58   slot4 = 18   slot5 =  0   <-- it moves after all
 ```
 
-Current HP is `$76B8`; `$76BA` is the max beside it.
-The lesson: an address that merely **holds** the right value at battle start
-has not been shown to be the live one — make it move first.
+The lesson, sharpened: an address that merely **holds** the right value has
+not been shown to be live — but "it never moved in my test" does not make it
+dead either. It may just be standing behind something.
 
-Byte 1 of the defence entry (Goblin's natural 10) does nothing measurable —
-0 and 255 both leave the damage at exactly 99, on a measurement sensitive
-enough to catch both of its neighbours. It is left unnamed rather than guessed.
+Byte 1 of the defence entry does nothing measurable — 0 and 255 both leave the
+damage at exactly 99, on a measurement sensitive enough to catch both of its
+neighbours. Left unnamed rather than guessed.
 
-Everything else in the 16-byte record (level, spAtkRate, weakness, spirit,
-atkElem, statusOnAtk, elemResist, statusResist, spAtkIdx) is **inherited from
-Data Crystal, not measured.** Do not cite it as verified.
+## The rest of the record
+
+Two instruments made these reachable. An **immortal party** (topped back to
+999 HP every round) turns damage taken into a gradient — without it every
+probe saturates at 118, the party's total HP, and every field reads as inert.
+**Elemental weapons** poked into the party's weapon slots (char-B `+3` and
+`+5`, found by writing a sword into each byte and seeing which moved the
+damage) make ordinary attacks elemental, so the receive-side fields can be
+measured without giving anyone magic.
+
+**Weakness (byte 5) and resistance (byte 11)** use the SAME bit for the same
+element — weakness doubles, resistance halves:
+
+```
+                  ice weapon   flame weapon
+  (no bits)             434            434
+  weakness   0x08       879            434     <- 0x08 is ICE
+  weakness   0x10       434            879     <- 0x10 is FIRE
+  elemResist 0x08       209            434
+  elemResist 0x10       434            209
+  elemResist 0x02       209            209     <- not elemental
+```
+
+`0x02` cuts the plain starting weapons too (91 -> 37), so it is the physical /
+non-elemental bit.
+
+**Status-on-attack (byte 10)** is a bitmask and seven bits name themselves on
+screen: `0x02` PSN, `0x04` BLIND, `0x08` MINI, `0x10` SLNC, `0x20` TOAD,
+`0x40` STONE, `0x80` Died. `0x01` printed nothing and is not named.
+
+**The special** is gated by its rate (byte 3): at 0 it never appears, at 0xFF
+every turn. Byte 14 picks which, and the game prints the name — 0 Fire,
+1 Blizzard, 2 Thunder, 3 Poison, 5 Glare+STONE, 8 Glare+Sleep, 32 Blind,
+64 Flare. ⛔ Byte 14 reads as inert unless the rate is raised first.
+
+**Status resistance (byte 13)** really is that — a petrify rod kills a Goblin
+outright, and bits `0x01`/`0x02`/`0x04` each block the kill while `0x08`-`0x80`
+do not. ⛔ Three bits blocked the same status, so the bit -> status map is NOT
+determined and is deliberately not written down.
+
+**Nibble-packed fields.** Bytes 0 and 4 carry their value in the HIGH nibble,
+byte 7 in the LOW one; the other nibble is inert. Swept across all 16 values
+of each nibble with the other pinned at 0:
+
+```
+byte 7  LOW   1178 1265 1362 1930 2056 2168 3429 3600
+              5344 5568 5844 8680 9070 9420 11958 12372   monotone
+        HIGH  1178 everywhere                             inert
+byte 0  LOW   1178 across all 16                          inert
+        HIGH  1178 1576 2352 3312, then the encounter breaks
+byte 4  LOW   1178 across all 16                          inert
+        HIGH  1178 1178 1576 1576 2352 2352               in PAIRS
+```
+
+Byte 4 tracks byte 0 at half weight, so the two feed the same damage term.
+⛔ Reading either as a plain 0-255 magnitude is wrong, and a coarse sweep that
+lands on multiples of 16 never notices.
+
+## ⛔ Still not isolated
+
+Byte 6 (mEvadeIdx) — nothing moved it; the party never casts magic at it.
+Byte 8 (atkElem) — flat across all 8 bits; the party has no elemental
+resistance for an attack element to show up against.
+Byte 15 — flat across its entire range in every configuration tried.
+These are recorded as unknown, **not** filled in from a wiki.
 
 ## The bestiary — 225 monsters
 
-| id | name | HP | attack | defence | evade | gil |
-|---|---|---|---|---|---|---|
-| `0x00` | Goblin | 5 | 5 | 1 | 0 | 3 |
-| `0x01` | Carbuncle | 7 | 5 | 1 | 0 | 5 |
-| `0x02` | Eye Fang | 8 | 7 | 1 | 0 | 7 |
-| `0x03` | Blue Wisp | 10 | 7 | 1 | 0 | 10 |
-| `0x04` | Killer Bee | 20 | 10 | 1 | 0 | 12 |
-| `0x05` | Werewolf | 24 | 9 | 1 | 0 | 14 |
-| `0x06` | Berserker | 30 | 10 | 1 | 0 | 16 |
-| `0x07` | Red Wisp | 34 | 10 | 1 | 0 | 18 |
-| `0x08` | Dark Eye | 38 | 12 | 1 | 0 | 20 |
-| `0x09` | Zombie | 42 | 12 | 1 | 0 | 22 |
-| `0x0A` | Mummy | 48 | 14 | 1 | 0 | 24 |
-| `0x0B` | Skeleton | 54 | 13 | 1 | 0 | 26 |
-| `0x0C` | CursdCopper | 35 | 14 | 1 | 0 | 28 |
-| `0x0D` | Larva | 38 | 13 | 1 | 0 | 30 |
-| `0x0E` | Shadow | 65 | 14 | 1 | 0 | 32 |
-| `0x0F` | Revenant | 70 | 10 | 1 | 0 | 34 |
-| `0x10` | Firefly | 72 | 14 | 1 | 0 | 36 |
-| `0x11` | Helldiver | 85 | 10 | 1 | 0 | 38 |
-| `0x12` | Rust Bird | 92 | 16 | 1 | 0 | 40 |
-| `0x13` | Rukh | 120 | 18 | 1 | 0 | 42 |
-| `0x14` | Basilisk | 100 | 17 | 1 | 0 | 44 |
-| `0x15` | Bugbear | 110 | 17 | 1 | 0 | 46 |
-| `0x16` | Mandrake | 120 | 16 | 1 | 0 | 48 |
-| `0x17` | Unei Clone | 1500 | 110 | 9 | 3 | 50 |
-| `0x18` | Leprechaun | 36 | 9 | 1 | 0 | 52 |
-| `0x19` | Darkface | 55 | 10 | 1 | 0 | 53 |
-| `0x1A` | Petit | 45 | 16 | 1 | 0 | 54 |
-| `0x1B` | Poison Bat | 60 | 16 | 1 | 0 | 56 |
-| `0x1C` | Lilliputian | 58 | 7 | 1 | 0 | 58 |
-| `0x1D` | Wererat | 72 | 9 | 1 | 0 | 60 |
-| `0x1E` | Blood Worm | 98 | 9 | 2 | 1 | 62 |
-| `0x1F` | Killer Fish | 85 | 21 | 2 | 1 | 64 |
-| `0x20` | Hermit | 105 | 21 | 2 | 1 | 66 |
-| `0x21` | SeaElementl | 123 | 19 | 2 | 1 | 67 |
-| `0x22` | Tangie | 125 | 20 | 2 | 1 | 68 |
-| `0x23` | Sahagin | 140 | 20 | 2 | 1 | 70 |
-| `0x24` | Parademon | 145 | 21 | 2 | 1 | 72 |
-| `0x25` | Griffon | 150 | 21 | 2 | 1 | 74 |
-| `0x26` | Lynx | 165 | 21 | 2 | 1 | 76 |
-| `0x27` | Hornet | 160 | 21 | 2 | 1 | 78 |
-| `0x28` | Knocker | 185 | 21 | 2 | 1 | 80 |
-| `0x29` | Flyer | 190 | 22 | 2 | 1 | 82 |
-| `0x2A` | Lizardman | 200 | 22 | 2 | 1 | 84 |
-| `0x2B` | Gorgon | 200 | 23 | 2 | 1 | 86 |
-| `0x2C` | Red Cap | 210 | 23 | 2 | 1 | 87 |
-| `0x2D` | Barometz | 220 | 26 | 2 | 1 | 88 |
-| `0x2E` | Slime | 200 | 23 | 4 | 2 | 90 |
-| `0x2F` | Tarantula | 200 | 24 | 2 | 1 | 92 |
-| `0x30` | Cuphgel | 200 | 24 | 2 | 1 | 94 |
-| `0x31` | Pugman | 109 | 16 | 2 | 1 | 96 |
-| `0x32` | Far Darrig | 111 | 13 | 2 | 1 | 98 |
-| `0x33` | Blood Bat | 114 | 26 | 2 | 1 | 100 |
-| `0x34` | Petit Mage | 118 | 14 | 2 | 1 | 101 |
-| `0x36` | Aughisky | 122 | 27 | 2 | 1 | 105 |
-| `0x37` | Bomb | 125 | 28 | 3 | 1 | 110 |
-| `0x38` | Manticore | 128 | 28 | 3 | 1 | 112 |
-| `0x39` | Stalagmite | 130 | 26 | 3 | 1 | 115 |
-| `0x3A` | Sea Devil | 133 | 29 | 3 | 1 | 116 |
-| `0x3B` | Merman | 136 | 30 | 3 | 1 | 118 |
-| `0x3C` | RuinousWave | 140 | 32 | 3 | 1 | 120 |
-| `0x3D` | Balloon | 143 | 30 | 3 | 1 | 125 |
-| `0x3E` | Myrmecoleon | 147 | 32 | 3 | 1 | 130 |
-| `0x3F` | Crocotta | 150 | 31 | 3 | 1 | 135 |
-| `0x40` | Adamantoise | 153 | 31 | 4 | 2 | 135 |
-| `0x41` | RMarshmao | 155 | 32 | 4 | 2 | 140 |
-| `0x42` | Pharaoh | 160 | 32 | 3 | 1 | 145 |
-| `0x43` | Lemur | 164 | 32 | 3 | 1 | 150 |
-| `0x44` | Lamia | 168 | 33 | 3 | 1 | 155 |
-| `0x45` | Demon | 171 | 33 | 3 | 1 | 158 |
-| `0x46` | Dullahan | 350 | 40 | 3 | 1 | 160 |
-| `0x47` | Anet | 179 | 34 | 3 | 1 | 165 |
-| `0x48` | Mermaid | 182 | 35 | 3 | 1 | 170 |
-| `0x49` | Seahorse | 185 | 35 | 3 | 1 | 175 |
-| `0x4A` | Sea Serpent | 190 | 36 | 3 | 1 | 180 |
-| `0x4B` | Cockatrice | 195 | 37 | 3 | 1 | 185 |
-| `0x4C` | Poison Toad | 200 | 37 | 3 | 1 | 190 |
-| `0x4D` | Twin Heads | 205 | 36 | 3 | 1 | 195 |
-| `0x4E` | Roper | 210 | 37 | 3 | 1 | 200 |
-| `0x4F` | Agaliarept | 215 | 37 | 3 | 1 | 210 |
-| `0x50` | Darklegs | 220 | 37 | 3 | 2 | 220 |
-| `0x51` | Gigantoad | 225 | 38 | 3 | 2 | 230 |
-| `0x52` | Twin Liger | 230 | 38 | 3 | 2 | 240 |
-| `0x53` | Stroper | 400 | 64 | 3 | 2 | 250 |
-| `0x54` | Black Flan | 240 | 39 | 5 | 2 | 260 |
-| `0x55` | Hellgaroo | 245 | 39 | 3 | 2 | 270 |
-| `0x56` | Vulcan | 250 | 40 | 3 | 2 | 280 |
-| `0x57` | Dracrocotta | 255 | 42 | 3 | 2 | 290 |
-| `0x58` | Magician | 260 | 24 | 3 | 2 | 300 |
-| `0x5A` | Gold Eagle | 270 | 42 | 4 | 2 | 320 |
-| `0x5B` | GoldWarrior | 275 | 44 | 4 | 2 | 330 |
-| `0x5C` | Gold Bear | 280 | 44 | 4 | 2 | 340 |
-| `0x5D` | Gold Knight | 285 | 46 | 4 | 2 | 350 |
-| `0x5E` | Nightmare | 290 | 42 | 4 | 2 | 360 |
-| `0x5F` | HelgaruMage | 295 | 46 | 4 | 2 | 370 |
-| `0x60` | NeedlMonkey | 300 | 42 | 4 | 2 | 380 |
-| `0x61` | Catoblepas | 305 | 48 | 4 | 2 | 390 |
-| `0x62` | Sorcerer | 310 | 29 | 4 | 2 | 400 |
-| `0x64` | Sand Worm | 320 | 52 | 4 | 2 | 420 |
-| `0x65` | Frostfly | 325 | 52 | 4 | 2 | 430 |
-| `0x67` | Simurgh | 335 | 54 | 4 | 2 | 450 |
-| `0x68` | Harpy | 1000 | 56 | 4 | 2 | 460 |
-| `0x69` | Gargoyle | 345 | 56 | 4 | 2 | 470 |
-| `0x6A` | Chimera | 350 | 48 | 4 | 2 | 475 |
-| `0x6B` | Demon Horse | 355 | 37 | 4 | 2 | 480 |
-| `0x6C` | RokGargoyle | 360 | 42 | 4 | 2 | 490 |
-| `0x6D` | Bovian | 365 | 30 | 4 | 2 | 500 |
-| `0x6E` | DreadKnight | 370 | 30 | 4 | 2 | 510 |
-| `0x6F` | Flyer Mage | 555 | 34 | 4 | 2 | 520 |
-| `0x70` | Noggle | 380 | 60 | 4 | 2 | 540 |
-| `0x71` | Abtu | 385 | 62 | 4 | 2 | 550 |
-| `0x72` | NeptoDragon | 60000 | 62 | 4 | 2 | 560 |
-| `0x73` | Kagura | 395 | 64 | 4 | 2 | 580 |
-| `0x74` | Charybdis | 650 | 64 | 4 | 2 | 600 |
-| `0x75` | Dira | 1250 | 66 | 4 | 2 | 610 |
-| `0x76` | ChimeraMage | 420 | 66 | 4 | 2 | 615 |
-| `0x77` | King Lizard | 430 | 68 | 4 | 2 | 620 |
-| `0x78` | Pterodactyl | 440 | 68 | 4 | 2 | 640 |
-| `0x79` | Wyvern | 450 | 70 | 4 | 2 | 650 |
-| `0x7A` | Behemoth | 1550 | 70 | 4 | 2 | 660 |
-| `0x7B` | KingSeahors | 470 | 72 | 4 | 2 | 680 |
-| `0x7C` | Dragon | 480 | 72 | 4 | 2 | 700 |
-| `0x7D` | Kyklops | 490 | 74 | 4 | 2 | 720 |
-| `0x7E` | Boss Troll | 500 | 74 | 4 | 2 | 740 |
-| `0x7F` | Fachan | 510 | 76 | 4 | 2 | 745 |
-| `0x80` | Cenchos | 1120 | 76 | 4 | 2 | 750 |
-| `0x81` | Balor | 530 | 78 | 4 | 2 | 760 |
-| `0x82` | Dozmare | 540 | 78 | 4 | 2 | 780 |
-| `0x83` | Sea Witch | 550 | 80 | 4 | 2 | 800 |
-| `0x84` | KierHermit | 560 | 80 | 4 | 2 | 820 |
-| `0x85` | Ologhai | 570 | 83 | 4 | 2 | 840 |
-| `0x86` | Kelpie | 580 | 83 | 4 | 2 | 850 |
-| `0x87` | Aegir | 590 | 85 | 5 | 2 | 860 |
-| `0x88` | Pyralis | 1500 | 85 | 5 | 2 | 880 |
-| `0x89` | Silenus | 910 | 87 | 5 | 2 | 900 |
-| `0x8A` | Gaap | 1000 | 87 | 5 | 2 | 920 |
-| `0x8B` | Azrael | 1100 | 90 | 5 | 2 | 940 |
-| `0x8C` | Eater | 1150 | 90 | 5 | 2 | 945 |
-| `0x8E` | ZombDragon | 2000 | 93 | 5 | 2 | 960 |
-| `0x8F` | Death Claw | 1400 | 95 | 5 | 2 | 980 |
-| `0x90` | HeishHorse | 680 | 95 | 5 | 2 | 990 |
-| `0x91` | Chronos | 1550 | 97 | 5 | 2 | 1000 |
-| `0x92` | Valefor | 1620 | 97 | 5 | 2 | 1050 |
-| `0x93` | Haniel | 1600 | 100 | 5 | 2 | 1100 |
-| `0x94` | Vassago | 720 | 100 | 5 | 2 | 1150 |
-| `0x95` | Peryton | 730 | 103 | 5 | 2 | 1200 |
-| `0x96` | Ogre | 740 | 103 | 5 | 2 | 1250 |
-| `0x97` | Cyclops | 750 | 105 | 5 | 2 | 1300 |
-| `0x98` | Nemesis | 760 | 48 | 5 | 2 | 1350 |
-| `0x99` | Humbaba | 770 | 105 | 5 | 2 | 1400 |
-| `0x9A` | DeathNeedle | 780 | 48 | 5 | 2 | 1450 |
-| `0x9B` | Liger | 790 | 107 | 5 | 2 | 1500 |
-| `0x9C` | XandeClone | 10000 | 175 | 11 | 5 | 1550 |
-| `0x9D` | Aeon | 1200 | 110 | 5 | 2 | 1600 |
-| `0x9E` | Minotaur | 820 | 110 | 5 | 2 | 1640 |
-| `0x9F` | Ouroboros | 830 | 48 | 5 | 2 | 1680 |
-| `0xA0` | Plancti | 840 | 113 | 5 | 2 | 1700 |
-| `0xA1` | Sea Lion | 850 | 113 | 5 | 2 | 1750 |
-| `0xA2` | Remora | 860 | 115 | 5 | 2 | 1800 |
-| `0xA3` | Grenade | 870 | 115 | 5 | 2 | 1900 |
-| `0xA4` | Drake | 880 | 117 | 5 | 2 | 1950 |
-| `0xA5` | Great Boros | 890 | 64 | 7 | 2 | 2000 |
-| `0xA6` | Saber Liger | 900 | 117 | 7 | 2 | 2100 |
-| `0xA7` | Queen Lamia | 1280 | 64 | 7 | 2 | 2200 |
-| `0xA8` | Iron Claws | 920 | 123 | 7 | 2 | 2300 |
-| `0xA9` | Great Demon | 2250 | 123 | 7 | 2 | 2400 |
-| `0xAA` | Thanatos | 2200 | 125 | 7 | 3 | 2500 |
-| `0xAB` | Bone Dragon | 2500 | 125 | 7 | 3 | 2600 |
-| `0xAC` | KingBehemth | 3000 | 127 | 7 | 3 | 2700 |
-| `0xAD` | Doga Clone | 1500 | 110 | 9 | 3 | 2800 |
-| `0xAE` | GreenDragon | 10000 | 170 | 10 | 4 | 2900 |
-| `0xAF` | Abaia | 990 | 130 | 7 | 3 | 3000 |
-| `0xB0` | Sleipnir | 1000 | 133 | 7 | 3 | 3100 |
-| `0xB1` | Haokah | 1010 | 133 | 7 | 3 | 3200 |
-| `0xB2` | Archeron | 1020 | 135 | 7 | 3 | 3300 |
-| `0xB3` | Oceanus | 1030 | 135 | 7 | 3 | 3400 |
-| `0xB4` | Amon | 7040 | 137 | 11 | 5 | 3450 |
-| `0xB5` | Gomory | 4050 | 137 | 9 | 3 | 3500 |
-| `0xB6` | Bluck | 1760 | 140 | 9 | 3 | 3600 |
-| `0xB7` | Azer | 1570 | 140 | 9 | 3 | 3700 |
-| `0xB8` | Platinal | 4580 | 143 | 10 | 4 | 3800 |
-| `0xB9` | Kum Kum | 2090 | 64 | 9 | 3 | 3900 |
-| `0xBA` | Shinobi | 1100 | 145 | 9 | 3 | 4000 |
-| `0xBB` | ShadwMaster | 2110 | 145 | 10 | 4 | 4100 |
-| `0xBC` | Kage | 2520 | 147 | 10 | 4 | 4200 |
-| `0xBD` | DarkGeneral | 1130 | 147 | 7 | 3 | 4300 |
-| `0xC0` | GlasLabolas | 2160 | 153 | 9 | 3 | 4600 |
-| `0xC1` | Yormungand | 2570 | 153 | 9 | 3 | 4700 |
-| `0xC2` | Thor | 2180 | 155 | 9 | 3 | 4800 |
-| `0xC3` | Hecatncheir | 6500 | 150 | 9 | 3 | 4900 |
-| `0xC4` | Hydra | 3600 | 157 | 9 | 3 | 5000 |
-| `0xC5` | QueenScylla | 6220 | 157 | 10 | 4 | 5100 |
-| `0xC6` | Garm | 4240 | 64 | 10 | 4 | 5200 |
-| `0xC7` | Twin Dragon | 4960 | 160 | 10 | 4 | 5300 |
-| `0xC8` | YeowDragon | 10000 | 170 | 10 | 4 | 5400 |
-| `0xC9` | Bahamut | 60000 | 7 | 8 | 3 | 5500 |
-| `0xCA` | Odin | 7000 | 157 | 10 | 4 | 5600 |
-| `0xCB` | Leviathan | 7000 | 160 | 10 | 4 | 5700 |
-| `0xCC` | Land Turtle | 120 | 9 | 1 | 0 | 500 |
-| `0xCD` | Djinn | 480 | 16 | 1 | 0 | 700 |
-| `0xCE` | Giant Rat | 450 | 18 | 3 | 1 | 1000 |
-| `0xCF` | Medusa | 980 | 24 | 3 | 2 | 1200 |
-| `0xD0` | Gutsco | 1400 | 36 | 3 | 1 | 1500 |
-| `0xD1` | Salamander | 2100 | 39 | 3 | 2 | 1800 |
-| `0xD2` | Hein | 1600 | 40 | 11 | 4 | 2100 |
-| `0xD3` | Kraken | 1950 | 50 | 5 | 2 | 2500 |
-| `0xD4` | Goldor | 2250 | 60 | 7 | 3 | 3300 |
-| `0xD5` | Garuda | 5000 | 107 | 9 | 3 | 3400 |
-| `0xD6` | Bahamut | 7500 | 143 | 10 | 4 | 3500 |
-| `0xD7` | Doga | 4500 | 110 | 10 | 4 | 4000 |
-| `0xD8` | Unei | 4500 | 110 | 10 | 4 | 4200 |
-| `0xD9` | Titan | 7800 | 135 | 10 | 4 | 4500 |
-| `0xDA` | Ninja | 5500 | 163 | 11 | 4 | 4800 |
-| `0xDB` | Kunoichi | 9000 | 150 | 11 | 5 | 5000 |
-| `0xDC` | General | 12000 | 165 | 11 | 5 | 5200 |
-| `0xDD` | Scylla | 10000 | 160 | 11 | 5 | 5400 |
-| `0xDE` | Guardian | 12000 | 163 | 11 | 5 | 5600 |
-| `0xDF` | Red Dragon | 15000 | 170 | 11 | 5 | 5800 |
-| `0xE0` | Demon Xande | 21000 | 175 | 11 | 5 | 0 |
-| `0xE1` | Cerberus | 23000 | 40 | 11 | 5 | 6400 |
-| `0xE2` | 2HeadDragon | 29000 | 255 | 11 | 5 | 6800 |
-| `0xE3` | Echidna | 32000 | 185 | 11 | 5 | 7000 |
-| `0xE4` | Ahriman | 35000 | 185 | 11 | 5 | 7200 |
-| `0xE5` | C | 45000 | 185 | 11 | 5 | 0 |
-| `0xE6` | C | 65000 | 240 | 255 | 32 | 0 |
-| `0xE7` | Chocobo | 0 | 1 | 1 | 0 | 0 |
+`lvl` and `pwr` are the HIGH nibbles of bytes 0 and 4; `spirit` is the LOW
+nibble of byte 7. The other nibble of each is inert — printing the raw byte
+would be printing a number the game never reads.
+
+| id | name | HP | attack | defence | evade | lvl | pwr | spirit | rate | special | weak | resist | on-hit | gil |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `0x00` | Goblin | 5 | 5 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 3 |
+| `0x01` | Carbuncle | 7 | 5 | 1 | 0 | 0 | 0 | 1 | 0 | Glare | - | - | - | 5 |
+| `0x02` | Eye Fang | 8 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 7 |
+| `0x03` | Blue Wisp | 10 | 7 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | - | - | - | 10 |
+| `0x04` | Killer Bee | 20 | 10 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | PSN. | 12 |
+| `0x05` | Werewolf | 24 | 9 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 14 |
+| `0x06` | Berserker | 30 | 10 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 16 |
+| `0x07` | Red Wisp | 34 | 10 | 1 | 0 | 0 | 0 | 1 | 0 | Fire | fire | - | - | 18 |
+| `0x08` | Dark Eye | 38 | 12 | 1 | 0 | 0 | 0 | 2 | 20 | BLIND | fire | - | - | 20 |
+| `0x09` | Zombie | 42 | 12 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | fire | - | - | 22 |
+| `0x0A` | Mummy | 48 | 14 | 1 | 0 | 0 | 0 | 0 | 20 | #33 | fire | - | - | 24 |
+| `0x0B` | Skeleton | 54 | 13 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | fire | - | - | 26 |
+| `0x0C` | CursdCopper | 35 | 14 | 1 | 0 | 0 | 0 | 1 | 20 | Glare | fire | - | - | 28 |
+| `0x0D` | Larva | 38 | 13 | 1 | 0 | 0 | 0 | 2 | 20 | BLIND | fire | - | - | 30 |
+| `0x0E` | Shadow | 65 | 14 | 1 | 0 | 0 | 0 | 3 | 20 | BLIND | fire | - | - | 32 |
+| `0x0F` | Revenant | 70 | 10 | 1 | 0 | 0 | 0 | 2 | 0 | Fire | fire | - | - | 34 |
+| `0x10` | Firefly | 72 | 14 | 1 | 0 | 0 | 0 | 0 | 60 | #27 | ice | fire | - | 36 |
+| `0x11` | Helldiver | 85 | 10 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | PSN. SLNC. | 38 |
+| `0x12` | Rust Bird | 92 | 16 | 1 | 0 | 0 | 0 | 1 | 30 | #9 | - | - | - | 40 |
+| `0x13` | Rukh | 120 | 18 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 42 |
+| `0x14` | Basilisk | 100 | 17 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 44 |
+| `0x15` | Bugbear | 110 | 17 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 46 |
+| `0x16` | Mandrake | 120 | 16 | 1 | 0 | 0 | 0 | 1 | 20 | #10 | - | - | STONE | 48 |
+| `0x17` | Unei Clone | 1500 | 110 | 9 | 3 | 1 | 2 | 7 | 99 | #22 | - | physical ice fire | - | 50 |
+| `0x18` | Leprechaun | 36 | 9 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 52 |
+| `0x19` | Darkface | 55 | 10 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 53 |
+| `0x1A` | Petit | 45 | 16 | 1 | 0 | 0 | 0 | 1 | 80 | #23 | - | - | STONE | 54 |
+| `0x1B` | Poison Bat | 60 | 16 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | PSN. | 56 |
+| `0x1C` | Lilliputian | 58 | 7 | 1 | 0 | 0 | 0 | 1 | 50 | #23 | - | - | - | 58 |
+| `0x1D` | Wererat | 72 | 9 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 60 |
+| `0x1E` | Blood Worm | 98 | 9 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 62 |
+| `0x1F` | Killer Fish | 85 | 21 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 64 |
+| `0x20` | Hermit | 105 | 21 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | PSN. | 66 |
+| `0x21` | SeaElementl | 123 | 19 | 2 | 1 | 0 | 0 | 2 | 0 | Fire | - | - | - | 67 |
+| `0x22` | Tangie | 125 | 20 | 2 | 1 | 0 | 0 | 1 | 40 | Glare | - | - | - | 68 |
+| `0x23` | Sahagin | 140 | 20 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 70 |
+| `0x24` | Parademon | 145 | 21 | 2 | 1 | 0 | 0 | 1 | 40 | #10 | - | - | SLNC. Died. | 72 |
+| `0x25` | Griffon | 150 | 21 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 74 |
+| `0x26` | Lynx | 165 | 21 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 76 |
+| `0x27` | Hornet | 160 | 21 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | PSN. | 78 |
+| `0x28` | Knocker | 185 | 21 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 80 |
+| `0x29` | Flyer | 190 | 22 | 2 | 1 | 0 | 0 | 1 | 50 | Glare | - | - | - | 82 |
+| `0x2A` | Lizardman | 200 | 22 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 84 |
+| `0x2B` | Gorgon | 200 | 23 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 86 |
+| `0x2C` | Red Cap | 210 | 23 | 2 | 1 | 0 | 0 | 1 | 50 | Glare | - | - | - | 87 |
+| `0x2D` | Barometz | 220 | 26 | 2 | 1 | 0 | 0 | 1 | 50 | #10 | - | - | SLNC. Died. | 88 |
+| `0x2E` | Slime | 200 | 23 | 4 | 2 | 0 | 0 | 1 | 0 | Fire | - | - | - | 90 |
+| `0x2F` | Tarantula | 200 | 24 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 92 |
+| `0x30` | Cuphgel | 200 | 24 | 2 | 1 | 0 | 0 | 0 | 0 | Fire | - | - | - | 94 |
+| `0x31` | Pugman | 109 | 16 | 2 | 1 | 0 | 0 | 1 | 45 | #25 | - | - | - | 96 |
+| `0x32` | Far Darrig | 111 | 13 | 2 | 1 | 0 | 0 | 1 | 45 | #30 | - | - | - | 98 |
+| `0x33` | Blood Bat | 114 | 26 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 100 |
+| `0x34` | Petit Mage | 118 | 14 | 2 | 1 | 0 | 0 | 1 | 45 | #31 | - | - | - | 101 |
+| `0x36` | Aughisky | 122 | 27 | 2 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 105 |
+| `0x37` | Bomb | 125 | 28 | 3 | 1 | 0 | 0 | 0 | 50 | #7 | fire | - | - | 110 |
+| `0x38` | Manticore | 128 | 28 | 3 | 1 | 1 | 0 | 0 | 60 | #28 | - | - | - | 112 |
+| `0x39` | Stalagmite | 130 | 26 | 3 | 1 | 0 | 0 | 1 | 35 | Glare | - | - | PSN. SLNC. | 115 |
+| `0x3A` | Sea Devil | 133 | 29 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 116 |
+| `0x3B` | Merman | 136 | 30 | 3 | 1 | 1 | 0 | 2 | 65 | #28 | - | - | - | 118 |
+| `0x3C` | RuinousWave | 140 | 32 | 3 | 1 | 0 | 0 | 1 | 40 | #10 | - | - | SLNC. Died. | 120 |
+| `0x3D` | Balloon | 143 | 30 | 3 | 1 | 0 | 0 | 1 | 60 | #7 | fire | - | - | 125 |
+| `0x3E` | Myrmecoleon | 147 | 32 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | ice | - | PSN. SLNC. | 130 |
+| `0x3F` | Crocotta | 150 | 31 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | ice | - | - | 135 |
+| `0x40` | Adamantoise | 153 | 31 | 4 | 2 | 0 | 0 | 1 | 0 | #13 | ice | - | - | 135 |
+| `0x41` | RMarshmao | 155 | 32 | 4 | 2 | 1 | 0 | 0 | 0 | Fire | fire | - | - | 140 |
+| `0x42` | Pharaoh | 160 | 32 | 3 | 1 | 0 | 0 | 2 | 30 | Glare | fire | - | SLNC. TOAD | 145 |
+| `0x43` | Lemur | 164 | 32 | 3 | 1 | 1 | 0 | 3 | 0 | Fire | fire | - | - | 150 |
+| `0x44` | Lamia | 168 | 33 | 3 | 1 | 0 | 0 | 3 | 30 | #9 | - | - | - | 155 |
+| `0x45` | Demon | 171 | 33 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 158 |
+| `0x46` | Dullahan | 350 | 40 | 3 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | 160 |
+| `0x47` | Anet | 179 | 34 | 3 | 1 | 1 | 0 | 3 | 0 | Fire | - | - | - | 165 |
+| `0x48` | Mermaid | 182 | 35 | 3 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | - | 170 |
+| `0x49` | Seahorse | 185 | 35 | 3 | 1 | 1 | 0 | 3 | 0 | Fire | - | - | - | 175 |
+| `0x4A` | Sea Serpent | 190 | 36 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 180 |
+| `0x4B` | Cockatrice | 195 | 37 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | PSN. | 185 |
+| `0x4C` | Poison Toad | 200 | 37 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | fire | - | PSN. | 190 |
+| `0x4D` | Twin Heads | 205 | 36 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 195 |
+| `0x4E` | Roper | 210 | 37 | 3 | 1 | 1 | 0 | 4 | 0 | Fire | - | - | SLNC. Died. | 200 |
+| `0x4F` | Agaliarept | 215 | 37 | 3 | 1 | 1 | 0 | 0 | 0 | Fire | - | - | - | 210 |
+| `0x50` | Darklegs | 220 | 37 | 3 | 2 | 1 | 0 | 0 | 0 | Fire | - | - | - | 220 |
+| `0x51` | Gigantoad | 225 | 38 | 3 | 2 | 1 | 0 | 5 | 0 | Fire | - | - | - | 230 |
+| `0x52` | Twin Liger | 230 | 38 | 3 | 2 | 1 | 0 | 0 | 0 | Fire | - | - | - | 240 |
+| `0x53` | Stroper | 400 | 64 | 3 | 2 | 1 | 0 | 5 | 40 | #9 | - | - | SLNC. Died. | 250 |
+| `0x54` | Black Flan | 240 | 39 | 5 | 2 | 1 | 0 | 0 | 60 | #10 | - | - | - | 260 |
+| `0x55` | Hellgaroo | 245 | 39 | 3 | 2 | 1 | 0 | 0 | 15 | BLIND | - | - | - | 270 |
+| `0x56` | Vulcan | 250 | 40 | 3 | 2 | 1 | 0 | 0 | 50 | #24 | ice | fire | - | 280 |
+| `0x57` | Dracrocotta | 255 | 42 | 3 | 2 | 1 | 0 | 0 | 0 | Fire | - | - | STONE | 290 |
+| `0x58` | Magician | 260 | 24 | 3 | 2 | 0 | 1 | 3 | 50 | #24 | - | - | - | 300 |
+| `0x5A` | Gold Eagle | 270 | 42 | 4 | 2 | 1 | 0 | 0 | 0 | Fire | - | - | - | 320 |
+| `0x5B` | GoldWarrior | 275 | 44 | 4 | 2 | 1 | 0 | 0 | 40 | #29 | - | - | - | 330 |
+| `0x5C` | Gold Bear | 280 | 44 | 4 | 2 | 1 | 0 | 0 | 30 | #34 | - | - | - | 340 |
+| `0x5D` | Gold Knight | 285 | 46 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 350 |
+| `0x5E` | Nightmare | 290 | 42 | 4 | 2 | 2 | 0 | 5 | 50 | #9 | - | - | TOAD | 360 |
+| `0x5F` | HelgaruMage | 295 | 46 | 4 | 2 | 2 | 0 | 4 | 99 | #26 | - | - | - | 370 |
+| `0x60` | NeedlMonkey | 300 | 42 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | PSN. | 380 |
+| `0x61` | Catoblepas | 305 | 48 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 390 |
+| `0x62` | Sorcerer | 310 | 29 | 4 | 2 | 1 | 1 | 3 | 99 | #24 | - | - | - | 400 |
+| `0x64` | Sand Worm | 320 | 52 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 420 |
+| `0x65` | Frostfly | 325 | 52 | 4 | 2 | 2 | 0 | 0 | 90 | #41 | fire | ice | - | 430 |
+| `0x67` | Simurgh | 335 | 54 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 450 |
+| `0x68` | Harpy | 1000 | 56 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 460 |
+| `0x69` | Gargoyle | 345 | 56 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 470 |
+| `0x6A` | Chimera | 350 | 48 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | PSN. | 475 |
+| `0x6B` | Demon Horse | 355 | 37 | 4 | 2 | 2 | 0 | 5 | 0 | Fire | - | - | STONE | 480 |
+| `0x6C` | RokGargoyle | 360 | 42 | 4 | 2 | 2 | 0 | 0 | 32 | #43 | - | - | BLIND | 490 |
+| `0x6D` | Bovian | 365 | 30 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 500 |
+| `0x6E` | DreadKnight | 370 | 30 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 510 |
+| `0x6F` | Flyer Mage | 555 | 34 | 4 | 2 | 1 | 0 | 2 | 64 | #24 | - | - | - | 520 |
+| `0x70` | Noggle | 380 | 60 | 4 | 2 | 2 | 0 | 2 | 0 | Fire | - | - | - | 540 |
+| `0x71` | Abtu | 385 | 62 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 550 |
+| `0x72` | NeptoDragon | 60000 | 62 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 560 |
+| `0x73` | Kagura | 395 | 64 | 4 | 2 | 2 | 0 | 4 | 0 | Fire | - | - | - | 580 |
+| `0x74` | Charybdis | 650 | 64 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 600 |
+| `0x75` | Dira | 1250 | 66 | 4 | 2 | 2 | 0 | 3 | 0 | #36 | - | - | - | 610 |
+| `0x76` | ChimeraMage | 420 | 66 | 4 | 2 | 2 | 0 | 2 | 50 | Thunder | - | - | - | 615 |
+| `0x77` | King Lizard | 430 | 68 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 620 |
+| `0x78` | Pterodactyl | 440 | 68 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 640 |
+| `0x79` | Wyvern | 450 | 70 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 650 |
+| `0x7A` | Behemoth | 1550 | 70 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 660 |
+| `0x7B` | KingSeahors | 470 | 72 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 680 |
+| `0x7C` | Dragon | 480 | 72 | 4 | 2 | 2 | 0 | 3 | 80 | Fire | - | - | - | 700 |
+| `0x7D` | Kyklops | 490 | 74 | 4 | 2 | 2 | 1 | 0 | 0 | Fire | - | - | - | 720 |
+| `0x7E` | Boss Troll | 500 | 74 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 740 |
+| `0x7F` | Fachan | 510 | 76 | 4 | 2 | 2 | 1 | 0 | 21 | #43 | - | - | - | 745 |
+| `0x80` | Cenchos | 1120 | 76 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 750 |
+| `0x81` | Balor | 530 | 78 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 760 |
+| `0x82` | Dozmare | 540 | 78 | 4 | 2 | 2 | 0 | 8 | 0 | Fire | - | - | - | 780 |
+| `0x83` | Sea Witch | 550 | 80 | 4 | 2 | 2 | 0 | 7 | 0 | Fire | - | - | - | 800 |
+| `0x84` | KierHermit | 560 | 80 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 820 |
+| `0x85` | Ologhai | 570 | 83 | 4 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 840 |
+| `0x86` | Kelpie | 580 | 83 | 4 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 850 |
+| `0x87` | Aegir | 590 | 85 | 5 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 860 |
+| `0x88` | Pyralis | 1500 | 85 | 5 | 2 | 2 | 0 | 0 | 0 | Fire | - | - | - | 880 |
+| `0x89` | Silenus | 910 | 87 | 5 | 2 | 2 | 1 | 8 | 0 | #16 | physical | ice fire | - | 900 |
+| `0x8A` | Gaap | 1000 | 87 | 5 | 2 | 2 | 1 | 10 | 0 | #16 | physical | ice fire | - | 920 |
+| `0x8B` | Azrael | 1100 | 90 | 5 | 2 | 2 | 1 | 10 | 40 | #15 | physical | ice fire | - | 940 |
+| `0x8C` | Eater | 1150 | 90 | 5 | 2 | 2 | 0 | 0 | 40 | #15 | - | - | - | 945 |
+| `0x8E` | ZombDragon | 2000 | 93 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | fire | - | - | 960 |
+| `0x8F` | Death Claw | 1400 | 95 | 5 | 2 | 3 | 0 | 0 | 0 | #16 | - | - | - | 980 |
+| `0x90` | HeishHorse | 680 | 95 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 990 |
+| `0x91` | Chronos | 1550 | 97 | 5 | 2 | 3 | 0 | 9 | 0 | #16 | physical | ice fire | - | 1000 |
+| `0x92` | Valefor | 1620 | 97 | 5 | 2 | 3 | 0 | 0 | 0 | #16 | physical | ice fire | - | 1050 |
+| `0x93` | Haniel | 1600 | 100 | 5 | 2 | 3 | 1 | 0 | 0 | #16 | physical | ice fire | - | 1100 |
+| `0x94` | Vassago | 720 | 100 | 5 | 2 | 3 | 1 | 6 | 0 | #16 | physical | ice fire | - | 1150 |
+| `0x95` | Peryton | 730 | 103 | 5 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | 1200 |
+| `0x96` | Ogre | 740 | 103 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 1250 |
+| `0x97` | Cyclops | 750 | 105 | 5 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | 1300 |
+| `0x98` | Nemesis | 760 | 48 | 5 | 2 | 3 | 1 | 0 | 30 | #9 | - | - | Died. | 1350 |
+| `0x99` | Humbaba | 770 | 105 | 5 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | 1400 |
+| `0x9A` | DeathNeedle | 780 | 48 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | PSN. | 1450 |
+| `0x9B` | Liger | 790 | 107 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 1500 |
+| `0x9C` | XandeClone | 10000 | 175 | 11 | 5 | 6 | 5 | 10 | 99 | #35 | - | physical ice fire | - | 1550 |
+| `0x9D` | Aeon | 1200 | 110 | 5 | 2 | 3 | 0 | 4 | 30 | #4 | - | - | - | 1600 |
+| `0x9E` | Minotaur | 820 | 110 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 1640 |
+| `0x9F` | Ouroboros | 830 | 48 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | PSN. | 1680 |
+| `0xA0` | Plancti | 840 | 113 | 5 | 2 | 3 | 0 | 0 | 40 | Glare | - | - | - | 1700 |
+| `0xA1` | Sea Lion | 850 | 113 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 1750 |
+| `0xA2` | Remora | 860 | 115 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 1800 |
+| `0xA3` | Grenade | 870 | 115 | 5 | 2 | 3 | 0 | 0 | 50 | #7 | - | - | - | 1900 |
+| `0xA4` | Drake | 880 | 117 | 5 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 1950 |
+| `0xA5` | Great Boros | 890 | 64 | 7 | 2 | 3 | 0 | 9 | 0 | Fire | - | - | PSN. | 2000 |
+| `0xA6` | Saber Liger | 900 | 117 | 7 | 2 | 3 | 0 | 0 | 0 | Fire | - | - | - | 2100 |
+| `0xA7` | Queen Lamia | 1280 | 64 | 7 | 2 | 3 | 0 | 10 | 90 | #9 | - | - | STONE | 2200 |
+| `0xA8` | Iron Claws | 920 | 123 | 7 | 2 | 3 | 1 | 0 | 0 | Fire | - | - | - | 2300 |
+| `0xA9` | Great Demon | 2250 | 123 | 7 | 2 | 3 | 2 | 7 | 20 | #20 | - | - | - | 2400 |
+| `0xAA` | Thanatos | 2200 | 125 | 7 | 3 | 3 | 2 | 8 | 21 | #43 | - | - | - | 2500 |
+| `0xAB` | Bone Dragon | 2500 | 125 | 7 | 3 | 3 | 1 | 0 | 0 | Fire | fire | - | - | 2600 |
+| `0xAC` | KingBehemth | 3000 | 127 | 7 | 3 | 3 | 1 | 0 | 0 | Fire | - | - | - | 2700 |
+| `0xAD` | Doga Clone | 1500 | 110 | 9 | 3 | 2 | 2 | 5 | 99 | #21 | - | physical ice fire | - | 2800 |
+| `0xAE` | GreenDragon | 10000 | 170 | 10 | 4 | 5 | 3 | 10 | 0 | Fire | - | - | - | 2900 |
+| `0xAF` | Abaia | 990 | 130 | 7 | 3 | 3 | 2 | 10 | 0 | Fire | - | - | - | 3000 |
+| `0xB0` | Sleipnir | 1000 | 133 | 7 | 3 | 3 | 2 | 7 | 30 | #30 | - | - | - | 3100 |
+| `0xB1` | Haokah | 1010 | 133 | 7 | 3 | 3 | 3 | 6 | 70 | Thunder | - | - | - | 3200 |
+| `0xB2` | Archeron | 1020 | 135 | 7 | 3 | 3 | 1 | 0 | 0 | Fire | - | - | - | 3300 |
+| `0xB3` | Oceanus | 1030 | 135 | 7 | 3 | 3 | 1 | 0 | 0 | Fire | - | - | - | 3400 |
+| `0xB4` | Amon | 7040 | 137 | 11 | 5 | 3 | 2 | 11 | 70 | Fire | - | - | - | 3450 |
+| `0xB5` | Gomory | 4050 | 137 | 9 | 3 | 3 | 2 | 0 | 30 | #36 | - | - | - | 3500 |
+| `0xB6` | Bluck | 1760 | 140 | 9 | 3 | 3 | 0 | 3 | 25 | #12 | - | - | - | 3600 |
+| `0xB7` | Azer | 1570 | 140 | 9 | 3 | 3 | 3 | 13 | 90 | Fire | ice | fire | - | 3700 |
+| `0xB8` | Platinal | 4580 | 143 | 10 | 4 | 3 | 4 | 9 | 26 | #43 | - | - | - | 3800 |
+| `0xB9` | Kum Kum | 2090 | 64 | 9 | 3 | 3 | 0 | 14 | 80 | #42 | - | - | BLIND | 3900 |
+| `0xBA` | Shinobi | 1100 | 145 | 9 | 3 | 3 | 2 | 0 | 0 | Fire | - | physical ice fire | - | 4000 |
+| `0xBB` | ShadwMaster | 2110 | 145 | 10 | 4 | 3 | 3 | 0 | 20 | #38 | - | physical ice fire | - | 4100 |
+| `0xBC` | Kage | 2520 | 147 | 10 | 4 | 3 | 3 | 0 | 15 | BLIND | - | - | - | 4200 |
+| `0xBD` | DarkGeneral | 1130 | 147 | 7 | 3 | 4 | 2 | 5 | 0 | Fire | - | - | - | 4300 |
+| `0xC0` | GlasLabolas | 2160 | 153 | 9 | 3 | 4 | 4 | 0 | 0 | Fire | - | - | - | 4600 |
+| `0xC1` | Yormungand | 2570 | 153 | 9 | 3 | 4 | 1 | 0 | 30 | #38 | - | - | - | 4700 |
+| `0xC2` | Thor | 2180 | 155 | 9 | 3 | 4 | 5 | 0 | 90 | Thunder | - | - | - | 4800 |
+| `0xC3` | Hecatncheir | 6500 | 150 | 9 | 3 | 4 | 4 | 0 | 0 | Fire | - | - | - | 4900 |
+| `0xC4` | Hydra | 3600 | 157 | 9 | 3 | 4 | 0 | 0 | 20 | #37 | - | - | - | 5000 |
+| `0xC5` | QueenScylla | 6220 | 157 | 10 | 4 | 4 | 0 | 0 | 0 | Fire | - | - | - | 5100 |
+| `0xC6` | Garm | 4240 | 64 | 10 | 4 | 4 | 3 | 0 | 40 | #36 | - | - | TOAD | 5200 |
+| `0xC7` | Twin Dragon | 4960 | 160 | 10 | 4 | 4 | 3 | 10 | 0 | Fire | - | - | - | 5300 |
+| `0xC8` | YeowDragon | 10000 | 170 | 10 | 4 | 5 | 3 | 10 | 0 | Fire | - | - | - | 5400 |
+| `0xC9` | Bahamut | 60000 | 7 | 8 | 3 | 0 | 3 | 10 | 0 | Fire | - | - | - | 5500 |
+| `0xCA` | Odin | 7000 | 157 | 10 | 4 | 4 | 2 | 10 | 65 | #17 | - | - | - | 5600 |
+| `0xCB` | Leviathan | 7000 | 160 | 10 | 4 | 4 | 3 | 11 | 70 | #18 | - | - | - | 5700 |
+| `0xCC` | Land Turtle | 120 | 9 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 500 |
+| `0xCD` | Djinn | 480 | 16 | 1 | 0 | 0 | 0 | 0 | 85 | #27 | ice | fire | - | 700 |
+| `0xCE` | Giant Rat | 450 | 18 | 3 | 1 | 0 | 0 | 1 | 50 | #24 | - | - | - | 1000 |
+| `0xCF` | Medusa | 980 | 24 | 3 | 2 | 2 | 0 | 5 | 80 | #34 | - | - | PSN. | 1200 |
+| `0xD0` | Gutsco | 1400 | 36 | 3 | 1 | 0 | 0 | 2 | 80 | #40 | - | - | - | 1500 |
+| `0xD1` | Salamander | 2100 | 39 | 3 | 2 | 1 | 0 | 4 | 80 | Fire | ice | fire | - | 1800 |
+| `0xD2` | Hein | 1600 | 40 | 11 | 4 | 0 | 0 | 5 | 99 | #24 | - | - | - | 2100 |
+| `0xD3` | Kraken | 1950 | 50 | 5 | 2 | 1 | 0 | 6 | 80 | #24 | - | - | - | 2500 |
+| `0xD4` | Goldor | 2250 | 60 | 7 | 3 | 1 | 0 | 8 | 80 | #24 | - | - | - | 3300 |
+| `0xD5` | Garuda | 5000 | 107 | 9 | 3 | 1 | 0 | 9 | 99 | Thunder | - | - | - | 3400 |
+| `0xD6` | Bahamut | 7500 | 143 | 10 | 4 | 3 | 3 | 11 | 80 | #19 | - | physical ice fire | - | 3500 |
+| `0xD7` | Doga | 4500 | 110 | 10 | 4 | 1 | 2 | 7 | 99 | #21 | - | physical ice fire | - | 4000 |
+| `0xD8` | Unei | 4500 | 110 | 10 | 4 | 1 | 2 | 8 | 99 | #22 | - | physical ice fire | - | 4200 |
+| `0xD9` | Titan | 7800 | 135 | 10 | 4 | 3 | 1 | 2 | 99 | #44 | - | physical ice fire | - | 4500 |
+| `0xDA` | Ninja | 5500 | 163 | 11 | 4 | 3 | 2 | 0 | 15 | BLIND | - | physical ice fire | - | 4800 |
+| `0xDB` | Kunoichi | 9000 | 150 | 11 | 5 | 4 | 2 | 0 | 60 | #11 | - | physical ice fire | - | 5000 |
+| `0xDC` | General | 12000 | 165 | 11 | 5 | 4 | 2 | 0 | 0 | Fire | - | physical ice fire | - | 5200 |
+| `0xDD` | Scylla | 10000 | 160 | 11 | 5 | 4 | 0 | 8 | 99 | #62 | - | - | TOAD | 5400 |
+| `0xDE` | Guardian | 12000 | 163 | 11 | 5 | 5 | 0 | 7 | 99 | #45 | - | - | - | 5600 |
+| `0xDF` | Red Dragon | 15000 | 170 | 11 | 5 | 5 | 3 | 11 | 0 | Fire | - | physical ice fire | - | 5800 |
+| `0xE0` | Demon Xande | 21000 | 175 | 11 | 5 | 7 | 6 | 12 | 99 | #35 | - | physical ice fire | - | 0 |
+| `0xE1` | Cerberus | 23000 | 40 | 11 | 5 | 5 | 2 | 15 | 99 | Thunder | - | physical ice fire | BLIND | 6400 |
+| `0xE2` | 2HeadDragon | 29000 | 255 | 11 | 5 | 5 | 4 | 8 | 0 | Fire | - | physical ice fire | - | 6800 |
+| `0xE3` | Echidna | 32000 | 185 | 11 | 5 | 5 | 6 | 11 | 99 | #47 | - | physical ice fire | SLNC. | 7000 |
+| `0xE4` | Ahriman | 35000 | 185 | 11 | 5 | 6 | 6 | 11 | 99 | #48 | - | physical ice fire | - | 7200 |
+| `0xE5` | C | 45000 | 185 | 11 | 5 | 6 | 7 | 15 | 100 | #6 | - | physical ice fire | - | 0 |
+| `0xE6` | C | 65000 | 240 | 255 | 32 | 6 | 9 | 15 | 99 | #6 | - | physical ice fire | - | 0 |
+| `0xE7` | Chocobo | 0 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | Fire | - | - | - | 0 |

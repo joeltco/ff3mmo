@@ -38,10 +38,16 @@ function nesText(bytes) {
 const nameOf = (id) => { try { return nesText(getMonsterName(id)); } catch { return `mon${id}`; } };
 
 const hex = (n, w = 2) => `0x${n.toString(16).toUpperCase().padStart(w, '0')}`;
+// ⛔ only the three element bits that were actually pinned get a name here.
+const ELEM_NAMES = Object.fromEntries(
+  Object.entries(M3.ELEM_BITS).map(([nm, bit]) => [bit, nm]));
 const rows = [];
 for (let id = 0; id < MONSTER_COUNT; id++) {
   const name = nameOf(id);
   if (!name) continue;
+  const pr = M3.props(rom, id);
+  const bits = (v, map) => Object.entries(map)
+    .filter(([bit]) => v & Number(bit)).map(([, nm]) => nm).join(' ') || '-';
   rows.push({
     id, name,
     hp: M3.monsterHP(rom, id),
@@ -49,6 +55,14 @@ for (let id = 0; id < MONSTER_COUNT; id++) {
     def: M3.monsterDefence(rom, id),
     evd: M3.monsterEvade(rom, id),
     gil: M3.monsterGil(rom, id),
+    lvl: M3.hiNib(pr[M3.FIELDS.levelHi]),
+    pwr: M3.hiNib(pr[M3.FIELDS.powerHi]),
+    spirit: M3.loNib(pr[M3.FIELDS.spiritLo]),
+    rate: pr[M3.FIELDS.spAtkRate],
+    special: M3.SPECIAL_NAMES[pr[M3.FIELDS.spAtkIdx]] || `#${pr[M3.FIELDS.spAtkIdx]}`,
+    weak: bits(pr[M3.FIELDS.weakness], ELEM_NAMES),
+    resist: bits(pr[M3.FIELDS.elemResist], ELEM_NAMES),
+    onHit: bits(pr[M3.FIELDS.statusOnAtk], M3.STATUS_BITS),
   });
 }
 
@@ -101,38 +115,112 @@ L.push('At byte 2 = 255 the hit counts are identical to baseline (`1xHit ×28,')
 L.push('`2xHit ×12`, `3xHit ×2`) and only the damage collapses. Byte 0 makes the party');
 L.push('miss; byte 2 lets them land and soaks it.');
 L.push('');
-L.push('## ⛔ What was retracted');
+L.push('## The combatant array');
 L.push('');
-L.push('`$7678` **is not the monster\'s current HP.** It is a copy HP is loaded into');
-L.push('that never moves again. An earlier pass measured damage there, read "0 dealt"');
-L.push('every time, and concluded the party simply could not hurt a Goblin — so');
-L.push('defence and evade were reported as unverifiable. Patching HP to 500 and');
-L.push('scanning every address holding it:');
+L.push('One array at `$7578`, stride `0x40`, holds EVERY fighter: slots 0-3 are the');
+L.push('party, slots 4-7 the monsters, each entry `+0` current HP and `+2` max.');
+L.push('Confirmed against the party HP the battle screen draws.');
+L.push('');
+L.push('## ⛔ What was retracted, twice');
+L.push('');
+L.push('v1.8.63 measured damage at `$7678`, read "0 dealt" every time, and concluded');
+L.push('the party could not hurt a Goblin — so defence and evade shipped as');
+L.push('unverifiable. v1.8.64 found damage does land at `$76B8` and called `$7678` a');
+L.push('dead copy. **That was also wrong.** `$7678` is enemy slot 0 and `$76B8` is');
+L.push('enemy slot 1 — this encounter spawns TWO Goblins, and the party targets the');
+L.push('second first. Kill it and slot 0 starts taking hits:');
 L.push('');
 L.push('```');
-L.push('$7678: 500 -> 500     $76B8: 500 -> 485   <-- the only one that moves');
-L.push('$767A: 500 -> 500     $76BA: 500 -> 500');
+L.push('round 31   slot4 = 25   slot5 =  2');
+L.push('round 36   slot4 = 25   slot5 =  0   "Enemy defeated."');
+L.push('round 58   slot4 = 18   slot5 =  0   <-- it moves after all');
 L.push('```');
 L.push('');
-L.push(`Current HP is \`$${M3.ENEMY_CUR_HP.toString(16).toUpperCase()}\`; ` +
-       `\`$${M3.ENEMY_MAX_HP.toString(16).toUpperCase()}\` is the max beside it.`);
-L.push('The lesson: an address that merely **holds** the right value at battle start');
-L.push('has not been shown to be the live one — make it move first.');
+L.push('The lesson, sharpened: an address that merely **holds** the right value has');
+L.push('not been shown to be live — but "it never moved in my test" does not make it');
+L.push('dead either. It may just be standing behind something.');
 L.push('');
-L.push('Byte 1 of the defence entry (Goblin\'s natural 10) does nothing measurable —');
-L.push('0 and 255 both leave the damage at exactly 99, on a measurement sensitive');
-L.push('enough to catch both of its neighbours. It is left unnamed rather than guessed.');
+L.push('Byte 1 of the defence entry does nothing measurable — 0 and 255 both leave the');
+L.push('damage at exactly 99, on a measurement sensitive enough to catch both of its');
+L.push('neighbours. Left unnamed rather than guessed.');
 L.push('');
-L.push('Everything else in the 16-byte record (level, spAtkRate, weakness, spirit,');
-L.push('atkElem, statusOnAtk, elemResist, statusResist, spAtkIdx) is **inherited from');
-L.push('Data Crystal, not measured.** Do not cite it as verified.');
+L.push('## The rest of the record');
+L.push('');
+L.push('Two instruments made these reachable. An **immortal party** (topped back to');
+L.push('999 HP every round) turns damage taken into a gradient — without it every');
+L.push('probe saturates at 118, the party\'s total HP, and every field reads as inert.');
+L.push('**Elemental weapons** poked into the party\'s weapon slots (char-B `+3` and');
+L.push('`+5`, found by writing a sword into each byte and seeing which moved the');
+L.push('damage) make ordinary attacks elemental, so the receive-side fields can be');
+L.push('measured without giving anyone magic.');
+L.push('');
+L.push('**Weakness (byte 5) and resistance (byte 11)** use the SAME bit for the same');
+L.push('element — weakness doubles, resistance halves:');
+L.push('');
+L.push('```');
+L.push('                  ice weapon   flame weapon');
+L.push('  (no bits)             434            434');
+L.push('  weakness   0x08       879            434     <- 0x08 is ICE');
+L.push('  weakness   0x10       434            879     <- 0x10 is FIRE');
+L.push('  elemResist 0x08       209            434');
+L.push('  elemResist 0x10       434            209');
+L.push('  elemResist 0x02       209            209     <- not elemental');
+L.push('```');
+L.push('');
+L.push('`0x02` cuts the plain starting weapons too (91 -> 37), so it is the physical /');
+L.push('non-elemental bit.');
+L.push('');
+L.push('**Status-on-attack (byte 10)** is a bitmask and seven bits name themselves on');
+L.push('screen: `0x02` PSN, `0x04` BLIND, `0x08` MINI, `0x10` SLNC, `0x20` TOAD,');
+L.push('`0x40` STONE, `0x80` Died. `0x01` printed nothing and is not named.');
+L.push('');
+L.push('**The special** is gated by its rate (byte 3): at 0 it never appears, at 0xFF');
+L.push('every turn. Byte 14 picks which, and the game prints the name — 0 Fire,');
+L.push('1 Blizzard, 2 Thunder, 3 Poison, 5 Glare+STONE, 8 Glare+Sleep, 32 Blind,');
+L.push('64 Flare. ⛔ Byte 14 reads as inert unless the rate is raised first.');
+L.push('');
+L.push('**Status resistance (byte 13)** really is that — a petrify rod kills a Goblin');
+L.push('outright, and bits `0x01`/`0x02`/`0x04` each block the kill while `0x08`-`0x80`');
+L.push('do not. ⛔ Three bits blocked the same status, so the bit -> status map is NOT');
+L.push('determined and is deliberately not written down.');
+L.push('');
+L.push('**Nibble-packed fields.** Bytes 0 and 4 carry their value in the HIGH nibble,');
+L.push('byte 7 in the LOW one; the other nibble is inert. Swept across all 16 values');
+L.push('of each nibble with the other pinned at 0:');
+L.push('');
+L.push('```');
+L.push('byte 7  LOW   1178 1265 1362 1930 2056 2168 3429 3600');
+L.push('              5344 5568 5844 8680 9070 9420 11958 12372   monotone');
+L.push('        HIGH  1178 everywhere                             inert');
+L.push('byte 0  LOW   1178 across all 16                          inert');
+L.push('        HIGH  1178 1576 2352 3312, then the encounter breaks');
+L.push('byte 4  LOW   1178 across all 16                          inert');
+L.push('        HIGH  1178 1178 1576 1576 2352 2352               in PAIRS');
+L.push('```');
+L.push('');
+L.push('Byte 4 tracks byte 0 at half weight, so the two feed the same damage term.');
+L.push('⛔ Reading either as a plain 0-255 magnitude is wrong, and a coarse sweep that');
+L.push('lands on multiples of 16 never notices.');
+L.push('');
+L.push('## ⛔ Still not isolated');
+L.push('');
+L.push('Byte 6 (mEvadeIdx) — nothing moved it; the party never casts magic at it.');
+L.push('Byte 8 (atkElem) — flat across all 8 bits; the party has no elemental');
+L.push('resistance for an attack element to show up against.');
+L.push('Byte 15 — flat across its entire range in every configuration tried.');
+L.push('These are recorded as unknown, **not** filled in from a wiki.');
 L.push('');
 L.push(`## The bestiary — ${rows.length} monsters`);
 L.push('');
-L.push('| id | name | HP | attack | defence | evade | gil |');
-L.push('|---|---|---|---|---|---|---|');
+L.push('`lvl` and `pwr` are the HIGH nibbles of bytes 0 and 4; `spirit` is the LOW');
+L.push('nibble of byte 7. The other nibble of each is inert — printing the raw byte');
+L.push('would be printing a number the game never reads.');
+L.push('');
+L.push('| id | name | HP | attack | defence | evade | lvl | pwr | spirit | rate | special | weak | resist | on-hit | gil |');
+L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 for (const r of rows) {
-  L.push(`| \`${hex(r.id)}\` | ${r.name} | ${r.hp} | ${r.atk} | ${r.def} | ${r.evd} | ${r.gil} |`);
+  L.push(`| \`${hex(r.id)}\` | ${r.name} | ${r.hp} | ${r.atk} | ${r.def} | ${r.evd} | ${r.lvl} | ` +
+         `${r.pwr} | ${r.spirit} | ${r.rate} | ${r.special} | ${r.weak} | ${r.resist} | ${r.onHit} | ${r.gil} |`);
 }
 L.push('');
 

@@ -18,6 +18,87 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.65 — 2026-08-15
+
+### The rest of FF3's monster record — and a second retraction on $7678
+
+**⛔ `$7678` is a SECOND GOBLIN.** v1.8.63 called it the live HP, v1.8.64 called it
+"a copy that never moves". Both wrong. There is ONE combatant array at `$7578`,
+stride `0x40` — slots 0-3 the party, slots 4-7 the monsters, each `+0` current HP
+and `+2` max — confirmed against the party HP the battle screen draws (30/32,
+30/32, 26/32, 32/32, and slot 2 tracking down as it got hit). This encounter
+spawns two Goblins and the party targets the second first. Kill it and the
+screen prints "Enemy defeated.", the battle carries on, and slot 0 starts taking
+hits (25 -> 18 -> 11). The gate now asserts slot 0 **moves**, which is the check
+that would have caught both mistakes. A footnote: "every fight ends at round 11"
+was also an artifact — round 11 is where the battle MENU stops being drawn.
+
+**Two instruments unlocked everything else.** An **immortal party**, topped back
+to 999 HP every round, turns damage taken into a gradient; without it every probe
+saturates at 118 (the party's total HP) and ⛔ **every field reads as inert** — a
+first pass concluded exactly that and was measuring nothing but "everyone died".
+And **elemental weapons** poked into the party's weapon slots make ordinary
+attacks elemental, so the receive-side fields need no magic. The weapon slots
+were measured, not guessed: writing a sword into each byte of the char-B block in
+turn, only `+3` and `+5` moved the damage — the two hands.
+
+⭐ **Weakness (5) and resistance (11) use the SAME bit per element** — weakness
+doubles, resistance halves, and each is inert against the other element:
+
+```
+                  ice weapon   flame weapon
+  (no bits)             434            434
+  weakness   0x08       879            434     <- 0x08 is ICE
+  weakness   0x10       434            879     <- 0x10 is FIRE
+  elemResist 0x08       209            434
+  elemResist 0x10       434            209
+  elemResist 0x02       209            209     <- not elemental
+```
+
+`0x02` cuts the plain starting weapons too (91 -> 37) — the physical bit.
+
+⭐ **Status-on-attack (10) is a bitmask that names itself on screen** — `0x02`
+PSN, `0x04` BLIND, `0x08` MINI, `0x10` SLNC, `0x20` TOAD, `0x40` STONE, `0x80`
+Died. `0x01` printed nothing and is left unnamed.
+
+⭐ **The special**: byte 3 gates it (0 = never, 0xFF = every turn), byte 14 picks
+which and the game prints the name — 0 Fire, 1 Blizzard, 2 Thunder, 3 Poison,
+5 Glare+STONE, 8 Glare+Sleep, 32 Blind, 64 Flare. ⛔ Byte 14 reads as inert
+unless the rate is raised first, which is how it stayed unlabelled.
+
+⭐ **Status resistance (13)** is real — a petrify rod kills a Goblin outright and
+bits `0x01`/`0x02`/`0x04` each block the kill while `0x08`-`0x80` do not. ⛔ Three
+bits blocked the same status, so the bit -> status map is NOT determined and is
+deliberately not written down. It is plainly not byte 10's order.
+
+⭐ **Three fields are NIBBLE-PACKED.** Bytes 0 and 4 carry their value in the HIGH
+nibble, byte 7 in the LOW one; the other nibble is inert. Swept across all 16
+values of each nibble with the other pinned at 0:
+
+```
+byte 7  LOW   1178 1265 1362 1930 2056 2168 3429 3600
+              5344 5568 5844 8680 9070 9420 11958 12372   monotone
+        HIGH  1178 everywhere                             inert
+byte 0  LOW   1178 across all 16                          inert
+        HIGH  1178 1576 2352 3312, then the encounter breaks
+byte 4  LOW   1178 across all 16                          inert
+        HIGH  1178 1178 1576 1576 2352 2352               in PAIRS
+```
+
+Byte 4 tracks byte 0 at half weight, so the two feed the same damage term. ⛔ A
+coarse sweep landing on multiples of 16 never notices any of this.
+
+⛔ **Still not isolated, and recorded as such:** byte 6 (mEvadeIdx, the party
+never casts magic at it), byte 8 (atkElem, flat across all 8 bits — the party has
+no elemental resistance for it to show against), byte 15 (flat across its entire
+range in every configuration tried).
+
+**New gate — `tools/check-ff3-monster-fields.mjs`, 27/27.** Most claims are read
+off the battle screen BY NAME, which is far harder to fake than a number.
+Revert-proven three ways: swap the ICE/FIRE bits -> **5 failures**; swap which
+nibble drives which byte -> **6 failures**; mislabel the `0x40` status bit -> **1
+failure**. `docs/FF3-MONSTERS.md` grows nine measured columns.
+
 ## 1.8.64 — 2026-08-15
 
 ### The Goblin was hurtable the whole time — a retraction, and two fields
