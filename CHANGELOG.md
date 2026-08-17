@@ -18,6 +18,25 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.8 — 2026-08-17
+
+### The FF1/FF2 shop gates move to the manual audit too
+
+`check-ff1-shops` (121s, 113 checks) and `check-ff2-shops` (109s, 83 checks) join
+`tools/audit-rom-decodes.mjs` — **230 more seconds off every deploy**.
+
+Same justification, verified the same way: nothing under `src/` imports
+`lib/ff1-shops` or `lib/ff2-shops`. Those gates protect the FF1/FF2 shop
+CATALOGS (`docs/FF1-SHOPS.md`, `docs/FF2-SHOPS.md`) — reference documentation,
+not game data. The game's own shops are `src/data/shops.js`, still gated by
+`check-shops` on every deploy.
+
+⭐ **Nothing weakened**: 10/10 decode gates pass under the manual runner (382s).
+⛔ `check-ff3-shops` stays in `deploy.sh` — FF3 shop data IS game content.
+
+Deploy is now carrying 48 gates instead of 56, with ~384s of emulator work moved
+to an on-demand audit.
+
 ## 1.9.7 — 2026-08-17
 
 ### Moved the FF1/FF2 ROM decode gates out of `deploy.sh`

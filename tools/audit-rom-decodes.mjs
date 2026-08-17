@@ -8,8 +8,8 @@
 // `lib/ff2-encounters`. They are a reference library, not a production contract.
 //
 // ⭐ They are still real and still revert-proven. Run this after touching any of:
-//   tools/lib/ff1-monsters.mjs   tools/lib/ff1-map.mjs
-//   tools/lib/ff2-locations.mjs  tools/lib/ff2-encounters.mjs
+//   tools/lib/ff1-monsters.mjs   tools/lib/ff1-map.mjs   tools/lib/ff1-shops.mjs
+//   tools/lib/ff2-locations.mjs  tools/lib/ff2-encounters.mjs  tools/lib/ff2-shops.mjs
 //
 //   node tools/audit-rom-decodes.mjs
 //   node tools/audit-rom-decodes.mjs --only ff2
@@ -29,6 +29,8 @@ const GATES = [
   ['ff1', 'check-ff1-formation-pattern.mjs', ['--prove-revert']],
   ['ff1', 'check-ff1-palette-select.mjs', ['--prove-revert']],
   ['ff1', 'check-ff1-encounter-rate.mjs', []],
+  ['ff1', 'check-ff1-shops.mjs', []],
+  ['ff2', 'check-ff2-shops.mjs', []],
   ['ff2', 'check-ff2-encounters.mjs', []],
   ['ff2', 'check-ff2-formations.mjs', []],
 ];
