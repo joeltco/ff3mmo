@@ -18,6 +18,48 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.92 — 2026-08-16
+
+### ⭐ FF1 formation bytes 10 and 11 are the battle PALETTE indices
+
+TCRF's FF1 page notes that some formations were altered for the American release
+because enemies "will occasionally display **corrupted colors**". That is a
+consequence of how the record is laid out: **the colours ride the FORMATION, not
+the monster.** Pair a formation with the wrong index and the monster draws in
+another monster's palette.
+
+Measured with `tools/ff1-formation-palette.mjs`, which patches one byte of the
+formation record, walks into a real encounter, and reads PPU `$3F00-$3F1F`:
+
+| byte | what it repaints |
+|---|---|
+| **10** | `$3F05-07` — **BG palette 1**, all three colours |
+| **11** | `$3F09-0B` — **BG palette 2**, all three colours |
+| 1 | 23 slots — a whole-scene change, **not identified** |
+| 12 | `$3F08` + `$3F18-1B` — **not identified** |
+
+⭐ The species does **not** pick the colours. Byte 2 provably reaches the fight
+(`$6BC9` slot 0 becomes the patched id) and moves **zero** palette slots across
+four very different monsters. That is the finding, not a broken probe — and it is
+what makes a mismatched formation possible in the first place.
+
+Both bytes index **one** table: `BATTLE_PAL_TABLE = 0x30F30` (bank 12, CPU
+`$8F20`), 4 bytes per entry, 64 entries, `[0x0F, c1, c2, c3]` — byte 0 is the NES
+backdrop and is `0x0F` throughout, which is why `$3F04`/`$3F08` never move. Found
+by `tools/ff1-palette-table.mjs`: read the colours off the PPU for 16 indices per
+byte, then search the ROM for a table reproducing **every** one. Exactly one
+offset in the whole ROM does, bytes 10 and 11 agree on it, and the ROM contains
+exactly one reader — `LDA $8F20,X` at CPU `$F478`.
+
+New gate `check-ff1-palette.mjs` (11/11, in `deploy.sh`, ~1s, no emulator). Its
+expectations are the PPU measurements, never values derived from the constant
+under test; `--prove-revert` moves the base by -4/+4/+16 and fails if the gate
+would have survived. `--live` re-fights for real.
+
+⛔ Bytes 0, 12, 13, 14, 15 remain unidentified and stay on
+`FORMATION_UNKNOWN_OFF`. Bytes 1 and 12 move the palette but *what* they select
+is not established, so they are listed as unidentified rather than guessed at.
+
 ## 1.8.91 — 2026-08-16
 
 ### FF2 warp table: not located. Third approach to dead-end; stopping.

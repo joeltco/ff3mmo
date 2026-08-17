@@ -57,9 +57,41 @@ export const formationSpecies = (rom, f) => {
   return FORMATION_SPECIES_OFF.map((o, i) => ({ id: r[o], count: countRange(r[FORMATION_COUNT_OFF[i]]) }))
     .filter(e => e.count[0] > 0 || e.count[1] > 0);
 };
-/** ⛔ Bytes 0, 1 and 10-15 are NOT identified — patching them moved neither the
- *  species nor the body count. Recorded as unknown rather than guessed. */
-export const FORMATION_UNKNOWN_OFF = [0, 1, 10, 11, 12, 13, 14, 15];
+// ── ⭐ BYTES 10 AND 11 ARE THE BATTLE PALETTE INDICES ───────────────────────
+// TCRF notes that formations were altered for the American release because
+// enemies "will occasionally display corrupted colors". That is a consequence of
+// this: the colours travel with the FORMATION, not with the monster. Measured by
+// `tools/ff1-formation-palette.mjs` — patching the SPECIES (byte 2) provably
+// reaches the fight ($6BC9 slot 0 becomes the patched id) and does not move a
+// single palette slot, while byte 10 repaints BG palette 1 ($3F05-07) and byte
+// 11 repaints BG palette 2 ($3F09-0B). Pair a formation with the wrong index and
+// the monster draws in another monster's colours.
+//
+// Both are indices into ONE 4-byte-per-entry table, found by reading the colours
+// off the PPU for 16 indices each and searching the ROM for the table that
+// reproduces every one — exactly ONE offset in the whole ROM does, and bytes 10
+// and 11 agree on it. Entry = [0x0F, c1, c2, c3]; byte 0 is the NES backdrop and
+// is 0x0F for every entry, which is why $3F04/$3F08 never move.
+//
+// The single reader: `LDA $8F20,X` at CPU $F478 (bank 15).
+export const BATTLE_PAL_TABLE = 0x30F30;   // bank 12, CPU $8F20
+export const BATTLE_PAL_STRIDE = 4;
+export const BATTLE_PAL_BACKDROP = 0x0F;   // entry byte 0, constant
+export const BATTLE_PAL_READER_PC = 0xF478;      // CPU, bank 15
+export const BATTLE_PAL_READER_FILE = 0x3F488;   // the LDA abs,X opcode
+export const FORMATION_PAL_OFF = [10, 11];       // -> BG palette 1, BG palette 2
+export const FORMATION_PAL_PPU = [0x3F05, 0x3F09];
+/** The 4 NES colour indices for palette entry `i`. */
+export const battlePalette = (rom, i) =>
+  [...rom.slice(BATTLE_PAL_TABLE + i * BATTLE_PAL_STRIDE,
+                BATTLE_PAL_TABLE + (i + 1) * BATTLE_PAL_STRIDE)];
+
+/** ⛔ Bytes 0, 12, 13, 14, 15 are still NOT identified. Byte 1 and byte 12 DO
+ *  move the palette (byte 1 repaints 23 slots — a whole-scene change; byte 12
+ *  touches $3F08 and $3F18-1B) but what they select is not established, so they
+ *  stay here rather than being guessed at. */
+export const FORMATION_UNKNOWN_OFF = [0, 1, 12, 13, 14, 15];
+export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [1, 12];
 
 // The 20-byte STAT record per monster. Located by hooking the source read of the
 // copy loop ($AFB6 LDA ($9C),Y): monster 0 reads from $8520, monster 58 from
