@@ -21,9 +21,11 @@
 //   ⭐ the bank is CONFIRMED by matching live bytes against the ROM — a CPU
 //      address is not an identity until you know what is mapped there;
 //   ⭐ and each id byte is PATCHED INDEPENDENTLY and must move that exact slot.
-// ⛔ It does NOT claim to know how $0E/$0F is derived: the pointer table is NOT a
-// stride-2 LE table (a two-anchor search returned 0 candidates), and the records
-// are not sequential either. That is still open and is deliberately not asserted.
+// ⭐ The DERIVATION is now proven too (v1.9.4): ptr = $8AA0 + v*4 where v is byte 5
+// of the record at ($0A). Patching that byte moves the pointer to the PREDICTED
+// address and changes the monsters. ⛔ It is COMPUTED, not looked up — which is
+// why a stride-2 pointer-table search returned 0 candidates and the records are
+// not sequential. Don't go looking for a pointer table; there isn't one.
 
 import fs from 'node:fs';
 import { NES, Controller } from 'jsnes';
@@ -35,6 +37,19 @@ export const FORMATION_ID_OFF = [0, 1];      // the two monster-id bytes
 export const IDS_RAM = 0x7B4E, COUNTS_RAM = 0x7B52;
 export const IDS_WRITE_PC = 0x98CF, COUNTS_WRITE_PC = 0x98CA;
 export const REC_PTR_ZP = 0x0E;
+
+// ── ⭐⭐ HOW THE RECORD POINTER IS DERIVED (bank 11 $98A1-$98BE) ────────────
+//   $98AD  LDA ($0A),Y   (Y=5)      ; an index byte, 5 into the record at ($0A)
+//   $98B1  JSR $FC79     (X=4)      ; x4
+//   $98B4  LDA $02 / ADC #$A0 / STA $0E
+//   $98BA  LDA $03 / ADC #$8A / STA $0F      ; ids    = $8AA0 + v*4
+//   $98A1        ADC #$A0 / STA $0C
+//   $98A5  LDA $03 / ADC #$8B / STA $0D      ; counts = $8BA0 + v*4
+// ⛔ COMPUTED, NOT LOOKED UP — which is why a pointer-table search found nothing
+// and why the records are not sequential.
+export const IDS_PTR_BASE = 0x8AA0, COUNTS_PTR_BASE = 0x8BA0, PTR_SCALE = 4;
+export const IDX_REC_ZP = 0x0A, IDX_REC_OFF = 5;
+export const IDX_READ_PC = 0x98AD;
 
 const { rom, snapshot } = L2.loadFixtures();
 const SETS = 0x2C290, ENC = 0x2C110, LOC = 0x29, FORM = 0x2B;
@@ -93,6 +108,61 @@ function probe(patch) {
   return null;
 }
 
+/** Run a battle and report how the record pointer was derived. */
+function derive(patch) {
+  const r = Uint8Array.from(rom);
+  const set = r[ENC + LOC];
+  for (let i = 0; i < 8; i++) r[SETS + set * 8 + i] = FORM;
+  for (const [o, v] of Object.entries(patch || {})) r[Number(o)] = v;
+  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  nes.loadROM(Buffer.from(r).toString('binary'));
+  nes.fromJSON(JSON.parse(snapshot));
+  nes.frame();
+  const c = nes.cpu;
+  c.mem[L2.PARTY_X_ZP] = L2.destX(r, LOC); c.mem[L2.PARTY_Y_ZP] = L2.destY(r, LOC);
+  c.mem[L2.LOC_ID_ZP] = LOC; c.mem[L2.DEST_ID_ZP] = LOC;
+  const st = [0x20, L2.LOC_ENTRY_PC & 0xFF, L2.LOC_ENTRY_PC >> 8, ...L2.NMI_TRAMPOLINE];
+  st.forEach((b, i) => { c.mem[L2.NMI_STUB_RAM + i] = b; });
+  c.mem[0x100] = 0x4C; c.mem[0x101] = L2.NMI_STUB_RAM & 0xFF; c.mem[0x102] = L2.NMI_STUB_RAM >> 8;
+  nes.frame();
+  L2.NMI_TRAMPOLINE.forEach((b, i) => { c.mem[0x100 + i] = b; });
+  const run = (k) => { for (let i = 0; i < k; i++) nes.frame(); };
+  run(90);
+  const base = [...nes.ppu.vramMem.slice(0x2000, 0x23C0)];
+  const loc0 = c.mem[L2.LOC_ID_ZP];
+  let armed = false, curPC = 0, srcPtr = null, v5 = null, bank = null, ptr = null;
+  const oW = c.write.bind(c), oE = c.emulate.bind(c);
+  c.write = function (a, vv) { if (armed && a === 0x0F && ptr === null) ptr = c.mem[0x0E] | (vv << 8); return oW(a, vv); };
+  c.emulate = function () {
+    curPC = (c.REG_PC + 1) & 0xFFFF;
+    if (curPC === 0xC5A3) armed = true;
+    if (armed && curPC === IDX_READ_PC && srcPtr === null) {
+      srcPtr = c.mem[IDX_REC_ZP] | (c.mem[IDX_REC_ZP + 1] << 8);
+      const sig = Array.from({ length: 16 }, (_, k) => nes.mmap.load(0x9890 + k) & 0xFF);
+      for (let bk = 0; bk < 16; bk++) {
+        const off = 0x10 + bk * 0x4000 + (0x9890 - 0x8000);
+        let okb = true;
+        for (let j = 0; j < 16; j++) if (rom[off + j] !== sig[j]) { okb = false; break; }
+        if (okb) { bank = bk; break; }
+      }
+      v5 = nes.mmap.load((srcPtr + IDX_REC_OFF) & 0xFFFF) & 0xFF;
+    }
+    return oE();
+  };
+  for (let s = 0; s < 80; s++) {
+    const b = D[Math.floor(s / 5) % 4];
+    nes.buttonDown(1, b); run(6); nes.buttonUp(1, b); run(8);
+    const now = nes.ppu.vramMem.slice(0x2000, 0x23C0);
+    let d = 0;
+    for (let i = 0; i < now.length; i++) if (now[i] !== base[i]) d++;
+    if (d > base.length * 0.85 && c.mem[L2.LOC_ID_ZP] === loc0) {
+      run(120);
+      return { srcPtr, v5, bank, ptr, ids: [...c.mem.slice(IDS_RAM, IDS_RAM + 4)] };
+    }
+  }
+  return null;
+}
+
 let bad = 0, n = 0;
 const ok = (label, cond, detail) => {
   n++; if (!cond) bad++;
@@ -128,6 +198,28 @@ for (const off of [2, 3]) {
      p ? p.ids.map(v => hx(v)).join(' ') : 'no battle');
 }
 ok('the unpatched ids differ from the sentinel', !a.ids.includes(SENT));
+
+// ── ⭐ the derivation: ptr = $8AA0 + v*4, patch-proven ──────────────────────
+{
+  const d = derive();
+  ok('the index byte and pointer were read live, bank confirmed',
+     d && d.bank === FORMATION_REC_BANK, d ? `($0A)=$${hx(d.srcPtr,4)} byte5=${hx(d.v5)}` : '');
+  ok('ptr = $8AA0 + v*4 reproduces the measured pointer',
+     d && (IDS_PTR_BASE + d.v5 * PTR_SCALE) === d.ptr,
+     `$${hx(IDS_PTR_BASE + d.v5 * PTR_SCALE,4)} vs $${hx(d.ptr,4)}`);
+  const file = 0x10 + d.bank * 0x4000 + (d.srcPtr - 0x8000) + IDX_REC_OFF;
+  for (const delta of [1, 2]) {
+    const p = derive({ [file]: (d.v5 + delta) & 0xFF });
+    const want = (IDS_PTR_BASE + ((d.v5 + delta) & 0xFF) * PTR_SCALE) & 0xFFFF;
+    ok(`patching the index byte +${delta} moves the pointer to the PREDICTED address`,
+       p && p.ptr === want, `$${hx(p.ptr,4)} vs predicted $${hx(want,4)}`);
+  }
+  // ⛔ and it must reach the monsters, not just the pointer
+  const far = derive({ [file]: (d.v5 + 2) & 0xFF });
+  ok('...and a moved pointer yields DIFFERENT monsters',
+     far && JSON.stringify(far.ids) !== JSON.stringify(d.ids),
+     `${d.ids.map(v=>hx(v)).join(' ')} -> ${far.ids.map(v=>hx(v)).join(' ')}`);
+}
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);
