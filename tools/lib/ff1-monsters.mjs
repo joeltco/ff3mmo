@@ -86,12 +86,46 @@ export const battlePalette = (rom, i) =>
   [...rom.slice(BATTLE_PAL_TABLE + i * BATTLE_PAL_STRIDE,
                 BATTLE_PAL_TABLE + (i + 1) * BATTLE_PAL_STRIDE)];
 
-/** ⛔ Bytes 0, 12, 13, 14, 15 are still NOT identified. Byte 1 and byte 12 DO
- *  move the palette (byte 1 repaints 23 slots — a whole-scene change; byte 12
- *  touches $3F08 and $3F18-1B) but what they select is not established, so they
- *  stay here rather than being guessed at. */
-export const FORMATION_UNKNOWN_OFF = [0, 1, 12, 13, 14, 15];
-export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [1, 12];
+// ── ⭐ BYTE 1 IS THE MONSTER SIZE / LAYOUT CLASS — ONLY BITS 0-1 ARE LIVE ────
+// It repaints 23 of 32 palette slots, which reads like a palette field and is
+// not one: it changes WHICH TILES ARE DRAWN. Measured by `ff1-formation-byte1.mjs`
+// (body count + nametable + attribute table + framebuffer, four signals) and by
+// looking at the rendered frames.
+//
+//   bits 2-7   INERT. 0x04/0x08/0x10/0x20/0x40/0x80 are byte-identical to 0x00
+//              on every signal — so the field is 2 bits wide.
+//   bit 1      ⭐ ALTERNATE MONSTER ART. The per-slot attribute array flips from
+//              0x00 to 0x80 and the same formation draws WOLVES instead of IMPs
+//              — same species ids, same name in the box, same stats, palette
+//              untouched. A formation with this bit wrong shows the wrong
+//              creature, which is the class of bug TCRF records for FF1.
+//   bit 0      ⭐ ALTERNATE SLOT LAYOUT. Placement changes from the 9-slot two
+//              column grid to 3 slots in one column. ⛔ With THIS formation's own
+//              count byte (0x35 = 3..5) nothing is placed at all — the field is
+//              empty and the screen draws garbage. Set the counts to 0x11 and it
+//              places 3. So bit 0 alone is not "no monsters"; the counts have to
+//              suit the layout.
+//
+// ⛔ A 128-species sweep with bit 0 set and the natural counts put a body on the
+// field ZERO times. So the empty field is NOT "this species has no large art" —
+// it is the count/placement path. Don't re-run that sweep.
+// ⚠ "size class" is a READING of the two bits, not a measured name. What is
+// measured: which tiles are drawn, the placement arrays, and the slot count.
+export const FORMATION_GFX_OFF = 1;
+export const FORMATION_GFX_MASK = 0x03;      // bits 2-7 measured inert
+export const FORMATION_GFX_ALT_LAYOUT = 0x01;
+export const FORMATION_GFX_ALT_ART = 0x02;
+/** Two parallel 9-byte arrays: slot -> enemy index, then slot -> art attribute. */
+export const ENEMY_PLACE_SLOTS = 0x6BB7, ENEMY_PLACE_ATTR = 0x6BC0, ENEMY_PLACE_LEN = 9;
+export const ENEMY_PLACE_EMPTY = 0xFF;
+export const ALT_ART_ATTR = 0x80;
+/** The 16-byte record is copied here at setup ($F2BC STA $6D84,Y). */
+export const FORMATION_RAM_COPY = 0x6D84;
+
+/** ⛔ Bytes 0, 12, 13, 14, 15 are still NOT identified. Byte 12 moves the palette
+ *  ($3F08 and $3F18-1B) but what it selects is not established. */
+export const FORMATION_UNKNOWN_OFF = [0, 12, 13, 14, 15];
+export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [12];
 
 // The 20-byte STAT record per monster. Located by hooking the source read of the
 // copy loop ($AFB6 LDA ($9C),Y): monster 0 reads from $8520, monster 58 from

@@ -18,6 +18,44 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.93 — 2026-08-16
+
+### ⭐ FF1 formation byte 1 is the monster SIZE/LAYOUT class — and only 2 bits wide
+
+Byte 1 repaints **23 of the 32 palette slots**, which is exactly what a palette
+field would do. It is not one: it changes **which tiles are drawn**. Only the
+nametable separates those two readings, which is why
+`tools/ff1-formation-byte1.mjs` measures four independent signals per value —
+body count, nametable, attribute table, and framebuffer — instead of colour alone.
+
+| bits | measured effect |
+|---|---|
+| 2-7 | **inert.** `0x04/0x08/0x10/0x20/0x40/0x80` are byte-identical to `0x00` on every signal — the field is 2 bits wide |
+| **1** | **alternate monster ART** — the per-slot attribute array flips `0x00`→`0x80` and the formation draws **wolves instead of IMPs**: same species ids, same name in the box, same bodies, **palette untouched** |
+| **0** | **alternate slot LAYOUT** — placement changes from the 9-slot two-column grid to **3 slots in one column** |
+
+⛔ With bit 0 and this formation's own count byte (`0x35` = 3..5) **nothing is
+placed at all** — empty field, garbage screen. Set the counts to `0x11` and it
+places 3. So bit 0 alone is not "no monsters"; the counts have to suit the
+layout. A **128-species sweep** with bit 0 and the natural counts put a body on
+the field **zero times** (all 128 reached a battle), so the empty field is the
+count/placement path, not "this species has no large art".
+
+⭐ `$6BB7` is **two parallel 9-byte arrays** — slot → enemy index, then slot →
+art attribute (`ENEMY_PLACE_SLOTS` / `ENEMY_PLACE_ATTR`). The record itself is
+copied to RAM `$6D84` at setup.
+
+New gate `check-ff1-formation-gfx.mjs` (13/13, in `deploy.sh`, ~30s). Every
+assertion fights a real battle — none of this is visible in the ROM bytes. The
+load-bearing one is *"bit 1 changes the tiles **while leaving the palette
+untouched**"*, which is the discriminator against reading byte 1 as a palette
+field. `--prove-revert` applies the same patch to bytes 0 and 12 and fails if
+either also produces the art-swap signature.
+
+⚠ "size class" is a **reading** of the two bits, not a measured name. What is
+measured: the drawn tiles, the placement arrays, and the slot count.
+⛔ Bytes 0, 12, 13, 14, 15 remain unidentified.
+
 ## 1.8.92 — 2026-08-16
 
 ### ⭐ FF1 formation bytes 10 and 11 are the battle PALETTE indices
