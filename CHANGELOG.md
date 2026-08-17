@@ -18,6 +18,50 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.3 — 2026-08-17
+
+### ⭐⭐ FF2's FORMATION RECORD — the monsters, patch-proven
+
+The last hop of the encounter chain. A formation id becomes a record pointer in
+zero page `$0E/$0F`, and bank 11 copies the record out:
+
+```
+$98CA  STA $7B52,Y     ; the COUNTS
+$98CD  LDA ($0E),Y
+$98CF  STA $7B4E,Y     ; ⭐ the MONSTER IDS
+```
+
+For formation `0x2B` the pointer reads `$8B3C` in **bank 11** = file **`0x2CB4C`**:
+
+```
+record: 66 6A 6D 00 66 6A 67 6B      ->  ids 6A, 66   counts 02, 01
+patch +0 (66->11) -> ids  6A 11      patch +1 (6A->11) -> ids  11 66
+patch +2, +3                          -> ids unchanged (not id bytes)
+```
+
+Both id slots move independently and exactly as patched, and the counts reconcile
+with the staged array (`6A 6A 66` = 2x `6A`, 1x `66`) and with the rendered battle.
+
+⛔ **Seven earlier candidates for this table were wrong** — found by static search
+or by trace adjacency. One (`$9BB7`) held `0x00` while the value written was `0x6A`;
+one whole class died because a CPU address was decoded in the wrong bank. So the
+gate reads the pointer **live**, **confirms the bank** against the ROM, and
+**patches each id byte independently** with neighbouring bytes as the control.
+
+⛔ **Still open, deliberately not asserted:** how `$0E/$0F` is derived. The pointer
+table is NOT a stride-2 LE table (a two-anchor search returned 0 candidates), and
+the records are not sequential either.
+
+New gate `check-ff2-formations.mjs` (9/9, in `deploy.sh`).
+
+### The full FF2 encounter chain
+
+```
+location $48 -> $8100 set -> $8280+set*8 (8 slots, 12/12/12/12/6/6/3/1)
+  -> formation id $6A -> ($0E) record bank 11 -> $7B4E ids / $7B52 counts
+  -> $7B62 staged -> x10 -> $87C3 stat record -> enemy block $7E3A
+```
+
 ## 1.9.2 — 2026-08-17
 
 ### ⭐⭐ FF2 encounter sets decoded — 8 weighted formation slots per set

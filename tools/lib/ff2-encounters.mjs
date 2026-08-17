@@ -17,6 +17,18 @@
 // ⛔ Also: `nes.opts.onFrame` assigned AFTER construction never fires, so the
 // verification screenshots came out empty until onFrame was passed to `new NES`.
 //
+// ⛔⛔ TWO DISPROVEN LEADS FOR "formation id -> monsters" (v1.9.2). Do NOT re-chase:
+//   1. `LDA $6A` at bank 1 $80FD is a FALSE MATCH — those bytes are DATA, part of
+//      a pointer table ($A56A, $A5A4, $A5D8, $A60D ... monotonic LE words). A
+//      static opcode scan cannot tell code from data; hook the read instead.
+//   2. The address-delta differential (force formation 0x2B vs 0x77, diff the ROM
+//      reads) DID find a contiguous range differing by exactly 0x4C — base $9B95
+//      in BANK 8 = file 0x21BA5, read by `LDA ($02),Y` at $FD73. ⛔ BUT PATCHING
+//      BYTES AT `0x21BA5 + formation` CHANGES NOTHING ON SCREEN (tested offsets
+//      0-4). So it is NOT the formation record — it is a copy loop whose SOURCE
+//      happens to shift with the formation, almost certainly graphics. The
+//      delta trick finds correlated addresses; only a PATCH proves causation.
+//
 // ➡ STILL OPEN: the encounter TABLES themselves — which per-location table maps a
 // location to its encounter set, and where the formations live. The way in is now
 // to hook a battle-start and see which `$48`-indexed table was read; the candidate
