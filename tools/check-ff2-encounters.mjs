@@ -34,6 +34,23 @@ export const ENCOUNTER_SET_READ_PC = 0xCF79;  // LDA $8100,X
 export const ENCOUNTER_RATE_ZP = 0xF8;
 export const ENCOUNTER_EXEMPT_LO = 0x40, ENCOUNTER_EXEMPT_HI = 0x50;
 
+// ── ⭐⭐ THE SET RECORD: 8 weighted FORMATION ids ───────────────────────────
+//   $C579  ASL A / ROL $81 (x3) / ADC #$80 / ADC #$82  ; ptr = $8280 + set*8
+//   $C591  LDA #$0B / JSR $FE03                        ; bank 11
+//   $C59A  LDA $F900,X / AND #$3F / TAX                ; random 0..63
+//   $C5A0  LDY $C5C8,X                                 ; 64-entry WEIGHT table
+//   $C5A3  LDA ($80),Y / STA $6A                       ; the chosen FORMATION id
+// Slot weights out of 64: 12 12 12 12 6 6 3 1 — a rare tail, same shape as FF3.
+export const SET_RECORD_TABLE = 0x2C290;    // file; bank 11 $8280, 8 bytes/set
+export const SET_RECORD_LEN = 8;
+export const SLOT_WEIGHT_TABLE = 0x3C5D8;   // file; bank 15 $C5C8, 64 entries
+export const FORMATION_PICK_PC = 0xC5A3;    // LDA ($80),Y
+export const FORMATION_ID_ZP = 0x6A;
+export const SLOT_WEIGHTS = [12, 12, 12, 12, 6, 6, 3, 1];
+export const setRecord = (r, set) =>
+  [...r.slice(SET_RECORD_TABLE + set * SET_RECORD_LEN,
+              SET_RECORD_TABLE + (set + 1) * SET_RECORD_LEN)];
+
 const { rom, snapshot } = L2.loadFixtures();
 const D = [Controller.BUTTON_UP, Controller.BUTTON_RIGHT, Controller.BUTTON_DOWN, Controller.BUTTON_LEFT];
 const hx = (v, n = 2) => v.toString(16).toUpperCase().padStart(n, '0');
@@ -50,11 +67,12 @@ function fight(dest, patch = {}) {
   const c = nes.cpu;
   c.mem[L2.PARTY_X_ZP] = L2.destX(r, dest); c.mem[L2.PARTY_Y_ZP] = L2.destY(r, dest);
   c.mem[L2.LOC_ID_ZP] = dest; c.mem[L2.DEST_ID_ZP] = dest;
-  let setUsed = null;
+  let setUsed = null, formation = null;
   const oE = c.emulate.bind(c);
   c.emulate = function () {
     const pc = (c.REG_PC + 1) & 0xFFFF; const res = oE();
     if (pc === ENCOUNTER_SET_READ_PC && setUsed === null) setUsed = c.REG_ACC;
+    if (pc === FORMATION_PICK_PC && formation === null) formation = c.REG_ACC;
     return res;
   };
   const st = [0x20, L2.LOC_ENTRY_PC & 0xFF, L2.LOC_ENTRY_PC >> 8, ...L2.NMI_TRAMPOLINE];
@@ -76,7 +94,7 @@ function fight(dest, patch = {}) {
     if (d > base.length * 0.85 && c.mem[L2.LOC_ID_ZP] === loc0) {
       run(40);
       const nt = Buffer.from(nes.ppu.vramMem.slice(0x2000, 0x23C0));
-      return { hash: crypto.createHash('sha1').update(nt).digest('hex').slice(0, 10), step: s, setUsed };
+      return { hash: crypto.createHash('sha1').update(nt).digest('hex').slice(0, 10), step: s, setUsed, formation };
     }
   }
   return null;
@@ -123,6 +141,30 @@ ok('the table is non-uniform — many distinct sets across locations', distinct 
    `${distinct} distinct values, ${zero}/256 are zero`);
 ok('...and both probed locations carry a nonzero set',
    encounterSet(rom, A) !== 0 && encounterSet(rom, B) !== 0);
+
+// ── ⭐ the SET RECORD is the formation source ───────────────────────────────
+{
+  const rec = setRecord(rom, encounterSet(rom, A));
+  ok('the formation the CPU picks is one of the set\'s 8 slots',
+     rec.includes(a.formation), `picked ${hx(a.formation)} from ${rec.map(v => hx(v)).join(' ')}`);
+  // ⭐ RNG-PROOF: fill EVERY slot with a sentinel, so whatever the weighted roll
+  // picks must be that value. This is what makes the claim independent of luck.
+  for (const sent of [0x2B, 0x77]) {
+    const patch = {};
+    for (let i = 0; i < SET_RECORD_LEN; i++) patch[SET_RECORD_TABLE + encounterSet(rom, A) * SET_RECORD_LEN + i] = sent;
+    const f = fight(A, patch);
+    ok(`filling all 8 slots with ${hx(sent)} makes the CPU pick ${hx(sent)}`,
+       f && f.formation === sent, f ? `picked ${hx(f.formation)}` : 'no battle');
+  }
+  // ⛔ and the unpatched pick must differ from both sentinels, or the above is vacuous
+  ok('the unpatched formation differs from both sentinels',
+     a.formation !== 0x2B && a.formation !== 0x77, hx(a.formation));
+  ok('the slot weights are the 64-entry table at $C5C8',
+     JSON.stringify(SLOT_WEIGHTS) === JSON.stringify(
+       (() => { const w = [...rom.slice(SLOT_WEIGHT_TABLE, SLOT_WEIGHT_TABLE + 64)];
+                return [...Array(8)].map((_, i) => w.filter(v => v === i).length); })()),
+     SLOT_WEIGHTS.join('/'));
+}
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

@@ -18,6 +18,46 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.2 — 2026-08-17
+
+### ⭐⭐ FF2 encounter sets decoded — 8 weighted formation slots per set
+
+The set id from `$8100` goes straight into `$C579`, which is fully readable:
+
+```
+$C57D  ASL A / ROL $81 (x3) / ADC #$80 / ADC #$82   ; ptr = $8280 + set*8
+$C591  LDA #$0B / JSR $FE03                          ; bank 11
+$C59A  LDA $F900,X / AND #$3F / TAX                  ; random 0..63
+$C5A0  LDY $C5C8,X                                   ; ⭐ 64-entry WEIGHT table
+$C5A3  LDA ($80),Y / STA $6A                         ; ⭐⭐ the FORMATION id
+```
+
+| thing | where |
+|---|---|
+| set record | bank 11 `$8280 + set*8` = file **`0x2C290`**, **8 formation ids** |
+| slot weights | bank 15 `$C5C8` = file **`0x3C5D8`**, 64 entries |
+| chosen formation | `$6A` |
+
+Slot weights out of 64: **12 12 12 12 6 6 3 1** — a rare tail, the same shape as
+FF3's drop table.
+
+⭐ **The proof is RNG-proof.** Location `0x29` uses set `6F`, whose record is
+`0F 8F 47 91 F1 E2 F2 59`, and the CPU picked `47` — one of the eight. Then
+**every slot** was filled with a sentinel, so whatever the weighted roll lands on
+must be that value: `2B` → picks `2B`, `77` → picks `77`, while the unpatched pick
+(`47`) differs from both. Filling all eight removes luck from the claim entirely.
+
+`check-ff2-encounters.mjs` is now 15/15.
+
+### ⛔ Not decoded: formation id -> the actual monsters
+
+One hop remains. The lead: `$6A` is consumed at bank 1 `$80FD`, and the bytes there
+are **data, not code** — read as little-endian words they run `$A56A, $A5A4,
+$A5D8, $A60D, $A646, $A684, ...`, monotonically increasing, i.e. a pointer table
+into `$A5xx`+ (variable-length records). ⚠ That is a **reading of a byte pattern,
+not a measurement** — nothing has been patched or watched yet, so it is recorded
+as a lead, not a finding.
+
 ## 1.9.1 — 2026-08-17
 
 ### ⭐⭐ FF2's ENCOUNTER TABLE — found by differential execution
