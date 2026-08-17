@@ -32,6 +32,14 @@ import * as L2 from './lib/ff2-locations.mjs';
 export const ENCOUNTER_SET_TABLE = 0x2C110;   // file; bank 11, CPU $8100
 export const ENCOUNTER_SET_READ_PC = 0xCF79;  // LDA $8100,X
 export const ENCOUNTER_RATE_ZP = 0xF8;
+// ⭐⭐ THE RATE TABLE: bank 11 $8000 + locationId (the bank is set by the code
+// itself, `$D123 LDA #$0B / JSR $FE03`, immediately before the read):
+//   $D128  LDX $48 / LDA $8000,X / STA $F8
+// ⭐ FF1 uses the SAME convention — zero page $F8, a bank-11 table indexed by the
+// map id ($8C01+mapId). Two games, one design.
+// ⛔ The rate is loaded at LOCATION ENTRY, so it can only be tested by crossing a
+// real load — `enterLocation`, not a mid-walk poke (see check-ff1-encounter-rate).
+export const RATE_TABLE = 0x2C010;
 export const ENCOUNTER_EXEMPT_LO = 0x40, ENCOUNTER_EXEMPT_HI = 0x50;
 
 // ── ⭐⭐ THE SET RECORD: 8 weighted FORMATION ids ───────────────────────────
@@ -164,6 +172,26 @@ ok('...and both probed locations carry a nonzero set',
        (() => { const w = [...rom.slice(SLOT_WEIGHT_TABLE, SLOT_WEIGHT_TABLE + 64)];
                 return [...Array(8)].map((_, i) => w.filter(v => v === i).length); })()),
      SLOT_WEIGHTS.join('/'));
+}
+
+// ── ⭐ the RATE table, patch-proven across a real location entry ────────────
+{
+  for (const loc of [0x29, 0x60]) {
+    const e = L2.enterLocation(rom, snapshot, loc, { frames: 120 });
+    ok(`loc ${hx(loc)}: $F8 after entry equals its table entry`,
+       e.cpu.mem[ENCOUNTER_RATE_ZP] === rom[RATE_TABLE + loc],
+       `$F8=${hx(e.cpu.mem[ENCOUNTER_RATE_ZP])} table=${hx(rom[RATE_TABLE + loc])}`);
+  }
+  // ⭐ causal: the table must DRIVE $F8, not merely match it
+  for (const v of [0x77, 0x03]) {
+    const e = L2.enterLocation(rom, snapshot, 0x29, { frames: 120, patch: { [RATE_TABLE + 0x29]: v } });
+    ok(`patching loc 29's rate to ${hx(v)} makes $F8 follow`,
+       e.cpu.mem[ENCOUNTER_RATE_ZP] === v, `$F8=${hx(e.cpu.mem[ENCOUNTER_RATE_ZP])}`);
+  }
+  ok('the unpatched rate differs from both sentinels',
+     rom[RATE_TABLE + 0x29] !== 0x77 && rom[RATE_TABLE + 0x29] !== 0x03, hx(rom[RATE_TABLE + 0x29]));
+  ok('the rate read is LDA $8000,X at $D12A',
+     rom[0x3D13A] === 0xBD && (rom[0x3D13B] | (rom[0x3D13C] << 8)) === 0x8000);
 }
 
 console.log(`\n${n - bad}/${n} checks passed`);

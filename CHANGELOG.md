@@ -18,6 +18,38 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.6 — 2026-08-17
+
+### ⭐⭐ FF2's encounter rate decoded and patch-proven — same design as FF1
+
+```
+$CF6E  CMP $F8 / BCS           ; random < $F8 -> battle
+$D123  LDA #$0B / JSR $FE03    ; bank 11
+$D128  LDX $48 / LDA $8000,X / STA $F8    ; ⭐⭐ per-location rate
+```
+
+**`RATE_TABLE` = bank 11 `$8000` + locationId = file `0x2C010`** — 7 distinct
+values over 256 locations.
+
+⭐ **FF1 and FF2 share the whole design**, not just the zero page:
+
+| | rate held in | table | indexed by |
+|---|---|---|---|
+| FF1 | `$F8` | bank 11 `$8C01` | map id `$48` |
+| FF2 | `$F8` | bank 11 `$8000` | location id `$48` |
+
+Both fire on `random < $F8`, both load the rate at map/location entry, both keep
+the table in bank 11 indexed by the id in `$48`.
+
+**Patch-proven across a real location entry:** loc `29` → `$F8` = `0x10` = its
+table entry, loc `60` → `0x09`; patch loc 29's entry to `0x77` or `0x03` and `$F8`
+follows, while the unpatched value differs from both sentinels.
+
+⛔ As with FF1, the rate is loaded at ENTRY — a mid-walk poke steers nothing. The
+check crosses a real load via `enterLocation`.
+
+`check-ff2-encounters.mjs` is now 21/21.
+
 ## 1.9.5 — 2026-08-17
 
 ### ⭐⭐ FF1's encounter rate decoded and patch-proven
