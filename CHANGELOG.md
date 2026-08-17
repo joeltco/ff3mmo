@@ -18,6 +18,49 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.98 — 2026-08-17
+
+### ⭐⭐ FF2 IS UNBLOCKED — the warp works, and the location table is proven
+
+Three approaches dead-ended before this (walking from `ff2-outside`, boot-driving,
+hunting a warp table). The way in was not a warp table at all:
+
+| piece | where |
+|---|---|
+| current location id | zero page **`$48`** |
+| location → tilemap | file **`0x3210`** = CPU `$B200`, bank 0, stride 1 |
+| the only reader | `LDA $B200,X` at `$D348` |
+| the loader | `$D341` — bit 7 picks bank 4/5, pointer at `$8000`, decompress to `$7400` |
+| ⭐ what the **game** calls | **`$D083`** — kills rendering, calls the loader, re-banks |
+
+⭐⭐ **And the way to invoke it: FF2's NMI vector points at RAM.** `$FFFA` holds
+`$0100`, `$0100` holds `4C A1 FE` (JMP `$FEA1`), and `$0103`-`$010F` are free
+`$FF`. So plant a stub `JSR $D083 / JMP $FEA1` at `$0103`, point `$0100` at it,
+run **one frame**, restore the trampoline. The game's own interrupt calls the
+loader with the bank, stack and timing it expects.
+
+⛔ **The "derail" that blocked this for two sessions was never a derail.** The
+trace `$D341 → $0100 → $FEA1` looked like a jump into garbage; `$0100` *is* the
+NMI vector doing its job, and the injected PC was simply losing the race to it.
+Don't fight the NMI — use it.
+
+⛔ **And the patch proof failed once for an unrelated reason:** `$D083` keeps
+writing per-location data into `$7400` *after* the loader returns, so two
+locations sharing a tilemap still differ. The snapshot is taken at
+`LOADER_RETURN_PC` (`$D08F`) instead.
+
+New `lib/ff2-locations.mjs` + gate `check-ff2-locations.mjs` (10/10, in
+`deploy.sh`, **<1s**). The proof is a patch, not a read: repointing one location's
+table entry at another's tilemap makes it decompress the other's map byte for
+byte, **both directions**, while the unpatched runs still differ so the check can
+fail. TCRF's "tilemap `2F` is referenced by no location" is re-verified against
+the ROM each run.
+
+`lib/ff2-encounters.mjs` updated: the movement blocker is solved, so the next
+attempt at FF2's encounter tables should warp to a location that has encounters
+and re-test the detectors — several were only "false tells" because no battle was
+reachable. The dead ends stay documented so they aren't re-run.
+
 ## 1.8.97 — 2026-08-16
 
 ### ⛔ FF1 formation bytes 14 and 15 are NEVER READ — the record is now fully accounted for

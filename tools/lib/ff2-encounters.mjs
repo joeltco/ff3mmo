@@ -1,7 +1,20 @@
 // ff2-encounters.mjs — FF2's encounter tables are NOT decoded. This is why.
 //
-// ⛔ NOTHING HERE IS A TABLE ADDRESS. The blocker is upstream of the tables: no
-// FF2 battle has ever been reached in this harness, so there is nothing to
+// ⭐⭐ UPDATE (v1.8.98): THE MOVEMENT BLOCKER BELOW IS SOLVED. `lib/ff2-locations.mjs`
+// warps to ANY location id — `$48` is the location id, the location->tilemap table
+// is at file 0x3210 ($B200, bank 0), and the loader is invoked by planting a stub
+// in the free RAM after FF2's NMI trampoline (its NMI vector is $0100, in RAM) and
+// letting the game's own interrupt call `$D083`. Proven by patching one location's
+// table entry to another's tilemap and watching it decompress the other's map,
+// both directions, with the unpatched runs still differing.
+// ⭐ SO THE NEXT ATTEMPT AT THE ENCOUNTER TABLES SHOULD START BY WARPING to a
+// location that actually has encounters, then re-testing the detectors below —
+// several of the "false tells" were only false because no battle was reachable.
+// ⛔ The dead ends below are still worth reading: they are why walking, boot
+// driving, and hunting a warp table all failed. Don't re-run them.
+//
+// ⛔ NOTHING HERE IS A TABLE ADDRESS. The blocker WAS upstream of the tables: no
+// FF2 battle had ever been reached in this harness, so there was nothing to
 // measure against and no way to calibrate a detector. Recording the dead ends so
 // the next attempt starts where this one stopped.
 //
