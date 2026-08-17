@@ -166,8 +166,12 @@ export const PARTY_HP = 0x610A, PARTY_HP_STRIDE = 0x40;
 // ⛔ NOTHING READS THE $6D84 RAM COPY. Hooking reads of it during a battle finds
 // two sites and BOTH are artifacts: `$F2BD` is the copy loop's own
 // `STA $6D84,Y` (an indexed store dummy-reads its target) and `$A167` sits inside
-// a DATA table (80 81 82 83), i.e. a page-cross spurious read. The consumers read
-// the record through the ROM pointer instead, so that is where to hook next.
+// a DATA table (80 81 82 83), i.e. a page-cross spurious read.
+// ⛔ CORRECTION (v1.8.97): I concluded from that "the consumers read the record
+// through the ROM pointer instead". THAT WAS WRONG. Bytes 10 and 11 are read from
+// the RAM COPY — `LDA $6D8E` at $F339 and `LDA $6D8F` at $F341. So the RAM copy IS
+// where consumers read; byte 0's consumer simply was not found by that probe, and
+// where it lives is still open.
 export const FORMATION_PATTERN_OFF = 0;
 export const FORMATION_PATTERN_MASK = 0xF0;   // low nibble measured inert
 export const FORMATION_PATTERN_DEFAULT = 0x00;
@@ -195,8 +199,31 @@ export const FORMATION_PATTERN_CORRUPT = 0x10;
 export const FORMATION_PAL_SELECT_OFF = 13;
 export const FORMATION_PAL_SELECT_BIT = 0x80;
 
-/** ⛔ Bytes 14, 15 are still NOT identified. */
-export const FORMATION_UNKNOWN_OFF = [14, 15];
+// ── ⛔ BYTES 14 AND 15 ARE NEVER READ ───────────────────────────────────────
+// Not "no visible effect" — NEVER READ. Across battle setup, a FOUGHT-OUT battle
+// (monsters swing, the party takes damage, monsters die), victory and the reward
+// screen, and all EIGHT layout/art/palette/ambush modes, no instruction ever
+// loads them. The only sites that touch them are the 16-byte copy loop
+// (`$F2BB LDA ($9A),Y`), that loop's own store (`$F2BD STA $6D84,Y`, whose
+// indexed write dummy-reads its target) and a generic VRAM upload (`$E966`).
+//
+// ⭐ THE POSITIVE CONTROL IS WHAT MAKES THIS MEAN ANYTHING. The same hook, in the
+// same run, finds real consumers for the neighbouring palette bytes:
+//        byte 10 -> `LDA $6D8E` at $F339        byte 11 -> `LDA $6D8F` at $F341
+// A probe that cannot find a consumer cannot prove one is absent.
+//
+// ⛔ AND THEY ARE NOT PADDING: across 128 formations byte 14 has 23 distinct
+// values and byte 15 has 19. The values are NIBBLE-SHAPED like the count bytes
+// (36 35 13 46 23 24 25 / 04 02 01 24 11), which is suggestive and NOT evidence —
+// nothing reads them, so what the nibbles would have meant is unknown.
+// ⛔ Same shape as this ROM's stat record, where offsets 14/17/19 are also unread.
+export const FORMATION_UNREAD_OFF = [14, 15];
+export const FORMATION_COPY_SITES = { copyLoad: 0xF2BB, copyStore: 0xF2BD, vramUpload: 0xE966 };
+/** ⭐ The control: bytes that ARE read, and where. Keeps the probe honest. */
+export const FORMATION_KNOWN_READERS = { 10: 0xF339, 11: 0xF341 };
+
+/** ⭐ Every byte of the 16-byte record is now accounted for. */
+export const FORMATION_UNKNOWN_OFF = [];
 export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [];
 
 // The 20-byte STAT record per monster. Located by hooking the source read of the

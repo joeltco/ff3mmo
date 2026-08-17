@@ -18,6 +18,48 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.97 — 2026-08-16
+
+### ⛔ FF1 formation bytes 14 and 15 are NEVER READ — the record is now fully accounted for
+
+Not "no visible effect" — **never read**. Across battle setup, a fought-out battle,
+victory and the reward screen, and all **eight** layout/art/palette/ambush modes,
+no instruction ever loads them. The only sites that touch them are the 16-byte
+copy loop (`$F2BB LDA ($9A),Y`), that loop's own store (`$F2BD STA $6D84,Y` —
+an indexed write dummy-reads its target), and a generic VRAM upload (`$E966`).
+
+⭐ **The positive control is what makes this mean anything.** The same hook, in
+the same run, finds the real consumers of the neighbouring palette bytes:
+byte 10 → `LDA $6D8E` at `$F339`, byte 11 → `LDA $6D8F` at `$F341`. A probe that
+cannot find a consumer cannot prove one is absent.
+
+⛔ **And they are not padding** — across 128 formations byte 14 has **23** distinct
+values, byte 15 has **19**. The values are nibble-shaped like the count bytes
+(`36 35 13 46 23 24 25` / `04 02 01 24 11`), which is suggestive and **not
+evidence**: nothing reads them, so what the nibbles would have meant is unknown.
+Same shape as this ROM's stat record, where offsets 14/17/19 are also unread.
+
+### ⛔ Correction to v1.8.95
+
+That entry concluded, from failing to find byte 0's consumer, that "the consumers
+read the record through the ROM pointer". **That was wrong.** Bytes 10 and 11 are
+read from the **RAM copy** (`$6D8E`/`$6D8F`). The RAM copy is where consumers
+read; byte 0's consumer simply was not found, and where it lives is still open.
+
+New audit `audit-ff1-formation-unread.mjs` (10/10). ⛔ **Manual, deliberately NOT
+in `deploy.sh`** — it fights ~20 battles with a full read-hook installed, and the
+five FF1 gates already push the deploy past ten minutes. Same arrangement as
+`check-ff3-monster-fields.mjs`.
+
+Two harness bugs found and fixed while building it, both of which faked failures:
+- it sampled enemy/party HP **after** the battle ended, when that RAM has been
+  written over — reporting "enemies never died" in a fight that was won;
+- it counted enemies by **current** HP (`+13`), which is not filled in on a fresh
+  spawn and reads 0. Bodies are counted by **max** HP (`+9`).
+
+⭐ **FF1's 16-byte formation record is now fully accounted for** — every byte is
+either decoded or demonstrated unread. `FORMATION_UNKNOWN_OFF` is empty.
+
 ## 1.8.96 — 2026-08-16
 
 ### ⭐ FF1 formation byte 13 bit 7 picks WHICH of the two palettes the monsters use
