@@ -18,6 +18,43 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.5 — 2026-08-17
+
+### ⭐⭐ FF1's encounter rate decoded and patch-proven
+
+```
+$CDC3  LDA $45 / BPL          ; tile prop bit 7 = an encounter tile
+$CDC7  JSR $C571              ; random
+$CDCA  CMP $F8 / BCS          ; ⭐ random < $F8 -> battle
+$CFB9  LDX $48 / LDA $8C01,X / STA $F8    ; ⭐⭐ per-map rate
+$C753  LDA $8C00 / STA $F8                ; ⭐ overworld rate
+```
+
+| thing | CPU | file |
+|---|---|---|
+| overworld rate | `$8C00` | **`0x2CC10`** (= `0x0A`) |
+| per-map rates | `$8C01 + mapId` | **`0x2CC11 + mapId`** (32 distinct over 128 maps) |
+
+⭐ **FF1 and FF2 both hold the live rate in zero page `$F8`** and both fire on
+`random < $F8` — same convention across two games.
+
+**Patch-proven across a real map load:** entering map `01` sets `$F8` = `0x08` =
+the table entry; patch the entry to `0x77` or `0x02` and `$F8` follows exactly,
+while the unpatched value differs from both sentinels.
+
+### ⛔ Two failed attempts first, both my own doing
+
+- **Poking `$F8` mid-walk steers nothing** — the rate is reloaded at map entry, not
+  per step. Worse, the poke corrupted state into a fake `RUN` detection at step 49
+  for *every* rate including `0x00`, which would have shipped a green gate
+  asserting a behaviour that never happened. It was deleted, not fixed.
+- **Poking `$27`/`$28` to reach the door fails** (blocked terrain) — a fact already
+  written down in `ff1-goto.mjs` and re-discovered the hard way. The gate now uses
+  the documented method: repoint the one reachable entrance and walk each direction
+  to exhaustion, resetting between.
+
+New gate `check-ff1-encounter-rate.mjs` (10/10, in `deploy.sh`).
+
 ## 1.9.4 — 2026-08-17
 
 ### ⭐⭐ FF2's record pointer is COMPUTED — the chain is complete
