@@ -175,8 +175,28 @@ export const FORMATION_PATTERN_REPOSITION = 0x20;
 export const FORMATION_PATTERN_ONE_LARGE = 0x40;
 export const FORMATION_PATTERN_CORRUPT = 0x10;
 
-/** ⛔ Bytes 13, 14, 15 are still NOT identified. */
-export const FORMATION_UNKNOWN_OFF = [13, 14, 15];
+// ── ⭐ BYTE 13 BIT 7 = WHICH OF THE TWO PALETTES THE MONSTERS USE ───────────
+// Bytes 10 and 11 load BG palette 1 and BG palette 2. Only ONE of them is what
+// the monsters are actually drawn with, and this bit picks it — by flipping every
+// monster block's ATTRIBUTE selector from palette 1 to palette 2 (0x55 -> 0xAA,
+// 0x11 -> 0x22, 0x77 -> 0xBB: the value 1 becomes 2 wherever it appears).
+//
+// ⭐ THE CROSSOVER IS THE PROOF, measured on the rendered monster panel:
+//        bit 7 CLEAR -> changing byte 10 recolours, byte 11 does nothing
+//        bit 7 SET   -> changing byte 11 recolours, byte 10 does nothing
+//   Either half alone has innocent explanations; the crossover does not.
+//
+// ⛔ IT TOUCHES NEITHER THE NAMETABLE NOR THE PALETTE RAM — only attributes. A
+// probe watching tiles and colours calls byte 13 inert and is WRONG. That is
+// exactly what happened: the sweep's grouping key omitted the attribute hash and
+// reported "1 distinct outcome across 16 values" while its own per-row output was
+// flagging ATTR. Fixed in `ff1-formation-byte1.mjs`.
+// ⛔ Bits 0-6 measured inert (0x00/0x01/0x20 identical to the 0x40 default).
+export const FORMATION_PAL_SELECT_OFF = 13;
+export const FORMATION_PAL_SELECT_BIT = 0x80;
+
+/** ⛔ Bytes 14, 15 are still NOT identified. */
+export const FORMATION_UNKNOWN_OFF = [14, 15];
 export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [];
 
 // The 20-byte STAT record per monster. Located by hooking the source read of the

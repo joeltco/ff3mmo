@@ -18,6 +18,45 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.96 — 2026-08-16
+
+### ⭐ FF1 formation byte 13 bit 7 picks WHICH of the two palettes the monsters use
+
+Bytes 10 and 11 load BG palette 1 and BG palette 2. Only **one** of them is what
+the monsters are actually drawn with — byte 13 bit 7 selects it, by flipping every
+monster block's **attribute** selector from palette 1 to palette 2 (`0x55`→`0xAA`,
+`0x11`→`0x22`, `0x77`→`0xBB` — the value 1 becomes 2 wherever it appears).
+
+⭐ **The crossover is the proof**, measured on the rendered monster panel:
+
+| | byte 10 | byte 11 |
+|---|---|---|
+| bit 7 **clear** | **recolours** | inert |
+| bit 7 **set** | inert | **recolours** |
+
+Either half alone has innocent explanations; the crossover does not. It also
+closes the loop on v1.8.92: both palettes are always loaded, and the "unused" one
+sits there until this bit says otherwise — which is another way an FF1 formation
+ends up drawing in the wrong colours.
+
+⛔ **It touches neither the nametable nor the palette RAM — only attributes.** A
+probe watching tiles and colours calls byte 13 inert and is wrong.
+
+### ⛔ Fixed a probe bug that hid this
+
+`ff1-formation-byte1.mjs` grouped its results on `nametable | palette` and left
+the **attribute hash out of the key**, so byte 13 — which changes *only*
+attributes — reported `1 distinct outcome across 16 values` while the tool's own
+per-row output was correctly flagging `ATTR` on `0x80/0xC0/0xFF`. The rows were
+right and the summary was wrong. The key now includes the attribute hash; a
+grouping that drops a signal the rows already measured would have hidden the next
+finding too.
+
+New gate `check-ff1-palette-select.mjs` (11/11, in `deploy.sh`, ~14 real
+battles). It hashes **only the monster panel** so party sprites and the HP boxes
+cannot vote, and asserts the crossover rather than either half.
+⛔ Bits 0-6 measured inert. Bytes 14, 15 remain unidentified.
+
 ## 1.8.95 — 2026-08-16
 
 ### ⭐ FF1 formation byte 0 = the enemy arrangement / size pattern (high nibble only)

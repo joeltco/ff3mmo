@@ -128,7 +128,11 @@ for (const val of VALUES) {
 console.log('\n  grouping by observed result:');
 const groups = new Map();
 for (const r of rows) {
-  const k = `${r.ntHash}|${r.pal.map(v => hx(v)).join('')}`;
+  // ⛔ The key MUST include the attribute table. It didn't, and byte 13 — which
+  // changes ONLY attributes — reported "1 distinct outcome across 16 values"
+  // while the per-row lines were correctly flagging ATTR. A grouping that drops a
+  // signal the rows already measured will hide the next finding too.
+  const k = `${r.ntHash}|${r.attrHash}|${r.pal.map(v => hx(v)).join('')}`;
   if (!groups.has(k)) groups.set(k, []);
   groups.get(k).push(r.val);
 }
