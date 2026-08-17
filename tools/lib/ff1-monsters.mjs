@@ -144,8 +144,39 @@ export const PREEMPT_MSG = 'Chance strike first';
 /** Party current HP, verified against the on-screen boxes (35/30/33/30). */
 export const PARTY_HP = 0x610A, PARTY_HP_STRIDE = 0x40;
 
-/** ⛔ Bytes 0, 13, 14, 15 are still NOT identified. */
-export const FORMATION_UNKNOWN_OFF = [0, 13, 14, 15];
+// ── ⭐ BYTE 0 = THE ENEMY ARRANGEMENT / SIZE PATTERN (high nibble only) ─────
+// Measured with the four-signal probe and confirmed by LOOKING at the frames:
+//
+//   low nibble  INERT — 0x01/0x02/0x03/0x04/0x08 leave the nametable and
+//               attribute table byte-identical. (`lit` wobbles by a few hundred
+//               pixels, which is sprite ANIMATION PHASE, not a difference.)
+//   0x00        the default: 5 imps in the 9-slot two-column grid
+//   0x20        the SAME 5 bodies, REPOSITIONED — packed tighter and right
+//   0x40        ONE large-monster slot, lower left
+//   0x80        ONE large slot again, different position/size
+//   0x10        ⛔ TOTAL GRAPHICS CORRUPTION and 0 bodies — the whole screen,
+//               party boxes included, is garbage
+//
+// ⛔ MOST VALUES COLLAPSE. Only 0x00/0x10/0x20/0x40 are distinct; 0x30 and every
+// value 0x50-0xF0 land on the same outcome as 0x80. So this is NOT a clean
+// 16-entry index, and it is NOT a bitfield either (0x30 does not combine 0x10 and
+// 0x20). What it is exactly is UNRESOLVED — the outcomes are measured, the
+// selection rule is not. Do not write a decoder that assumes either shape.
+//
+// ⛔ NOTHING READS THE $6D84 RAM COPY. Hooking reads of it during a battle finds
+// two sites and BOTH are artifacts: `$F2BD` is the copy loop's own
+// `STA $6D84,Y` (an indexed store dummy-reads its target) and `$A167` sits inside
+// a DATA table (80 81 82 83), i.e. a page-cross spurious read. The consumers read
+// the record through the ROM pointer instead, so that is where to hook next.
+export const FORMATION_PATTERN_OFF = 0;
+export const FORMATION_PATTERN_MASK = 0xF0;   // low nibble measured inert
+export const FORMATION_PATTERN_DEFAULT = 0x00;
+export const FORMATION_PATTERN_REPOSITION = 0x20;
+export const FORMATION_PATTERN_ONE_LARGE = 0x40;
+export const FORMATION_PATTERN_CORRUPT = 0x10;
+
+/** ⛔ Bytes 13, 14, 15 are still NOT identified. */
+export const FORMATION_UNKNOWN_OFF = [13, 14, 15];
 export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [];
 
 // The 20-byte STAT record per monster. Located by hooking the source read of the
