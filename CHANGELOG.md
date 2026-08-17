@@ -18,6 +18,47 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.1 — 2026-08-17
+
+### ⭐⭐ FF2's ENCOUNTER TABLE — found by differential execution
+
+The encounter check, at `$CF57` in bank 15:
+
+```
+$CF61  LDA $48 / CMP #$40 / CMP #$50   ; ⭐ locations $40-$4F are EXEMPT
+$CF6B  JSR $C5AD                       ; random
+$CF6E  CMP $F8 / BCS                   ; ⭐ $F8 = the encounter RATE threshold
+$CF72  LDA #$0B / JSR $FE03            ; ⭐ bank 11 into the $8000 window
+$CF77  LDX $48
+$CF79  LDA $8100,X                     ; ⭐⭐ the location's ENCOUNTER SET
+$CF7C  JSR $C579                       ; start the battle with it
+```
+
+**`ENCOUNTER_SET_TABLE` = bank 11 `$8100` = file `0x2C110`**, one byte per
+location, 93 distinct values across 256 locations (71 zero).
+
+⭐ **How it was found — the differential.** Fight in two locations, record every
+ROM address read, and look for a pair whose difference equals the difference of
+the two location ids. A table indexed by the location id must read `T+A` in one
+run and `T+B` in the other, so `addr_A - addr_B == A - B` identifies `T` with no
+guessing. Out of 3462 and 1864 addresses read only in one run, exactly **two**
+pairs matched — and one of them was `$8100`, which the earlier static `$48` scan
+had already flagged at `$CF77`.
+
+⛔ **What the gate deliberately does NOT claim.** Patching location A's set byte to
+B's does *not* reproduce B's battle screen, and that is not a failure: the two
+locations trigger at **different steps** (12 vs 25), so the formation is drawn from
+the set at different RNG. The honest comparison is **within one location** — same
+walk, same step — where changing the set byte changes the battle drawn,
+reproducibly. Plus the byte the CPU loads at `$CF79` is captured live and must
+follow the patched table.
+
+⛔ Also fixed an invented assertion in the new gate: it asserted "more than 100
+entries are zero", a number I never measured (it is 71), and it failed for no
+reason but my own guess. It now asserts non-uniformity, which is the real claim.
+
+New gate `check-ff2-encounters.mjs` (10/10, in `deploy.sh`).
+
 ## 1.9.0 — 2026-08-17
 
 ### ⭐⭐ FF2 battles are reachable — first encounters ever reached in this harness
