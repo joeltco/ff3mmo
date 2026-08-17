@@ -122,10 +122,31 @@ export const ALT_ART_ATTR = 0x80;
 /** The 16-byte record is copied here at setup ($F2BC STA $6D84,Y). */
 export const FORMATION_RAM_COPY = 0x6D84;
 
-/** ⛔ Bytes 0, 12, 13, 14, 15 are still NOT identified. Byte 12 moves the palette
- *  ($3F08 and $3F18-1B) but what it selects is not established. */
-export const FORMATION_UNKNOWN_OFF = [0, 12, 13, 14, 15];
-export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [12];
+// ── ⭐ BYTE 12 BIT 7 = "MONSTERS STRIKE FIRST" (the ambush flag) ────────────
+// It looked like a palette field too — it moves $3F08 and $3F18-1B. It isn't:
+// those five slots move because an extra ROUND happens before the first menu.
+// ⭐ THE GAME SAYS IT IN WORDS, which is the whole finding: with the bit clear the
+// battle opens "Chance strike first"; with it set, "Monsters strike first", the
+// party takes a free round of hits, and only THEN does the menu appear.
+//
+// ⛔ FORCED, NOT A RATE. A single sample cannot tell those apart, and the first
+// pass here was exactly that — 6 "trials" that varied no RNG at all and returned
+// 6 identical results. With the walk genuinely varied (12 distinct step-counts):
+//   0x00 -> ambushed  0/12      0x40 -> ambushed  0/12      0x80 -> ambushed 12/12
+// ⛔ Bits 0-6 are INERT: 0x01 through 0x40 are byte-identical to 0x00 on every
+// signal. Do not read byte 12 as a 0-255 surprise RATE — measured, it is one bit.
+// ⛔ The ambush damage is IDENTICAL across runs with different step counts, so it
+// is not evidence of RNG; don't treat repeated damage values as a control.
+export const FORMATION_AMBUSH_OFF = 12;
+export const FORMATION_AMBUSH_BIT = 0x80;
+export const AMBUSH_MSG = 'Monsters strike first';
+export const PREEMPT_MSG = 'Chance strike first';
+/** Party current HP, verified against the on-screen boxes (35/30/33/30). */
+export const PARTY_HP = 0x610A, PARTY_HP_STRIDE = 0x40;
+
+/** ⛔ Bytes 0, 13, 14, 15 are still NOT identified. */
+export const FORMATION_UNKNOWN_OFF = [0, 13, 14, 15];
+export const FORMATION_MOVES_PALETTE_UNIDENTIFIED = [];
 
 // The 20-byte STAT record per monster. Located by hooking the source read of the
 // copy loop ($AFB6 LDA ($9C),Y): monster 0 reads from $8520, monster 58 from

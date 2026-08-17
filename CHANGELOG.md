@@ -18,6 +18,49 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.94 — 2026-08-16
+
+### ⭐ FF1 formation byte 12 bit 7 = "Monsters strike first" — the ambush flag
+
+The third formation byte in a row that looks like a palette field and isn't. Byte
+12 moves `$3F08` and `$3F18-1B`, but only because **an extra round happens before
+the first menu**. The game says it in words, which is the whole finding:
+
+| byte 12 | battle opens with |
+|---|---|
+| `0x00` | **"Chance strike first"** — party preemptive, party at full HP |
+| `0x80` | **"Monsters strike first"** — party eats a free round, then the menu |
+
+⛔ **FORCED, NOT A RATE.** Bits 0-6 are inert — `0x01` through `0x40` are
+byte-identical to `0x00` on every signal — so reading byte 12 as a 0-255 surprise
+rate invents 127 distinctions the game does not make.
+
+⛔ **The first pass at this proved nothing and was thrown out.** Six "trials"
+returned six identical results because the variation I applied (pre-roll frames)
+never moved the RNG — six copies of one sample. With the walk genuinely varied
+(hold length, direction period, pre-roll; 12 distinct step-counts):
+
+```
+byte12=0x00 -> ambushed  0/12       0x40 -> ambushed  0/12       0x80 -> ambushed 12/12
+```
+
+⛔ Related trap: the ambush damage is **identical** across runs with different
+step counts, so repeated damage values are NOT evidence of RNG variation.
+
+New gate `check-ff1-ambush.mjs` (12/12, in `deploy.sh`, ~45s, ~12 real battles).
+⭐ It asserts **its own trials vary the RNG** before trusting "always"/"never" —
+the control on the control. `--prove-revert` sets the same bit on bytes 11 and 13
+and fails if either also ambushes. ⚠ The "bit 7 clear does NOT" assertion passes
+on the HP evidence; the preempt message is sampled between button presses and is
+not always caught, so it is not load-bearing there.
+
+Also fixed a **vacuous check** in `check-ff1-palette.mjs`: it asserted
+`FORMATION_MOVES_PALETTE_UNIDENTIFIED.every(...)`, and now that the list is empty
+`every` returns true for free. It now asserts the real claim — that bytes 1 and
+12 are identified rather than parked as unknown.
+
+⛔ Bytes 0, 13, 14, 15 remain unidentified.
+
 ## 1.8.93 — 2026-08-16
 
 ### ⭐ FF1 formation byte 1 is the monster SIZE/LAYOUT class — and only 2 bits wide

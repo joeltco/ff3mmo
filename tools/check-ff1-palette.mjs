@@ -98,9 +98,16 @@ ok('the two palette bytes drive BG palette 1 and BG palette 2',
    JSON.stringify(MN.FORMATION_PAL_PPU) === JSON.stringify([0x3F05, 0x3F09]));
 ok('battlePalette() returns 4 colours', MN.battlePalette(rom, 0).length === 4,
    MN.battlePalette(rom, 0).map(v => hx(v)).join(' '));
-// ⛔ the bytes that move the palette but are NOT understood stay declared unknown.
-ok('bytes 1 and 12 move the palette but stay UNIDENTIFIED',
-   MN.FORMATION_MOVES_PALETTE_UNIDENTIFIED.every(o => MN.FORMATION_UNKNOWN_OFF.includes(o)));
+// ⛔ Bytes 1 and 12 also move the palette and are NOT palette fields — 1 is the
+// size/layout class, 12 is the ambush bit (an extra ROUND moves those slots).
+// ⛔ This check used to be `every(...)` over that list; now the list is empty and
+// `every` on an empty array is TRUE, so it passed vacuously. Assert the real
+// thing instead: those two are identified, and nothing unknown still moves it.
+ok('the other palette-moving bytes are identified, not parked as unknown',
+   MN.FORMATION_MOVES_PALETTE_UNIDENTIFIED.length === 0
+   && !MN.FORMATION_UNKNOWN_OFF.includes(MN.FORMATION_GFX_OFF)
+   && !MN.FORMATION_UNKNOWN_OFF.includes(MN.FORMATION_AMBUSH_OFF),
+   `byte ${MN.FORMATION_GFX_OFF} = size/layout, byte ${MN.FORMATION_AMBUSH_OFF} = ambush`);
 
 // ── ⭐ the revert proof ─────────────────────────────────────────────────────
 if (args.includes('--prove-revert')) {
