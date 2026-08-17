@@ -18,6 +18,36 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.7 — 2026-08-17
+
+### Moved the FF1/FF2 ROM decode gates out of `deploy.sh`
+
+Eight emulator-driven gates now live in `tools/audit-rom-decodes.mjs` and are run
+by hand, the same arrangement `check-ff3-monster-fields.mjs` has had for the same
+reason. **154 seconds off every deploy.**
+
+⛔ **Why:** each drives a real emulator through battles or map loads, and they
+protect constants **no shipped game code reads** — verified, nothing under `src/`
+imports `lib/ff1-monsters`, `lib/ff1-map`, `lib/ff2-locations` or
+`lib/ff2-encounters`. They are a reference library, not a production contract.
+
+⭐ **Nothing was weakened.** The gates still exist, still revert-prove, and all
+8 pass (12/12, 13/13, 12/12, 10/10, 11/11, 10/10, 21/21, 14/14). Run
+`node tools/audit-rom-decodes.mjs` after touching those libs.
+
+The two **sub-second** decode gates stay in `deploy.sh` because they cost nothing:
+`check-ff1-palette` and `check-ff2-locations`.
+
+### Context: 25 deploys, 0 lines of game code
+
+The FF1/FF2 decode work of the last several sessions changed `tools/` only — `src/`
+was untouched across all of it, and the deploy had grown past ten minutes carrying
+gates for data the game does not use. This trims that back.
+
+⚠ **Next-biggest candidates, not touched** (they predate this work and were not in
+scope): `check-ff1-shops` (124s) and `check-ff2-shops` (108s) — same class,
+emulator-driven, catalog-only. 232s more if you want them moved too.
+
 ## 1.9.6 — 2026-08-17
 
 ### ⭐⭐ FF2's encounter rate decoded and patch-proven — same design as FF1
