@@ -1,5 +1,28 @@
 // ff2-encounters.mjs — FF2's encounter tables are NOT decoded. This is why.
 //
+// ⭐⭐ UPDATE (v1.9.0): **FF2 BATTLES ARE NOW REACHABLE.** The blocker described
+// below is gone. `tools/ff2-location-sweep.mjs` enters every location id via
+// `lib/ff2-locations.mjs#enterLocation` and walks; 99 of 256 locations produce a
+// battle within 60 steps. VERIFIED BY RENDERING, not by a heuristic: location
+// 0x29 draws four purple beasts, location 0x60 draws three green bombs plus two
+// armoured soldiers — different encounters in different places.
+//
+// ⛔⛔ THE OBVIOUS DETECTOR IS A FALSE TELL, and it fooled me for a whole pass.
+// ">85% of the nametable changed" fires on a MAP TRANSITION: walking into an exit
+// redraws everything. The first sweep reported 111 "battles"; rendering two showed
+// both fired at the SAME step, with the party at the SAME coords, and `$48`
+// changed to 1 — they were EXITS. ⭐ THE DISCRIMINATOR: a battle leaves the
+// location id `$48` ALONE; an exit changes it. With that added, 12 of the 111
+// turned out to be exits.
+// ⛔ Also: `nes.opts.onFrame` assigned AFTER construction never fires, so the
+// verification screenshots came out empty until onFrame was passed to `new NES`.
+//
+// ➡ STILL OPEN: the encounter TABLES themselves — which per-location table maps a
+// location to its encounter set, and where the formations live. The way in is now
+// to hook a battle-start and see which `$48`-indexed table was read; the candidate
+// tables already found are `$9400` ($CAA5), `$8100` ($CF77), `$8000` ($D128) and
+// `$7600` (RAM, bank 5 $AB2D).
+//
 // ⭐⭐ UPDATE (v1.8.98): THE MOVEMENT BLOCKER BELOW IS SOLVED. `lib/ff2-locations.mjs`
 // warps to ANY location id — `$48` is the location id, the location->tilemap table
 // is at file 0x3210 ($B200, bank 0), and the loader is invoked by planting a stub
