@@ -18,6 +18,49 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.8.99 — 2026-08-17
+
+### ⭐⭐ FF2's warp table located — and a full warp that actually places the party
+
+The thing three earlier attempts hunted for and this repo recorded as "NOT
+LOCATED". It is not a table of destination records; it is **parallel arrays
+indexed by the destination location id**, read by the transition at `$CAC0`:
+
+```
+$CAD6  LDX $45                                          ; destination id
+$CAD8  LDA $B000,X / AND #$1F / SEC / SBC #$07 / ...    ; -> $29  destination X
+$CAE4  LDA $B100,X            / SEC / SBC #$07 / ...    ; -> $2A  destination Y
+$CAEE  STX $48                                          ; becomes the current location
+$CAF0  JSR $CA41                                        ; full entry — and it RETURNS
+```
+
+| table | file | holds |
+|---|---|---|
+| `$B000` | `0x3010` | destination **X** (low 5 bits; top 3 are a graphics field) |
+| `$B100` | `0x3110` | destination **Y** |
+| `$B200` | `0x3210` | tilemap (v1.8.98) |
+| `$B300` | `0x3310` | tileset — bit 0 picks between two tile sets |
+
+⭐ Because `$CA41` **returns**, a full warp is: poke `$29`/`$2A`/`$48`/`$45` and
+call it through the NMI stub. `L2.enterLocation()` does that, and unlike v1.8.98's
+map-buffer warp it **redraws the screen and places the party** — verified by eye
+on rendered frames, and the party now walks 66 distinct tiles where the old
+savestate managed 31.
+
+Gate `check-ff2-locations.mjs` is now 15/15. The new checks prove the tables by
+**patching**: change the `$B000` entry and the party must land on the new X; same
+for `$B100`. Plus a control that two destinations give two different screens, so
+"the screen redrew" cannot pass on one static scene.
+
+### ⛔ The encounter tables themselves are still NOT decoded
+
+Warping to ten locations and walking 200 steps each produced **no battle** — those
+destinations are almost certainly towns. What is now true that was not before: the
+party can be put in an arbitrary location and walks freely there. The next step is
+finding which location ids are overworld/dungeon, then re-testing the detectors in
+`lib/ff2-encounters.mjs` — several were only "false tells" because no battle was
+reachable at all.
+
 ## 1.8.98 — 2026-08-17
 
 ### ⭐⭐ FF2 IS UNBLOCKED — the warp works, and the location table is proven

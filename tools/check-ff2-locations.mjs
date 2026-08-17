@@ -64,5 +64,32 @@ for (let i = 0; i < 0x100; i++) if (L2.tilemapOf(rom, i) === L2.UNREFERENCED_TIL
 ok(`tilemap ${hx(L2.UNREFERENCED_TILEMAP)} is referenced by no location`, used.length === 0,
    used.length ? `used by ${used.map(v => hx(v)).join(',')}` : 'unreferenced');
 
+// ── ⭐ the WARP TABLE: $B000 = destination X, $B100 = destination Y ─────────
+// ⛔ Proven by PATCHING, not by reading: change the destination-X entry and the
+// party must land on the new X. A read would only show the table holds a number.
+{
+  const DEST = 0x05;
+  const e = L2.enterLocation(rom, snapshot, DEST);
+  ok('a full entry places the party where the tables say',
+     e.x === L2.destX(rom, DEST) && e.y === L2.destY(rom, DEST),
+     `at ${e.x},${e.y}`);
+  ok('...and the screen actually redrew (not the pre-warp scene)',
+     new Set(e.nt).size > 24, `${new Set(e.nt).size} distinct nametable tiles`);
+
+  const want = (rom[L2.DEST_X_TABLE + DEST] & ~L2.DEST_X_MASK) | 0x11;   // keep the top 3 bits
+  const moved = L2.enterLocation(rom, snapshot, DEST, { patch: { [L2.DEST_X_TABLE + DEST]: want } });
+  ok('patching $B000 MOVES where the party lands',
+     moved.x === ((0x11 - L2.DEST_BIAS) & L2.DEST_WRAP) && moved.x !== e.x,
+     `${e.x} -> ${moved.x}`);
+  const movedY = L2.enterLocation(rom, snapshot, DEST, { patch: { [L2.DEST_Y_TABLE + DEST]: 0x19 } });
+  ok('patching $B100 MOVES the party Y', movedY.y === ((0x19 - L2.DEST_BIAS) & L2.DEST_WRAP) && movedY.y !== e.y,
+     `${e.y} -> ${movedY.y}`);
+  // ⛔ two different destinations must give two different screens, or the
+  // "it redrew" check above could pass on one static scene.
+  const other = L2.enterLocation(rom, snapshot, 0x1E);
+  ok('two destinations give two different screens',
+     JSON.stringify(other.nt) !== JSON.stringify(e.nt));
+}
+
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

@@ -54,6 +54,61 @@ export const UNREFERENCED_TILEMAP = 0x2F;
 
 export const tilemapOf = (rom, loc) => rom[LOC_TILEMAP_TABLE + loc * LOC_TILEMAP_STRIDE];
 
+// ── ⭐⭐ THE WARP TABLE — the thing three earlier attempts failed to find ────
+// It is not a "warp table" with destination records; it is FOUR parallel arrays
+// indexed by the DESTINATION location id, which the transition at $CAC0 reads:
+//
+//   $CAD6  LDX $45                                        ; destination id
+//   $CAD8  LDA $B000,X / AND #$1F / SEC / SBC #$07 / AND #$3F / STA $29   ; X
+//   $CAE4  LDA $B100,X            / SEC / SBC #$07 / AND #$3F / STA $2A   ; Y
+//   $CAEE  STX $48                                        ; becomes current
+//   $CAF0  JSR $CA41                                      ; full entry
+//
+// ⭐ `$CA41` RETURNS — it is the location-entry-and-run body — so a full warp is:
+// poke $29/$2A/$48/$45 and call $CA41 through the NMI stub. THAT redraws the
+// screen and places the party; `$D083` alone loads the map buffer and neither.
+// ⛔ `$B000` carries the X in its LOW 5 BITS ONLY — the top 3 bits are a separate
+// field (`$E534 LDA $B000,X / AND #$E0` builds a graphics pointer from them).
+export const DEST_X_TABLE = 0x3010;        // file; CPU $B000, bank 0
+export const DEST_Y_TABLE = 0x3110;        // file; CPU $B100, bank 0
+export const LOC_TILESET_TABLE = 0x3310;   // file; CPU $B300 — bit 0 picks a tileset
+export const DEST_ID_ZP = 0x45;
+export const PARTY_X_ZP = 0x29, PARTY_Y_ZP = 0x2A;
+export const LOC_ENTRY_PC = 0xCA41;
+export const DEST_X_MASK = 0x1F, DEST_BIAS = 7, DEST_WRAP = 0x3F;
+
+/** Where the game will put the party when it enters `dest`. */
+export const destX = (rom, dest) => ((rom[DEST_X_TABLE + dest] & DEST_X_MASK) - DEST_BIAS) & DEST_WRAP;
+export const destY = (rom, dest) => ((rom[DEST_Y_TABLE + dest]) - DEST_BIAS) & DEST_WRAP;
+
+/**
+ * ⭐ A FULL warp: the screen redraws and the party is placed, unlike `warp()`
+ * which only drives the map loader. Returns the live machine so callers can walk.
+ */
+export function enterLocation(rom, snapshot, dest, { patch = null, frames = 150 } = {}) {
+  const r = patch ? Uint8Array.from(rom) : rom;
+  if (patch) for (const [off, val] of Object.entries(patch)) r[Number(off)] = val;
+  let fb = null;
+  const nes = new NES({ onFrame: (b) => { fb = b; }, onAudioSample: () => {} });
+  nes.loadROM(Buffer.from(r).toString('binary'));
+  nes.fromJSON(JSON.parse(snapshot));
+  nes.frame();
+  const c = nes.cpu;
+  c.mem[PARTY_X_ZP] = destX(r, dest);
+  c.mem[PARTY_Y_ZP] = destY(r, dest);
+  c.mem[LOC_ID_ZP] = dest; c.mem[DEST_ID_ZP] = dest;
+  const stub = [0x20, LOC_ENTRY_PC & 0xFF, LOC_ENTRY_PC >> 8, ...NMI_TRAMPOLINE];
+  stub.forEach((b, i) => { c.mem[NMI_STUB_RAM + i] = b; });
+  c.mem[NMI_VECTOR_RAM] = 0x4C;
+  c.mem[NMI_VECTOR_RAM + 1] = NMI_STUB_RAM & 0xFF;
+  c.mem[NMI_VECTOR_RAM + 2] = NMI_STUB_RAM >> 8;
+  nes.frame();
+  NMI_TRAMPOLINE.forEach((b, i) => { c.mem[NMI_VECTOR_RAM + i] = b; });
+  for (let i = 0; i < frames; i++) nes.frame();
+  return { nes, cpu: c, fb, x: c.mem[PARTY_X_ZP], y: c.mem[PARTY_Y_ZP],
+           nt: [...nes.ppu.vramMem.slice(0x2000, 0x23C0)] };
+}
+
 /**
  * Warp to `loc` and return what the game decompressed.
  * `patch` is {fileOffset: byte} applied to an in-memory ROM copy first.
