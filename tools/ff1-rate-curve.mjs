@@ -36,6 +36,11 @@ const flag = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : ar
 const ID = Number(flag('id', '0x77'));
 const ROUNDS = Number(flag('rounds', '24'));
 const CHANCE = flag('chance', null);
+// ⭐ n comes from BATTLES, not rounds. One fight ends after 8-20 rounds and yields
+// only 4-9 rolls, so a single run can show almost any rate. Each battle re-loads
+// the savestate and burns a different number of frames first, which walks the RNG
+// to a different stream — independent samples rather than a longer correlated one.
+const BATTLES = Number(flag('battles', '1'));
 const ROUND_CAP = 1800;
 
 const rom = new Uint8Array(fs.readFileSync(process.env.FF1_ROM || '/home/joeltco/roms/ff1-usa.nes'));
@@ -56,73 +61,90 @@ const POOL_FILE = 0x30010 + (POOL_CPU - 0x8000);   // bank 12
 if (CHANCE !== null) p[POOL_FILE] = Number(CHANCE) & 0xFF;
 const CHANCE_VAL = p[POOL_FILE];
 
-const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
-nes.loadROM(Buffer.from(p).toString('binary'));
-nes.fromJSON(JSON.parse(SNAP));
-const c = nes.cpu;
-const run = (n) => { for (let i = 0; i < n; i++) nes.frame(); };
+function runBattle(offset) {
+  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  nes.loadROM(Buffer.from(p).toString('binary'));
+  nes.fromJSON(JSON.parse(SNAP));
+  const c = nes.cpu;
+  const run = (n) => { for (let i = 0; i < n; i++) nes.frame(); };
 
-const lines = () => {
-  const v = nes.ppu.vramMem, out = [];
-  for (let r = 0; r < 30; r++) {
-    let s = '';
-    for (let col = 0; col < 32; col++) { const g = F1.glyph(v[0x2000 + r * 32 + col]); s += (g === null || g === '\n') ? ' ' : g; }
-    out.push(s);
-  }
-  return out;
-};
-const menuUp = () => lines().some(l => /\bRUN\b/.test(l));
-const onBattleScreen = () => lines().filter(l => /\bHP\b/.test(l)).length >= 3;
-const immortal = () => {
-  for (let i = 0; i < 4; i++) { c.mem[PARTY_HP + i * PARTY_STRIDE] = 0xE7; c.mem[PARTY_HP + i * PARTY_STRIDE + 1] = 0x03; }
-  for (let i = 0; i < 9; i++) {
-    const a = MN.ENEMY_RAM + i * MN.ENEMY_RAM_STRIDE;
-    if ((c.mem[a + MN.ENEMY_MAXHP_OFF] | (c.mem[a + MN.ENEMY_MAXHP_OFF + 1] << 8)) === 0) continue;
-    c.mem[a + MN.ENEMY_CURHP_OFF] = 0xE7; c.mem[a + MN.ENEMY_CURHP_OFF + 1] = 0x03;
-  }
-};
+  const lines = () => {
+    const v = nes.ppu.vramMem, out = [];
+    for (let r = 0; r < 30; r++) {
+      let s = '';
+      for (let col = 0; col < 32; col++) { const g = F1.glyph(v[0x2000 + r * 32 + col]); s += (g === null || g === '\n') ? ' ' : g; }
+      out.push(s);
+    }
+    return out;
+  };
+  const menuUp = () => lines().some(l => /\bRUN\b/.test(l));
+  const onBattleScreen = () => lines().filter(l => /\bHP\b/.test(l)).length >= 3;
+  const immortal = () => {
+    for (let i = 0; i < 4; i++) { c.mem[PARTY_HP + i * PARTY_STRIDE] = 0xE7; c.mem[PARTY_HP + i * PARTY_STRIDE + 1] = 0x03; }
+    for (let i = 0; i < 9; i++) {
+      const a = MN.ENEMY_RAM + i * MN.ENEMY_RAM_STRIDE;
+      if ((c.mem[a + MN.ENEMY_MAXHP_OFF] | (c.mem[a + MN.ENEMY_MAXHP_OFF + 1] << 8)) === 0) continue;
+      c.mem[a + MN.ENEMY_CURHP_OFF] = 0xE7; c.mem[a + MN.ENEMY_CURHP_OFF + 1] = 0x03;
+    }
+  };
 
-let recording = false, rolls = 0, fires = 0;
-const picked = new Set();
-const origLoad = c.load.bind(c);
-c.load = function (addr) {
-  if (recording) {
-    if (addr === POOL_CPU) rolls++;
-    else if (addr > POOL_CPU + 1 && addr <= POOL_CPU + 9) { fires++; picked.add(addr - POOL_CPU - 2); }
-  }
-  return origLoad(addr);
-};
+  let recording = false, rolls = 0, fires = 0;
+  const picked = new Set();
+  const origLoad = c.load.bind(c);
+  c.load = function (addr) {
+    if (recording) {
+      if (addr === POOL_CPU) rolls++;
+      else if (addr > POOL_CPU + 1 && addr <= POOL_CPU + 9) { fires++; picked.add(addr - POOL_CPU - 2); }
+    }
+    return origLoad(addr);
+  };
 
-run(20);
-c.mem[0x27] = 150; c.mem[0x28] = 170;
-run(20);
-const D = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT];
-let started = false;
-for (let s = 0; s < 300 && !started; s++) {
-  const b = D[Math.floor(s / 6) % 2];
-  nes.buttonDown(1, b); run(8); nes.buttonUp(1, b); run(12);
-  if (menuUp()) started = true;
+  run(20);
+  c.mem[0x27] = 150; c.mem[0x28] = 170;
+  run(20);
+  const D = [Controller.BUTTON_LEFT, Controller.BUTTON_RIGHT];
+  let started = false;
+  for (let s = 0; s < 300 && !started; s++) {
+    const b = D[Math.floor(s / 6) % 2];
+    nes.buttonDown(1, b); run(8); nes.buttonUp(1, b); run(12);
+    if (menuUp()) started = true;
+  }
+  if (!started) return null;
+
+  // ⭐ FF1's "random" is a 256-BYTE TABLE at $FCF1 indexed by a counter at $688A
+  // ($FCE7: LDX $688A / INC $688A / LDA $FCF1,X). It is not seeded from frame count
+  // or input, which is why battles started at different times came out BYTE
+  // IDENTICAL — same table position every run. Moving the counter is the only way
+  // to get an independent stream, so each battle starts at a different offset.
+  c.mem[0x688A] = offset & 0xFF;
+
+  recording = true;
+  let acted = 0;
+  for (let r = 0; r < ROUNDS; r++) {
+    if (!onBattleScreen()) break;
+    immortal();
+    for (let k = 0; k < 12 && menuUp() && onBattleScreen(); k++) {
+      nes.buttonDown(1, Controller.BUTTON_A); run(4); nes.buttonUp(1, Controller.BUTTON_A); run(16);
+    }
+    acted++;
+    let f = 0;
+    while (f < ROUND_CAP && !menuUp() && onBattleScreen()) { run(30); f += 30; immortal(); }
+  }
+  return { rolls, fires, rounds: acted, picked };
 }
-if (!started) { console.log('never reached a battle'); process.exit(1); }
 
-recording = true;
-let acted = 0;
-for (let r = 0; r < ROUNDS; r++) {
-  if (!onBattleScreen()) break;
-  immortal();
-  for (let k = 0; k < 12 && menuUp() && onBattleScreen(); k++) {
-    nes.buttonDown(1, Controller.BUTTON_A); run(4); nes.buttonUp(1, Controller.BUTTON_A); run(16);
-  }
-  acted++;
-  let f = 0;
-  // ⛔ Sample the screen every 30 frames, not every 10 — glyph-decoding 30x32 cells
-  // is what makes a long run slow, and nothing here needs 10-frame resolution.
-  while (f < ROUND_CAP && !menuUp() && onBattleScreen()) { run(30); f += 30; immortal(); }
+let R = 0, F = 0, RD = 0, ok = 0;
+const allPicked = new Set();
+for (let b = 0; b < BATTLES; b++) {
+  // Offsets are spread so consecutive battles do not land on adjacent RNG states.
+  const res = runBattle(b * 21);   // spread the starting table position
+  if (!res) { console.log(`  battle ${b + 1}: never reached a battle`); continue; }
+  ok++; R += res.rolls; F += res.fires; RD += res.rounds;
+  for (const q of res.picked) allPicked.add(q);
+  console.log(`  battle ${b + 1}: rounds=${res.rounds} rolls=${res.rolls} fires=${res.fires}`);
 }
-recording = false;
-
-const pct = rolls ? (100 * fires / rolls).toFixed(0) + '%' : 'n/a';
+const pct = R ? (100 * F / R).toFixed(1) + '%' : 'n/a';
 const expect = ((CHANCE_VAL / 128) * 100).toFixed(0);
-console.log(`id $${hx(ID)} pool $${hx(POOL_ID)} @ $${hx(POOL_CPU, 4)}  chance=$${hx(CHANCE_VAL)} (${CHANCE_VAL})  ` +
-            `rounds=${acted}  rolls=${rolls}  fires=${fires}  -> ${pct}   (chance/128 = ${expect}%)  ` +
-            `list slots used: ${[...picked].sort((a, b) => a - b).join(',') || '—'}`);
+console.log(`\nid $${hx(ID)} pool $${hx(POOL_ID)} @ $${hx(POOL_CPU, 4)}  chance=$${hx(CHANCE_VAL)} (${CHANCE_VAL})  ` +
+            `battles=${ok}/${BATTLES} rounds=${RD}  ⭐ n=${R} rolls, ${F} fires -> ${pct}   ` +
+            `(chance/128 = ${expect}%)  slots: ${[...allPicked].sort((a, b) => a - b).join(',') || '—'}`);

@@ -18,6 +18,42 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.10 — 2026-08-17
+
+### The FF1 special rate is `chance / 128` — and the first curve was an artifact
+
+`$AE5D` scales the roll to `value = floor(rand * 129 / 256)`, and `$B2C7 BCS`
+skips when `value >= chance`. Measured over **14 independent battles per row**,
+counting the branch outcome directly (a read of pool `+0` is one roll, a read of
+`+2..+9` is a pass):
+
+| byte 0 | n rolls | fires | measured | exact from the ROM table |
+|---|---|---|---|---|
+| `$00` | 111 | 0 | 0.0% | 0.0% |
+| `$10` | 108 | 15 | 13.9% | 12.9% |
+| `$20` | 96 | 18 | 18.8% | 25.4% |
+| `$40` | 87 | 44 | 50.6% | 50.4% |
+| `$60` | 113 | 88 | 77.9% | 74.6% |
+| `$7F` | 110 | 109 | 99.1% | 98.8% |
+
+Five of six land within ~3 points; `$20` is 1.5 sigma low on n=96.
+
+⭐ **FF1's RNG is a fixed 256-byte table at `$FCF1`**, indexed by a counter at
+`$688A` (`$FCE7: LDX $688A / INC $688A / LDA $FCF1,X`). It is not computed and not
+seeded from frames or input. That makes the exact rate countable straight out of
+the ROM, which is where the right-hand column comes from — so this is a real check
+on the decode, not a curve fit.
+
+⛔ **The v1.9.9 curve (0 / 38 / 71 / 89 / 100%) is RETRACTED.** Those rows were 4-9
+rolls each AND were not independent: because the RNG table is never reseeded, every
+battle launched from the savestate replayed the same stream, and two runs at the
+same chance came out byte-identical. The fix is to seed `$688A` per battle, which
+`ff1-rate-curve.mjs --battles N` now does. Any harness that restarts from a
+savestate inherits this trap — a repeated run that agrees with itself perfectly is
+evidence of correlation, not of a solid measurement.
+
+Reference only — nothing wired into `src/`.
+
 ## 1.9.9 — 2026-08-17
 
 ### FF1's special RATE, and two retractions of earlier retractions

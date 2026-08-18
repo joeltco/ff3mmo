@@ -43,19 +43,33 @@ The gate, disassembled in the bank the CPU actually had mapped:
   B2CB  LDA ($9A),Y / AND #$07 / ADC #$02   ; counter mod 8 -> list index
 ```
 
+`$AE5D` scales the roll: `value = floor(rand * 129 / 256)`, fired when
+`value < chance`. And `rand` is not computed — FF1's RNG is a **fixed 256-byte
+table at `$FCF1`** indexed by a counter at `$688A` (`$FCE7: LDX $688A / INC
+$688A / LDA $FCF1,X`). So the exact rate is countable from the ROM, and the
+table is uniform enough that it reduces to **chance / 128**.
+
 Measured by counting the branch outcome directly — a read of `+0` is one roll,
-a read of `+2..+9` is a pass:
+a read of `+2..+9` is a pass — over 14 independent battles per row:
 
-| byte 0 | rolls | fires | observed |
-|---|---|---|---|
-| `$00` | 4 | 0 | 0% |
-| `$10` | 8 | 3 | 38% |
-| `$30` | 7 | 5 | 71% |
-| `$60` | 9 | 8 | 89% |
-| `$7F` | 8 | 8 | 100% |
+| byte 0 | n rolls | fires | measured | exact from the ROM table |
+|---|---|---|---|---|
+| `$00` | 111 | 0 | 0.0% | 0.0% |
+| `$10` | 108 | 15 | 13.9% | 12.9% |
+| `$20` | 96 | 18 | 18.8% | 25.4% |
+| `$40` | 87 | 44 | 50.6% | 50.4% |
+| `$60` | 113 | 88 | 77.9% | 74.6% |
+| `$7F` | 110 | 109 | 99.1% | 98.8% |
 
-⛔ Monotonic with both endpoints pinned, but **n is 4-9 rolls per row** — the
-direction is solid, the exact curve is not. Observed rates run above `chance/128`.
+Five of six rows land within ~3 points of the value computed from the ROM table;
+`$20` sits 1.5 sigma low on n=96. **The rate is `chance / 128`.**
+
+⛔ **An earlier version of this table was wrong and is retracted.** It reported
+0 / 38 / 71 / 89 / 100% off 4-9 rolls per row. Those were not independent
+samples: the RNG table above is not seeded from frames or input, so every battle
+replayed the SAME stream and repeated runs came out byte-identical. Independent
+samples require seeding `$688A` per battle, which is what `ff1-rate-curve.mjs`
+now does. Any harness that restarts from a savestate has this problem.
 ⛔ `$FF` in byte 0 yields 0%, matching the table's use of `$FF` as "empty"
 rather than "always".
 ⭐ The `AND #$07` is why a pool cycles: LICH cast `1F 1C 1D` — the first three
