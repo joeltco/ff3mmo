@@ -500,7 +500,8 @@ so themes vary by world.)
 | 2 | **canoe (afloat)** | high | shallow-water ONLY; small gold canoe sprite; plays the WALKING theme, so it is not a separate vehicle; reached only by transformation at `$C5ED`-`$C5FE` on a bit-1 tile |
 | 3 | **ship** | high | ocean only; own theme `$22`; **the only vehicle whose disembark records a mooring position** — you park it at a dock |
 | 4 | **the Enterprise, flying** | high | §13 — same craft as mode 3; collapses to 3 over water; matches "can only land on water" (`0x08c`) |
-| 5, 6 | **airships, unnamed** | — | §13 — separated by story flag only; neither lands on water |
+| 5 | **airship, unnamed** | — | §13 — flies, does not land on water |
+| 6 | **DEAD CODE — never granted** | high | §15 — no script issues `$CA`; fully implemented but unreachable |
 | 7 | **the Invincible** | high | flies; the ONLY flyer with its own theme `$23`; **14 sprites vs 4** for everything else — much the largest craft; granted by `$CB` via script #163. The script calls it "the Great Ship... Invincible" (`0x0de`) |
 
 ⛔ **Still open: which airship is 4 vs 5 vs 6.** They are indistinguishable by
@@ -635,3 +636,63 @@ Both are read only by native code (`$DB09`, `$DB2F`), never by the event system.
 **Flag 6 is never written by anything**, so the mode-6 parked-draw is gated on a
 flag nothing sets. That is why §13's flag evidence does not name 5 vs 6 — and it
 raises a new question worth chasing: whether mode 6 is reachable at all.
+
+## 15. Is mode 6 reachable? NO — it is dead code
+
+Four independent lines, all pointing the same way.
+
+**1. No script issues `$CA`.** Sweeping all 1024 script-table slots (423 hold
+valid pointers; the first invalid is slot 254, and a condition RESULT is a single
+byte so only slots 0-255 can ever be selected):
+
+| opcode | sets | scripts issuing it |
+|---|---|---|
+| `$CA` | mode 6 | **NONE** |
+| `$CB` | mode 7 | 163 |
+| `$CE` | dismount | 91 |
+| `$CF` | mode 1 | 146 |
+
+**2. A byte census rules out a parser artifact.** My script parser could in
+principle misalign and hide a `$CA`. Of the 7 bytes equal to `$CA` in the script
+data bank, **0 are parsed as an opcode**; 1 sits in an operand slot (the
+interpreter never executes operand bytes — length rules read from `$D257`) and 6
+are in regions no script reaches at all. Control: `$CB`, which we know IS
+reachable, shows exactly **1 as an opcode** — so the census can detect a
+reachable vehicle opcode when one exists.
+
+**3. The only native write of 6 is the `$CA` handler itself.** Sweeping every
+`LDA/LDX/LDY #imm` followed by a store to `$42`/`$46`, the sole source of the
+value 6 is bank 59 `$8171` — the `$CA` branch of the `$C0-$CF` dispatcher.
+
+**4. The save cannot smuggle it in.** `$600F` restores the vehicle at boot
+(`$C0D7`), but `$600F` is written FROM `$42` by the save routine at bank 61
+`$8E61`. For a save to contain 6, `$42` must already have been 6, which requires
+`$CA`. Circular.
+
+And the flag that gates its parked-vehicle drawing, `$6020` bit 6 = flag id 6, is
+**set, cleared and tested by nothing** (§14).
+
+### It is fully built, just never switched on
+
+Mode 6 is not broken or half-written — forcing it produces a working vehicle:
+
+- a mask-table entry (`$10`, flight) at `$C6CD`+6;
+- an in-flight sprite (`$7c-$7f`, same as mode 5) and a parked sprite (`$68`);
+- music — `$0a` normally, and `$15` when `$78`=4, where it is the ONE airship
+  whose theme differs from modes 4 and 5;
+- its own parked-vehicle draw block at `$DB2F`, with a world check
+  (`$6003 == $78`) that mode 5's block does not have;
+- a handler in the event dispatcher, waiting for an opcode no script sends.
+
+Measured: booting with vehicle 6 on open ocean keeps `$42` = 6 and renders it.
+
+### What this means for §13
+
+The 4-vs-5-vs-6 question was malformed. There are **two** reachable airships in
+this ROM — mode 4 (the Enterprise flying, §13) and mode 5 — plus mode 7, the
+Invincible. Mode 6 is a third airship that was implemented and then cut, or was
+staged for content that did not ship. Naming it against a story vehicle is not
+merely unproven, it may be meaningless.
+
+⭐ For the vehicle system: **do not build mode 6 in.** Wiring a vehicle the
+original never grants would be inventing a system, not porting one.

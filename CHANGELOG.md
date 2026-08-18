@@ -1,3 +1,40 @@
+## 1.9.23 — 2026-08-18
+
+### docs: mode 6 is DEAD CODE — fully implemented, never granted
+
+Four independent lines:
+
+1. **No script issues `$CA`** (the opcode that sets mode 6). Swept all 1024
+   script-table slots — 423 hold valid pointers, first invalid is slot 254, and a
+   condition RESULT is one byte so only 0-255 can be selected. `$CB` (mode 7),
+   `$CE` (dismount) and `$CF` (mode 1) each have exactly one issuing script.
+   `$CA` has none.
+2. **A byte census rules out a parser artifact.** Of 7 bytes equal to `$CA` in the
+   script data bank, **0 parse as an opcode**; 1 is an operand (never executed)
+   and 6 are unreachable. Control: `$CB` shows 1 as an opcode, so the census can
+   detect a reachable vehicle opcode when one exists.
+3. **The only native write of the value 6 to `$42`/`$46` is the `$CA` handler
+   itself** (bank 59 `$8171`).
+4. **The save cannot smuggle it in** — `$600F` restores the vehicle at boot but is
+   written FROM `$42`, so a save holding 6 already required `$CA`. Circular.
+
+Its parked-draw flag (id 6) is set, cleared and tested by nothing (v1.9.22).
+
+**It is fully built, just never switched on:** mask entry, in-flight sprite
+(`$7c-$7f`), parked sprite (`$68`), its own draw block at `$DB2F` with a world
+check mode 5 lacks, a dispatcher handler, and music that is the ONE airship theme
+differing from modes 4 and 5 when `$78`=4. Measured: forcing vehicle 6 on open
+ocean keeps `$42` = 6 and renders it.
+
+So the 4-vs-5-vs-6 question was malformed: this ROM has **two** reachable airships
+(mode 4 = the Enterprise flying, and mode 5) plus mode 7, the Invincible. Mode 6
+was implemented and cut, or staged for content that never shipped.
+
+⭐ **Do not build mode 6 into the vehicle system** — wiring a vehicle the original
+never grants would be inventing a system, not porting one.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.22 — 2026-08-18
 
 ### docs+tools: the event FLAG ENCODING decoded and verified live
