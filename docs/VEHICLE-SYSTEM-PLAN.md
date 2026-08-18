@@ -1,7 +1,8 @@
 # Vehicle system — plan
 
 Status: **PROPOSED**. Nothing under `src/` yet. Scoped 2026-08-18.
-Phase 0 **ATTEMPTED AND NOT LANDED** — see §8 for exactly where it stalled.
+Phase 0 **LANDED** — see §9. It CORRECTS §1: bit 3 is never tested, bit 4 is the
+flight barrier, and there are EIGHT movement modes, not four.
 
 Decisions taken (Joel, 2026-08-18):
 
@@ -230,3 +231,77 @@ Find the exit-to-world routine statically. `EXIT_X_TABLE = 0x000890` and
 `EXIT_Y_TABLE = 0x0008D0` are in bank 0, so they appear at CPU `$8880`/`$88C0`.
 Code reading that range IS the return-to-world path, and it will lead to both the
 world-map mode flag and, from there, the props read. That search has NOT been run.
+
+## 9. Phase 0 — LANDED. The routine, read off the ROM.
+
+Reached the world map by ROM patch (§8's dead ends stand; the way in was
+`world-sfx-sweep.cjs`'s SPAWN trick — copy map 115's props over all 512 slots
+with the entrance moved to (16,25), one tile above Altar Cave's exit at (16,26),
+combined with the 1-HP goblin so the intro battle ends). **The props table is
+copied to RAM at `$0400`** — full 256-byte match, which is why no static search
+for `$8500` could ever have found the read.
+
+Hooking reads of `$0400-$04FF` while walking gives four PCs, two of them hot
+(135 reads each). The routine is in the fixed bank at **`$C69B`**:
+
+```
+C69D  B1 80     LDA ($80),Y     ; metatile id of the target tile
+C69F  0A        ASL A           ; *2  <-- interleaved PAIRS, confirmed by the code
+C6A0  AA        TAX
+C6A1  BD 00 04  LDA $0400,X     ; byte1
+C6A4  85 44     STA $44
+C6A6  BD 01 04  LDA $0401,X     ; byte2
+C6A9  85 45     STA $45
+C6AB  A4 42     LDY $42         ; <-- THE MOVEMENT MODE
+C6AD  B9 CD C6  LDA $C6CD,Y     ; <-- mask table, indexed by mode
+C6B0  25 44     AND $44
+C6B2  D9 CD C6  CMP $C6CD,Y     ; blocked iff EVERY mask bit is set
+C6B5  D0 1E     BNE $C6D5
+C6B7  38        SEC
+C6B8  60        RTS             ; blocked
+```
+
+**The mask table at `$C6CD` is eight bytes:**
+
+    mode   0     1     2     3     4     5     6     7
+    mask  $01   $03   $02   $04   $10   $10   $10   $10
+    bits  b0   b0+b1  b1    b2    b4    b4    b4    b4
+
+Cross-checked against every terrain class on world 0 (`X` = blocked):
+
+| class | byte1 vals | tiles | m0 | m1 | m2 | m3 | m4-7 |
+|---|---|---|---|---|---|---|---|
+| grass / desert / hills | `$46 $06` | 3679 | . | . | X | X | . |
+| forest | `$6e $2e $0e` | 814 | . | . | X | X | . |
+| ocean | `$6b` | 4548 | X | X | X | . | . |
+| shallow | `$6d` | 75 | X | . | . | X | . |
+| mountain + void | `$1f $0f $2f` | 7214 | X | X | X | X | mixed |
+
+- **mode 0** = on foot. Land and forest only.
+- **mode 1** = land + forest + shallow water. This is the **canoe**, and it is
+  gated by TWO bits together (`b0+b1`) — no one-bit-per-vehicle model predicts it.
+- **mode 2** = shallow water ONLY.
+- **mode 3** = ocean ONLY. This is the **ship**.
+- **modes 4-7** = everything except the **1122 tiles carrying bit 4**. Four
+  distinct FLYING modes sharing one terrain mask, differing in rules elsewhere —
+  exactly the `{terrain bits} x {per-vehicle flags}` model in §2.
+
+Flying also suppresses entrances: at `$C6B9`, when the mode is >= 4 the code does
+`AND #$7F` on byte1, clearing the trigger bit, so an airship cannot walk into a
+town.
+
+### What this CORRECTS in §1
+
+- ⛔ **bit 3 is NEVER tested by this routine**, though 12,702 tiles carry it. The
+  §1 reading of "bit3 = airship landing" was **wrong**.
+- ⛔ **bit 4 was missed entirely** and is the real flight barrier.
+- ⛔ **There are 8 modes, not 4.**
+- ✅ Confirmed: interleaved pairs (the `ASL A`), bit 0 = foot, bit 2 = ship.
+- ⚠ Partly right: bit 1 does gate the canoe, but as `b0+b1`, not alone.
+
+### Still open
+
+`LDA #imm / STA $42` appears at 10 sites setting modes 0, 1, 2, 5, 6 and 7
+(3 and 4 are computed, not immediate). Mapping each site to a NAMED vehicle —
+and identifying what mode 2 is — is not done. The passability STRUCTURE is now
+proven; the vehicle-to-mode naming is not.

@@ -1,3 +1,54 @@
+## 1.9.15 — 2026-08-18
+
+### docs: vehicle Phase 0 LANDED — the passability routine read off the ROM
+
+v1.9.14 shipped the bit assignment as inference and said so. It is now measured,
+and **the inference was wrong in two places**.
+
+Reached the world map by ROM patch (the `world-sfx-sweep.cjs` SPAWN trick: copy
+map 115's props over all 512 slots with the entrance moved to (16,25), one tile
+above Altar Cave's exit, plus the 1-HP goblin so the intro battle ends). **The
+props table is copied to RAM at `$0400`** — a full 256-byte match, which is why
+no static search for `$8500` could ever have found the read. Hooking
+`$0400-$04FF` during movement gives the routine at **`$C69B`** in the fixed bank:
+
+    C69D  LDA ($80),Y     ; metatile id
+    C69F  ASL A           ; *2 — interleaved PAIRS, confirmed by the code itself
+    C6A1  LDA $0400,X     ; byte1
+    C6AB  LDY $42         ; the MOVEMENT MODE
+    C6AD  LDA $C6CD,Y     ; mask table indexed by mode
+    C6B0  AND $44
+    C6B2  CMP $C6CD,Y     ; blocked iff EVERY mask bit is set
+
+Mask table at `$C6CD`, eight bytes: `$01 $03 $02 $04 $10 $10 $10 $10`.
+
+| mode | mask | passable |
+|---|---|---|
+| 0 | `b0` | land + forest — **on foot** |
+| 1 | `b0+b1` | land + forest + shallow — **canoe**, gated by TWO bits |
+| 2 | `b1` | shallow ONLY |
+| 3 | `b2` | ocean ONLY — **ship** |
+| 4-7 | `b4` | everything except the 1122 bit-4 tiles — four **flying** modes |
+
+Flying also suppresses entrances: at `$C6B9`, mode >= 4 does `AND #$7F` on byte1,
+clearing the trigger bit, so an airship cannot walk into a town.
+
+⛔ **Corrections to v1.9.14:** bit 3 is NEVER tested by this routine even though
+12,702 tiles carry it — "bit3 = airship landing" was wrong. Bit 4 was missed
+entirely and is the real flight barrier. There are **8 modes, not 4**. Confirmed
+from v1.9.14: interleaved pairs, bit 0 = foot, bit 2 = ship. Partly right: bit 1
+does gate the canoe, but as `b0+b1`, not alone.
+
+Four flying modes sharing one terrain mask is direct evidence for the
+`{terrain bits} x {per-vehicle capability flags}` model — a one-bit-per-vehicle
+build would have been wrong from the first commit.
+
+⚠ Still open: `LDA #imm / STA $42` appears at 10 sites setting modes 0, 1, 2, 5,
+6 and 7 (3 and 4 are computed). Mapping each site to a NAMED vehicle, and
+identifying what mode 2 is, is NOT done. Structure proven; naming is not.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.14 — 2026-08-18
 
 ### docs+tools: vehicle system scoped; Phase 0 attempted and NOT landed
