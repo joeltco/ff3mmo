@@ -1,8 +1,9 @@
 # Vehicle system — plan
 
 Status: **PROPOSED**. Nothing under `src/` yet. Scoped 2026-08-18.
-Phase 0 **LANDED** — see §9. It CORRECTS §1: bit 3 is never tested, bit 4 is the
-flight barrier, and there are EIGHT movement modes, not four.
+Phase 0 **LANDED AND BEHAVIOURALLY PROVEN** — §9 reads the routine off the ROM,
+§10 proves it by patching the mask table. It CORRECTS §1: bit 3 is never tested,
+bit 4 is the flight barrier, and there are EIGHT movement modes, not four.
 
 Decisions taken (Joel, 2026-08-18):
 
@@ -305,3 +306,87 @@ town.
 (3 and 4 are computed, not immediate). Mapping each site to a NAMED vehicle —
 and identifying what mode 2 is — is not done. The passability STRUCTURE is now
 proven; the vehicle-to-mode naming is not.
+
+## 10. Mask table proven by patching it — and the harness that got there
+
+### The proof
+
+Per-step testing failed five times (see "What did NOT work" below), so the mask
+table is proven a different way: **change one byte and watch reachability change
+exactly as the table says it must.** The check is `AND mask ; CMP mask`, i.e.
+blocked iff every mask bit is set in byte1, so `mask[0]` fully controls on-foot
+movement. Starting the party on a land tile that touches ocean:
+
+| `mask[0]` | terrain the party stood on, 120 steps | expected | result |
+|---|---|---|---|
+| `$01` (stock) | land 120, **ocean 0** | a walker can never stand on water | ✅ |
+| `$80` | mtn 113, land 5, **ocean 2** | bit 7 is the trigger bit, so almost nothing blocks | ✅ |
+| `$00` | frozen — 1 class, 120 steps | `AND $00 == $00`, everything blocks | ✅ |
+
+Reproducible: `node tools/monscan/mask-table-proof.cjs`. This is the
+revert-proves-the-gate pattern: the stock table FORBIDS water and the patched one
+PERMITS it, so the table is demonstrably what gates movement.
+
+### The harness
+
+`tools/monscan/world-harness.cjs` (NEW) boots FF3 headless straight onto the
+world map and self-verifies by checking that the world tile-property table is
+live at `$0400` — it throws rather than hand back a machine sitting somewhere
+else. Options: `worldX`/`worldY` (position), `vehicle`, `maskTable`.
+
+Placement and vehicle are pinned by rewriting the three absolute loads at `$C0CD`
+as `LDA #imm ; NOP`. Those loads read **battery-backed save RAM**, so position
+and vehicle are SAVE fields:
+
+    $6009 -> $27   world X
+    $600A -> $28   world Y
+    $600F -> $46 and $42   THE VEHICLE
+
+### Vehicles are real, and the engine normalises them
+
+`tools/monscan/vehicle-art.cjs` (NEW) captures each vehicle sprite off the PPU.
+Distinct craft, all genuine rips:
+
+| `$42` | OAM tiles | sprites | appearance |
+|---|---|---|---|
+| 0 | `$00-$03` | 4 | walking party |
+| 2 | `$28-$2b` | 4 | small gold canoe |
+| 3 | `$58-$5b` | 4 | white/gold rounded vessel |
+| 5, 6 | `$7c-$7f` | 4 | masted sailing ship |
+| 7 | `$c6-$d5` | **14** | large ornate golden craft (the Invincible) |
+
+⭐ **Forcing `$42` alone does NOT change the sprite** — `$46` drives sprite
+selection, and both come from `$600F`.
+
+⭐ **The engine normalises the requested vehicle against the terrain you start
+on.** Asking for a boat while standing on grass silently yields mode 0; modes 5
+and 6 persist on ocean and shallow but revert to 0 on land, forest and mountain.
+Mode 7 persisted everywhere tested (220/220). Any probe that sets a vehicle must
+therefore READ BACK `$42` rather than trust the request.
+
+### Vehicles are granted by EVENT COMMANDS
+
+Bank 59 `$8157` is a `CMP #$xx / BNE` dispatcher on an event opcode:
+
+    cmd $0A -> mode 6      cmd $0B -> mode 7
+    cmd $0F -> mode 1      cmd $0E -> mode 0 (dismount; also records a return
+                                   position to $6005/$6006 and sets $6004 = 1)
+
+Modes 2, 3, 4 and 5 are set elsewhere (`LDA #imm / STA $42` appears at 10 sites
+in total). Naming each mode to a STORY vehicle means resolving which event script
+issues which command — `tools/event-resolve.mjs` is the way in. **NOT DONE.**
+
+### What did NOT work — do not repeat
+
+- ⛔ **jsnes `save()`/`load()` breaks movement.** A restored machine never moves
+  again, no matter how long it settles. Trials cannot be isolated by restoring an
+  anchor; every probe must boot fresh or walk continuously.
+- ⛔ **Per-step prediction testing is too noisy to trust.** Runs reported 76-81%
+  "agreement" that was instrument error, including impossible outcomes such as a
+  walker crossing mountains. Causes: position read while still mid-move, a single
+  press crossing several tiles, and the first press only TURNING the party.
+- ⛔ **Writing `$27`/`$28` directly** holds the value but freezes the party — the
+  engine keeps its own position/scroll state alongside them.
+- ⛔ **The `0x890`/`0x8D0` exit tables do not drive the landing spot.**
+- ⛔ **Walking into a map transition crashes the emulator** with an invalid
+  opcode. Long walks need the `$0400` world-map check between steps.

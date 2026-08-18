@@ -1,3 +1,53 @@
+## 1.9.16 — 2026-08-18
+
+### tools: world-map harness; mask table PROVEN by patching; vehicle sprites captured
+
+v1.9.15 read the passability routine off the ROM. This proves it, and adds the
+harness that makes the world map reachable for any future probe.
+
+**`tools/monscan/world-harness.cjs` (NEW)** boots FF3 headless straight onto the
+world map and **self-verifies** by checking the world tile-property table is live
+at `$0400`, throwing rather than handing back a machine sitting elsewhere.
+Position and vehicle are pinned by rewriting three absolute loads at `$C0CD` as
+`LDA #imm ; NOP`. Those loads read battery-backed save RAM, so position and
+vehicle are SAVE fields: `$6009`->`$27` world X, `$600A`->`$28` world Y,
+`$600F`->`$46` and `$42` the vehicle.
+
+**`tools/monscan/mask-table-proof.cjs` (NEW)** proves the `$C6CD` table gates
+movement. The check is `AND mask ; CMP mask`, so `mask[0]` controls walking.
+From a land tile touching ocean, 120 steps each:
+
+| `mask[0]` | stood on | expected | |
+|---|---|---|---|
+| `$01` stock | land 120, **ocean 0** | a walker can never stand on water | ✅ |
+| `$80` | mtn 113, land 5, **ocean 2** | bit 7 is the trigger bit — almost nothing blocks | ✅ |
+| `$00` | frozen, 1 class | `AND $00 == $00` — everything blocks | ✅ |
+
+Revert proves the gate: stock FORBIDS water, patched PERMITS it.
+
+**`tools/monscan/vehicle-art.cjs` (NEW)** captures each vehicle off the PPU —
+genuine rips, no hand-authored pixels: mode 2 a small gold canoe (`$28-$2b`),
+mode 3 a white/gold rounded vessel (`$58-$5b`), modes 5/6 a masted sailing ship
+(`$7c-$7f`), mode 7 a large ornate golden craft in **14 sprites** (`$c6-$d5`).
+
+⭐ Forcing `$42` alone does NOT change the sprite — `$46` drives sprite selection.
+⭐ **The engine normalises the vehicle against the terrain you start on**: asking
+for a boat on grass silently yields mode 0; modes 5/6 persist on water but revert
+on land. Any probe setting a vehicle must READ BACK `$42`, not trust the request.
+
+Vehicles are granted by event commands (bank 59 `$8157` dispatcher): `$0A`->mode
+6, `$0B`->mode 7, `$0F`->mode 1, `$0E`->dismount. ⚠ Mapping modes to STORY
+vehicle names is **NOT done**.
+
+⛔ Recorded so they are not repeated: jsnes `save()`/`load()` returns a machine
+that never moves again, so trials cannot be isolated by restoring an anchor;
+per-step prediction testing produced 76-81% "agreement" that was instrument noise
+including impossible results, and was abandoned for the patch-and-observe test
+above; writing `$27`/`$28` freezes the party; the `0x890`/`0x8D0` exit tables do
+not drive the landing spot; walking into a map transition crashes the emulator.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.15 — 2026-08-18
 
 ### docs: vehicle Phase 0 LANDED — the passability routine read off the ROM
