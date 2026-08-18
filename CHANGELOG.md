@@ -1,3 +1,39 @@
+## 1.9.20 — 2026-08-18
+
+### docs: the movement modes NAMED
+
+Three findings made it possible.
+
+**Auto-disembark at `$C5B5`.** `LDA $44 / LSR A / BCC` — if the tile you are on
+is foot-walkable, the game zeroes `$46`/`$42` and puts you out of the vehicle;
+and if the vehicle was **3**, it records a parking spot (`$6001` = X+7,
+`$6002` = Y+7, `$6003` = `$78`). This is what normalised every earlier probe: the
+walk out of Altar Cave crosses land, dropping a pinned vehicle before the party
+reaches water.
+
+**Vehicle music table, bank 59 `$A027`**, indexed by `$78` and `$46`, written to
+`$7F43`: modes 0 and 2 play `$1e` (the walking theme), 1 plays `$08`, 3 plays
+`$22`, **4/5/6 SHARE `$0a`**, and 7 has its own `$23`.
+
+| mode | name | confidence |
+|---|---|---|
+| 0 | on foot | certain |
+| 1 | canoe, carried — mask `b0+b1` is land + forest + shallow | high |
+| 2 | canoe, afloat — shallow only, canoe sprite, plays the WALKING theme | high |
+| 3 | ship — ocean only, own theme, the only one that records a mooring | high |
+| 4, 5, 6 | airships — all fly, all share one theme, 5 and 6 share a sprite | medium |
+| 7 | the Invincible — only flyer with its own theme, **14 sprites vs 4** | high |
+
+⛔ **Still open: which airship is 4 vs 5 vs 6.** Indistinguishable by terrain
+mask, sharing a music track, and 5/6 sharing a sprite. FF3 has Cid's airship, the
+Enterprise and the Enterprise-as-airship; nothing measured separates them yet, so
+they are NOT guessed at.
+
+⭐ Consequence for `world-harness.cjs`: to keep a vehicle, land on water and never
+touch a foot-walkable tile.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.19 — 2026-08-18
 
 ### Phase 1 groundwork: mode-aware world passability, wired to nothing, gated

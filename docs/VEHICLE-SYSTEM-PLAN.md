@@ -456,3 +456,54 @@ Capturing it still needs the scene reached. With `world-harness.cjs` the party
 can be put anywhere on the world map in any vehicle, but this sequence runs from
 an event, so the remaining work is to trigger it — either by condition-patching
 the script that calls it or by jumping the routine directly.
+
+## 12. Naming the modes
+
+Three new pieces of evidence made this possible: the **auto-disembark** routine,
+the **per-vehicle music table**, and the sprites from §10.
+
+### Auto-disembark — `$C5B5`
+
+    C5B5  LDA $44 / LSR A / BCC $C5BB   ; tile bit0 CLEAR = walkable on foot
+    C5BA  RTS                           ; otherwise stay aboard
+    C5CB  LDA $42 / LDX #$00
+    C5CF  STX $46 / STX $42             ; ZERO the vehicle
+    C5D8  CMP #$03 / BEQ $C59E          ; was it vehicle 3?
+    C59E  ...$6001 = X+7, $6002 = Y+7, $6003 = $78   ; record where it was left
+
+**Stepping onto any foot-walkable tile puts you out of the vehicle**, and vehicle
+3 *specifically* records a parking spot. That is what normalised every probe:
+the exit walk out of Altar Cave crosses land, so a pinned vehicle is dropped
+before the party ever reaches water.
+
+⭐ Consequence for `world-harness.cjs`: to keep a vehicle you must land on water
+and never touch a walkable tile.
+
+### Vehicle music table — bank 59 `$A027`
+
+`$A006` indexes it by `$78` and `$46` and writes `$7F43`, the song register:
+
+| `$46` | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| track (`$78`=0) | `$1e` | `$08` | `$1e` | `$22` | `$0a` | `$0a` | `$0a` | `$23` |
+
+Modes 4/5/6 SHARE a theme. Mode 7 has its own. Mode 2 plays the walking theme.
+(`$78` selects a row — the `$78`=4 row gives modes 3-7 five *different* tracks,
+so themes vary by world.)
+
+### The naming
+
+| mode | name | confidence | evidence |
+|---|---|---|---|
+| 0 | **on foot** | certain | mask bit 0; walking sprite; overworld theme `$1e` |
+| 1 | **canoe (carried)** | high | mask `b0+b1` = land + forest + **shallow** — walk normally, enter rivers, which is exactly a portable canoe. Own theme `$08`. The only mode-1 grant in the game, script #146 via opcode `$CF` |
+| 2 | **canoe (afloat)** | high | shallow-water ONLY; small gold canoe sprite; plays the WALKING theme, so it is not a separate vehicle; reached only by transformation at `$C5ED`-`$C5FE` on a bit-1 tile |
+| 3 | **ship** | high | ocean only; own theme `$22`; **the only vehicle whose disembark records a mooring position** — you park it at a dock |
+| 4, 5, 6 | **airships** | medium | all three fly (mask bit 4) and **share one theme** `$0a`; 5 and 6 draw the same masted-ship sprite; mode 5 is granted at the end of the rising animation in §11 |
+| 7 | **the Invincible** | high | flies; the ONLY flyer with its own theme `$23`; **14 sprites vs 4** for everything else — much the largest craft; granted by `$CB` via script #163. The script calls it "the Great Ship... Invincible" (`0x0de`) |
+
+⛔ **Still open: which airship is 4 vs 5 vs 6.** They are indistinguishable by
+terrain mask and share a music track; 5 and 6 share a sprite. Separating them
+needs the story conditions on their grant scripts resolved, which is the same
+work §11 left open. Do not guess: FF3 has Cid's airship, the Enterprise and the
+Enterprise-as-airship, and nothing measured so far distinguishes them.
