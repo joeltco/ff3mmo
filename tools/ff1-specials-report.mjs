@@ -26,6 +26,50 @@ for (const p of process.argv.slice(2)) {
 const rows = [...byId.values()].sort((a, b) => a.id - b.id);
 const hx = (v, n = 2) => v.toString(16).toUpperCase().padStart(n, '0');
 
+// ⭐ The byte 1 curve, measured by tools/ff1-rng-stride.mjs on id 0x76 (WarMECH,
+// pool $20). Kept as literals because the run is ~90 min of emulation and the
+// report regenerates in a second — but they are MEASURED numbers, transcribed
+// from that tool's output, never estimated. Re-run it to change them.
+const BYTE1_TABLE = `| chance | exact rate from the ROM's RNG table | \`chance/128\` | delta |
+|---|---|---|---|
+| \`$00\` | 0.00% (0/256) | 0.00% | 0.00pp |
+| \`$10\` | 12.89% (33/256) | 12.50% | +0.39pp |
+| \`$20\` | 25.39% (65/256) | 25.00% | +0.39pp |
+| \`$40\` | 50.39% (129/256) | 50.00% | +0.39pp |
+| \`$60\` | 74.61% (191/256) | 75.00% | -0.39pp |
+| \`$7F\` | 98.83% (253/256) | 99.22% | -0.39pp |`;
+const BYTE1_VERDICT = `⭐ **\`chance/128\` is exact, and no sampling was needed to establish it.** The
+roll is \`floor(rand * 129 / 256) < chance\` where \`rand\` is the next byte of the
+FIXED 256-byte table at \`$FCF1\`, so the rate is just how many of those 256 bytes
+clear the bar — a closed-form count, not an estimate. Swept over ALL 129 legal
+chance values, the exact rate never departs from \`chance/128\` by more than
+**0.39pp**, which is one table entry out of 256. There is no room in the ROM for
+a 1.35x mid-range inflation; the v1.9.11 anomaly was the hang, nothing else.
+
+Empirical check on the corrected setup (\`0x76\`, chance \`$20\`, 10 battles, 300
+rounds, **129 rolls**), via \`tools/ff1-rng-stride.mjs\` + \`ff1-rng-stride-analyze.mjs\`:
+
+- fire rate **33.0% ± 7.1pp** vs the exact 25.39% — **z = 1.07, consistent**.
+- **129/129** logged bytes equal \`TABLE[idx]\` read straight from the ROM, and
+  **129/129** fire outcomes equal \`floor(v*129/256) < chance\`. The model is not
+  approximately right, it is exactly right on every roll observed.
+
+⚠ **Rolls inside one battle are NOT independent.** Per-battle rates came out
+58/15/58/7/0/46/42/14/31/58% — far past binomial spread. A battle walks one RNG
+stream, so the honest bar is battle-clustered (±7.1pp); treating all 129 rolls as
+independent would claim ±3.8pp and overstate confidence by ~1.9x. Any future
+FF1 rate measurement has this property and must cluster by battle.
+
+⚠ **Visited RNG indices are genuinely non-uniform** — odd indices outnumber even
+**93 to 36** (chi2 = 30.8, df = 7, p < 0.05). So a stride-like structure is real,
+just not the one v1.9.11 guessed. It also cannot be the missing explanation: the
+odd-index subset scores **21.9%** at chance \`$20\`, *below* nominal, so the bias
+pushes the rate DOWN. Every mechanism found so far moves the wrong way.
+
+⚠ **Scope.** Only chance \`$20\` was measured in-battle (each battle is ~5 min of
+emulation). The other rows rest on the closed-form table count, which carries no
+sampling error — but they are computed, not observed.`;
+
 const nameOf = (id) => MN.monsterName(rom, id, F1.glyph) || `#${hx(id)}`;
 // Every monster name in the game, so a name never reads as behaviour.
 const NAMES = new Set();
@@ -114,8 +158,15 @@ lines.push('| `$40` | 87 | 44 | 50.6% | 50.4% |');
 lines.push('| `$60` | 113 | 88 | 77.9% | 74.6% |');
 lines.push('| `$7F` | 110 | 109 | 99.1% | 98.8% |');
 lines.push('');
-lines.push('Five of six rows land within ~3 points of the value computed from the ROM table;');
-lines.push('`$20` sits 1.5 sigma low on n=96. **The rate is `chance / 128`.**');
+lines.push('Five of six rows land within ~3 points of the value computed from the ROM table.');
+lines.push('**The rate is `chance / 128`.**');
+lines.push('');
+lines.push('⚠ **The per-row sigma here is overstated.** These rows treat every roll as an');
+lines.push('independent sample; the byte 1 work below measures that rolls CLUSTER within a');
+lines.push('battle, widening the real error bar by ~1.9x. So `$20` sitting "1.5 sigma low"');
+lines.push('is really under 1 sigma — the agreement is looser than it looks, but the');
+lines.push('conclusion is unchanged because the exact ROM-table count needs no sampling at');
+lines.push('all. Re-running this curve with battle-clustered bars is the outstanding work.');
 lines.push('');
 lines.push('⛔ **An earlier version of this table was wrong and is retracted.** It reported');
 lines.push('0 / 38 / 71 / 89 / 100% off 4-9 rolls per row. Those were not independent');
@@ -140,36 +191,51 @@ lines.push('  B2F6  BCS $B319                ; fail -> no attack at all');
 lines.push('  B2FA  LDA ($9A),Y  Y=8         ; a SEPARATE counter (list A uses Y=7)');
 lines.push('  B2FC  AND #$03                 ; mod 4, not mod 8');
 lines.push('  B301  ADC #$0B                 ; +11 = start of list B');
-lines.push('  B304  LDA ($9E),Y / CMP #$FF   ; $FF entry -> reset counter, wrap');
+lines.push('  B304  LDA ($9E),Y / CMP #$FF   ; $FF entry -> reset counter, retry');
+lines.push('  B314  ADC #$42                 ; ⭐ list B ids are OFFSET BY $42');
 lines.push('```');
 lines.push('');
 lines.push('⭐ Because `$B2C7 BCS $B2EF` falls through from list A, a monster carrying both');
 lines.push('lists uses list B at **`(1 - a/128) * (b/128)`**, not `b/128`.');
 lines.push('');
+lines.push('⭐ **List B ids are not spell ids.** `$B314 ADC #$42` shifts every list B entry');
+lines.push('into `$42..$5B` before dispatch, so the two lists index DIFFERENT tables —');
+lines.push('list A holds spell ids `$00..$3F`, list B holds skill ids `$42..$5B`. This is');
+lines.push('why STINGER, INK and NUCLEAR were never findable in the `$81E0` spell table:');
+lines.push('they were never in it. Pools `$21`, `$26`, `$28`, `$29` looked "broken" for');
+lines.push('the same reason — they carry no list A at all.');
+lines.push('');
+lines.push('⛔ **AN ALL-`$FF` LIST IS AN INFINITE LOOP.** `$B30A` resets the counter and');
+lines.push('jumps back to `$B2F8` whenever the indexed entry is `$FF`; if every slot is');
+lines.push('`$FF`, the ROM never leaves. The stock game never reaches it — chance is 0');
+lines.push('exactly when the list is empty, in all 44 pools — but PATCHING a chance byte');
+lines.push('over an empty list hangs the game. `ff1-rng-stride.mjs` now refuses that');
+lines.push('configuration instead of measuring a frozen emulator.');
+lines.push('');
 lines.push('Structural check across all 44 pool entries, **zero mismatches**: `byte 0 != 0`');
 lines.push('iff `+2..+9` is populated, `byte 1 != 0` iff `+11..+14` is populated, and `+10`');
 lines.push('and `+15` are always `$FF`.');
 lines.push('');
-lines.push('Measured on WarMECH (pool `$20`, `byte 0 = 00` so list A can never fire, which');
-lines.push('isolates list B), 14 independent battles per row:');
+lines.push('#### ⛔ The v1.9.11 byte 1 curve is RETRACTED');
 lines.push('');
-lines.push('| byte 1 | n rolls | fires | measured | chance/128 |');
-lines.push('|---|---|---|---|---|');
-lines.push('| `$00` | 126 | 0 | 0.0% | 0% |');
-lines.push('| `$10` | 123 | 18 | 14.6% | 13% |');
-lines.push('| `$20` | 117 | 42 | 35.9% | 25% |');
-lines.push('| `$40` | 108 | 72 | 66.7% | 50% |');
-lines.push('| `$7F` | 100 | 98 | 98.0% | 99% |');
+lines.push('It was published as "measured on WarMECH (pool `$20`)". It was not.');
+lines.push('`ff1-rate-curve.mjs` defaults to `--id 0x77`, the run used the default, and');
+lines.push('`0x77` is **LICH, pool `$22`** — `byte 0 = $60` and list B `FF FF FF FF`.');
+lines.push('Patching byte 1 non-zero there walked straight into the `$FF` retry loop');
+lines.push('above: one battle logged **12,332,381 reads of `+11`**. The emulator hung');
+lines.push('after the first roll, so every row of that table was counted off a frozen');
+lines.push('game. The reported n was meaningless and so was the "~1.35x mid-range"');
+lines.push('anomaly built on it — along with the strided-RNG hypothesis invented to');
+lines.push('explain it. WarMECH is `0x76`. The catalog table below had the right pool for');
+lines.push('`0x76` the whole time; only the prose was wrong.');
 lines.push('');
-lines.push('⛔ **OPEN: the mid-range runs high.** Endpoints are pinned (0 -> 0%, 127 -> 98%)');
-lines.push('and it is monotonic, so byte 1 is certainly the chance — but `$20` and `$40`');
-lines.push('measure ~1.35x their nominal rate, which is too systematic for noise at n>100.');
-lines.push('The suspect is the RNG: it is a FIXED 256-byte table, and the special roll');
-lines.push('happens at a fixed point in each turn\'s call sequence, so it samples the table');
-lines.push('at a stride rather than uniformly — a strided subsample need not match the');
-lines.push('table\'s overall distribution. **Not proven.** Testing it means logging the');
-lines.push('`$688A` index at each roll and checking whether the visited indices are strided.');
-lines.push('Until then `chance/128` is the mechanism, not a calibrated in-battle rate.');
+lines.push('The correct isolator is **`0x76` WarMECH, pool `$20`** — `byte 0 = 00` (list A');
+lines.push('can never fire) AND all four list B slots populated (no retry path, so one list');
+lines.push('read == one fire). The table below is **computed from the ROM, not sampled**:');
+lines.push('');
+lines.push(BYTE1_TABLE);
+lines.push('');
+lines.push(BYTE1_VERDICT);
 lines.push('');
 lines.push('| byte 7 | monsters | behaviour (names + baseline stripped) | example |');
 lines.push('|---|---|---|---|');

@@ -60,8 +60,15 @@ a read of `+2..+9` is a pass — over 14 independent battles per row:
 | `$60` | 113 | 88 | 77.9% | 74.6% |
 | `$7F` | 110 | 109 | 99.1% | 98.8% |
 
-Five of six rows land within ~3 points of the value computed from the ROM table;
-`$20` sits 1.5 sigma low on n=96. **The rate is `chance / 128`.**
+Five of six rows land within ~3 points of the value computed from the ROM table.
+**The rate is `chance / 128`.**
+
+⚠ **The per-row sigma here is overstated.** These rows treat every roll as an
+independent sample; the byte 1 work below measures that rolls CLUSTER within a
+battle, widening the real error bar by ~1.9x. So `$20` sitting "1.5 sigma low"
+is really under 1 sigma — the agreement is looser than it looks, but the
+conclusion is unchanged because the exact ROM-table count needs no sampling at
+all. Re-running this curve with battle-clustered bars is the outstanding work.
 
 ⛔ **An earlier version of this table was wrong and is retracted.** It reported
 0 / 38 / 71 / 89 / 100% off 4-9 rolls per row. Those were not independent
@@ -86,36 +93,88 @@ gates a 4-entry list at `+11..+14`, reached only when list A's roll FAILS:
   B2FA  LDA ($9A),Y  Y=8         ; a SEPARATE counter (list A uses Y=7)
   B2FC  AND #$03                 ; mod 4, not mod 8
   B301  ADC #$0B                 ; +11 = start of list B
-  B304  LDA ($9E),Y / CMP #$FF   ; $FF entry -> reset counter, wrap
+  B304  LDA ($9E),Y / CMP #$FF   ; $FF entry -> reset counter, retry
+  B314  ADC #$42                 ; ⭐ list B ids are OFFSET BY $42
 ```
 
 ⭐ Because `$B2C7 BCS $B2EF` falls through from list A, a monster carrying both
 lists uses list B at **`(1 - a/128) * (b/128)`**, not `b/128`.
 
+⭐ **List B ids are not spell ids.** `$B314 ADC #$42` shifts every list B entry
+into `$42..$5B` before dispatch, so the two lists index DIFFERENT tables —
+list A holds spell ids `$00..$3F`, list B holds skill ids `$42..$5B`. This is
+why STINGER, INK and NUCLEAR were never findable in the `$81E0` spell table:
+they were never in it. Pools `$21`, `$26`, `$28`, `$29` looked "broken" for
+the same reason — they carry no list A at all.
+
+⛔ **AN ALL-`$FF` LIST IS AN INFINITE LOOP.** `$B30A` resets the counter and
+jumps back to `$B2F8` whenever the indexed entry is `$FF`; if every slot is
+`$FF`, the ROM never leaves. The stock game never reaches it — chance is 0
+exactly when the list is empty, in all 44 pools — but PATCHING a chance byte
+over an empty list hangs the game. `ff1-rng-stride.mjs` now refuses that
+configuration instead of measuring a frozen emulator.
+
 Structural check across all 44 pool entries, **zero mismatches**: `byte 0 != 0`
 iff `+2..+9` is populated, `byte 1 != 0` iff `+11..+14` is populated, and `+10`
 and `+15` are always `$FF`.
 
-Measured on WarMECH (pool `$20`, `byte 0 = 00` so list A can never fire, which
-isolates list B), 14 independent battles per row:
+#### ⛔ The v1.9.11 byte 1 curve is RETRACTED
 
-| byte 1 | n rolls | fires | measured | chance/128 |
-|---|---|---|---|---|
-| `$00` | 126 | 0 | 0.0% | 0% |
-| `$10` | 123 | 18 | 14.6% | 13% |
-| `$20` | 117 | 42 | 35.9% | 25% |
-| `$40` | 108 | 72 | 66.7% | 50% |
-| `$7F` | 100 | 98 | 98.0% | 99% |
+It was published as "measured on WarMECH (pool `$20`)". It was not.
+`ff1-rate-curve.mjs` defaults to `--id 0x77`, the run used the default, and
+`0x77` is **LICH, pool `$22`** — `byte 0 = $60` and list B `FF FF FF FF`.
+Patching byte 1 non-zero there walked straight into the `$FF` retry loop
+above: one battle logged **12,332,381 reads of `+11`**. The emulator hung
+after the first roll, so every row of that table was counted off a frozen
+game. The reported n was meaningless and so was the "~1.35x mid-range"
+anomaly built on it — along with the strided-RNG hypothesis invented to
+explain it. WarMECH is `0x76`. The catalog table below had the right pool for
+`0x76` the whole time; only the prose was wrong.
 
-⛔ **OPEN: the mid-range runs high.** Endpoints are pinned (0 -> 0%, 127 -> 98%)
-and it is monotonic, so byte 1 is certainly the chance — but `$20` and `$40`
-measure ~1.35x their nominal rate, which is too systematic for noise at n>100.
-The suspect is the RNG: it is a FIXED 256-byte table, and the special roll
-happens at a fixed point in each turn's call sequence, so it samples the table
-at a stride rather than uniformly — a strided subsample need not match the
-table's overall distribution. **Not proven.** Testing it means logging the
-`$688A` index at each roll and checking whether the visited indices are strided.
-Until then `chance/128` is the mechanism, not a calibrated in-battle rate.
+The correct isolator is **`0x76` WarMECH, pool `$20`** — `byte 0 = 00` (list A
+can never fire) AND all four list B slots populated (no retry path, so one list
+read == one fire). The table below is **computed from the ROM, not sampled**:
+
+| chance | exact rate from the ROM's RNG table | `chance/128` | delta |
+|---|---|---|---|
+| `$00` | 0.00% (0/256) | 0.00% | 0.00pp |
+| `$10` | 12.89% (33/256) | 12.50% | +0.39pp |
+| `$20` | 25.39% (65/256) | 25.00% | +0.39pp |
+| `$40` | 50.39% (129/256) | 50.00% | +0.39pp |
+| `$60` | 74.61% (191/256) | 75.00% | -0.39pp |
+| `$7F` | 98.83% (253/256) | 99.22% | -0.39pp |
+
+⭐ **`chance/128` is exact, and no sampling was needed to establish it.** The
+roll is `floor(rand * 129 / 256) < chance` where `rand` is the next byte of the
+FIXED 256-byte table at `$FCF1`, so the rate is just how many of those 256 bytes
+clear the bar — a closed-form count, not an estimate. Swept over ALL 129 legal
+chance values, the exact rate never departs from `chance/128` by more than
+**0.39pp**, which is one table entry out of 256. There is no room in the ROM for
+a 1.35x mid-range inflation; the v1.9.11 anomaly was the hang, nothing else.
+
+Empirical check on the corrected setup (`0x76`, chance `$20`, 10 battles, 300
+rounds, **129 rolls**), via `tools/ff1-rng-stride.mjs` + `ff1-rng-stride-analyze.mjs`:
+
+- fire rate **33.0% ± 7.1pp** vs the exact 25.39% — **z = 1.07, consistent**.
+- **129/129** logged bytes equal `TABLE[idx]` read straight from the ROM, and
+  **129/129** fire outcomes equal `floor(v*129/256) < chance`. The model is not
+  approximately right, it is exactly right on every roll observed.
+
+⚠ **Rolls inside one battle are NOT independent.** Per-battle rates came out
+58/15/58/7/0/46/42/14/31/58% — far past binomial spread. A battle walks one RNG
+stream, so the honest bar is battle-clustered (±7.1pp); treating all 129 rolls as
+independent would claim ±3.8pp and overstate confidence by ~1.9x. Any future
+FF1 rate measurement has this property and must cluster by battle.
+
+⚠ **Visited RNG indices are genuinely non-uniform** — odd indices outnumber even
+**93 to 36** (chi2 = 30.8, df = 7, p < 0.05). So a stride-like structure is real,
+just not the one v1.9.11 guessed. It also cannot be the missing explanation: the
+odd-index subset scores **21.9%** at chance `$20`, *below* nominal, so the bias
+pushes the rate DOWN. Every mechanism found so far moves the wrong way.
+
+⚠ **Scope.** Only chance `$20` was measured in-battle (each battle is ~5 min of
+emulation). The other rows rest on the closed-form table count, which carries no
+sampling error — but they are computed, not observed.
 
 | byte 7 | monsters | behaviour (names + baseline stripped) | example |
 |---|---|---|---|

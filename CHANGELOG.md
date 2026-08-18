@@ -1,3 +1,44 @@
+## 1.9.12 — 2026-08-17
+
+### docs: FF1 byte 1 curve RETRACTED — it was measured on a hung emulator
+
+The v1.9.11 byte 1 rate table is withdrawn. It was published as "measured on
+WarMECH (pool `$20`)"; it was not. `ff1-rate-curve.mjs` defaults to `--id 0x77`,
+the run used the default, and `0x77` is LICH, pool `$22` — `byte 0 = $60` and
+list B `FF FF FF FF`. Patching byte 1 non-zero over an empty list drives the ROM
+into the `$B30A` retry loop, which has no exit: one battle logged **12,332,381
+reads of `+11`**. The emulator hung after the first roll, so every row of that
+table was counted off a frozen game, and the "~1.35x mid-range" anomaly plus the
+strided-RNG hypothesis invented to explain it both go with it. WarMECH is `0x76`.
+
+What replaced it, and what is now stronger than before:
+
+- **`chance/128` is EXACT, with no sampling.** The roll is
+  `floor(rand * 129 / 256) < chance` against the fixed 256-byte table at `$FCF1`,
+  so the rate is a closed-form count of that table. Swept over all 129 legal
+  chance values, it never departs from `chance/128` by more than **0.39pp** —
+  one entry in 256. There is no room in the ROM for a 1.35x inflation.
+- **Empirical check on the correct isolator** (`0x76`, chance `$20`, 10 battles,
+  300 rounds, 129 rolls): **33.0% ± 7.1pp** vs the exact 25.39%, **z = 1.07**.
+  129/129 logged bytes equal the ROM table, and 129/129 fire outcomes equal the
+  formula — exact on every roll observed.
+- **List B ids are offset by `$42`** (`$B314 ADC #$42`), so the two lists index
+  DIFFERENT tables: list A spell ids `$00..$3F`, list B skill ids `$42..$5B`.
+  This is why STINGER / INK / NUCLEAR were never in the `$81E0` spell table.
+- **Two-list structure re-confirmed** across all 44 pools, 0 mismatches.
+- **Rolls cluster within a battle** (per-battle rates 58/15/58/7/0/46/42/14/31/58%),
+  so the honest error bar is battle-clustered; per-roll bars overstate confidence
+  ~1.9x. The list A curve's "1.5 sigma" claim is annotated accordingly.
+- **Visited RNG indices ARE non-uniform** — odd outnumber even 93:36
+  (chi2 = 30.8, df = 7). Real structure, but it moves the rate DOWN (21.9% at
+  `$20`), so it cannot explain an upward deviation either.
+
+Tooling: `tools/ff1-rng-stride.mjs` logs the `$688A` index at each roll and now
+**refuses** an all-`$FF` list rather than measuring a frozen game, warns when
+`byte 0 != 0` means list B is not isolated, and writes per-battle JSONL so a
+killed run leaves usable data. `tools/ff1-rng-stride-analyze.mjs` judges that
+data with battle-clustered error bars. Reference-only; nothing under `src/`.
+
 # Changelog
 
 All notable changes to this project are documented here.
