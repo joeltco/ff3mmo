@@ -1,3 +1,38 @@
+## 1.9.21 — 2026-08-18
+
+### docs: airship mode 4 identified; 5 vs 6 separated but deliberately unnamed
+
+**Mode 4 is the airship form of the mode-3 craft — the Enterprise.** Three
+independent lines agree:
+
+- The parked-vehicle draw at `$DAD8` suppresses itself when `$42` is **3 OR 4**,
+  and reads ONE owned-flag (`$6000`), ONE position pair (`$6001`/`$6002`) and one
+  sprite (`$50`) for both. A "draw your vehicle out there" routine skipping on
+  both values means 3 and 4 are one craft.
+- **Booting vehicle 4 yields `$42` = 3**, measured on land and on open ocean.
+  Modes 5, 6 and 7 do not convert under the same test.
+- That is `0x08c`: *"turn the Enterprise into an airship. But, you can only land
+  on water."*
+
+So mode 3 = that craft as a ship, mode 4 = the same craft flying.
+
+**Modes 5 and 6 are separated but NOT named.** Identical terrain mask, identical
+sprites (`$7c-$7f` flying, `$68` parked). Differences: story flag `$6020` bit 0
+vs bit 6; mode 5's parked-draw has no world check while mode 6 requires
+`$6003 == $78`; mode 5's flag is CLEARED at bank 58 `$9ACC` (which also forces a
+dismount), no such clear found for 6; and when `$78`=4 mode 6's music `$15`
+differs from `$09` shared by 4 and 5. Neither converts on water, so unlike mode 4
+they do not land on water.
+
+⛔ **Not guessed at.** The remaining discriminator is a story-flag bit, and
+nothing reachable sets `$6020` bit 0 or bit 6 — the two `STA $6020` sites clear
+bit 0 and set bit 5, so those bits come from the generic event-flag mechanism,
+which is not decoded. A plausible story could be told for either assignment,
+which is precisely why it is not being asserted. Settling it needs the event
+flag/condition encoding decoded, the same missing piece as §11 and §12.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.20 — 2026-08-18
 
 ### docs: the movement modes NAMED

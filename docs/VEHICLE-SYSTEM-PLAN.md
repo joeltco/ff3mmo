@@ -499,7 +499,8 @@ so themes vary by world.)
 | 1 | **canoe (carried)** | high | mask `b0+b1` = land + forest + **shallow** — walk normally, enter rivers, which is exactly a portable canoe. Own theme `$08`. The only mode-1 grant in the game, script #146 via opcode `$CF` |
 | 2 | **canoe (afloat)** | high | shallow-water ONLY; small gold canoe sprite; plays the WALKING theme, so it is not a separate vehicle; reached only by transformation at `$C5ED`-`$C5FE` on a bit-1 tile |
 | 3 | **ship** | high | ocean only; own theme `$22`; **the only vehicle whose disembark records a mooring position** — you park it at a dock |
-| 4, 5, 6 | **airships** | medium | all three fly (mask bit 4) and **share one theme** `$0a`; 5 and 6 draw the same masted-ship sprite; mode 5 is granted at the end of the rising animation in §11 |
+| 4 | **the Enterprise, flying** | high | §13 — same craft as mode 3; collapses to 3 over water; matches "can only land on water" (`0x08c`) |
+| 5, 6 | **airships, unnamed** | — | §13 — separated by story flag only; neither lands on water |
 | 7 | **the Invincible** | high | flies; the ONLY flyer with its own theme `$23`; **14 sprites vs 4** for everything else — much the largest craft; granted by `$CB` via script #163. The script calls it "the Great Ship... Invincible" (`0x0de`) |
 
 ⛔ **Still open: which airship is 4 vs 5 vs 6.** They are indistinguishable by
@@ -507,3 +508,51 @@ terrain mask and share a music track; 5 and 6 share a sprite. Separating them
 needs the story conditions on their grant scripts resolved, which is the same
 work §11 left open. Do not guess: FF3 has Cid's airship, the Enterprise and the
 Enterprise-as-airship, and nothing measured so far distinguishes them.
+
+## 13. Airships 4 vs 5 vs 6
+
+### Mode 4 is the AIRSHIP FORM OF THE MODE-3 CRAFT — resolved
+
+Three independent lines agree:
+
+1. **The parked-vehicle draw at `$DAD8` skips when `$42` is 3 OR 4.** A routine
+   that draws "your vehicle sitting out there" suppresses itself while you are
+   aboard — suppressing on *both* values means 3 and 4 are ONE craft. It also
+   reads one owned-flag (`$6000`) and one position pair (`$6001`/`$6002`) for
+   both, and draws them with the same sprite `$50`.
+2. **Booting vehicle 4 yields `$42` = 3** — measured, on land AND on open ocean.
+   Mode 4 collapses into mode 3 the moment it is over water; modes 5, 6 and 7 do
+   not convert at all under the same test.
+3. That is exactly `0x08c` — *"Press the A Button to turn the Enterprise into an
+   airship. But, you can only land on water."* A craft that is a ship, becomes an
+   airship, and can only set down on water.
+
+So **mode 3 = that craft as a ship, mode 4 = the same craft flying.** Since the
+mode-3/4 pair is the only vessel in the game that is both, it is the Enterprise.
+
+### Modes 5 and 6 — separated mechanically, NOT named
+
+They are not distinguishable by terrain (identical mask `$10`) or by sprite
+(both draw `$7c-$7f` in flight and `$68` parked). What does differ:
+
+| | mode 5 | mode 6 |
+|---|---|---|
+| story flag | `$6020` **bit 0** | `$6020` **bit 6** |
+| parked-draw world check | **none** | requires `$6003 == $78` |
+| flag ever cleared? | **yes** — bank 58 `$9ACC` clears bit 0, forces `$42`/`$46` to 0 and sets `$602F` bit 6 | not found |
+| music when `$78`=4 | `$09` (same as mode 4) | `$15` (differs) |
+
+Neither converts on water, so unlike mode 4 these do **not** land on water.
+
+**Why I am not naming them.** The remaining evidence is a story-flag bit, and
+nothing sets `$6020` bit 0 or bit 6 in code I can reach — the two `STA $6020`
+sites clear bit 0 and set bit 5, so those bits are written by the generic
+event-flag mechanism, which is not decoded. The tempting move is to map "the one
+that gets taken away" to Cid's airship and the other to a later one; FF3 does
+have Cid's airship, the Enterprise and a mythril-ram upgrade, and a plausible
+story could be told for either assignment. That is exactly the guess that would
+later get quoted back as measured.
+
+**What would settle it:** decode the event opcode that writes story flags, find
+the scripts that set `$6020` bit 0 and bit 6, and read the dialogue attached to
+them. Same missing piece as §11 and §12 — the flag/condition encoding.
