@@ -23,10 +23,9 @@ Byte 7 is **not** an attack — it indexes a 16-byte pool entry at
 `$9020 + byte7*16` (bank 12, file `$31030`), and the monster picks from a list:
 
 ```
-  +0        chance      (rolled against random 0..128; higher = more often)
-  +1        unidentified
-  +2..+9    8-entry spell list, $FF = empty
-  +10..15   $FF padding
+  +0        chance for list A     +1        chance for list B
+  +2..+9    list A: 8 entries      +11..+14  list B: 4 entries
+  +10       $FF separator          +15       $FF separator
 
   pool $22 (LICH):  60 00 | 1F 1C 1D 16 15 14 0F 05 | FF x6
 ```
@@ -74,6 +73,49 @@ now does. Any harness that restarts from a savestate has this problem.
 rather than "always".
 ⭐ The `AND #$07` is why a pool cycles: LICH cast `1F 1C 1D` — the first three
 entries of its own list, in order — rather than repeating one attack.
+
+### Byte 1 — the second list
+
+The entry holds **two parallel lists**, each with its own chance byte. Byte 1
+gates a 4-entry list at `+11..+14`, reached only when list A's roll FAILS:
+
+```
+  B2EF  LDY #$01 / LDA ($9E),Y   ; byte 1 = chance for list B
+  B2F3  JSR $B294                ; the SAME roll routine as list A
+  B2F6  BCS $B319                ; fail -> no attack at all
+  B2FA  LDA ($9A),Y  Y=8         ; a SEPARATE counter (list A uses Y=7)
+  B2FC  AND #$03                 ; mod 4, not mod 8
+  B301  ADC #$0B                 ; +11 = start of list B
+  B304  LDA ($9E),Y / CMP #$FF   ; $FF entry -> reset counter, wrap
+```
+
+⭐ Because `$B2C7 BCS $B2EF` falls through from list A, a monster carrying both
+lists uses list B at **`(1 - a/128) * (b/128)`**, not `b/128`.
+
+Structural check across all 44 pool entries, **zero mismatches**: `byte 0 != 0`
+iff `+2..+9` is populated, `byte 1 != 0` iff `+11..+14` is populated, and `+10`
+and `+15` are always `$FF`.
+
+Measured on WarMECH (pool `$20`, `byte 0 = 00` so list A can never fire, which
+isolates list B), 14 independent battles per row:
+
+| byte 1 | n rolls | fires | measured | chance/128 |
+|---|---|---|---|---|
+| `$00` | 126 | 0 | 0.0% | 0% |
+| `$10` | 123 | 18 | 14.6% | 13% |
+| `$20` | 117 | 42 | 35.9% | 25% |
+| `$40` | 108 | 72 | 66.7% | 50% |
+| `$7F` | 100 | 98 | 98.0% | 99% |
+
+⛔ **OPEN: the mid-range runs high.** Endpoints are pinned (0 -> 0%, 127 -> 98%)
+and it is monotonic, so byte 1 is certainly the chance — but `$20` and `$40`
+measure ~1.35x their nominal rate, which is too systematic for noise at n>100.
+The suspect is the RNG: it is a FIXED 256-byte table, and the special roll
+happens at a fixed point in each turn's call sequence, so it samples the table
+at a stride rather than uniformly — a strided subsample need not match the
+table's overall distribution. **Not proven.** Testing it means logging the
+`$688A` index at each roll and checking whether the visited indices are strided.
+Until then `chance/128` is the mechanism, not a calibrated in-battle rate.
 
 | byte 7 | monsters | behaviour (names + baseline stripped) | example |
 |---|---|---|---|

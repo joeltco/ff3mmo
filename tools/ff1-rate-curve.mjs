@@ -41,6 +41,16 @@ const CHANCE = flag('chance', null);
 // the savestate and burns a different number of frames first, which walks the RNG
 // to a different stream — independent samples rather than a longer correlated one.
 const BATTLES = Number(flag('battles', '1'));
+// ⭐ The pool entry holds TWO lists, each with its own chance byte — verified across
+// all 44 entries with ZERO mismatches: byte 0 != 0 iff +2..+9 is populated, byte 1
+// != 0 iff +11..+14 is populated, and +10/+15 are always $FF separators.
+//   --list a  (default) roll = +0, fire = a read of +2..+9   (8-entry list)
+//   --list b            roll = +1, fire = a read of +11..+14 (4-entry list)
+// A monster with byte 0 = 0 can never use list A, so it isolates list B cleanly.
+const LIST = flag('list', 'a');
+const ROLL_OFF = LIST === 'b' ? 1 : 0;
+const LIST_LO = LIST === 'b' ? 11 : 2;
+const LIST_HI = LIST === 'b' ? 14 : 9;
 const ROUND_CAP = 1800;
 
 const rom = new Uint8Array(fs.readFileSync(process.env.FF1_ROM || '/home/joeltco/roms/ff1-usa.nes'));
@@ -58,8 +68,8 @@ p[S + MN.STAT_FIELDS.evade] = 0xFF;
 const POOL_ID = rom[S + MN.STAT_FIELDS.special];
 const POOL_CPU = 0x9020 + POOL_ID * 16;
 const POOL_FILE = 0x30010 + (POOL_CPU - 0x8000);   // bank 12
-if (CHANCE !== null) p[POOL_FILE] = Number(CHANCE) & 0xFF;
-const CHANCE_VAL = p[POOL_FILE];
+if (CHANCE !== null) p[POOL_FILE + ROLL_OFF] = Number(CHANCE) & 0xFF;
+const CHANCE_VAL = p[POOL_FILE + ROLL_OFF];
 
 function runBattle(offset) {
   const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
@@ -93,8 +103,8 @@ function runBattle(offset) {
   const origLoad = c.load.bind(c);
   c.load = function (addr) {
     if (recording) {
-      if (addr === POOL_CPU) rolls++;
-      else if (addr > POOL_CPU + 1 && addr <= POOL_CPU + 9) { fires++; picked.add(addr - POOL_CPU - 2); }
+      if (addr === POOL_CPU + ROLL_OFF) rolls++;
+      else if (addr >= POOL_CPU + LIST_LO && addr <= POOL_CPU + LIST_HI) { fires++; picked.add(addr - POOL_CPU - LIST_LO); }
     }
     return origLoad(addr);
   };
@@ -147,4 +157,4 @@ const pct = R ? (100 * F / R).toFixed(1) + '%' : 'n/a';
 const expect = ((CHANCE_VAL / 128) * 100).toFixed(0);
 console.log(`\nid $${hx(ID)} pool $${hx(POOL_ID)} @ $${hx(POOL_CPU, 4)}  chance=$${hx(CHANCE_VAL)} (${CHANCE_VAL})  ` +
             `battles=${ok}/${BATTLES} rounds=${RD}  ⭐ n=${R} rolls, ${F} fires -> ${pct}   ` +
-            `(chance/128 = ${expect}%)  slots: ${[...allPicked].sort((a, b) => a - b).join(',') || '—'}`);
+            `(chance/128 = ${expect}%)  list ${LIST} slots: ${[...allPicked].sort((a, b) => a - b).join(',') || '—'}`);

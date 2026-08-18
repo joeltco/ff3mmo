@@ -18,6 +18,52 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.11 — 2026-08-17
+
+### Byte 1 of the pool entry is a SECOND attack list's chance
+
+The 16-byte pool entry at `$9020 + byte7*16` holds **two parallel lists**, not one
+list plus padding — the `+10..15` I called padding in v1.9.9 was wrong:
+
+    +0        chance for list A     +1        chance for list B
+    +2..+9    list A: 8 entries     +11..+14  list B: 4 entries
+    +10       $FF separator         +15       $FF separator
+
+Byte 1 gates the 4-entry list, and it is reached **only when list A's roll fails**
+(`$B2C7 BCS $B2EF` falls straight into it). So a monster carrying both uses list B
+at `(1 - a/128) * (b/128)`, not `b/128`.
+
+    B2EF  LDY #$01 / LDA ($9E),Y   ; byte 1 = chance for list B
+    B2F3  JSR $B294                ; the SAME roll routine as list A
+    B2F6  BCS $B319                ; fail -> no attack at all
+    B2FA  LDA ($9A),Y  Y=8         ; SEPARATE counter (list A uses Y=7)
+    B2FC  AND #$03                 ; mod 4, not mod 8
+    B301  ADC #$0B                 ; +11 = start of list B
+    B304  LDA ($9E),Y / CMP #$FF   ; $FF entry -> reset counter, wrap
+
+Structural check across all 44 entries, **zero mismatches**: `byte 0 != 0` iff
+`+2..+9` populated, `byte 1 != 0` iff `+11..+14` populated, `+10`/`+15` always `$FF`.
+
+Measured on WarMECH (pool `$20`, `byte 0 = 00`, so list A can never fire and list B
+is isolated), 14 independent battles per row: `$00` 0/126 = 0.0%, `$10` 18/123 =
+14.6%, `$20` 42/117 = 35.9%, `$40` 72/108 = 66.7%, `$7F` 98/100 = 98.0%.
+
+⭐ This also clears up a contradiction flagged in v1.9.9: pool ids `$21`, `$26`,
+`$28`, `$29` looked broken because they were looked up in the `$81E0` SPELL table
+and came back with `byte4=00`. Those monsters have `byte 0 = 00` — no spells at
+all. MANTICOR's STINGER, KRAKEN's INK and WarMECH's NUCLEAR all come from list B,
+so the spell table was never the right place to look.
+
+⛔ **OPEN — the mid-range runs high.** Endpoints are pinned and the curve is
+monotonic, so byte 1 is certainly the chance; but `$20` and `$40` measure ~1.35x
+nominal, too systematic for noise at n>100. Suspect: the RNG is a FIXED 256-byte
+table and the special roll sits at a fixed point in each turn's call sequence, so
+it samples the table at a STRIDE rather than uniformly. Not proven. The test is to
+log the `$688A` index at each roll and check whether visited indices are strided.
+Until then `chance/128` is the mechanism, not a calibrated in-battle rate.
+
+Reference only — nothing wired into `src/`.
+
 ## 1.9.10 — 2026-08-17
 
 ### The FF1 special rate is `chance / 128` — and the first curve was an artifact
