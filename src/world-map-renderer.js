@@ -45,6 +45,60 @@ const CHOKE_TILE_Y = 54;
 //        meant to leave it by disembarking, and there is no vehicle system yet.
 //        Confirmed not an event problem: every event script on the map decodes
 //        with no map transition (tools/event-resolve.mjs). v1.7.949.
+// Movement-mode passability masks — the ROM's own table at $C6CD, read off the
+// cartridge, not inferred. A tile blocks a mode iff EVERY bit of that mode's
+// mask is set in the tile's `byte1` (`AND mask ; CMP mask` at $C6B0).
+//
+//   0        on foot          land + forest
+//   1        bit0+bit1        land + forest + shallow water
+//   2        bit1             shallow water only
+//   3        bit2             ocean only
+//   4-7      bit4             everything except the bit-4 barrier tiles (flying)
+//
+// ⛔ bit 3 is NEVER tested by this routine even though most tiles carry it, and
+// bit 4 is the flight barrier — it is outside the low nibble and easy to miss.
+const WORLD_MODE_MASKS = [0x01, 0x03, 0x02, 0x04, 0x10, 0x10, 0x10, 0x10];
+const MODE_ON_FOOT = 0;
+const FIRST_FLYING_MODE = 4;
+
+/**
+ * Passability for a movement mode, mirroring the ROM routine at $C69B:
+ *
+ *     C69F  ASL A           ; tile props are interleaved PAIRS
+ *     C6A1  LDA $0400,X     ; byte1 (props table, copied to RAM at map load)
+ *     C6AB  LDY $42         ; the movement mode
+ *     C6AD  LDA $C6CD,Y     ; mask table
+ *     C6B0  AND $44
+ *     C6B2  CMP $C6CD,Y     ; blocked iff EVERY mask bit is set
+ *
+ * Proven by patching that table and watching reachability change — see
+ * `tools/monscan/mask-table-proof.cjs` and docs/VEHICLE-SYSTEM-PLAN.md §10.
+ *
+ * Module-level and pure so tools can borrow `isPassable` off the prototype
+ * with only `{ data }` bound.
+ */
+function passableForMode(data, tileX, tileY, mode) {
+  const size = data.mapWidth;
+  const wx = ((tileX % size) + size) % size;
+  const wy = ((tileY % size) + size) % size;
+
+  // Choke boulder south of Ur — hard-blocked regardless of terrain prop.
+  if (wx === CHOKE_TILE_X && wy === CHOKE_TILE_Y) return false;
+
+  const props = data.tileProps[data.tilemap[wy * size + wx] & 0x7F];
+  let byte1 = props.byte1;
+
+  // $C6B9: a FLYING mode clears the trigger bit, so an airship cannot walk into
+  // a town. On foot and in the boats the bit stands.
+  if (mode >= FIRST_FLYING_MODE) byte1 &= 0x7F;
+
+  // Trigger tiles are always passable (walk onto to enter)
+  if (byte1 & 0x80) return true;
+
+  const mask = WORLD_MODE_MASKS[mode] ?? WORLD_MODE_MASKS[MODE_ON_FOOT];
+  return (byte1 & mask) !== mask;
+}
+
 const REMOVED_ENTRANCES = new Set([95, 180]);
 export class WorldMapRenderer {
   constructor(worldMapData) {
@@ -366,24 +420,37 @@ export class WorldMapRenderer {
   }
 
   isPassable(tileX, tileY) {
-    const size = this.data.mapWidth;
-    const wx = ((tileX % size) + size) % size;
-    const wy = ((tileY % size) + size) % size;
+    // Delegates to a MODULE-LEVEL function, not `this.isPassableForMode`.
+    // Several tools borrow this method through the prototype on a bare
+    // `{ data }` object to avoid the canvas-building constructor, so anything
+    // reached via `this` other than `data` breaks them — check-encounter-zones
+    // failed exactly that way.
+    return passableForMode(this.data, tileX, tileY, MODE_ON_FOOT);
+  }
 
-    // Choke boulder south of Ur — hard-blocked regardless of terrain prop.
-    if (wx === CHOKE_TILE_X && wy === CHOKE_TILE_Y) return false;
-
-    const metatileId = this.data.tilemap[wy * size + wx];
-    const m = metatileId & 0x7F;
-    const props = this.data.tileProps[m];
-
-    // Trigger tiles are always passable (walk onto to enter)
-    if (props.byte1 & 0x80) return true;
-
-    // Foot blocked: bit 0 set
-    if (props.byte1 & 0x01) return false;
-
-    return true;
+  /**
+   * Passability for a given MOVEMENT MODE, mirroring the ROM routine at $C69B.
+   *
+   * The NES does exactly this (fixed bank):
+   *
+   *     C69D  LDA ($80),Y     ; metatile id
+   *     C69F  ASL A           ; *2 — tile props are interleaved PAIRS
+   *     C6A1  LDA $0400,X     ; byte1  (the props table, copied to RAM at load)
+   *     C6AB  LDY $42         ; the movement mode
+   *     C6AD  LDA $C6CD,Y     ; mask table
+   *     C6B0  AND $44
+   *     C6B2  CMP $C6CD,Y     ; blocked iff EVERY mask bit is set
+   *
+   * Proven by patching the table and watching reachability change — stock
+   * `mask[0] = $01` never lets a walker stand on water, `$80` lets the same
+   * walker cross water and mountains, `$00` freezes it. See
+   * `tools/monscan/mask-table-proof.cjs` and docs/VEHICLE-SYSTEM-PLAN.md §10.
+   *
+   * NOT wired to anything yet: `isPassable` still asks for MODE_ON_FOOT, so
+   * behaviour is unchanged. `tools/check-world-passability.mjs` gates that.
+   */
+  isPassableForMode(tileX, tileY, mode) {
+    return passableForMode(this.data, tileX, tileY, mode);
   }
 
   getTriggerAt(tileX, tileY) {

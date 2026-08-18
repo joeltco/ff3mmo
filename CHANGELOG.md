@@ -1,3 +1,41 @@
+## 1.9.19 — 2026-08-18
+
+### Phase 1 groundwork: mode-aware world passability, wired to nothing, gated
+
+First change under `src/` for the vehicle system, and it is deliberately inert.
+
+`WorldMapRenderer` gains `isPassableForMode(x, y, mode)`, mirroring the ROM
+routine at `$C69B`, plus `WORLD_MODE_MASKS` — a transcription of the cartridge's
+own table at `$C6CD`. `isPassable(x, y)` now delegates with `MODE_ON_FOOT`, so
+**player-visible behaviour is unchanged**. Flying modes clear the trigger bit
+(`$C6B9`), so an airship could not walk into a town.
+
+⚠ Deliberately NOT included: the vehicle save field. That needs the 4-hop save
+lockstep plus a server validator change against the live player database, and is
+not something to ship unattended.
+
+`tools/check-world-passability.mjs` (NEW, wired into deploy.sh) gates three
+things:
+
+- `WORLD_MODE_MASKS` still equals the ROM bytes at `$C6CD`;
+- `isPassable` agrees with the pre-vehicle rule on **all 16384 world tiles**;
+- the modes are actually distinct, so a degenerate table cannot pass.
+
+Both failure modes were proven by breaking the code on purpose: drifting one mask
+byte trips the ROM comparison, and swapping the foot mask from bit 0 to bit 1
+changes 4567 tiles and trips the behaviour check.
+
+The per-mode open-tile counts cross-check arithmetically, which is independent
+evidence the mask table is right:
+
+| mode | open tiles | = |
+|---|---|---|
+| 0 foot | 4546 | — |
+| 1 canoe | 4621 | 4546 + the 75 shallow tiles |
+| 2 | 129 | 75 shallow + 54 trigger tiles |
+| 3 ship | 4602 | 4548 ocean + 54 trigger tiles |
+| 4 flying | 15261 | 16384 − 1122 bit-4 barrier − 1 choke boulder |
+
 ## 1.9.18 — 2026-08-18
 
 ### docs: how vehicles are granted; a LAUNCH ANIMATION located in code
