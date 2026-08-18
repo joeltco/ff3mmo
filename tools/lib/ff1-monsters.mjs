@@ -46,7 +46,17 @@ export const FORMATION_SPECIES_OFF = [2, 3, 4, 5];
 export const FORMATION_COUNT_OFF = [6, 7, 8, 9];
 export const FORMATION_MAX_SPECIES = 4;
 export const ENEMY_RAM = 0x6BDC, ENEMY_RAM_STRIDE = 20;
-export const ENEMY_MAXHP_OFF = 9, ENEMY_CURHP_OFF = 13;
+export const ENEMY_MAXHP_OFF = 9;
+// ⛔ CURRENT HP IS NOT +13. That value pointed one SLOT too far — $6BDC+13 = $6BE9
+// is the NEXT monster's current HP, which is why it read 0 on a fresh single-monster
+// spawn ("unpopulated") and why poking it never kept anything alive.
+// Measured with tools/ff1-enemy-hp-hook.mjs: sentinel HP 227 landed on
+// $6BD5/$6BE9/$6BFD (current) and $6BE5/$6BF9/$6C0D (max) for a 3-monster
+// formation — two interleaved stride-20 arrays, current = max - 16.
+// ⭐ Outcome-proven, not just held: poking $6BD5 = 1 KILLS the monster; poking the
+// other candidate that carried the identical 227->225->224 trail ($687C, a working
+// copy written from $AED5) does not.
+export const ENEMY_CURHP_OFF = ENEMY_MAXHP_OFF - 16;   // -7 from ENEMY_RAM
 /** A raw count byte as the game reads it: [min, max]. */
 export const countRange = (b) => [(b >> 4) & 0x0F, b & 0x0F];
 export const formationOf = (rom, f) =>
