@@ -49,26 +49,39 @@ $688A / LDA $FCF1,X`). So the exact rate is countable from the ROM, and the
 table is uniform enough that it reduces to **chance / 128**.
 
 Measured by counting the branch outcome directly — a read of `+0` is one roll,
-a read of `+2..+9` is a pass — over 14 independent battles per row:
+a read of `+2..+9` is a pass. Isolator is **LICH `0x77`, pool `$22`**: list A is
+fully populated (`1F 1C 1D 16 15 14 0F 05`, no `$FF`) so there is no retry path
+and one list read == one fire, and `byte 1 = 00` keeps list B inert.
+⭐ Error bars are **battle-clustered** — each battle contributes one rate and the
+spread ACROSS battles sets the SE. 10 battles x 30 rounds per row:
 
-| byte 0 | n rolls | fires | measured | exact from the ROM table |
-|---|---|---|---|---|
-| `$00` | 111 | 0 | 0.0% | 0.0% |
-| `$10` | 108 | 15 | 13.9% | 12.9% |
-| `$20` | 96 | 18 | 18.8% | 25.4% |
-| `$40` | 87 | 44 | 50.6% | 50.4% |
-| `$60` | 113 | 88 | 77.9% | 74.6% |
-| `$7F` | 110 | 109 | 99.1% | 98.8% |
+| byte 0 | battles | n rolls | fires | measured (battle-clustered) | exact from ROM table | z |
+|---|---|---|---|---|---|---|
+| `$00` | 10 | 93 | 0 | 0.0% ± 0.0pp | 0.00% | 0.00 |
+| `$10` | 10 | 104 | 15 | 14.5% ± 4.1pp | 12.89% | +0.40 |
+| `$20` | 10 | 76 | 17 | 23.6% ± 5.2pp | 25.39% | -0.35 |
+| `$40` | 10 | 64 | 33 | 51.1% ± 6.2pp | 50.39% | +0.11 |
+| `$60` | 10 | 88 | 66 | 73.5% ± 4.0pp | 74.61% | -0.27 |
+| `$7F` | 10 | 81 | 80 | 98.9% ± 1.1pp | 98.83% | +0.05 |
 
-Five of six rows land within ~3 points of the value computed from the ROM table.
+**Every row is consistent with the exact ROM-table count, |z| <= 0.40.**
+Integrity across all 506 rolls: **506/506** logged bytes equal `TABLE[idx]` read
+from the ROM, and **506/506** fire outcomes equal `floor(v*129/256) < chance`.
 **The rate is `chance / 128`.**
 
-⚠ **The per-row sigma here is overstated.** These rows treat every roll as an
-independent sample; the byte 1 work below measures that rolls CLUSTER within a
-battle, widening the real error bar by ~1.9x. So `$20` sitting "1.5 sigma low"
-is really under 1 sigma — the agreement is looser than it looks, but the
-conclusion is unchanged because the exact ROM-table count needs no sampling at
-all. Re-running this curve with battle-clustered bars is the outstanding work.
+⛔ **This supersedes the v1.9.10 table** (`13.9 / 18.8 / 50.6 / 77.9 / 99.1%` over
+14 battles). Those measurements were sound — the config had no retry path — but
+they carried per-roll error bars, and on that basis `$20` was reported as
+"1.5 sigma low". Re-measured with clustered bars it is **23.6% ± 5.2pp vs 25.39%,
+z = -0.35** — never discrepant at all. The apparent outlier was an artifact of
+the error bar, not of the game.
+
+⚠ **Clustering is NOT a fixed inflation — do not reuse a single factor.** The
+byte 1 run measured ~1.9x, and an earlier draft of this section extrapolated that
+number here. Measured per row, list A ranges **0.9x to 1.3x**: `$10` 1.3x wider,
+`$20` 1.0x, and `$40`/`$60` actually NARROWER than binomial (underdispersed at
+10 battles). The dispersion depends on the row, so each curve must be clustered
+from its own data rather than scaled by a borrowed constant.
 
 ⛔ **An earlier version of this table was wrong and is retracted.** It reported
 0 / 38 / 71 / 89 / 100% off 4-9 rolls per row. Those were not independent
@@ -163,8 +176,9 @@ rounds, **129 rolls**), via `tools/ff1-rng-stride.mjs` + `ff1-rng-stride-analyze
 ⚠ **Rolls inside one battle are NOT independent.** Per-battle rates came out
 58/15/58/7/0/46/42/14/31/58% — far past binomial spread. A battle walks one RNG
 stream, so the honest bar is battle-clustered (±7.1pp); treating all 129 rolls as
-independent would claim ±3.8pp and overstate confidence by ~1.9x. Any future
-FF1 rate measurement has this property and must cluster by battle.
+independent would claim ±3.8pp and overstate confidence by ~1.9x. ⚠ That 1.9x is
+THIS row's factor, NOT a constant — list A measures 0.9x-1.3x per row (above).
+Every curve must be clustered from its own data, never scaled by a borrowed one.
 
 ⚠ **Visited RNG indices are genuinely non-uniform** — odd indices outnumber even
 **93 to 36** (chi2 = 30.8, df = 7, p < 0.05). So a stride-like structure is real,

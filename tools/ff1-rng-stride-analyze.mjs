@@ -93,3 +93,28 @@ const uniqGaps = new Set(gaps);
 console.log(`  consecutive-index gaps: ${gaps.length} gaps, ${uniqGaps.size} distinct, mean ` +
             `${gaps.length ? (gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(1) : 'n/a'}` +
             `  ${uniqGaps.size > gaps.length * 0.8 ? '✅ no fixed stride' : '⛔ repeating gap — possible stride'}`);
+
+// --- --table: one clustered row per chance value, across many JSONL files -----
+// ⭐ This is the shape a published curve must take. Each row's error bar is the
+// spread across BATTLES, not across rolls — see the clustering note above.
+if (process.argv.includes('--table')) {
+  const byChance = new Map();
+  for (const r of recs) {
+    if (!byChance.has(r.chance)) byChance.set(r.chance, []);
+    byChance.get(r.chance).push(r);
+  }
+  console.log(`\n=== clustered curve (id $${hx(recs[0].id)} pool $${hx(recs[0].pool)} list ${recs[0].list}) ===`);
+  console.log('| chance | battles | n rolls | fires | measured (battle-clustered) | exact from ROM table | z |');
+  console.log('|---|---|---|---|---|---|---|');
+  for (const [ch, rs] of [...byChance].sort((a, b) => a[0] - b[0])) {
+    const rolls = rs.flatMap(r => r.rolls);
+    const fr = rolls.filter(x => x[2]).length;
+    const per = rs.filter(r => r.rolls.length).map(r => r.rolls.filter(x => x[2]).length / r.rolls.length);
+    const m = per.reduce((a, b) => a + b, 0) / per.length;
+    const v = per.length > 1 ? per.reduce((a, b) => a + (b - m) ** 2, 0) / (per.length - 1) : 0;
+    const s = Math.sqrt(v / per.length);
+    const ex = TABLE.filter(x => rollValue(x) < ch).length / 256;
+    const zz = s > 0 ? (m - ex) / s : (Math.abs(m - ex) < 1e-9 ? 0 : NaN);
+    console.log(`| \`$${hx(ch)}\` | ${per.length} | ${rolls.length} | ${fr} | ${(100 * m).toFixed(1)}% ± ${(100 * s).toFixed(1)}pp | ${(100 * ex).toFixed(2)}% | ${isNaN(zz) ? 'n/a' : zz.toFixed(2)} |`);
+  }
+}

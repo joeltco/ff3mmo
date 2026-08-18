@@ -1,3 +1,38 @@
+## 1.9.13 — 2026-08-18
+
+### docs: FF1 list A curve re-measured with battle-clustered error bars
+
+The v1.9.10 list A table is superseded. Those measurements were sound — pool
+`$22`'s list A is fully populated so there was no retry path and no hang — but
+they carried per-roll error bars, which the byte 1 work showed to be wrong.
+
+Re-run on LICH `0x77` / pool `$22` (list A `1F 1C 1D 16 15 14 0F 05`, no `$FF`;
+`byte 1 = 00` so list B stays inert), **10 battles x 30 rounds per chance value**,
+six values in parallel:
+
+| byte 0 | battles | n rolls | fires | measured (clustered) | exact from ROM table | z |
+|---|---|---|---|---|---|---|
+| `$00` | 10 | 93 | 0 | 0.0% ± 0.0pp | 0.00% | 0.00 |
+| `$10` | 10 | 104 | 15 | 14.5% ± 4.1pp | 12.89% | +0.40 |
+| `$20` | 10 | 76 | 17 | 23.6% ± 5.2pp | 25.39% | -0.35 |
+| `$40` | 10 | 64 | 33 | 51.1% ± 6.2pp | 50.39% | +0.11 |
+| `$60` | 10 | 88 | 66 | 73.5% ± 4.0pp | 74.61% | -0.27 |
+| `$7F` | 10 | 81 | 80 | 98.9% ± 1.1pp | 98.83% | +0.05 |
+
+- **Every row consistent, |z| <= 0.40.** Integrity **506/506** on both checks:
+  logged byte == `TABLE[idx]` from the ROM, and fired == `floor(v*129/256) < chance`.
+- **The `$20` "outlier" was never real.** v1.9.10 reported it 1.5 sigma low off a
+  per-roll bar; clustered it is 23.6% ± 5.2pp vs 25.39%, **z = -0.35**. The
+  discrepancy was in the error bar, not the game.
+- ⚠ **Clustering is NOT a fixed inflation.** v1.9.12 measured ~1.9x on the byte 1
+  row and an earlier draft extrapolated that constant to list A. Measured per row,
+  list A ranges **0.9x-1.3x** — `$40` and `$60` come out NARROWER than binomial.
+  Each curve must be clustered from its own data; that generalization is corrected
+  in both sections.
+
+Tooling: `ff1-rng-stride-analyze.mjs --table` emits one clustered row per chance
+value across many JSONL files. Reference-only; nothing under `src/`.
+
 ## 1.9.12 — 2026-08-17
 
 ### docs: FF1 byte 1 curve RETRACTED — it was measured on a hung emulator
