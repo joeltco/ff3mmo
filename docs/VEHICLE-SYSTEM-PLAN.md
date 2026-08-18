@@ -439,11 +439,18 @@ conditions, so naming them needs condition-aware resolution. **NOT DONE.**
 88E0  LDA #$01 / STA $6000 ; $00 -> $6003   ; story flags
 ```
 
-**This is one of the launch animations** (§6) located in code: an object rises 16
-pixels at a fixed X, one pixel every four frames, and the party is then aboard
-mode 5 — whose sprite is the masted sailing ship. Which story vehicle that is
-(Cid's airship out of the sand, or a ship) is **not yet established** — the
-animation is identified, the name is not.
+⚠ **Status: read from the disassembly, NOT run.** What is proven by the code is
+that something is drawn each pass at a fixed X while its Y decreases from `$6F`
+to `$60`, one pixel per four frames, and that `$42`/`$46` become 5 afterwards.
+`JSR $A956` builds a pointer (`$54`/`$55`) into a table at `$87xx` from the index
+in A and jumps to `$87CD`, which is consistent with a draw call but has not been
+traced to actual pixels.
+
+That shape — an object RISING, then the party aboard a vehicle — is what a launch
+animation looks like, so this is the strongest §6 lead found. But it has not been
+executed or captured, and which story vehicle it belongs to is **not established**
+(mode 5's sprite is the masted sailing ship). Do not treat it as "the Cid's
+airship scene" until it has been triggered and watched.
 
 Capturing it still needs the scene reached. With `world-harness.cjs` the party
 can be put anywhere on the world map in any vehicle, but this sequence runs from

@@ -1,4 +1,4 @@
-## 1.9.17 — 2026-08-18
+## 1.9.18 — 2026-08-18
 
 ### docs: how vehicles are granted; a LAUNCH ANIMATION located in code
 
@@ -18,8 +18,11 @@ bit 1. A mode-3 craft on the right water becomes mode 2 — exactly the shape th
 starts at Y `$6F`, is drawn each pass at fixed X `$70`, advances one pixel every
 fourth frame (`LDA $F0 / AND #$03`), and RISES until Y reaches `$60` — 16 pixels
 over roughly 64 frames — after which `$42`/`$46` become 5 and two story flags are
-set. That is one of the launch animations located in code. Which story vehicle it
-belongs to is **not established**; mode 5's sprite is the masted sailing ship.
+set. ⚠ **Read from the disassembly, NOT run.** `JSR $A956` builds a pointer into a
+table at `$87xx` and jumps to `$87CD` — consistent with a draw call but not traced
+to pixels. An object RISING then the party aboard a vehicle is what a launch
+animation looks like, and it is the strongest lead found, but it has not been
+executed or captured and which story vehicle it belongs to is **not established**.
 
 Capturing it still needs the scene triggered — `world-harness.cjs` can place the
 party anywhere in any vehicle, but this runs from an event, so the next step is
