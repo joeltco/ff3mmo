@@ -390,3 +390,62 @@ issues which command — `tools/event-resolve.mjs` is the way in. **NOT DONE.**
 - ⛔ **The `0x890`/`0x8D0` exit tables do not drive the landing spot.**
 - ⛔ **Walking into a map transition crashes the emulator** with an invalid
   opcode. Long walks need the `$0400` world-map check between steps.
+
+## 11. How vehicles are granted — and a launch animation found in code
+
+### Event opcodes $C0-$CF
+
+Bank 59 `$812B` handles event opcodes `$C0-$CF` (`LDA $70 / CMP #$C0 / CMP #$D0`,
+then `AND #$0F` to get the sub-command). Four of them set the vehicle:
+
+    $CA -> mode 6      $CB -> mode 7      $CF -> mode 1
+    $CE -> mode 0 (dismount; also records a return position to $6005/$6006
+                   and sets $6004 = 1)
+
+Scanning all 512 script-table entries, **exactly three scripts carry a vehicle
+opcode**:
+
+| script | ops | grants |
+|---|---|---|
+| #91 `$AC2A` | `$C1 $C1 $C7 $FC.20 $C9 $F8.BE $C2 $FC.10 $CE $FD` | dismount |
+| #146 `$B6AA` | `$F0.00 $E2 $E2 $F8.B3 $CF $FD` | mode 1 |
+| #163 `$BACC` | `$F0.00 $CB $FD` | mode 7 |
+
+Resolving every map's event tiles (0-255) on a fresh save reaches only the
+dismount, on **map 180 — the ship**. Scripts #146 and #163 sit behind later story
+conditions, so naming them needs condition-aware resolution. **NOT DONE.**
+
+### Modes 2 and 5 are not event-granted
+
+- **Mode 2 is a TRANSFORMATION.** At `$C5F6`: `LDA $42 / CMP #$03 / BNE` then
+  `LDA #$02 / STA $42`, guarded above by `LDA $44 / LSR / LSR / BCS` — a test of
+  tile bit 1. So a mode-3 craft standing on the right water becomes mode 2. This
+  is the shape the `{terrain} x {per-vehicle flags}` model predicted: one vehicle
+  changing mode in place.
+- **Mode 5 is granted at the END OF AN ANIMATION.** Bank 59 `$88A9`:
+
+```
+88AC  LDA #$6F / STA $62          ; start Y = $6F
+88B0  JSR $A85A / $A842 / $A8EB   ; per-frame work
+88B9  LDA $62 / STA $41           ; Y
+88BD  LDA #$70 / STA $40          ; X = $70, fixed
+88C1  LDA #$68 / JSR $A956        ; draw
+88C6  INC $BC
+88C8  LDA $F0 / AND #$03 / BNE $88B0   ; advance every 4th frame
+88CE  DEC $62                     ; RISE one pixel
+88D2  CMP #$60 / BCS $88B0        ; until Y = $60  -> 16 px over ~64 frames
+88D6  LDA #$02 / STA $33
+88DA  LDA #$05 / STA $42 / STA $46     ; ...now aboard vehicle 5
+88E0  LDA #$01 / STA $6000 ; $00 -> $6003   ; story flags
+```
+
+**This is one of the launch animations** (§6) located in code: an object rises 16
+pixels at a fixed X, one pixel every four frames, and the party is then aboard
+mode 5 — whose sprite is the masted sailing ship. Which story vehicle that is
+(Cid's airship out of the sand, or a ship) is **not yet established** — the
+animation is identified, the name is not.
+
+Capturing it still needs the scene reached. With `world-harness.cjs` the party
+can be put anywhere on the world map in any vehicle, but this sequence runs from
+an event, so the remaining work is to trigger it — either by condition-patching
+the script that calls it or by jumping the routine directly.

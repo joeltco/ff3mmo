@@ -1,3 +1,32 @@
+## 1.9.17 — 2026-08-18
+
+### docs: how vehicles are granted; a LAUNCH ANIMATION located in code
+
+Event opcodes `$C0-$CF` are handled at bank 59 `$812B`. Four set the vehicle:
+`$CA`->mode 6, `$CB`->mode 7, `$CF`->mode 1, `$CE`->dismount (which also records
+a return position to `$6005`/`$6006`). Scanning all 512 script-table entries,
+**exactly three scripts carry a vehicle opcode** — #91 (dismount), #146 (mode 1),
+#163 (mode 7). Resolving every map 0-255 on a fresh save reaches only the
+dismount, on **map 180, the ship**; the other two sit behind story conditions.
+
+**Mode 2 is a transformation, not a vehicle grant.** At `$C5F6`:
+`LDA $42 / CMP #$03 / BNE` then `LDA #$02 / STA $42`, guarded by a test of tile
+bit 1. A mode-3 craft on the right water becomes mode 2 — exactly the shape the
+`{terrain bits} x {per-vehicle flags}` model predicted.
+
+⭐ **Mode 5 is granted at the end of an ANIMATION** — bank 59 `$88A9`. An object
+starts at Y `$6F`, is drawn each pass at fixed X `$70`, advances one pixel every
+fourth frame (`LDA $F0 / AND #$03`), and RISES until Y reaches `$60` — 16 pixels
+over roughly 64 frames — after which `$42`/`$46` become 5 and two story flags are
+set. That is one of the launch animations located in code. Which story vehicle it
+belongs to is **not established**; mode 5's sprite is the masted sailing ship.
+
+Capturing it still needs the scene triggered — `world-harness.cjs` can place the
+party anywhere in any vehicle, but this runs from an event, so the next step is
+condition-patching the calling script or jumping the routine directly.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.16 — 2026-08-18
 
 ### tools: world-map harness; mask table PROVEN by patching; vehicle sprites captured
