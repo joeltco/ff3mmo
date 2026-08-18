@@ -17,6 +17,50 @@ HP pinned). A special gated on low HP, or on a party member dying, cannot fire
 under these conditions — so an empty row means *nothing observed while healthy*,
 not *no special exists*. The FF3 sweep has the same property.
 
+## What byte 7 actually selects
+
+Byte 7 is **not** an attack — it indexes a 16-byte pool entry at
+`$9020 + byte7*16` (bank 12, file `$31030`), and the monster picks from a list:
+
+```
+  +0        chance      (rolled against random 0..128; higher = more often)
+  +1        unidentified
+  +2..+9    8-entry spell list, $FF = empty
+  +10..15   $FF padding
+
+  pool $22 (LICH):  60 00 | 1F 1C 1D 16 15 14 0F 05 | FF x6
+```
+
+The gate, disassembled in the bank the CPU actually had mapped:
+
+```
+  B2A8  LDA ($9C),Y  Y=7      ; byte 7; $FF -> no special
+  B2B3  JSR $AE09    X=$10    ; id * 16
+  B2B7  ADC #$20 / ADC #$90   ; pointer = $9020 + id*16
+  B2C2  LDA ($9E),Y  Y=0      ; byte 0 = the chance
+  B2C4  JSR $B294             ; random(0..128); CMP chance
+  B2C7  BCS $B2EF             ; random >= chance -> skip
+  B2CB  LDA ($9A),Y / AND #$07 / ADC #$02   ; counter mod 8 -> list index
+```
+
+Measured by counting the branch outcome directly — a read of `+0` is one roll,
+a read of `+2..+9` is a pass:
+
+| byte 0 | rolls | fires | observed |
+|---|---|---|---|
+| `$00` | 4 | 0 | 0% |
+| `$10` | 8 | 3 | 38% |
+| `$30` | 7 | 5 | 71% |
+| `$60` | 9 | 8 | 89% |
+| `$7F` | 8 | 8 | 100% |
+
+⛔ Monotonic with both endpoints pinned, but **n is 4-9 rolls per row** — the
+direction is solid, the exact curve is not. Observed rates run above `chance/128`.
+⛔ `$FF` in byte 0 yields 0%, matching the table's use of `$FF` as "empty"
+rather than "always".
+⭐ The `AND #$07` is why a pool cycles: LICH cast `1F 1C 1D` — the first three
+entries of its own list, in order — rather than repeating one attack.
+
 | byte 7 | monsters | behaviour (names + baseline stripped) | example |
 |---|---|---|---|
 | `0x00` | 1 ⚠ | FROST | FrWOLF |
