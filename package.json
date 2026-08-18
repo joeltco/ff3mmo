@@ -1,7 +1,7 @@
 {
   "name": "ff3mmo",
-  "version": "1.9.8",
-  "description": "NES RPG engine \u2014 runtime ROM extraction, procedural dungeons, NSF music",
+  "version": "1.9.9",
+  "description": "NES RPG engine — runtime ROM extraction, procedural dungeons, NSF music",
   "private": true,
   "type": "module",
   "scripts": {

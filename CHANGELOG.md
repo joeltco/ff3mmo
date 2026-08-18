@@ -18,6 +18,47 @@ All notable changes to this project are documented here.
 > - **Phase 7 (conservative cleanup + correctness fix):** SHIPPED. Per the rewrite plan, full Phase 7 strips flag-off branches and is gated on 48h live smoke. This commit ships the SAFE subset that doesn't depend on flag-flip: removed dead `battleSt.encounterTurnIndex` field (set in 8 places, never bumped — a v1.7.422-era leftover from when assist-join used a per-round counter). Audit surfaced a real bug: Phase 5's host-arb snapshot was shipping `encounterTurnIndex` (always 0) as the resolver `turnIdx` — a joiner consuming that would set `_lastAppliedTurnIdx = 0` and queue every subsequent resolution forever. Fixed by shipping `getResolverTurnIdx()` (the host's authoritative counter) in `resolveEncounterJoin`. Legacy `encounter-assist-snapshot` keeps its `turnIndex` wire field for backward-compat with older clients but ships 0 literally. **`COOP_HOST_ARB` kept as a kill switch** — flag-off path is intact, hot-revert is still available. Stale "Phase 6.9 will close" comments refreshed to past tense. Remaining cleanup (prerollSpellAmount / isHealSpell / perTurnIndex / maybeReseedCoopTurn / _pushPlayerCoop) is deferred until post-live-smoke. Gates: lint 0, pvp-wire-sim 49/49, coop-wire-sim 7/7, coop-arbiter-sim 59 pass + 5 expected divergence.
 > - **Phase 8 (docs refresh):** SHIPPED. `MULTIPLAYER.md` co-op section rewritten — new host-arb model as primary, legacy lockstep marked HISTORICAL with a "do not extend" note + explanation of why it failed. `docs/design-notes.md` got a new "Co-op battle architecture" entry between PVP search and Roster fade. `docs/MULTIPLAYER-AUDIT-2026-05-15.md` got a follow-up note pointing at the rewrite (PvP audit findings still load-bearing). New auto-memory `project_ff3mmo_coop_host_arb.md` documents the working model; the broken-state memory `project_ff3mmo_coop_sync_2026_05_18.md` is marked SUPERSEDED in the MEMORY.md index. Zero code change.
 
+## 1.9.9 — 2026-08-17
+
+### FF1's special RATE, and two retractions of earlier retractions
+
+Byte 7 is a **pool**, not an attack. It indexes a 16-byte entry at
+`$9020 + byte7*16` (bank 12, file `$31030`):
+
+    +0        chance      (random 0..128; higher = more often)
+    +1        unidentified
+    +2..+9    8-entry spell list, $FF = empty
+    +10..15   $FF padding
+
+    pool $22 (LICH):  60 00 | 1F 1C 1D 16 15 14 0F 05 | FF x6
+
+The pick is a counter `AND #$07`, so a pool CYCLES — LICH cast `1F 1C 1D`, the
+first three entries of its own list in order. That explains a result already in
+the committed sweep: one byte-7 value producing ICE, SLP, FAST *and* LIT.
+
+Branch outcome counted directly (a read of `+0` is one roll, a read of `+2..+9`
+is a pass): `$00` → 0% (0/4), `$10` → 38% (3/8), `$30` → 71% (5/7), `$60` → 89%
+(8/9), `$7F` → 100% (8/8). Monotonic, both endpoints pinned. **n is 4-9 rolls per
+row** — the direction is solid, the exact curve is not, and the doc says so.
+
+**`$B2A6` and the `$9020` table were withdrawn earlier the same day as a "wrong
+bank, coincidental decode". That withdrawal was wrong and is retracted.** This
+time the table was not derived from disassembly at all — the pool reads were
+caught at runtime (byte 7 `$22`/`$24`/`$2A` read their lists at
+`$9242`/`$9262`/`$92C2`), fixing stride and base independently. The bad
+retraction came from a hook that counted by **PC**: `LDA (zp),Y` issues its two
+zero-page pointer reads at the SAME PC, so a PC-keyed counter over-counts ~3x and
+made one roll look like three. Key hooks on the ADDRESS, not the PC.
+
+Enemy record re-framed: base `$6BD3`, stride 20 — `+2` current HP, `+12` special
+id, `+18` max HP. Same addresses as the old `$6BDC` framing read 9 bytes earlier,
+so nothing measured changes; it just stops current HP looking like it lives at a
+negative offset.
+
+New tools: `ff1-special-rate.mjs`, `ff1-spell-source.mjs`, `ff1-rate-curve.mjs`.
+
+Reference only — nothing wired into `src/`.
+
 ## 1.9.8 — 2026-08-17
 
 ### The FF1/FF2 shop gates move to the manual audit too
