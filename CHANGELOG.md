@@ -1,3 +1,55 @@
+## 1.9.14 — 2026-08-18
+
+### docs+tools: vehicle system scoped; Phase 0 attempted and NOT landed
+
+`docs/VEHICLE-SYSTEM-PLAN.md` is new. Decisions taken: vehicles are **personal
+per player**, scope is **all vehicles**, launch animations are **in scope**, and
+the ROM bit assignment gets **proven before anything is built on it**.
+
+What the scope established:
+
+- **The 4-mode passability table is already loaded and thrown away.**
+  `world-map-loader.js` reads all 128 metatile property pairs; `isPassable` uses
+  bit 0 (foot) and bit 7 (trigger) and discards bits 1-3. Five low-nibble values
+  occur on world 0 and each mode unlocks exactly one terrain class — ocean `1011`
+  traces the seas exactly, shallow water `1101` is 75 enclosed tiles.
+- **Modes are NOT vehicles.** The script rules out one-bit-per-vehicle: the
+  Enterprise transforms and "can only land on water" (`0x08c`), the Invincible
+  "can cross over mountains" (`0x0dd`), the Nautilus travels underwater (`0x0e7`).
+  The model is `{terrain bits} x {per-vehicle capability flags}` over FIVE
+  vehicles, and submerge / fly-over-mountains are not in the 4-bit table at all.
+- **Multiplayer is smaller than assumed.** Presence broadcasts a coarse polled
+  `loc` and no remote avatars are drawn on the overworld, so under personal
+  ownership a vehicle is local state plus a save field — no new wire shape.
+- **Map 180 (the ship) is already built** and disabled only because no vehicle
+  system exists.
+
+⚠ **Phase 0 did not land — the bit assignment remains UNPROVEN.** Settled: the
+props table is interleaved pairs, not two split tables (the split reading yields
+zero enterable towns; interleaved yields 54 trigger tiles over 27 destinations),
+and the props + entrance tables are byte-identical JP vs English. Ruled out:
+static search cannot find the read (no pointer setup to `$8500` exists — the
+table is copied to RAM), neither TAS movie leaves Altar Cave, and the world map
+is not reachable through the `$0700` warp. Next step recorded in the plan §8.
+
+Two traps hit, both now guarded in code:
+
+- **The fm2 command column is not decoration.** Both movies soft-reset in the
+  first ten frames; ignoring `cmd` desynced both replays from frame 6, and a
+  desynced FF3 still renders a party walking around a cave. `tools/fm2-replay.cjs`
+  (NEW) handles it with `cpu.requestIrq(IRQ_RESET)` — RAM intact — and refuses to
+  replay against a ROM whose headerless md5 does not match the movie, a gate
+  proven in both directions.
+- **"Warp accepted" was meaningless.** The engine rewrites `$AB` every frame a
+  menu is open, so a warp sweep reported success for all 8 map ids while
+  rendering the same battle screen. Root cause: `bootToWorld`'s flee loop can
+  fail forever. `tools/monscan/build-field-rom.cjs` (NEW) makes every encounter
+  one 1-HP harmless goblin so the fight ends on the first hit — sprites 48 -> 4,
+  `$AB` back to 0, warps then actually change the screen. It refuses to write if
+  the patch disturbs the tile-props table.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.13 — 2026-08-18
 
 ### docs: FF1 list A curve re-measured with battle-clustered error bars
