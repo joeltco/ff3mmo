@@ -544,15 +544,94 @@ They are not distinguishable by terrain (identical mask `$10`) or by sprite
 
 Neither converts on water, so unlike mode 4 these do **not** land on water.
 
-**Why I am not naming them.** The remaining evidence is a story-flag bit, and
-nothing sets `$6020` bit 0 or bit 6 in code I can reach — the two `STA $6020`
-sites clear bit 0 and set bit 5, so those bits are written by the generic
-event-flag mechanism, which is not decoded. The tempting move is to map "the one
-that gets taken away" to Cid's airship and the other to a later one; FF3 does
-have Cid's airship, the Enterprise and a mythril-ram upgrade, and a plausible
+**Why I am not naming them.** ⚠ **The flag discriminator above is weaker than it
+looks** — §14 decoded the flag system and the answer is not what this section
+implied. `$6020` bit 0 is **flag id 0, set by script 48, which is the game's
+OPENING sequence** ("We've fallen down a hole"), so it is a general world-state
+flag, not an airship-acquisition flag; the mode-5 draw is effectively gated on
+`$6000` (a vehicle is placed). And `$6020` bit 6 is **flag id 6, which NO script
+sets, clears or tests** — the mode-6 draw block is gated on a flag nothing in the
+event system ever writes.
+
+So the flags do not encode which airship is which. The tempting move is to map
+"the one that gets taken away" to Cid's airship and the other to a later one; FF3
+does have Cid's airship, the Enterprise and a mythril-ram upgrade, and a plausible
 story could be told for either assignment. That is exactly the guess that would
 later get quoted back as measured.
 
 **What would settle it:** decode the event opcode that writes story flags, find
 the scripts that set `$6020` bit 0 and bit 6, and read the dialogue attached to
 them. Same missing piece as §11 and §12 — the flag/condition encoding.
+
+## 14. The event flag encoding — DECODED and verified live
+
+### The encoding
+
+A story flag is **one byte, id 0-127**, in battery-backed save RAM:
+
+    address = $6020 + (id >> 3)        bit = 1 << (id & 7)
+
+so ids 0-127 occupy `$6020`-`$602F`. **Two independent implementations in the ROM
+agree on this for all 128 ids**, which is the cross-check:
+
+- the CONDITION evaluator computes it arithmetically, bank `$3C` `$9344`:
+  `AND #$7F / AND #$07 / TAY / LDA $935A,Y` (mask table `01 02 04 08 10 20 40 80`)
+  then `PLA / LSR A x3 / TAY / LDA $6020,Y / AND $80`;
+- the SETTER looks it up, bank 59 `$B983`: `LDA $BBD2,Y` (mask), `LDA $BCD2,Y`
+  (byte offset), `ORA` / `STA $6020,Y`. Clear is the same at `$B999` with `EOR #$FF`.
+
+### Condition records — bank `$3C` `$931B`
+
+A record is condition bytes until `$FF`, then one RESULT byte (the script index).
+**Bit 7 of a condition byte is POLARITY**: set = "this flag must be SET", clear =
+"must be CLEAR". Low 7 bits are the flag id. Every condition in a record must
+hold or the record is skipped and the next is tried.
+
+### Event opcodes — jump table bank 59 `$B617`, opcode = `$E4 + index`
+
+| opcode | meaning |
+|---|---|
+| `$F0` | show NPC dialogue by slot (`$0740,X`) |
+| `$F1` | show message by id |
+| `$F2` | **SET FLAG** (operand = flag id) |
+| `$F3` | **CLEAR FLAG** |
+| `$F8` | sound / music (writes `$7F42`, `$7F43`) |
+| `$F9` | exit to world |
+| `$FA` | go to map |
+| `$FE` wait, `$FF` / `$FD` end | |
+
+⛔ This corrects an earlier reading: `$F1`/`$F2` are message and set-flag, **not**
+"call script". Operands that happened to equal a script index were coincidence.
+`$F8` is music, so operands that looked like dialogue ids were song numbers.
+
+### Verified live
+
+Booting the real ROM and watching SRAM writes, the flags set during the opening
+are **126, 44, 0 in that order** — exactly the `$F2` operands of script 48, at the
+predicted addresses and bits. Final state `$6020 = $01`, `$6025 = $10`. (Flag 126
+is cleared again later, so only the transition log shows it.)
+
+⚠ The live test must NOT use `world-harness.cjs`'s ROM: that copies map 115's
+props over all 512 maps **including byte 15, the event-table index**, so no map's
+real events fire and zero flags are written. Use a goblin-only patch.
+
+### The tool
+
+`tools/event-flags.mjs` decodes an id, cross-checks the ROM tables, and indexes
+every flag by which scripts set/clear it and which map events test it.
+**106 of 128 flags are referenced somewhere.**
+
+    node tools/event-flags.mjs        # summary
+    node tools/event-flags.mjs 6      # everything about flag 6
+
+### What it says about the airships
+
+| flag | set by | cleared by | tested by conditions |
+|---|---|---|---|
+| 0 (mode 5 gate) | script 48 — **the opening** | script 17 | **0** |
+| 6 (mode 6 gate) | **NONE** | none | **0** |
+
+Both are read only by native code (`$DB09`, `$DB2F`), never by the event system.
+**Flag 6 is never written by anything**, so the mode-6 parked-draw is gated on a
+flag nothing sets. That is why §13's flag evidence does not name 5 vs 6 — and it
+raises a new question worth chasing: whether mode 6 is reachable at all.

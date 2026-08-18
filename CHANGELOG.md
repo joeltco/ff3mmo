@@ -1,3 +1,48 @@
+## 1.9.22 — 2026-08-18
+
+### docs+tools: the event FLAG ENCODING decoded and verified live
+
+A story flag is **one byte, id 0-127**, in battery-backed save RAM:
+
+    address = $6020 + (id >> 3)        bit = 1 << (id & 7)
+
+**Two independent implementations in the ROM agree for all 128 ids** — the
+condition evaluator computes it arithmetically (bank `$3C` `$9344`, mask table at
+`$935A`), and the setter looks it up (bank 59 `$B983`, tables `$BBD2` mask /
+`$BCD2` byte offset).
+
+**Condition records** (bank `$3C` `$931B`): condition bytes until `$FF`, then a
+RESULT byte. **Bit 7 of a condition byte is POLARITY** — set means "flag must be
+SET", clear means "must be CLEAR"; low 7 bits are the flag id.
+
+**Event opcodes** (jump table bank 59 `$B617`, opcode = `$E4` + index): `$F0`
+show NPC dialogue by slot, `$F1` show message by id, **`$F2` SET FLAG**, **`$F3`
+CLEAR FLAG**, `$F8` sound/music, `$F9` exit to world, `$FA` go to map.
+
+⛔ **Corrects v1.9.19-21:** `$F1`/`$F2` are message and set-flag, NOT "call
+script" — operands that matched a script index were coincidence. `$F8` is music,
+so operands that looked like dialogue ids were song numbers.
+
+⭐ **Verified live.** Booting the real ROM and watching SRAM, the flags set during
+the opening are **126, 44, 0 in that order** — exactly script 48's `$F2` operands,
+at the predicted addresses and bits (`$6020` = `$01`, `$6025` = `$10`).
+⚠ The live test must NOT use `world-harness.cjs`'s ROM: it copies map 115's props
+over all 512 maps *including byte 15, the event-table index*, so no real events
+fire and zero flags are written.
+
+`tools/event-flags.mjs` (NEW) decodes ids, cross-checks the ROM tables, and
+indexes every flag by which scripts set/clear it and which map events test it.
+**106 of 128 flags are referenced.**
+
+⛔ **This weakens v1.9.21's airship evidence, and that section is corrected.**
+`$6020` bit 0 is flag id 0, set by script 48 — **the game's OPENING** — so it is
+general world state, not an airship-acquisition flag. And `$6020` bit 6 is flag
+id 6, which **no script sets, clears or tests at all**. Both are read only by
+native code. So the flags do NOT name modes 5 vs 6, and it is now an open
+question whether mode 6 is reachable at all.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.21 — 2026-08-18
 
 ### docs: airship mode 4 identified; 5 vs 6 separated but deliberately unnamed
