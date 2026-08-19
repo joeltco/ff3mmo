@@ -1482,3 +1482,58 @@ harness never reaches the state where their loops run.
 Confirm whether `$C93A` executes at all — hook the PC or breakpoint `$A006`
 directly — before trusting any of §30's table reading. That is one measurement and
 it decides whether the six values mean anything.
+
+## 32. vehicle-test.cjs — and §31's retraction was itself WRONG
+
+### The tool
+
+`tools/monscan/vehicle-test.cjs` (NEW). One command, every vehicle. Each row
+proves, in order: the vehicle **sticks** (`$42` read back), the vehicle **moves**
+(party coords actually change, distance reported), and only then what it sounds
+like, plays, and looks like. It tries several terrains per vehicle and keeps the
+one where the craft both sticks and moves.
+
+That ordering exists because §31 concluded "modes 5/6/7 make no sound" **without
+ever checking the party moved**. A propeller loop only plays while flying, so a
+silent result from a vehicle that never moved is not evidence of silence — it is a
+broken test.
+
+### ⛔ §31's retraction is withdrawn — the `$A047` table is CORRECT
+
+§31 reported that none of the predicted SFX fired and that `$A006` never ran, and
+downgraded §30's table to "unverified". **That was an artefact of hooking too
+late**: `onBatteryRamWrite` was installed after `bootToWorldMap()` returned, and
+**boarding happens during that boot**. Every cue was fired before the hook existed.
+
+With the hook wired at CONSTRUCTION (`world-harness.cjs` now accepts
+`onBatteryRamWrite` and passes it to `new Nes`), the table predicts reality
+exactly:
+
+| `$42` | predicted SFX | observed | predicted music | observed |
+|---|---|---|---|---|
+| 3 | `$04` | **`$04`** ✅ | `$22` | **`$22`** ✅ |
+| 4 | `$26` | **`$26`** ✅ | `$0a` | **`$0a`** ✅ |
+| 5 | `$25` | **`$25`** ✅ | `$0a` | **`$0a`** ✅ |
+| 6 | `$27` | **`$27`** ✅ | `$0a` | **`$0a`** ✅ |
+| 7 | `$28` | **`$28`** ✅ (+ `$2c`) | `$23` | **`$23`** ✅ |
+
+Five of six table SFX confirmed firing, plus all four music values. `$2b` is the
+row-3 mode-6 variant and was not reached. Vehicle 7 additionally fires **`$2c`**,
+which is NOT in the table — an extra cue worth chasing.
+
+Common to every boot regardless of vehicle: `$05 $18 $14` (and `$7f`) — intro and
+menu sounds, not vehicle cues.
+
+### ⛔ Mode 4 IS reachable — §27 was wrong about that too
+
+On **mountain**, vehicle 4 sticks at `$42` = 4 and flew **679 tiles**. §27 claimed
+mode 4 unreachable because it normalised to 3 — but that was only ever tested on
+ocean and land. Modes 5, 6 and 7 fly as well (48, 570 and 48 tiles measured).
+
+### Sail and propeller sound: it is the MUSIC, not a repeating SFX
+
+Flying vehicles moved **570-679 tiles** with the hook live and produced **zero**
+`$7F49` writes while moving. So there is no per-step engine SFX. The continuous
+sail/propeller sound is the vehicle MUSIC track — `$22` on the ship, `$0a` on the
+airships, `$23` on the Invincible — started once at boarding by `$A006`, with the
+one-shot transition cue alongside it.

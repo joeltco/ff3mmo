@@ -137,7 +137,11 @@ function spriteCount(nes) {
 function bootToWorldMap(opts = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'world-'));
   const romPath = buildWorldRom(path.join(dir, 'ff3-world.nes'), opts);
-  const nes = new Nes(romPath);
+  // ⭐ opts.onBatteryRamWrite must be wired at CONSTRUCTION. FF3 fires sound by
+  // writing $7F49 and music by writing $7F43, and BOARDING happens during this
+  // boot — a hook installed after bootToWorldMap() returns misses every boarding
+  // cue and makes a vehicle look silent when it is not.
+  const nes = new Nes(romPath, { onBatteryRamWrite: opts.onBatteryRamWrite });
   nes.romPath = romPath;
   run(nes, 300);
   for (let i = 0; i < 25; i++) press(nes, 'start', 6, 45);

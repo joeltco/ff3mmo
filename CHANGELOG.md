@@ -1,3 +1,43 @@
+## 1.9.40 — 2026-08-19
+
+### vehicle-test.cjs; the $A047 SFX table CONFIRMED; v1.9.39's retraction withdrawn
+
+`tools/monscan/vehicle-test.cjs` (NEW) — one command, every vehicle. Each row
+proves in order: the vehicle **sticks**, the vehicle **MOVES** (distance
+reported), and only then its sound/music/sprite. That ordering exists because
+v1.9.39 concluded "modes 5/6/7 make no sound" without ever checking the party
+moved — a propeller loop only plays while flying, so silence from a vehicle that
+never moved is a broken test, not a result.
+
+⛔ **v1.9.39's retraction is withdrawn — the `$A047` table is CORRECT.** The
+"contradiction" was hook timing: `onBatteryRamWrite` was installed after
+`bootToWorldMap()` returned, and **boarding happens during that boot**, so every
+cue fired before the hook existed. `world-harness.cjs` now accepts
+`onBatteryRamWrite` and passes it to `new Nes`. With that fixed:
+
+| `$42` | SFX predicted/observed | music predicted/observed |
+|---|---|---|
+| 3 | `$04` / **`$04`** ✅ | `$22` / **`$22`** ✅ |
+| 4 | `$26` / **`$26`** ✅ | `$0a` / **`$0a`** ✅ |
+| 5 | `$25` / **`$25`** ✅ | `$0a` / **`$0a`** ✅ |
+| 6 | `$27` / **`$27`** ✅ | `$0a` / **`$0a`** ✅ |
+| 7 | `$28` / **`$28`** ✅ (+`$2c`) | `$23` / **`$23`** ✅ |
+
+Five of six table SFX plus all four music values confirmed. `$2b` is the row-3
+mode-6 variant, not reached. Vehicle 7 also fires **`$2c`**, which is NOT in the
+table. Common to every boot: `$05 $18 $14 $7f` (intro/menu, not vehicle cues).
+
+⛔ **Mode 4 IS reachable — v1.9.35 was wrong.** On MOUNTAIN it sticks at `$42` = 4
+and flew **679 tiles**; the "unreachable" finding came from only testing ocean and
+land, where it normalises to 3. Modes 5/6/7 fly too (48/570/48 tiles).
+
+⭐ **Sail and propeller sound is the MUSIC, not a repeating SFX.** Flying vehicles
+moved 570-679 tiles with the hook live and produced ZERO `$7F49` writes in motion.
+The continuous engine/sail sound is the vehicle music track (`$22` ship, `$0a`
+airships, `$23` Invincible), started once at boarding by `$A006`.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.39 — 2026-08-19
 
 ### Vehicle SFX capture attempted — result CONTRADICTS v1.9.38
