@@ -1,3 +1,44 @@
+## 1.10.1 — 2026-08-19
+
+### VEHICLES COMPLETE — boarding, parking, sprites, music and SFX
+
+Everything from the ROM work is now wired into the game.
+
+**Boarding is by POSITION, as the ROM does it** (`$C633` compares the party tile
+against the parked craft and puts you aboard on a match — no prompt, no facing).
+Disembarking parks the craft on the tile being LEFT, not the one entered — you
+step ashore and it stays in the water behind you, which is what `$C59E` records.
+Both directions are gated.
+
+**Parked-craft state** (`ps.vehicleParked` / `X` / `Y` / `Mode`, mirroring
+`$6000`/`$6001`/`$6002`/`$600B`) rides all four save hops with server-side clamps.
+`check-save-lockstep`: 34/34.
+
+**Sprites.** FF3 is CHR-RAM, so a vehicle's tiles have no fixed ROM offset and
+`Sprite.gfxBase` cannot reach them. `tools/monscan/emit-vehicle-sprites.cjs` (NEW)
+captures the pattern bytes, OAM layout and palette off the PPU into
+`src/data/vehicle-sprites-captured.js` (NEW) — modes 0, 2, 3, 5, 6, 7, every
+reachable one. `src/vehicle-sprite.js` (NEW) composites and caches them, and
+`render.js` swaps the craft in for the walk sprite when aboard, as the ROM does.
+
+**Audio.** `src/data/vehicles.js` (NEW) carries each mode's music and cue, taken
+from the cartridge's own tables (`$A027` music, `$A047` SFX) with music.js's
+"ROM SFX ID + 0x41" conversion. Boarding plays the cue and starts the craft's
+track; disembarking returns to the overworld theme. ⭐ There is no per-step engine
+sound — flying craft were driven 570-679 tiles with the sound port hooked and
+produced zero writes in motion, so the sail/propeller you hear IS the music track.
+
+**Debug access.** The STATE tab (previously a stub) now exposes board/park
+controls. The ROM grants craft through event scripts (`$EE`), and those events are
+not wired, so without this `ps.vehicle` could never leave 0 and none of the above
+would be reachable in play. Clearly labelled debug-only — not a story grant.
+
+`check-vehicle-wiring.mjs` now runs 9 checks: per-mode terrain against the ROM
+mask table, flight limited to the bit-4 barrier, `isFootWalkable == mode 0` on all
+16384 tiles, disembark-before-gate ordering, indoor force-to-foot, music/SFX
+against `$A027`/`$A047`, complete captured sprite coverage, boarding-by-position,
+and park-on-tile-left. Three of them proven by reverting real bugs.
+
 ## 1.10.0 — 2026-08-19
 
 ### VEHICLES WIRED — Phase 1: save field, terrain gating, auto-disembark

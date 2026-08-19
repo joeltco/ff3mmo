@@ -1,6 +1,8 @@
 // World rendering pipeline — map, sprites, overlays, viewport effects
 
 import { mapSt } from './map-state.js';
+import { ps } from './player-stats.js';
+import { drawVehicle, hasVehicleSprite } from './vehicle-sprite.js';
 import { battleSt } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
@@ -51,7 +53,15 @@ function _renderSprites(camX, camY, originX, originY, spriteY) {
   }
   // Boss render moved into `npc.js#drawNpcs` (spriteKey: 'boss'). Single
   // NPC module path for moogle / shopkeeper / opening scene / boss.
-  if (sprite) sprite.draw(ui.ctx, SCREEN_CENTER_X, spriteY);
+  // Aboard a craft on the world map, the craft IS the player sprite — the ROM
+  // swaps the walk graphic outright rather than drawing a boat under a walker.
+  // Falls back to the walk sprite for any mode with no captured art.
+  const _veh = mapSt.onWorldMap ? (ps.vehicle | 0) : 0;
+  if (_veh !== 0 && hasVehicleSprite(_veh)) {
+    drawVehicle(ui.ctx, SCREEN_CENTER_X, spriteY, _veh);
+  } else if (sprite) {
+    sprite.draw(ui.ctx, SCREEN_CENTER_X, spriteY);
+  }
 }
 
 function _renderMapAndWater(camX, camY, originX, originY, spriteY) {

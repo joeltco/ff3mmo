@@ -741,6 +741,10 @@ function _updateTitleMainOutCase() {
   ps.status.poisonDmgTick = (slot && slot.statusPoisonTick) || 0;
   ps.playTime = (slot && slot.playTime) || 0;
   ps.vehicle = (slot && slot.vehicle != null) ? (slot.vehicle & 7) : 0;
+  ps.vehicleParked = (slot && slot.vehicleParked != null) ? (slot.vehicleParked ? 1 : 0) : 0;
+  ps.vehicleParkedX = (slot && slot.vehicleParkedX != null) ? (slot.vehicleParkedX & 127) : 0;
+  ps.vehicleParkedY = (slot && slot.vehicleParkedY != null) ? (slot.vehicleParkedY & 127) : 0;
+  ps.vehicleParkedMode = (slot && slot.vehicleParkedMode != null) ? (slot.vehicleParkedMode & 7) : 0;
   ps.lastTown = (slot && slot.lastTown != null) ? slot.lastTown : 114;
   ps.lastWorldExitX = (slot && slot.lastWorldExitX != null) ? slot.lastWorldExitX : null;
   ps.lastWorldExitY = (slot && slot.lastWorldExitY != null) ? slot.lastWorldExitY : null;

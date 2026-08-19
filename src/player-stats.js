@@ -62,6 +62,15 @@ export const ps = {
   // 3 ship, 4-7 flying. Indexes WORLD_MODE_MASKS in world-map-renderer.js.
   vehicle: 0,
 
+  // Where the craft is parked when you are NOT aboard it, mirroring the ROM's
+  // $6000 (placed) / $6001,$6002 (world tile) / $600B (which craft). Walking
+  // onto that tile boards it ($C633 matches the party position against it);
+  // disembarking writes it back ($C59E).
+  vehicleParked: 0,      // 0 = none placed
+  vehicleParkedX: 0,
+  vehicleParkedY: 0,
+  vehicleParkedMode: 0,  // the movement mode boarding it grants
+
   // Persistent map mutations — keyed by mapId, then "x,y" coord, value is the
   // new tile byte. Replayed in loadMapById after generateFloor rebuilds the
   // fresh tilemap from ROM, so chests stay opened / secret walls stay

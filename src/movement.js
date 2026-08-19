@@ -18,6 +18,7 @@ import { isTradeOffering, isTradePicking, cancelTrade, handleTradePickInput } fr
 import { isInspectOpen, handleInspectInput } from './inspect.js';
 import { chatState, tabSelectMode, chatScrollOffset, setChatScrollOffset, canChatScrollUp, canChatScrollDown } from './chat.js';
 import { ps } from './player-stats.js';
+import { vehicleInfo, isAboard } from './data/vehicles.js';
 import { saveSlotsToDB } from './save-state.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
@@ -108,8 +109,32 @@ export function startMove(dir, isNewPress = false) {
   // tile puts you out of the craft and the step then happens on foot.
   if (vehicle !== 0 && renderer && typeof renderer.isFootWalkable === 'function'
       && renderer.isFootWalkable(tileX, tileY)) {
+    // Park the craft on the tile being LEFT, not the one being entered — you
+    // step ashore and it stays in the water behind you, which is where the ROM
+    // records it ($C59E writes the pre-step position).
+    ps.vehicleParked = 1;
+    ps.vehicleParkedX = mapSt.worldX | 0;
+    ps.vehicleParkedY = mapSt.worldY | 0;
+    ps.vehicleParkedMode = vehicle;
     ps.vehicle = 0;
     vehicle = 0;
+    playTrack(vehicleInfo(0).music);
+  }
+
+  // ── BOARDING ($C633) ────────────────────────────────────────────────────
+  // The ROM boards by POSITION: it compares the party's tile against the parked
+  // craft's and, on a match, puts you aboard. No prompt, no facing requirement.
+  if (vehicle === 0 && mapSt.onWorldMap && ps.vehicleParked
+      && tileX === (ps.vehicleParkedX | 0) && tileY === (ps.vehicleParkedY | 0)) {
+    const mode = ps.vehicleParkedMode | 0;
+    if (isAboard(mode)) {
+      ps.vehicle = mode;
+      vehicle = mode;
+      ps.vehicleParked = 0;
+      const info = vehicleInfo(mode);
+      if (info.sfx) playSFX(info.sfx);
+      playTrack(info.music);
+    }
   }
 
   const passable = (renderer && mapSt.onWorldMap && typeof renderer.isPassableForMode === 'function')

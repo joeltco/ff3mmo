@@ -92,5 +92,42 @@ if (!/mapSt\.onWorldMap \? \(ps\.vehicle \| 0\) : 0/.test(mv))
   fail('movement.js no longer forces vehicle 0 indoors (MapRenderer arg 3 is a Z-LEVEL)');
 else ok('indoor movement forces vehicle 0');
 
+// ── 5. vehicles.js music/SFX match the ROM's own tables ────────────────────
+// music  = bank 59 $A027 + mode ; SFX = $A047 + mode, and music.js's convention
+// is "ROM SFX ID + 0x41" for the NSF track number.
+const b59 = (a) => 16 + 59 * 0x2000 + (a - 0xA000);
+const romMusic = (m) => rom[b59(0xA027) + m];
+const romSfx   = (m) => rom[b59(0xA047) + m];
+const { VEHICLES } = await import('../src/data/vehicles.js');
+let audioBad = 0;
+for (const [mode, v] of VEHICLES) {
+  if (mode === 1 || mode === 2) continue;          // normalise away; table row is not their live one
+  if (v.music !== romMusic(mode)) { fail(`vehicles.js mode ${mode} music $${v.music.toString(16)} != ROM $${romMusic(mode).toString(16)}`); audioBad++; }
+  const rs = romSfx(mode);
+  const want = rs === 0xFF ? null : rs + 0x41;
+  if (v.sfx !== want) { fail(`vehicles.js mode ${mode} sfx ${v.sfx} != ROM ${want}`); audioBad++; }
+}
+if (!audioBad) ok('vehicles.js music/SFX match the ROM tables at $A027/$A047');
+
+// ── 6. captured sprite art covers every REACHABLE mode ─────────────────────
+const { CAPTURED_VEHICLE_SPRITES } = await import('../src/data/vehicle-sprites-captured.js');
+for (const mode of [0, 2, 3, 5, 6, 7]) {
+  const v = CAPTURED_VEHICLE_SPRITES.get(mode);
+  if (!v) { fail(`no captured sprite for mode ${mode}`); continue; }
+  if (!v.layout.length || !v.tiles.length) fail(`captured sprite for mode ${mode} is empty`);
+  const have = new Set(v.tiles.map(([id]) => id));
+  for (const [tileId] of v.layout)
+    if (!have.has(tileId)) fail(`mode ${mode} layout references tile $${tileId.toString(16)} with no pattern data`);
+}
+if (!bad) ok('captured vehicle sprites cover modes 0,2,3,5,6,7 with complete tile data');
+
+// ── 7. boarding is by POSITION, and parking uses the tile being LEFT ────────
+if (!/ps\.vehicleParked\s*&&[\s\S]{0,160}tileX === \(ps\.vehicleParkedX/.test(mv))
+  fail('movement.js no longer boards by comparing the target tile to the parked craft ($C633)');
+else ok('boarding matches the parked craft by position');
+if (!/ps\.vehicleParkedX = mapSt\.worldX/.test(mv))
+  fail('disembark must park the craft on the tile being LEFT (mapSt.worldX/Y), not the one entered');
+else ok('disembark parks the craft on the tile being left');
+
 console.log(bad ? `\n⛔ ${bad} check(s) FAILED` : '\n✅ vehicle wiring OK');
 process.exit(bad ? 1 : 0);

@@ -249,6 +249,10 @@ function _validateSaveData(data) {
   // Vehicle is the ROM movement mode, 0-7. Anything outside that range is a
   // client that has been tampered with; clamp rather than trust.
   if (typeof data.vehicle === 'number')      out.vehicle = _clamp(data.vehicle, 0, 7);
+  if (typeof data.vehicleParked === 'number')     out.vehicleParked = _clamp(data.vehicleParked, 0, 1);
+  if (typeof data.vehicleParkedX === 'number')    out.vehicleParkedX = _clamp(data.vehicleParkedX, 0, 127);
+  if (typeof data.vehicleParkedY === 'number')    out.vehicleParkedY = _clamp(data.vehicleParkedY, 0, 127);
+  if (typeof data.vehicleParkedMode === 'number') out.vehicleParkedMode = _clamp(data.vehicleParkedMode, 0, 7);
   if (typeof data.lastTown === 'number')     out.lastTown = _clamp(data.lastTown, 0, 65535);
   if (typeof data.lastWorldExitX === 'number' || data.lastWorldExitX === null) out.lastWorldExitX = data.lastWorldExitX == null ? null : _clamp(data.lastWorldExitX, 0, 4096);
   if (typeof data.lastWorldExitY === 'number' || data.lastWorldExitY === null) out.lastWorldExitY = data.lastWorldExitY == null ? null : _clamp(data.lastWorldExitY, 0, 4096);
