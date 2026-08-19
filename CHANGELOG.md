@@ -1,3 +1,44 @@
+## 1.9.27 — 2026-08-18
+
+### CORRECTION: vehicle identity is `$600B`, not the movement mode
+
+The orphaning in v1.9.26 is real, but the conclusion drawn from it was wrong.
+
+**Opcode `$EE`** (`$B6A6`: `LDA $71 / STA $600B`) sets **which vehicle exists in
+the world**. Eight are granted, each by its own script — `$600B` 1..8 from scripts
+120, 51, 124, 136, 150, 83, 84, 161. **Not one of them invokes a sequence.**
+Vehicle grants are dialogue plus `$EE`; they never play a launch cutscene.
+
+Boarding is a position test, not an identity: `$C633` compares the party position
+against the parked vehicle at `$6001`/`$6002` and on a match sets `$46`/`$47` = **3**
+whichever craft it is. Identity comes from `$600B`; the mode then changes by
+transformation (3 -> 2 on shallow at `$C5FC`, 3 <-> 4 for the flying form).
+
+⛔ **This invalidates the vehicle NAMING in v1.9.20 and v1.9.26.** Modes were named
+by which cutscene granted them, but cutscenes do not grant vehicles. "Mode 5 =
+Cid's airship" rested on seq 0 — the orphaned content. Modes 0-7 are movement
+STATES; the eight vehicles are `$600B` 1-8 and are **not yet mapped to names**.
+⛔ v1.9.23's "mode 6 is dead code" needs the same caveat: no script issues `$CA`,
+but since boarding sets the mode directly and vehicles transform between modes,
+"no script sets this mode" was never the right reachability test.
+
+✅ **The orphaning stands.** Script bodies tile the bank almost perfectly — 230 of
+247 consecutive pairs end exactly where the next begins, zero overlaps, 7 gaps in
+254 slots — so an unreferenced 12-byte block is meaningful, not slack. `$A568`
+(`f8 bd | ef 00 | c8 | f8 0a | f8 a5 | f2 3f | ff`) is unreachable: a RESULT byte
+indexes the slot table and no slot holds `$A568`.
+
+**So what is cut is the sand-launch CUTSCENE, not the airship.** Cid's airship is
+granted normally by an `$EE` script with dialogue; what no longer runs is the
+animated rise out of the sand. The animation itself is intact and plays correctly
+when invoked (v1.9.26 captured it).
+
+Next: map `$600B` 1-8 to names from each grant script's dialogue, which needs the
+`$F1` message-id banking resolved (`$B6CE`: `$95` = `$84`/`$86` by `$78`).
+**Do not name vehicles from cutscenes again.**
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.26 — 2026-08-18
 
 ### The SAND LAUNCH exists — captured, and it names mode 5 as Cid's airship

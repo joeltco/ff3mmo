@@ -1,6 +1,7 @@
 # Vehicle system — plan
 
 Status: **PROPOSED**. Nothing under `src/` yet. Scoped 2026-08-18.
+⚠ §19 CORRECTS the vehicle NAMING in §12/§18 — identity is `$600B`, not the mode.
 Phase 0 **LANDED AND BEHAVIOURALLY PROVEN** — §9 reads the routine off the ROM,
 §10 proves it by patching the mask table. It CORRECTS §1: bit 3 is never tested,
 bit 4 is the flight barrier, and there are EIGHT movement modes, not four.
@@ -848,3 +849,63 @@ airship is buried.
   exists. `$A4FA` has one caller (the `$EF` handler) and `$A8A9` one caller (the
   id-0 branch), so if the game reaches it, it is by a route outside the script
   table — that is now the open question.
+
+## 19. CORRECTION — vehicle IDENTITY is `$600B`, not the movement mode
+
+Joel pushed back on "cut content". The orphaning is real, but the conclusion I
+drew from it was wrong, and the reason is a variable I had been collapsing.
+
+### `$600B` is the vehicle; `$42`/`$46` is only a movement STATE
+
+Event opcode **`$EE`** (`$B6A6`: `LDA $71 / STA $600B`) sets **which vehicle
+exists in the world**. Eight are granted, each by its own script:
+
+| `$600B` | script | messages | sets flag |
+|---|---|---|---|
+| 1 | 120 | 2 | 67 |
+| 2 | 51 | 15 | 19 |
+| 3 | 124 | 166,167,168 | 126,1,2,3 |
+| 4 | 136 | — | — |
+| 5 | 150 | 237,238,239 | 51 |
+| 6 | 83 | 50-54 | 52 |
+| 7 | 84 | 55-58,226 | 72 |
+| 8 | 161 | — | 57 |
+
+**Not one of them invokes a sequence.** Vehicle grants are dialogue plus `$EE`;
+they never play a launch cutscene.
+
+Boarding is a position test, not an identity: `$C633` compares the party position
+against the parked vehicle at `$6001`/`$6002` and on a match sets `$46`/`$47` = **3**
+regardless of which vehicle it is. The craft's identity comes from `$600B`; the
+mode then changes by transformation (3 -> 2 on shallow water at `$C5FC`, 3 <-> 4
+for the flying form).
+
+### What this corrects
+
+- ⛔ **§12/§18's naming is unsound.** Modes were named by which cutscene granted
+  them, but cutscenes do not grant vehicles — `$EE` does. "Mode 5 = Cid's airship"
+  rested on seq 0, which is exactly the orphaned content. Modes 0-7 are movement
+  states; the eight VEHICLES are `$600B` 1-8 and are not yet mapped to names.
+- ⛔ **§15's "mode 6 is dead code" needs the same caveat.** It is true that no
+  script issues `$CA`, but since boarding sets the mode directly and vehicles
+  transform between modes, "no script sets this mode" was never the right test for
+  whether a vehicle is reachable.
+- ✅ **The orphaning itself stands.** Script bodies tile the bank almost perfectly
+  — 230 of 247 consecutive pairs end exactly where the next begins, zero overlaps,
+  only 7 gaps in 254 slots — so an unreferenced 12-byte block is meaningful, not
+  normal slack. `$A568` (`f8 bd | ef 00 | c8 | f8 0a | f8 a5 | f2 3f | ff`) is
+  genuinely unreachable: a RESULT byte indexes the slot table, and no slot holds
+  `$A568`.
+
+### So what is actually cut
+
+**The sand-launch CUTSCENE, not the airship.** Cid's airship is granted normally
+by one of the `$EE` scripts with dialogue. What no longer runs is the animated
+rise out of the sand — the animation is intact and plays correctly when invoked
+(§18 captured it), but nothing points at the script that would start it.
+
+### Next
+
+Map `$600B` 1-8 to names via each grant script's dialogue. That needs the `$F1`
+message-id banking resolved (`$B6CE`: `$95` = `$84` or `$86` depending on `$78`),
+which is not yet done. **Do not name vehicles from cutscenes again.**
