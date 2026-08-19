@@ -453,6 +453,15 @@ export class WorldMapRenderer {
     return passableForMode(this.data, tileX, tileY, mode);
   }
 
+  /**
+   * Can a party ON FOOT stand here? This is the ROM's auto-disembark test at
+   * `$C5B5` (`LDA $44 / LSR A / BCC` — bit 0 clear means walkable), which is
+   * what ejects you from a boat the instant you touch land.
+   */
+  isFootWalkable(tileX, tileY) {
+    return passableForMode(this.data, tileX, tileY, MODE_ON_FOOT);
+  }
+
   getTriggerAt(tileX, tileY) {
     const size = this.data.mapWidth;
     const wx = ((tileX % size) + size) % size;

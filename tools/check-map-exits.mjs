@@ -109,7 +109,11 @@ for (const [mapId, name] of LIVE) {
   // so the sentence describing the call cannot satisfy the check.
   const mv = fs.readFileSync(new URL('../src/movement.js', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-  const blocked = (mv.match(/!renderer\.isPassable\(tileX, tileY\)\)[\s\S]{0,400}?\n {2}\}/) || [''])[0];
+  // Match the REFUSED-MOVE block by its shape, not by one spelling of the
+  // condition. v1.10.0 renamed the test to `!passable` when vehicles introduced
+  // isPassableForMode; the requirement (tryExitToWorldAt must run when a move is
+  // refused) is unchanged, so the pattern must not be tied to the old wording.
+  const blocked = (mv.match(/!(?:renderer\.isPassable\(tileX, tileY\)|passable)\)[\s\S]{0,400}?\n {2}\}/) || [''])[0];
   if (!/tryExitToWorldAt\(tileX, tileY\)/.test(blocked)) {
     bad('movement.js does not call tryExitToWorldAt when a move is refused — exit tiles carry ' +
         'collision $80, so the step-on trigger can never fire and the map has no way out');

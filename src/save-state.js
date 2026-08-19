@@ -72,6 +72,7 @@ export async function saveSlotsToDB() {
       slot.onWorldMap = pos.onWorldMap;
       slot.currentMapId = pos.currentMapId;
     }
+    slot.vehicle = ps.vehicle | 0;
     slot.lastTown = ps.lastTown;
     slot.lastWorldExitX = ps.lastWorldExitX;
     slot.lastWorldExitY = ps.lastWorldExitY;
@@ -107,6 +108,7 @@ export async function saveSlotsToDB() {
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
+      vehicle: s.vehicle != null ? s.vehicle : 0,
       lastTown: s.lastTown != null ? s.lastTown : 114,
       lastWorldExitX: s.lastWorldExitX != null ? s.lastWorldExitX : null,
       lastWorldExitY: s.lastWorldExitY != null ? s.lastWorldExitY : null,

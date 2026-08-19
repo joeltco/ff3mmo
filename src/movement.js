@@ -91,8 +91,31 @@ export function startMove(dir, isNewPress = false) {
     return;
   }
 
+  // ── VEHICLES (world map only) ────────────────────────────────────────────
+  // `ps.vehicle` is the ROM's movement MODE and indexes the mask table the
+  // cartridge itself uses ($C6CD) — see docs/VEHICLE-SYSTEM-PLAN.md. Indoors
+  // you are always on foot: the ROM has no indoor vehicle state, and the
+  // interior renderer's third argument is a Z-LEVEL, not a mode, so passing a
+  // vehicle there would silently mean "z = 3".
   const renderer = mapSt.onWorldMap ? mapSt.worldMapRenderer : mapSt.mapRenderer;
-  if (renderer && !renderer.isPassable(tileX, tileY)) {
+  let vehicle = mapSt.onWorldMap ? (ps.vehicle | 0) : 0;
+
+  // ⭐ DISEMBARK IS TESTED BEFORE PASSABILITY, NOT AFTER. A ship's mask blocks
+  // every land tile, so a disembark check that ran after the terrain gate could
+  // never fire — the move would already have been refused and the player would
+  // be stuck at sea forever. The ROM resolves it during the move attempt
+  // ($C5B5, reached from the $C51A dispatch): stepping toward a foot-walkable
+  // tile puts you out of the craft and the step then happens on foot.
+  if (vehicle !== 0 && renderer && typeof renderer.isFootWalkable === 'function'
+      && renderer.isFootWalkable(tileX, tileY)) {
+    ps.vehicle = 0;
+    vehicle = 0;
+  }
+
+  const passable = (renderer && mapSt.onWorldMap && typeof renderer.isPassableForMode === 'function')
+    ? renderer.isPassableForMode(tileX, tileY, vehicle)
+    : (renderer ? renderer.isPassable(tileX, tileY) : true);
+  if (renderer && !passable) {
     sprite.setDirection(dir);
     sprite.resetFrame();
     // Walking INTO an exit-to-world tile leaves the map. Those tiles carry

@@ -246,6 +246,9 @@ function _validateSaveData(data) {
   if (typeof data.worldY === 'number' || data.worldY === null) out.worldY = data.worldY == null ? null : _clamp(data.worldY, 0, 4096);
   if (typeof data.onWorldMap === 'boolean' || data.onWorldMap === null) out.onWorldMap = data.onWorldMap;
   if (typeof data.currentMapId === 'number' || data.currentMapId === null) out.currentMapId = data.currentMapId == null ? null : _clamp(data.currentMapId, 0, 65535);
+  // Vehicle is the ROM movement mode, 0-7. Anything outside that range is a
+  // client that has been tampered with; clamp rather than trust.
+  if (typeof data.vehicle === 'number')      out.vehicle = _clamp(data.vehicle, 0, 7);
   if (typeof data.lastTown === 'number')     out.lastTown = _clamp(data.lastTown, 0, 65535);
   if (typeof data.lastWorldExitX === 'number' || data.lastWorldExitX === null) out.lastWorldExitX = data.lastWorldExitX == null ? null : _clamp(data.lastWorldExitX, 0, 4096);
   if (typeof data.lastWorldExitY === 'number' || data.lastWorldExitY === null) out.lastWorldExitY = data.lastWorldExitY == null ? null : _clamp(data.lastWorldExitY, 0, 4096);

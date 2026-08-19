@@ -1,3 +1,41 @@
+## 1.10.0 — 2026-08-19
+
+### VEHICLES WIRED — Phase 1: save field, terrain gating, auto-disembark
+
+First working vehicle behaviour in the game, not reference data.
+
+**`ps.vehicle`** holds the ROM's movement MODE (0 foot, 1 canoe carried, 2 canoe
+afloat, 3 ship, 4-7 flying) and rides all four save hops — `slot.vehicle` in the
+serializer, `vehicle:` in the payload, a `_clamp(…, 0, 7)` in the server validator
+(a client outside that range is tampered with, so clamp rather than trust), and
+`ps.vehicle = slot.vehicle & 7` on load. `check-save-lockstep` passes 30/30.
+
+**Movement now asks the ROM's own mask table.** `movement.js` calls
+`isPassableForMode(x, y, ps.vehicle)` on the world map, so a ship sails ocean and
+refuses land, a canoe adds shallow water to walking, and flying crosses everything
+but the bit-4 barrier.
+
+⭐ **Auto-disembark is tested BEFORE the passability gate**, and that ordering is
+the whole feature. A ship's mask blocks every land tile, so a disembark check
+placed after the terrain gate can never fire — the move is already refused and the
+player is stranded at sea permanently. The ROM resolves it during the move attempt
+(`$C5B5` via the `$C51A` dispatch): stepping toward a foot-walkable tile puts you
+out of the craft and the step happens on foot. I wrote it the wrong way round
+first; the gate below now makes that unrepeatable.
+
+**Indoors is always on foot.** `MapRenderer.isPassable`'s third argument is a
+Z-LEVEL, so passing a vehicle there would silently mean "z = 3".
+
+`tools/check-vehicle-wiring.mjs` (NEW, in deploy.sh) gates all of it: per-mode
+terrain reachability against the ROM mask table, flight limited to the bit-4
+barrier, `isFootWalkable == mode 0` across all 16384 tiles, the disembark/gate
+source ordering, and the indoor force-to-foot. Proven by reverting the ordering
+bug — the gate fails.
+
+⚠ Not yet wired: boarding (no parked-vehicle placement yet), the vehicle sprite,
+and vehicle music/SFX. `ps.vehicle` defaults to 0, so player-visible behaviour is
+unchanged until a vehicle can be granted.
+
 ## 1.9.45 — 2026-08-19
 
 ### RETRACTION: the party CAN move indoors — two broken tests said otherwise
