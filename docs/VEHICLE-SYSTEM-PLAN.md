@@ -1684,7 +1684,7 @@ the correct probe. What is missing is whatever makes an A-press register as a ta
 — most likely the party must be exactly one tile away and facing, and the sprite
 positions I steer by are OAM screen coords, not map tiles.
 
-## 36. NPC map positions FOUND in RAM; navigation blocked on a different problem
+## 36. NPC map positions FOUND in RAM (⚠ its 'party never moves' conclusion is RETRACTED — see §37)
 
 ### The NPC record table — decoded
 
@@ -1729,3 +1729,49 @@ never moves, so it can never reach anyone.**
 ⛔ Navigation-by-tile is implemented-ready but untestable until that is fixed. The
 NPC side is done: positions are at `$7000 + n*16 + 2/+3`, and the party's live tile
 coords on an indoor map are the missing half.
+
+## 37. RETRACTION — the party CAN move indoors. Two broken tests said otherwise.
+
+### Measured
+
+Booting the working world case and the forced-indoor case side by side and holding
+a direction for 60 frames:
+
+| boot | world props at `$0400` | `$27`/`$28` | moved |
+|---|---|---|---|
+| default (map 115 -> world) | 32/32 | (41,50) -> (42,50) | **yes** |
+| forced map 114 (indoor) | 2/32 | (41,47) -> (44,47) | **yes** |
+
+**The party moves in both.** §36's "no party tile coordinate changes at all" is
+withdrawn, and with it the claim that immobility explains the talk failure.
+
+### Why the earlier tests lied
+
+1. **`findparty.cjs` held DOWN then UP** and looked for a byte that moved one way
+   then back. The party at (41,47) is blocked vertically but free to the right, so
+   a down/up probe shows zero net change on a party that walks fine. The scan then
+   "found" only `$20`, `$33d` and three SOUND-ENGINE bytes (`$7f4a`/`$7f75`/`$7f98`
+   — `$7F42`/`$7F43`/`$7F49` are its ports) and I read that as proof of immobility.
+2. **`talknav.cjs` pressed for 14 frames.** An FF3 tile step needs ~16+ frames of
+   held input, so not one step ever completed — across 70 steps x 6 NPCs the party
+   never left (41,47). The run that *did* move it used 60-frame holds.
+
+Both are the same mistake in different clothes: a negative result from an
+instrument that could not have produced a positive one.
+
+### The actual obstacle
+
+The party spawns at **(41,47)**, and the only direction it can leave in is RIGHT.
+Every NPC on map 114 sits at (8-29, 10-29) — up and to the left. So it is not
+immobile, it is **penned in and disconnected from the cast**.
+
+### The fix, identified but not yet executed
+
+Do not navigate. **Patch the spawn to a tile adjacent to a known NPC.** Map
+property bytes 0 and 1 carry the entrance X/Y in their low 5 bits (`world-harness`
+already exposes this as `spawnX`/`spawnY`, range 0-31), and every map-114 NPC is
+within that range — e.g. NPC #6 at (8,20), so spawn (9,20) and face left.
+
+With the party placed beside an NPC, `$6C` (the script index) and the
+string-pointer hook report the NPC -> script mapping directly. That is the last
+step, and nothing about it is now unknown.

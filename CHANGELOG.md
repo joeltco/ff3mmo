@@ -1,3 +1,43 @@
+## 1.9.45 — 2026-08-19
+
+### RETRACTION: the party CAN move indoors — two broken tests said otherwise
+
+Booting the working world case and the forced-indoor case side by side, holding a
+direction for 60 frames:
+
+| boot | world props `$0400` | `$27`/`$28` | moved |
+|---|---|---|---|
+| default (world) | 32/32 | (41,50) -> (42,50) | **yes** |
+| forced map 114 | 2/32 | (41,47) -> (44,47) | **yes** |
+
+⛔ **v1.9.44's "no party tile coordinate changes at all" is withdrawn**, along with
+the claim that immobility explains the talk failure.
+
+**Why the earlier tests lied:**
+
+1. `findparty.cjs` held DOWN then UP and looked for a byte that moved one way then
+   back — but the party at (41,47) is blocked vertically and free to the RIGHT, so
+   that probe shows zero net change on a party that walks fine. It then "found"
+   only `$20`, `$33d` and three SOUND-ENGINE bytes (`$7f4a`/`$7f75`/`$7f98`).
+2. `talknav.cjs` pressed for **14 frames**; an FF3 tile step needs ~16+ frames of
+   held input, so no step ever completed — 70 steps x 6 NPCs, never left (41,47).
+   The run that did move used 60-frame holds.
+
+Both are the same error: a negative result from an instrument that could not have
+produced a positive one.
+
+**The actual obstacle:** the party spawns at (41,47) and can only leave RIGHT,
+while every map-114 NPC sits at (8-29, 10-29) — up and left. Not immobile,
+**penned in and disconnected from the cast**.
+
+**The fix, identified:** do not navigate — patch the spawn adjacent to a known NPC.
+Map property bytes 0/1 hold the entrance X/Y in their low 5 bits (`spawnX`/`spawnY`,
+range 0-31) and every map-114 NPC is in range, e.g. NPC #6 at (8,20) -> spawn
+(9,20), face left. Then `$6C` and the string hook report the NPC -> script mapping
+directly.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.44 — 2026-08-19
 
 ### NPC map positions found in RAM; navigation blocked because the party never moves
