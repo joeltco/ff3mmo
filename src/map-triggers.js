@@ -20,6 +20,7 @@ import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
+import { isShippedMap } from './data/areas.js';
 import { addItem, canAddItem } from './inventory.js';
 import { sendNetInvEvent, SERVER_ECONOMY, PVE_ARBITER, sendNetChestOpen, sendNetVaseSearch, nextChestTxnId } from './net.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -578,6 +579,26 @@ function _checkDynType1(trigger, tileX, tileY) {
   }
   const destMap = mapSt.mapData.entranceData[trigger.trigId];
   if (destMap === 0) return false;
+  // ⭐ A DOOR MAY ONLY LEAD SOMEWHERE WE BUILT.
+  //
+  // `entranceData` is the cartridge's own table, and it points at the whole of
+  // FF3 — not at the part of it ff3mmo ships. Castle Sasune had 24 doors leading
+  // out of the castle: its tower rooms chain 19 -> 23 -> 21 into UR'S HOUSES, and
+  // map 22 opens into the Altar Cave. That is the "warps are all over the place"
+  // report, and `map-audit --play` measured the damage — 69 maps reachable on
+  // foot from Ur, against 32 that are actually places.
+  //
+  // Refused here rather than in `_triggerMapTransition`, which the procedural
+  // dungeon also uses: its destinations are >= 1000 and generated, not table
+  // lookups, and must not be filtered against a content list.
+  //
+  // ⛔ The ROM's own destinations are NOT wrong — measured door-for-door with
+  // `tools/monscan/door-graph.cjs`, Ur matches 6/6 and Sasune's other two doors
+  // match exactly. The table is right; the far side just isn't built yet.
+  if (!isShippedMap(destMap)) {
+    showMsgBox(_nameToBytes('The way is barred.'));
+    return true;
+  }
   _triggerMapTransition(tileX, tileY, destMap);
   return true;
 }

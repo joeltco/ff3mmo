@@ -52,9 +52,20 @@ export const AREAS = [
       [9,   'ur-tavern'],   // tavern (inn, upstairs)
       [147, 'ur-well'],     // well
     ]),
+    // Map 1 is the secret ROOM, and it shares one 32x32 tilemap with map 2 (the
+    // secret house) the way FF3 packs several interiors per grid. From map 2's
+    // spawn the door to it at (23,16) is WALLED OFF — measured twice, by
+    // `map-connectivity.mjs` against the production `isPassable` and by the
+    // emulator prober, which could not walk to it either. Ur's door 0 at (5,7)
+    // is the one door in the game I could not measure cleanly: the transition
+    // fires somewhere my prober cannot attribute, and the tile it lands on is
+    // map 1's entrance region, so our table's answer (map 2) may be the thing
+    // that is wrong. Listed rather than deleted so the room keeps its name and
+    // roster key if that turns out to be it. See docs/design-notes.md#followups.
+    unreachable: new Set([1]),
   },
   {
-    head: 10, banner: 'Kazus', loc: 'kazus', fromOverworld: true,
+    head: 10, banner: 'Kazus', loc: 'kazus', fromOverworld: true, unreachable: new Set(),
     // ⛔ These were LOST once already: they shipped in v1.8.12, the revert of
     // that version took them out, and the rebuild restored the NPCs without
     // them — the same way all three Kazus shops went missing. Nothing looked
@@ -77,7 +88,19 @@ export const AREAS = [
       [23, 'sasune-d'], [24, 'sasune-e'], [25, 'sasune-f'],
       [26, 'sasune-g'], [27, 'sasune-h'], [28, 'sasune-i'],
       [30, 'sasune-j'],
+      // The EAST tower room, measured: walking into the tower door at (23,12)
+      // in the real ROM lands on map 174 at (4,10) (tools/monscan/door-graph.cjs).
+      // It shares map 19's tilemap and entrance, which is why the pair looks like
+      // a duplicate. Listed so the east tower stays enterable; its own onward
+      // doors (175 / 52 / 54) leave the castle and are barred by SHIPPED_MAPS.
+      [174, 'sasune-tower-e'],
     ]),
+    // Map 24 is in `map-triggers.js#STRANDING_MAPS` — the engine already refuses
+    // it at the door because its ROM entrance drops the player in a pocket with
+    // no reachable exit. Nothing in the castle points at it either (its own door
+    // 0 points at ITSELF). Kept in the list so it keeps its roster key, declared
+    // unreachable so the graph gate does not have to lie about it.
+    unreachable: new Set([24]),
   },
   {
     // Map 29 names ITSELF on entry, so it is a head map that happens to sit
@@ -85,7 +108,7 @@ export const AREAS = [
     // banner, which is why the lookup below is keyed per map rather than
     // latched once per town.
     head: 29, banner: 'Sasune Throne Room', loc: 'sasune-throne', fromOverworld: false,
-    rooms: new Map(),
+    rooms: new Map(), unreachable: new Set(),
   },
 ];
 
@@ -109,6 +132,29 @@ for (const a of AREAS) {
  * NOT every named map: a throne room names itself without being a town.
  */
 export const TOWN_MAPS = new Set(AREAS.filter(a => a.fromOverworld).map(a => a.head));
+
+/**
+ * ⭐ EVERY MAP THIS GAME SHIPS AS A PLACE YOU CAN WALK INTO.
+ *
+ * FF3's door tables are the whole cartridge's, and most of what they point at is
+ * a part of the game ff3mmo has not built. Castle Sasune alone had TWENTY-FOUR
+ * doors leading outside the castle — its tower rooms chain 19 -> 23 -> 21 into
+ * Ur's houses, and map 22 opens straight into the Altar Cave. `map-audit --play`
+ * measured 69 maps reachable on foot from Ur; only 32 of them are places.
+ *
+ * `map-triggers.js` refuses a door whose destination is not in here, with the
+ * same "The way is barred." the stranding guard uses. Ur already had ZERO
+ * leaking doors, which is why nobody noticed the rule was missing.
+ *
+ * ⛔ This is a CONTENT list, not a passability rule. Adding a map here makes it
+ * enterable, so add it only when the place is actually built — and check its own
+ * doors, because each one you open leaks one level further out.
+ */
+export const SHIPPED_MAPS = new Set();
+for (const a of AREAS) { SHIPPED_MAPS.add(a.head); for (const r of a.rooms.keys()) SHIPPED_MAPS.add(r); }
+
+/** Is this door destination a place we ship? Dungeon/world ids are not doors. */
+export function isShippedMap(mapId) { return SHIPPED_MAPS.has(mapId); }
 
 /** Every map in a named area -> its roster location key. */
 export const ROSTER_LOC = new Map();

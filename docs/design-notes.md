@@ -4,6 +4,25 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 
 ## Followups
 
+- **Ur's door 0 at (5,7) is the one door in the game not cleanly measured.** Our
+  table says map 2 (the secret house); map 1 (the secret room) shares map 2's
+  tilemap and its connecting door at (23,16) is walled off from map 2's spawn —
+  measured by `map-connectivity.mjs` against the production `isPassable` and
+  again by the emulator prober. So map 1 is unreachable today. The ROM prober
+  could not attribute this door's transition (it lands in map 1's entrance
+  region), which is exactly what you would see if the ROM's answer were map 1
+  rather than map 2. Re-measure before building anything on top of it; the
+  hole is declared in `data/areas.js` (`Ur.unreachable`).
+- **Castle Sasune map 24** is listed as a room but is refused at the door by
+  `STRANDING_MAPS` and nothing points at it (its own door 0 points at itself).
+  Declared in `Castle Sasune.unreachable`.
+- **24 of Castle Sasune's doors lead out of the castle** and are now barred by
+  `isShippedMap`. They are not wrong in the ROM — they lead to parts of FF3 we
+  have not built. Each one is a place to build, and `check-area-graph --list`
+  prints them.
+- **Kazus map 10's door 0 at (21,11) leads to map 101**, which is a cave, not a
+  Kazus interior (rendered with `map-png.mjs`). Barred for now.
+
 Deferred work that's been noted in changelog entries but doesn't yet have a home in code. Tracked here so it doesn't get buried in release notes.
 
 - **Per-spell anim registry** — `src/spell-anim.js` is the per-spell-ID registry (caster cast windup + spell-throw / target-effect frames), keyed by spell ID, with distinct tile bytes per spell and palette swaps per school. Lookup is `getSpellAnim(spellId)` / `getSpellAnimForItem(itemId)` / `getSpellAnimFrame(bundle, elapsedMs)`. The unified cast / throw / impact / apply pipeline lives in `src/combatant-cast.js` and serves player, ally, and PVP-enemy callers — exports include `drawCastWindup`, `drawSpellThrow`, `getSpellImpactSFX`, `playSpellImpactSFX`, `applySpell`, `applyMagicDamage`, `applyMagicHeal`, `applyMagicCureStatus`, `applyMagicSight`, `applyMagicDrain`, `applyMagicRecovery`, `applyMagicAllStatus`, `applyMagicInstakill`, `applyMagicErase`, `applyMagicStatus`. Render sites pull spell ID from per-context state: player cast uses `getCurrentSpellId()`, ally-cast paths use `battleSt.allyMagicSpellId`, PVP-enemy casts use `pvpSt.pvpMagicSpellId`. Cast SFX is `SFX.MAGIC_CAST = 0x62` for every spell at cast start (`spell-cast.js:72`); impact SFX is selected by `getSpellImpactSFX(spell)` (single source — fire → FIRE_BOOM, ice → SW_HIT, sleep → SLEEP_PUFF, sight → SIGHT, default SW_HIT). Adding a new spell anim: capture frames via REC OAM, land per-spell tile bytes in `spell-anim.js`, add a `getSpellImpactSFX` branch if needed, no render-site edits required.

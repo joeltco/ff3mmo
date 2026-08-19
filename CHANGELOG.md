@@ -1,3 +1,76 @@
+## 1.10.4 — 2026-08-19
+
+### Fix: Castle Sasune had 24 doors leading out of the castle
+
+"Warps are all over the place" was right, and it was not the door table. Measured
+door-for-door in a real emulator first (`tools/monscan/door-graph.cjs`, new):
+**Ur matches the ROM 6/6**, and Castle Sasune's keep door (→ 25) and east tower
+(→ 174) match exactly. `entranceData[trigId]` and the per-type trigger scan order
+are correct — verified against the ROM's own routine at `3A/91C8`.
+
+The problem is that `entranceData` is the WHOLE CARTRIDGE's door table, and most
+of what it points at is a part of FF3 this game has not built. Castle Sasune's
+tower rooms chain `19 → 23 → 21` into **Ur's houses**; map 22 opens into the
+**Altar Cave**; Kazus's door at (21,11) opens into a cave (map 101 — rendered and
+looked at, it is not a Kazus interior). `map-audit --play` had been reporting the
+damage all along: **69 maps reachable on foot from Ur, against 32 that are
+places.** Ur itself has zero leaking doors, which is why this never showed up.
+
+`map-triggers.js#_checkDynType1` now refuses a door whose destination is not a
+map we ship, with the same "The way is barred." the stranding guard uses. Refused
+there rather than in `_triggerMapTransition`, which the procedural dungeon shares
+— its destinations are generated, not table lookups.
+
+The shipped set is derived from `data/areas.js`, the same single declaration the
+name banners and roster keys already read. Castle Sasune gains **map 174, the east
+tower room**, because the ROM measurably sends you there from the door at (23,12).
+
+### New gate: `check-area-graph`
+
+Every place we ship is **complete** (every room reachable on foot from the head
+map, through the real `MapRenderer.isPassable`) and **closed** (no door leads
+anywhere unbuilt). Proven by reverting three ways: disabling the guard, marking a
+genuinely-unreachable room as reachable, and adding an unbuilt map as a room.
+
+It asserts the call site in `map-triggers.js`, not just the predicate — the
+predicate alone still answers correctly with the guard ripped out.
+
+### Two rooms are declared unreachable rather than quietly claimed
+
+- **Ur map 1** (the secret room) shares one tilemap with map 2, and map 2's door
+  to it at (23,16) is walled off from map 2's spawn — measured twice,
+  independently. Ur's door 0 at (5,7) is the one door in the game I could not
+  measure cleanly; its transition lands in map 1's entrance region, which is what
+  you would see if the ROM's answer were map 1 rather than our table's map 2.
+- **Castle Sasune map 24** is already refused by `STRANDING_MAPS`, and nothing in
+  the castle points at it (its own door 0 points at itself).
+
+Both are declared in `areas.js` with the measurement written next to them, and the
+gate fails if a NEW unreachable room appears or a declared one silently becomes
+reachable. Recorded in `design-notes#followups`.
+
+### New tools
+
+- `tools/monscan/door-graph.cjs` — walks the party into each door in a real
+  emulator and reads the destination back. **`$48` is the current map id**,
+  calibrated by warping to three maps in three separate boots and intersecting
+  RAM; `$0700` is not usable (it read 27 while the loaded map was 25). One warp
+  per boot — a second warp never clears `$AB` again and the probe then reports the
+  first map forever. It discards any result whose transition did not fire from the
+  intended tile, which is what a route crossing another door looks like; that
+  misattribution produced one full false "Ur door 0 is wrong" reading.
+- `tools/rom-door-map.mjs` — the walkable grid, door list and trigger-avoid list
+  per map, so the prober routes with the production passability instead of its own.
+
+### Finding: the top-box scene is already what the ROM uses
+
+Chased "are tree / desert / lake tiles getting the correct battle scenes" to the
+ROM. `$48` indexes the battle-background table at `$BC00`, and entering the world
+map hard-codes it: `3E/C0E6  LDA #$00 / STA $48`. **FF3 has ONE overworld battle
+background**, not one per terrain, and `setupTopBox` already reads exactly that
+entry. Indoors it uses the map id, which is also what `$48` holds. Nothing to fix;
+per-terrain scenes would be a new design, not a correction.
+
 ## 1.10.3 — 2026-08-19
 
 ### Fix: Kazus, Castle Sasune and the Sasune Throne Room get their name banners
