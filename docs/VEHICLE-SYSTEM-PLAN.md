@@ -696,3 +696,67 @@ merely unproven, it may be meaningless.
 
 ⭐ For the vehicle system: **do not build mode 6 in.** Wiring a vehicle the
 original never grants would be inventing a system, not porting one.
+
+## 16. Launch animations — mechanism decoded, motion captured, ART NOT captured
+
+### The mechanism
+
+Event opcode **`$EF` starts a CUTSCENE SEQUENCE by id**. Handler bank 59 `$B6B4`:
+`LDA #$00 / STA $BC / STA $F0 / LDA $71 / JMP $A4FA`, and `$A4FA` is a `CMP`
+chain dispatching **ids 0-13**. Sequence 0 lands on `$A8A9` — the same bank-59
+offset as `$88A9` seen through the `$8000` window (§11).
+
+Each link has exactly ONE caller: `$A4FA` only from the `$EF` handler, `$A8A9`
+only from the id-0 branch.
+
+### Census of all 14 sequences
+
+Run by rewriting the opening script's tail to `EF <id> FF`, watching the draw
+coordinates `$40`/`$41` and the vehicle `$42`:
+
+| seq | motion | grants | notes |
+|---|---|---|---|
+| **0** | yes | **vehicle 5** | X fixed `$70`, Y `$6F`->`$60` — a straight RISE |
+| **9** | yes | **vehicle 7 — the Invincible** | X `$97`->`$80`, Y `$82`->`$77` — a DIAGONAL approach |
+| 2, 3, 4, 10, 11, 12, 13 | yes | — | other cutscenes |
+| 1, 5, 6, 7, 8 | static | — | |
+
+⭐ **Sequence 9 is the Invincible's launch and it IS script-invoked** — script 162
+issues `$EF 09`, and script 163 (`$F0.00 $CB $FD`) grants mode 7. So the Invincible
+launch is reachable in the shipped game.
+
+⛔ **Sequence 0 is invoked by NO script.** All 256 scripts were swept for `$EF`;
+ids 1-13 are used, 0 is not. Combined with the single-caller chain above, the
+vehicle-5 rising animation is unreachable in the shipped game — the same status as
+mode 6 (§15).
+
+### What was actually captured
+
+Both were run live and their trajectories recorded frame by frame. Sequence 0's
+measured Y is `$6F, $6E, $6D, ... , $60`, one pixel per four frames at fixed X
+`$70` — **exactly** what §11 predicted from the disassembly, which is a live
+confirmation of that reading.
+
+⛔ **The ART is NOT valid and must not be used.** FF3 is CHR-RAM: sprite tiles are
+decompressed per context. These captures trigger the sequence from the OPENING
+script, which runs inside Altar Cave, where the vehicle's tiles are not loaded.
+The pixels that come out are whatever text/UI tiles occupy those slots — visibly
+garbage (letters appear inside the "craft"). Motion right, art wrong.
+
+`tools/monscan/launch-capture.cjs` (NEW) does the capture:
+`SEQ=9 WANT=7 node tools/monscan/launch-capture.cjs sheet.png strip.png`.
+
+### The remaining work
+
+Capture must run the sequence **in the context that loads the vehicle's CHR** —
+i.e. from its real calling script rather than bolted onto the opening. For
+sequence 9 that means reaching script 162's trigger; the flag decode (§14) now
+makes that tractable, since its condition records can be read and the gating flags
+forced. `world-harness.cjs` cannot be used for this as-is: it copies map 115's
+props over all 512 maps including byte 15, the event-table index, so no real
+events fire (§14).
+
+⚠ Cid's-airship-out-of-the-sand and the Enterprise transformation are NOT among
+the vehicle-granting sequences found. Sequence 0 grants vehicle 5 and is dead;
+mode 4 (the Enterprise flying) is reached by transformation, not by a cutscene.
+Whether a sand-launch animation exists in this ROM at all is **unanswered**.

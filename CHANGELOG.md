@@ -1,3 +1,44 @@
+## 1.9.24 — 2026-08-18
+
+### tools+docs: launch-animation mechanism decoded; motion captured, ART NOT captured
+
+Event opcode **`$EF` starts a cutscene SEQUENCE by id** (handler bank 59 `$B6B4`
+-> `$A4FA`, a CMP chain over ids 0-13). Sequence 0 lands on `$A8A9` — the same
+bank-59 offset as `$88A9` from v1.9.17. Single-caller chain throughout.
+
+**Census of all 14 sequences**, run by rewriting the opening script's tail to
+`EF <id> FF` and watching `$40`/`$41`/`$42`:
+
+| seq | grants | motion |
+|---|---|---|
+| **0** | **vehicle 5** | X fixed `$70`, Y `$6F`->`$60` — a straight RISE |
+| **9** | **vehicle 7, the Invincible** | X `$97`->`$80`, Y `$82`->`$77` — DIAGONAL |
+| 2,3,4,10,11,12,13 | — | other cutscenes |
+| 1,5,6,7,8 | — | static |
+
+⭐ **Sequence 9 is the Invincible's launch and IS script-invoked** — script 162
+issues `$EF 09`, script 163 grants mode 7. Reachable in the shipped game.
+⛔ **Sequence 0 is invoked by NO script** (all 256 swept; ids 1-13 used, 0 not),
+so the vehicle-5 rise is dead code like mode 6.
+
+Sequence 0's measured Y is `$6F,$6E,...,$60` one pixel per four frames at fixed X
+`$70` — exactly what v1.9.17 predicted from the disassembly. Live confirmation.
+
+⛔ **THE ART IS NOT CAPTURED AND MUST NOT BE USED.** FF3 is CHR-RAM; these runs
+trigger the sequence from the OPENING script, which executes inside Altar Cave
+where the vehicle's tiles are not loaded, so the "craft" renders as text/UI tiles.
+Motion right, pixels wrong. Real capture needs the sequence run in its own calling
+context — for sequence 9, reaching script 162's trigger, which the v1.9.22 flag
+decode now makes tractable. `world-harness.cjs` cannot be used as-is: it copies
+map 115's props over all 512 maps including the event-table index, so no real
+events fire.
+
+⚠ Cid's-airship-out-of-the-sand and the Enterprise transformation are NOT among
+the vehicle-granting sequences; mode 4 is reached by transformation, not a
+cutscene. Whether a sand-launch animation exists in this ROM is unanswered.
+
+`tools/monscan/launch-capture.cjs` (NEW). Reference-only; nothing under `src/`.
+
 ## 1.9.23 — 2026-08-18
 
 ### docs: mode 6 is DEAD CODE — fully implemented, never granted
