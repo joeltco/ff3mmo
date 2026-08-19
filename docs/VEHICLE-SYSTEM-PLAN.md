@@ -1106,3 +1106,49 @@ a mixed Cid/"beautiful face" jumble under `$86`, which argues for `$84`, but tha
 is the same shape of reasoning already retracted twice in this document.
 
 ⛔ Still unnamed: `$600B` 1, 3, 4, 5, 6, 7, 8.
+
+## 24. Running a grant script in an advanced world — DOES NOT WORK by pinning `$78`
+
+### The new instrument
+
+`tools/monscan/run-script.cjs` (NEW) runs **any** script by repointing slot 48 —
+the opening, which always runs — at the target's body, then reads the ids off the
+§23 hook. No need to reach the real trigger.
+
+### What it measured
+
+**Script 83 under `$78` = 0: operands 50/51/52 resolve to `0x32`/`0x33`/`0x34`** —
+the Saronia thug scene, the bank-`$84` reading. NOT the Cid/mythril-ram strings at
+`0x232`+. That is a measurement of what the ROM actually resolved, and it is the
+opposite of the reading that "mentions an airship" — exactly why the coherence
+argument was refused in §20-§23.
+
+### Why the request could not be completed
+
+Pinning the world at boot (rewriting `LDA $6008` at `$C0DE` to an immediate) **does
+take effect** — `$78` reads back correctly and map naming changes, with strings
+like `0x183` "Amur" and `0x1BB` "Ancients' Maze" appearing. But under `$78` = 1, 2
+or 3 the script **never reaches its messages at all**: every operand reports
+"neither" candidate.
+
+The world byte alone is not a game state. A save also carries map, position, party
+and the story flags the scripts branch on, and with only `$78` moved the boot path
+diverges long before the script's dialogue. So **"patch the conditions so a grant
+script runs after the world advances" cannot be done by pinning `$78`** — it needs
+a coherent late-game save.
+
+### A lead investigated and ruled out
+
+Map property **byte 13** takes exactly `$84` (259 maps), `$85` (201), `$86` (52) —
+precisely the message-bank range, which looked like a per-map text bank and would
+have settled everything. It is not: `$078C`/`$078D` are loaded as a POINTER pair at
+bank 58 `$9356` with `ORA #$20`, giving `$A4xx`/`$A5xx`/`$A6xx`. The numeric
+coincidence is just that.
+
+### Where this leaves the naming
+
+⛔ `$600B` 1, 3, 4, 5, 6, 7, 8 still unnamed. What is now needed is concrete and
+narrow: **a coherent save state at each grant's story position.** Options, in
+order: construct one by setting world + map + position + the flags each grant's
+conditions test (all of which §14's decode makes addressable); or obtain a real
+late-game save. Neither TAS in `tools/movies/` helps — both stay in Altar Cave.

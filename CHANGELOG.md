@@ -1,3 +1,36 @@
+## 1.9.32 — 2026-08-19
+
+### run-script.cjs; pinning `$78` does NOT let a grant script run in an advanced world
+
+`tools/monscan/run-script.cjs` (NEW) runs **any** script by repointing slot 48 —
+the opening, which always runs — at the target's body, then reads the resolved ids
+off the v1.9.31 string-pointer hook. No need to reach the real trigger.
+
+⭐ **Measured: script 83 under `$78` = 0 resolves operands 50/51/52 to
+`0x32`/`0x33`/`0x34`** — the Saronia thug scene (bank `$84`), NOT the
+Cid/mythril-ram strings at `0x232`+. A measurement, and it contradicts the reading
+that "mentions an airship" — which is why that coherence argument kept being
+refused.
+
+⛔ **The requested approach does not work.** Pinning the world at boot (rewriting
+`LDA $6008` at `$C0DE` to an immediate) genuinely takes effect — `$78` reads back
+and map naming changes, producing strings like `0x183` "Amur" and `0x1BB`
+"Ancients' Maze". But under `$78` = 1, 2 or 3 the script **never reaches its
+messages**: every operand reports "neither" candidate. The world byte alone is not
+a game state; a save also carries map, position, party and the story flags scripts
+branch on, so the boot path diverges long before the dialogue.
+
+⛔ A promising lead ruled out: map property **byte 13** is `$84`/`$85`/`$86` across
+all 512 maps — exactly the message-bank range — but `$078C`/`$078D` are loaded as a
+POINTER pair at bank 58 `$9356` with `ORA #$20` (`$A4xx`/`$A5xx`/`$A6xx`). Numeric
+coincidence only.
+
+⛔ `$600B` 1, 3, 4, 5, 6, 7, 8 still unnamed. What is needed is now narrow: **a
+coherent save state at each grant's story position** — world + map + position +
+the flags its conditions test, all addressable via the v1.9.22 flag decode.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.31 — 2026-08-19
 
 ### tools: string-pointer hook recovers real string ids; `$78`==0 case measured

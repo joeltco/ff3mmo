@@ -53,6 +53,17 @@ let end=start; for(let n=0;n<200;n++){const op=base[end];
 const at=end-4;
 const OP=parseInt(process.env.OP||'15',10);
 const b=Buffer.from(base); b[at]=0xFC; b[at+1]=0x40; b[at+2]=0xF1; b[at+3]=OP; b[at+4]=0xFF;
+// ⭐ WORLD=n pins $78 at BOOT by rewriting the save load at $C0DE
+//   C0DE  AD 08 60  LDA $6008
+//   C0E1  85 78     STA $78
+// as `LDA #n ; NOP`. This mimics a save made in world n, unlike pinning $78
+// every frame (PIN78), which desynchronises the script mid-run.
+if(process.env.WORLD!==undefined){
+  const FIXED=16+b[4]*16384-16384, at2=FIXED+(0xC0DE-0xC000);
+  if(b[at2]!==0xAD||b[at2+1]!==0x08||b[at2+2]!==0x60) throw new Error('expected LDA $6008 at $C0DE');
+  b[at2]=0xA9; b[at2+1]=parseInt(process.env.WORLD,10)&0xFF; b[at2+2]=0xEA;
+  console.log('WORLD pinned: $78 <- '+process.env.WORLD+' at boot');
+}
 const romPath=path.join(dir,'m.nes'); fs.writeFileSync(romPath,b);
 const nes=new Nes(romPath); const cpu=nes.nes.cpu;
 // is bank 24 currently mapped at $8000? sample a few offsets
