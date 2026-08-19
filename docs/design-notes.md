@@ -17,6 +17,57 @@ Deferred work that's been noted in changelog entries but doesn't yet have a home
 - **`lvReq` is never enforced** — job level requirements are data-only. Ranger (`lvReq: 9`) is unreachable at `MAX_LEVEL: 5` regardless, since jobs unlock from crystals rather than level.
 - **Land Turtle boss art is unverified** — the boss fight draws from `src/data/boss-sprites-rom.js`, deliberately left untouched when the main registry's art was replaced (v1.7.818). Its 6x6 mapping is documented as verified against live Land Turtle data, and the replacement captures were of bosses spawned in random encounters, which may legitimately differ from a scripted fight.
 - **PvP enemy magic + items + roster ally items** — moot under the PvP arbiter rewrite (`[[ff3mmo-pvp-arbiter-rewrite]]`, currently DISABLED v1.7.770 pending P-6d anim polish + P-4c magic/items). When PvP re-enables, magic + items land server-side as part of P-4c — the legacy `_tryPVPEnemyCure`/`_tryPVPEnemyPoisona`/`_tryPVPEnemyItem`/`_processPVPEnemyMagic`/`_tryAllyItem`/`allyMagicItemMode` code paths in `pvp.js` + `battle-turn.js` are superseded and should be removed once the arbiter ships P-4c.
+- **No in-game vehicle grant** — the vehicle system is complete and gated, but nothing in normal play hands you a craft. The ROM does it from event scripts (opcode `$EE` writes `$600B`), and those scripts are reached by TALKING TO AN NPC — a path that is decoded only partway: the NPC records are at `$7000` on a stride of 16 with X at +2 and Y at +3, and `$6C` is the script-index probe, but a headless talk has never fired because the party spawns penned in at (41,47) while the NPCs sit at (8-29,10-29). Until that path is decoded, the STATE debug tab is the only way to board. ⛔ Do NOT invent a grant condition to fill the hole.
+- **`$600B` values 1-8 are unnamed except 2** — eight event scripts each write a distinct value, and value 2 (Cid's airship, granted at Kazus) is the only one tied to a craft by observation. Naming the rest needs the same NPC→script path above. ⛔ Do not name them by movement mode: the mode is movement STATE, and boarding sets it to 3 whichever craft it is.
+- **Time Wheel remodel + Nautilus submerge/surface are located but not captured** — script 180's inline low-opcode choreography (opcodes below `$C0` dispatch through `$ACD1`, a third animation mechanism alongside `$EF` sequences and native counter loops) is the Enterprise remodel; the Nautilus dive machinery was found the same way. Neither has been captured, for the same reason: the script has to be run in its own map context, which is the blocked NPC path.
+
+## Vehicles
+
+Shipped v1.10.0-1.10.1. Full ROM derivation in `docs/VEHICLE-SYSTEM-PLAN.md`.
+
+`ps.vehicle` is the CARTRIDGE'S OWN movement mode, not an invention: 0 on foot,
+1 canoe carried, 2 canoe afloat, 3 ship, 4-7 flying. Terrain comes from the ROM's
+mask table at `$C6CD`, transcribed into `WORLD_MODE_MASKS`
+(`src/world-map-renderer.js`) and checked by `isPassableForMode(x, y, mode)`. A
+tile blocks a mode when EVERY bit of that mode's mask is set in its `byte1` —
+`AND mask ; CMP mask`, exactly as `$C6B0` does it.
+
+⭐ **Auto-disembark is tested BEFORE the passability gate** in `movement.js`, and
+the order is load-bearing. A ship's mask blocks every land tile, so a disembark
+check placed after the terrain gate can never fire — the move is already refused
+and the player is stranded at sea permanently. The ROM resolves it during the move
+attempt (`$C5B5`). Gated by `check-vehicle-wiring` as a source-order assertion,
+because neither half tested alone reveals it.
+
+**Boarding is by POSITION** (`$C633`): walking onto the parked craft's tile boards
+it — no prompt, no facing. Disembarking parks it on the tile being LEFT, so it
+stays in the water behind you (`$C59E` records the pre-step position). Parked
+state is `ps.vehicleParked` / `X` / `Y` / `Mode`, mirroring `$6000`/`$6001`/
+`$6002`/`$600B`, and rides all four save hops.
+
+**Indoors is always on foot.** `MapRenderer.isPassable`'s third argument is a
+Z-LEVEL, so handing it a vehicle would silently mean "z = 3".
+
+**Sprites are captured, not ROM-addressed.** FF3 is CHR-RAM: a craft's tiles are
+decompressed into pattern memory at run time and have no fixed ROM offset, so
+`Sprite.gfxBase` cannot reach them. `tools/monscan/emit-vehicle-sprites.cjs`
+captures pattern bytes + OAM layout + palette off the PPU into
+`src/data/vehicle-sprites-captured.js`; `src/vehicle-sprite.js` composites and
+caches; `render.js` swaps the craft in for the walk sprite when aboard.
+
+**Audio** lives in `src/data/vehicles.js`, taken from the ROM's own tables —
+music at `$A027`, SFX at `$A047`, with music.js's "ROM SFX ID + 0x41" conversion.
+⭐ There is NO per-step engine sound: flying craft were driven 570-679 tiles with
+the sound port hooked and produced zero writes in motion. The continuous
+sail/propeller you hear IS the music track, started once on boarding.
+
+⛔ **Nothing grants a vehicle in normal play.** The ROM does it through event
+scripts (`$EE` sets `$600B`), and those scripts are reached by talking to an NPC —
+a path that is not decoded. The STATE debug tab stands in. Do not invent a grant.
+
+⛔ **Do not name vehicles by movement mode.** Identity is `$600B` (8 values, set by
+8 scripts); the mode is a movement STATE and boarding sets it to 3 whichever craft
+it is. Only `$600B` = 2 (Cid's airship, granted at Kazus) is confirmed.
 
 ## Loot / drops
 

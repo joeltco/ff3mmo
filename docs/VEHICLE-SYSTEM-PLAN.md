@@ -1,10 +1,14 @@
-# Vehicle system — plan
+# Vehicle system — ROM record and shipped design
 
-Status: **PROPOSED**. Nothing under `src/` yet. Scoped 2026-08-18.
-⚠ §19 CORRECTS the vehicle NAMING in §12/§18 — identity is `$600B`, not the mode.
-Phase 0 **LANDED AND BEHAVIOURALLY PROVEN** — §9 reads the routine off the ROM,
-§10 proves it by patching the mask table. It CORRECTS §1: bit 3 is never tested,
-bit 4 is the flight barrier, and there are EIGHT movement modes, not four.
+Status: **BUILT AND LIVE** as of v1.10.1 — see `design-notes#vehicles` for the
+shipped design, and `CHANGELOG.md` 1.10.0/1.10.1 for what landed. This file is the
+ROM-archaeology record: how the rules were measured, what was proven, and every
+claim that had to be retracted along the way. Read §9/§10 (the mask table and its
+proof) and §19 (identity is `$600B`, not the mode) before changing behaviour.
+
+⚠ Sections are chronological and several were CORRECTED later. The corrections
+are marked in place; where a section header and a later section disagree, the
+later one wins.
 
 Decisions taken (Joel, 2026-08-18):
 
@@ -102,15 +106,15 @@ validator, `payload -> ps`.
 
 ## 5. Phases
 
-| Phase | Work | Blocks |
+| Phase | Work | Status |
 |---|---|---|
-| **0** | Prove the bit assignment from the code that reads it. Also answers whether flight/submerge are separate bits or pure code paths, and whether encounters are terrain-keyed. | everything |
-| **0.5** | fm2 replayer + reach-the-scene harness (see §6). | all launch animations |
-| **1** | `isPassable(x, y, mode)`; vehicle state through the 4 save hops. One call site: `movement.js:95`. | 2+ |
-| **2** | Canoe end-to-end — sprite, board/disembark, save. Smallest complete vehicle. | — |
-| **3** | Ship; re-enable entrance to map 180. | — |
-| **4** | Enterprise — the mode-toggle case that breaks a naive model. | — |
-| **5** | Nautilus + Invincible — the two needing rules outside the table. | — |
+| **0** | Prove the bit assignment from the code that reads it | ✅ §9, proven by patching the table (§10) |
+| **0.5** | fm2 replayer + reach-the-scene harness | ✅ `fm2-replay.cjs`, `world-harness.cjs` |
+| **1** | mode-aware passability + vehicle state through the 4 save hops | ✅ v1.10.0 |
+| **2** | Boarding / disembark / parking, sprites, music + SFX | ✅ v1.10.1 |
+| **3** | Story GRANTS — the `$EE` events that hand you a craft | ⛔ blocked: the grant scripts are reached by talking to an NPC, and that path is undecoded (§34-§37). A debug panel stands in |
+| **4** | Time Wheel remodel animation (§29) | ⛔ located, not captured — needs the script run on its own map |
+| **5** | Nautilus submerge/surface (§33) | ⛔ machinery found, not captured — same blocker |
 
 Sprite capture runs alongside from Phase 2. **Vehicle sprite CHR offsets are not
 identified yet.**

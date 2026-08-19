@@ -1,3 +1,37 @@
+## 1.10.2 — 2026-08-19
+
+### Docs brought in line with the shipped vehicle system
+
+No behaviour change — every markdown that describes the project was still
+describing a vehicle system that didn't exist yet.
+
+**`docs/VEHICLE-SYSTEM-PLAN.md`** said `Status: PROPOSED. Nothing under src/ yet`
+and listed Phases 1-5 as future work, three versions after they shipped. It now
+says what it actually is — the ROM-archaeology record — points at
+`design-notes#vehicles` for the shipped design, and its phase table marks 0/0.5/1/2
+done and 3/4/5 blocked, naming the blocker (the NPC→script path) instead of leaving
+them looking un-started. A warning up top notes the file is chronological and that
+several sections were corrected later, so a reader doesn't act on a retracted claim.
+
+**`docs/design-notes.md`** gained a `## Vehicles` section — the first place anyone
+touching this should read. It carries the load-bearing invariants: the mask table
+at `$C6CD` is the ROM's, not ours; ⭐ auto-disembark is tested BEFORE the passability
+gate and the order matters (a ship's mask blocks every land tile, so the reverse
+order can never fire and strands the player at sea); boarding is by position;
+`MapRenderer.isPassable`'s third argument is a Z-LEVEL, so indoors is always foot;
+sprites are PPU captures because FF3 is CHR-RAM; there is no per-step engine sound.
+Three followups added — no in-game grant exists, `$600B` 1-8 are unnamed except 2,
+and the Time Wheel / Nautilus animations are located but uncaptured — each naming
+the same blocker rather than reading as an oversight.
+
+**`CLAUDE.md`** gained a "Where things live" row (with the disembark-order warning
+inline, since that is the one thing a reader can silently get wrong) and a
+`check-vehicle-wiring` gate row listing what the gate actually pins — verified
+against the gate's own output, not written from memory.
+
+**`README.md`** leads with a v1.10.1 status paragraph; the v1.7.995 block it
+displaced is relabelled "Previous" so there is only one "Current status".
+
 ## 1.10.1 — 2026-08-19
 
 ### VEHICLES COMPLETE — boarding, parking, sprites, music and SFX

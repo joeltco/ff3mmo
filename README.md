@@ -17,7 +17,23 @@ works, or share examples and code. Seriously, ask away. 🙂
 
 ## Status
 
-> **Current status (v1.7.995):** Ur is content-complete and gated. **Quests are FF2 Word Memory** — no markers, no quest log: an NPC says something, you LEARN the Key Term out of it, and you carry it to whoever it means something to. Terms print red inside the dialogue box; the giver only offers the job when you ASK him about the word, with ACCEPT / DENY on the same menu. FF2's own cursor and confirm blips are ripped from the ROM (`ff2-nsf-builder.js` appends them to the NSF as extra tracks); the text type-out is deliberately silent because FF2 has none. See `design-notes#word-memory--ff2-ask--learn-v17980-991`.
+> **Current status (v1.10.1):** **Vehicles are wired.** The canoe, ship and
+> airships move by FF3's own rules, not invented ones — per-mode terrain comes
+> from the ROM's mask table at `$C6CD` (transcribed into `WORLD_MODE_MASKS` and
+> proven by patching the table in a running emulator), boarding is by position
+> the way `$C633` does it, and disembarking parks the craft on the tile you
+> LEFT so it stays in the water behind you. Craft sprites are captured off the
+> PPU (FF3 is CHR-RAM — there is no ROM offset to point at), and each mode's
+> music and SFX come from the ROM's own `$A027` / `$A047` tables. There is no
+> per-step engine sound: flying craft were driven ~600 tiles with the sound port
+> hooked and wrote nothing; the propeller you hear IS the music track. ⛔ Nothing
+> in normal play grants a vehicle yet — the ROM's `$EE` grant events are reached
+> by talking to an NPC, and that path is still undecoded, so a debug panel stands
+> in. Gated fail-on-revert by `check-vehicle-wiring`. See
+> `design-notes#vehicles`; the full ROM derivation, including every claim that
+> had to be retracted, is `docs/VEHICLE-SYSTEM-PLAN.md`.
+>
+> **Previous status (v1.7.995):** Ur is content-complete and gated. **Quests are FF2 Word Memory** — no markers, no quest log: an NPC says something, you LEARN the Key Term out of it, and you carry it to whoever it means something to. Terms print red inside the dialogue box; the giver only offers the job when you ASK him about the word, with ACCEPT / DENY on the same menu. FF2's own cursor and confirm blips are ripped from the ROM (`ff2-nsf-builder.js` appends them to the NSF as extra tracks); the text type-out is deliberately silent because FF2 has none. See `design-notes#word-memory--ff2-ask--learn-v17980-991`.
 >
 > **Mirror integrity** got a full sweep in v1.7.993-995. Four resources, three different authorities: equipment and bag/gil are mirror-backed and must emit; spells / job levels / cp ride the four-hop SAVE chain; exp is local-canonical. Three real desync sources found and fixed — the Optimum button's offhand release, the quiver-empty clear, and quest gil — plus a fled-battle claiming the previous battle's victory (v1.7.982). Each is now gated fail-on-revert: `check-equip-emit`, `check-inv-emit`, `check-save-lockstep`, `check-pve-claim`. See `design-notes#mirror-integrity--which-resource-lives-where-v17993-995`.
 
