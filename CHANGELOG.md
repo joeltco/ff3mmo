@@ -1,3 +1,29 @@
+## 1.9.33 — 2026-08-19
+
+### Animation coverage closed: sequence census complete, 2 launches exist, both captured
+
+Sequence 14 (script 158) was missed by the v1.9.24 census and has now been run:
+**static, no vehicle**. The census 0-14 is therefore complete, and across every
+sequence the dispatcher can reach, **only two animate a vehicle — 0 and 9 — and
+both are captured** (`docs/sprites/ff3-cid-airship-sand-launch.png`,
+`docs/sprites/ff3-invincible-launch.png`).
+
+⚠ **That is 2 launches, not 8 vehicles.** There are eight vehicles (`$600B` 1-8);
+their grant scripts — 120, 51, 124, 136, 150, 83, 84, 161 — were each checked and
+**not one contains a sequence opcode**. Most vehicles are handed over with dialogue
+and music only: they have no launch animation to capture, so nothing is missing.
+And of the two that exist, sequence 0's is orphaned (v1.9.27) — the sand launch
+does not play in the shipped game.
+
+⛔ **Genuinely not captured: per-vehicle PARKED art.** The world-map sprite for a
+vehicle sitting in the world is selected from `$600B` (`$DB73` picks `$30`; the
+draw blocks use `$50` for modes 3/4 and `$68` for 5/6, via a table at `$DC1A`).
+That is a per-VEHICLE sprite set and none of it is ripped.
+⚠ `vehicle-art.png` is a per-MOVEMENT-MODE sheet (modes 0,2,3,5,6,7; 1 and 4
+normalise away), not the eight vehicles.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.32 — 2026-08-19
 
 ### run-script.cjs; pinning `$78` does NOT let a grant script run in an advanced world

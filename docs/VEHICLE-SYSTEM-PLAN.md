@@ -1152,3 +1152,41 @@ narrow: **a coherent save state at each grant's story position.** Options, in
 order: construct one by setting world + map + position + the flags each grant's
 conditions test (all of which §14's decode makes addressable); or obtain a real
 late-game save. Neither TAS in `tools/movies/` helps — both stay in Altar Cave.
+
+## 25. Animation coverage — 2 captured, and most vehicles have none
+
+### The sequence census is now COMPLETE (0-14)
+
+§16 tested 0-13; sequence 14 (invoked by script 158) was missed and has now been
+run: **static, no vehicle**. So across every sequence the dispatcher can reach:
+
+| sequence | animates | grants a vehicle | captured |
+|---|---|---|---|
+| **0** | yes — vertical rise + dust plume | vehicle 5 | ✅ `docs/sprites/ff3-cid-airship-sand-launch.png` |
+| **9** | yes — diagonal approach | vehicle 7 | ✅ `docs/sprites/ff3-invincible-launch.png` |
+| 2,3,4,10,11,12,13 | yes | no | n/a — not vehicle scenes |
+| 1,5,6,7,8,14 | static | no | n/a |
+
+**Only two sequences in the game animate a vehicle, and both are captured.**
+
+### But that is 2 launches, not 8 vehicles
+
+There are **eight** vehicles (`$600B` 1-8, §19). Their grant scripts — 120, 51,
+124, 136, 150, 83, 84, 161 — were each checked and **not one contains a sequence
+opcode**. So most vehicles are handed over with dialogue and music only:
+**they have no launch animation to capture.** Nothing is missing for them.
+
+⚠ And of the two that exist, sequence 0's is **orphaned** (§19): no script invokes
+it, so the sand launch does not play in the shipped game even though the animation
+is intact.
+
+### What is genuinely NOT captured
+
+- ⛔ **Per-vehicle PARKED art.** The world-map sprite for a vehicle sitting in the
+  world is selected from `$600B` — `$DB73` reads it and picks sprite `$30`, and the
+  draw blocks use `$50` (modes 3/4) and `$68` (modes 5/6), indexed through a table
+  at `$DC1A`. That is a per-VEHICLE sprite set and none of it has been ripped.
+- ⚠ **`vehicle-art.png` is per-MOVEMENT-MODE, not per-vehicle.** It captured modes
+  0, 2, 3, 5, 6, 7; modes 1 and 4 normalise away (1 -> 0, 4 -> 3) so they have no
+  distinct capture. Since §19 established identity lives in `$600B`, that sheet is
+  a mode sheet — useful, but it is not "the eight vehicles".
