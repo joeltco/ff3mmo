@@ -1537,3 +1537,54 @@ Flying vehicles moved **570-679 tiles** with the hook live and produced **zero**
 sail/propeller sound is the vehicle MUSIC track — `$22` on the ship, `$0a` on the
 airships, `$23` on the Invincible — started once at boarding by `$A006`, with the
 one-shot transition cue alongside it.
+
+## 33. Nautilus submerge/surface — machinery found, animation NOT captured
+
+### What was found
+
+**The grant.** Script 86 is Doga's Aquario scene (messages `0xe6`, `0xe7` — *"The
+Nautilus can now travel underwater"*). It sets **flag 7** and, like script 180,
+carries its animation INLINE: a run of `$d1` opcodes with a decreasing `$fc` ramp
+(`$fc.40 $fc.30 $fc.20 $fc.10 $fc.8`) — a speed ramp, not a `$EF` sequence.
+
+**A mode-indexed animation loop.** Bank 59 `$85BE`:
+
+    85BE  LDA #$00 / STA $BC              ; counter
+    85C5  LDA $602F / ORA #$40            ; raise the animation flag
+    85CD  JSR $A85A / $A842 / $A5E3
+    85D6  LDY $42                         ; <- indexed by the VEHICLE MODE
+    85DE  INC $BC / BPL $85CD             ; 128 steps
+
+`$85E3` blinks the craft — it rewrites 16 OAM bytes from `$A5F9` on `$BC & $08`,
+i.e. a fade/flash cycle. That is what a submerge looks like, and it is per-vehicle.
+
+**The animation flag.** `$602F` bit 6 is "transition in progress": raised by
+`$85C5`, `$82BA`, `$847A` and bank 58 `$9ADD`, and consumed in the world render at
+`$D8F4`, which advances a counter (`$19 += 4`), toggles the bit back off on carry,
+and picks a frame with `$F0 >> 3 & 3`.
+
+**A dead gate.** `$602E` bits `$02`-`$20` are set by sequences 5-8 (`$8537`,
+`$854D`, `$8563`, `$8579`, `$85AF`), but **nothing sets `$602E` bit 0** — the exact
+bit the transform handler `$C5DE` requires. Same dead-gate shape as mode 6 and
+flag 6, and it explains why pressing A aboard a craft never transformed in §31.
+
+### What failed
+
+Capturing sequences 2, 3, 4, 10, 11, 12 and 13 with script 162's exit-to-world
+prelude produced **identical output for every one**: one OAM state, mode 0, and the
+same boot-noise SFX list. They did not run. The prelude that works for sequence 9
+does not reach them, so the §25 census entry "these animate but grant nothing" is
+based on the earlier in-cave runs and their identity is still unestablished.
+
+⛔ **The submerge and surface animations are NOT captured.** The machinery is
+located — grant script, inline choreography, a mode-indexed 128-step blink loop and
+the `$602F` bit-6 flag that drives it — but nothing has been made to play.
+
+### The one blocker, stated plainly
+
+Every uncaptured item now shares a single cause: **a script or sequence that needs
+its own map, actors and story state, which the Altar-Cave boot cannot supply.**
+That covers the Time Wheel remodel (§29), the submerge/surface here, and the seven
+unnamed vehicles (§21). It is one problem, and the fix is one thing — a coherent
+save at the relevant story point, or the NPC->script path decoded so those scripts
+can be reached where they live.

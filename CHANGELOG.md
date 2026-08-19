@@ -1,3 +1,38 @@
+## 1.9.41 — 2026-08-19
+
+### Nautilus submerge/surface: machinery located, animation NOT captured
+
+**Grant:** script 86 is Doga's Aquario scene (msgs `0xe6`/`0xe7`, *"The Nautilus
+can now travel underwater"*). It sets **flag 7** and carries its animation INLINE —
+a run of `$d1` opcodes with a decreasing `$fc` ramp (`$fc.40 $fc.30 $fc.20 $fc.10
+$fc.8`), a speed ramp, not a sequence. Same mechanism as script 180.
+
+**A mode-indexed animation loop:** bank 59 `$85BE` — `STA $BC`, raise `$602F`
+bit 6, then a 128-step loop with **`LDY $42`** (indexed by the VEHICLE MODE).
+`$85E3` blinks the craft, rewriting 16 OAM bytes from `$A5F9` on `$BC & $08`.
+
+**The flag:** `$602F` bit 6 = transition in progress — raised at `$85C5`, `$82BA`,
+`$847A`, bank 58 `$9ADD`; consumed in the world render at `$D8F4`, which advances
+`$19 += 4`, toggles the bit off on carry, and picks a frame via `$F0 >> 3 & 3`.
+
+**A dead gate:** `$602E` bits `$02`-`$20` are set by sequences 5-8, but **nothing
+sets `$602E` bit 0** — the bit the transform handler `$C5DE` requires. Same shape
+as mode 6 and flag 6, and it explains why pressing A aboard a craft never
+transformed in v1.9.39.
+
+⛔ **Not captured.** Capturing sequences 2/3/4/10/11/12/13 with script 162's
+exit-to-world prelude gave IDENTICAL output for every one — one OAM state, mode 0,
+the same boot-noise SFX. They do not run from that prelude, so their identity is
+still unestablished and the v1.9.33 census entry for them rests on the earlier
+in-cave runs.
+
+⭐ Every uncaptured item now shares ONE cause: a script/sequence that needs its own
+map, actors and story state, which the Altar-Cave boot cannot supply — the Time
+Wheel remodel, the submerge/surface, and the seven unnamed vehicles. One problem,
+one fix: a coherent save at the story point, or the NPC->script path decoded.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.40 — 2026-08-19
 
 ### vehicle-test.cjs; the $A047 SFX table CONFIRMED; v1.9.39's retraction withdrawn
