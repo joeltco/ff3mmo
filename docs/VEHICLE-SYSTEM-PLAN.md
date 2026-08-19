@@ -1588,3 +1588,48 @@ That covers the Time Wheel remodel (§29), the submerge/surface here, and the se
 unnamed vehicles (§21). It is one problem, and the fix is one thing — a coherent
 save at the relevant story point, or the NPC->script path decoded so those scripts
 can be reached where they live.
+
+## 34. NPC -> script path — NOT decoded. What is known, and what blocked it.
+
+### Established
+
+- A map's event data block is **condition records followed by a 32-byte NPC
+  table**. Bank 60 `$92F3` walks past the records looking for the `$FF` terminator,
+  then `$930D`-`$9317` copies 32 bytes into **`$0740`**.
+- **`$6C` is the condition evaluator's RESULT — the script index.** `$931B` stores
+  it (`$9325`), so hooking `$6C` reports exactly which script any trigger selects.
+- Opcode `$F0` reads `$0740,X` as a MESSAGE id (`$B6BF`), so `$0740` holds
+  per-NPC dialogue ids, not script indices. The script must be selected elsewhere.
+
+### Both routes failed
+
+**Static.** The only real writer into the `$7B00` condition buffer is bank 60
+`$974C`, and that is inside `$9737` — a *save/restore wrapper* that copies `$7B00`
+to `$7BC0`, calls `$A875`, and copies back. Following it means resolving which bank
+sits in the `$A000` window at that moment, and the trace spirals. (Two other
+apparent writers, bank 48 `$8917` and the `$7B00` hits in data banks, are byte
+coincidences, not code.)
+
+**Empirical.** Booting the harness into Kazus (`opts.map` added to
+`world-harness.cjs`) puts the party on the map's tiles but **loads no NPCs**: 4
+visible sprites (the party alone), `$0740` reads `$01 $00 $00...`, and no `$6C`
+write ever occurs. The map-props copy forces tileset, tilemap and graphics subset —
+it does not populate the cast. With no NPC present there is nothing to talk to and
+the path cannot be observed.
+
+⛔ **So the NPC -> script path is NOT decoded.** `$6C` is the right probe and
+`world-harness.cjs` can now force any map; what is missing is a boot that loads a
+town's NPCs.
+
+### Why this matters more than it looks
+
+This path is the single shared blocker (§33): the Time Wheel remodel, the Nautilus
+submerge/surface, and the naming of `$600B` 1-8 all sit behind scripts reached by
+talking to someone. Every instrument needed downstream already exists — the string
+hook reports ids, `$6C` reports script indices, `vehicle-test` proves vehicle state,
+`seqcap`/`launch-capture` record frames. They are all waiting on one thing: a game
+state with NPCs in it.
+
+The realistic fix is not more static tracing. It is **a real save** at the relevant
+points, or working out what the map loader does with property byte 4 (`npcIdx`)
+that the forced-props boot is skipping.

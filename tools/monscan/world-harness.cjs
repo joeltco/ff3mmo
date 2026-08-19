@@ -58,9 +58,12 @@ function buildWorldRom(outPath, opts = {}) {
   p[ENCOUNTER_STR] = 1; p[ENCOUNTER_STR + 1] = 0; p[ENCOUNTER_STR + 2] = 0; p[ENCOUNTER_STR + 3] = 0;
   for (let e = 0; e < 256; e++) { p[ENCOUNTER_SET + e * 2] = list; p[ENCOUNTER_SET + e * 2 + 1] &= 0xC0; }
   // 2) map 115 everywhere, spawning one tile above its exit
+  // opts.map forces a DIFFERENT map everywhere (default: Altar Cave). Booting into
+  // a town is how NPCs become reachable — Altar Cave has none to talk to.
+  const MAP = opts.map !== undefined ? opts.map : ALTAR_MAP;
   const sx = opts.spawnX !== undefined ? opts.spawnX : EXIT_X;
   const sy = opts.spawnY !== undefined ? opts.spawnY : EXIT_Y - 1;
-  const props = Buffer.from(p.slice(MAP_PROPS_BASE + ALTAR_MAP * 16, MAP_PROPS_BASE + ALTAR_MAP * 16 + 16));
+  const props = Buffer.from(p.slice(MAP_PROPS_BASE + MAP * 16, MAP_PROPS_BASE + MAP * 16 + 16));
   props[0] = (props[0] & 0xE0) | (sx & 0x1F);      // top 3 bits are the TILESET — never clobber
   props[1] = (props[1] & 0xE0) | (sy & 0x1F);
   // 3) optional: land at an arbitrary world coordinate on exit
@@ -109,7 +112,7 @@ function buildWorldRom(outPath, opts = {}) {
     for (let i = 0; i < 8; i++) if (opts.maskTable[i] !== undefined) p[o + i] = opts.maskTable[i] & 0xFF;
   }
 
-  const tid = p[TILEMAP_ID_BASE + ALTAR_MAP], gid = p[GFX_SUBSET_ID_BASE + ALTAR_MAP];
+  const tid = p[TILEMAP_ID_BASE + MAP], gid = p[GFX_SUBSET_ID_BASE + MAP];
   for (let m = 0; m < 512; m++) {
     props.copy(p, MAP_PROPS_BASE + m * 16);
     p[TILEMAP_ID_BASE + m] = tid; p[GFX_SUBSET_ID_BASE + m] = gid;

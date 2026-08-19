@@ -1,3 +1,32 @@
+## 1.9.42 — 2026-08-19
+
+### NPC -> script path NOT decoded; `world-harness.cjs` gains `opts.map`
+
+**Established.** A map's event data block is condition records followed by a
+**32-byte NPC table**: bank 60 `$92F3` scans past the records to the `$FF`
+terminator, then `$930D`-`$9317` copies 32 bytes to **`$0740`**. **`$6C` is the
+condition evaluator's RESULT — the script index** (stored at `$9325`), so hooking
+`$6C` reports which script any trigger picks. Opcode `$F0` reads `$0740,X` as a
+MESSAGE id, so `$0740` holds per-NPC dialogue ids, not script indices.
+
+⛔ **Both routes failed.** Static: the only real `$7B00` writer is bank 60 `$974C`,
+inside `$9737` — a save/restore wrapper (copy `$7B00`->`$7BC0`, `JSR $A875`, copy
+back) whose target depends on the `$A000` window bank, and the trace spirals. The
+other apparent writers are byte coincidences in data banks. Empirical: booting into
+Kazus (new `opts.map`) puts the party on the map's tiles but **loads no NPCs** — 4
+visible sprites (party only), `$0740` = `$01 $00 $00...`, zero `$6C` writes. The
+props copy forces tileset/tilemap/graphics subset; it does not populate the cast.
+
+⭐ This is the single shared blocker: the Time Wheel remodel, the Nautilus
+submerge/surface, and naming `$600B` 1-8 all sit behind scripts reached by talking
+to someone. Every downstream instrument already exists (string hook, `$6C` probe,
+vehicle-test, sequence capture) — all waiting on a state with NPCs in it.
+
+The realistic fix is a real save at those points, or working out what the map loader
+does with property byte 4 (`npcIdx`) that the forced-props boot skips.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.41 — 2026-08-19
 
 ### Nautilus submerge/surface: machinery located, animation NOT captured
