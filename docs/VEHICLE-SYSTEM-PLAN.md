@@ -909,3 +909,61 @@ rise out of the sand — the animation is intact and plays correctly when invoke
 Map `$600B` 1-8 to names via each grant script's dialogue. That needs the `$F1`
 message-id banking resolved (`$B6CE`: `$95` = `$84` or `$86` depending on `$78`),
 which is not yet done. **Do not name vehicles from cutscenes again.**
+
+## 20. The eight vehicles — one named, seven not
+
+### The grant table (all verified)
+
+Every `$EE` in the game, each script confirmed to carry exactly one:
+
+| `$600B` | script | `$F1` message operands | sets flag | referencing maps |
+|---|---|---|---|---|
+| 1 | 120 | 2 | 67 | (none found) |
+| **2** | **51** | **15 (`0x00F`)** | **19** | **10/t0 — KAZUS** + 7 others |
+| 3 | 124 | 166,167,168 | 1,2,3 | (none found) |
+| 4 | 136 | — | — | (none found) |
+| 5 | 150 | 237,238,239 | 51 | (none found) |
+| 6 | 83 | 50-54 | 52 | 69,90,91,149,166,167,173,256 |
+| 7 | 84 | 55-58,226 | 72 | 69,90,91,149,166,167,256,313 |
+| 8 | 161 | — | 57 | (none found) |
+
+### `$600B` = 2 is CID'S AIRSHIP — solid
+
+Triangulated three ways:
+
+1. **Map**: script 51 is reached from **map 10 = Kazus**, trigId 0, on conditions
+   `SET 18, CLR 19`, and the script sets flag 19 so it fires once.
+2. **Dialogue**: its `$f1.f` is message `0x00F` — *"Cid: Yeah. I knew you could do
+   it. **You'll make great use of my airship.** But first, Mrs. Cid's been waiting
+   for me in Canaan. Take me back."*
+3. **Joel's own account**: "an event that happens... after talking to Cid in Kazus."
+
+The script in full: `... $f1.f  $ee.2  $cc $f8.2c $fc.c0 $f8.7e  $f2.13  $f5.1f $ff`
+— message, **grant**, music, set-flag-19, end. ⭐ **No sequence opcode**, which is
+the point: the grant plays dialogue and music, never an animation. The orphaned
+block at `$A568` (§19) is the launch cutscene that is missing from it.
+
+### The other seven are NOT named — and here is exactly why
+
+`$F1` takes a ONE-BYTE operand; the message id is completed by a bank in `$95`,
+which `$B6CE` sets to **`$84` when `$78` == 0 and `$86` otherwise**. `$78` is the
+world (from save byte `$6008`), so the same operand decodes to two different
+strings depending on where the script runs, and **both readings are usually
+internally coherent**:
+
+| script | as bank `$84` | as bank `$86` |
+|---|---|---|
+| 51 | `0x00F` Cid's airship ✅ | `0x20F` "Kazus is a town south of here" |
+| 83 | `0x32-36` Saronia thugs / Prince Alus | `0x232-36` Cid, Nelv rock, **mythril ram on the airship** |
+| 84 | `0x37-3a` Doga's manor | `0x237-3a` Takka, the Djinn's curse, **a magical folding canoe** |
+| 150 | `0x0ed-ef` Aria, Temple of Water | `0x2ed-ef` "Status restored / Revived" |
+
+For script 51 the `$84` reading is clearly right. For 83 and 84 **both** readings
+are coherent scenes, so coherence cannot arbitrate — and the `$86` readings are
+the ones that mention an airship and a canoe, which is exactly the kind of
+suggestive-but-circular evidence that produced the naming error retracted in §19.
+
+⛔ **Not guessed at.** Resolving this needs `$78` determined per calling context,
+which means finishing the `$76`/`$92` -> `$EC8B` message path. Until then the
+roster is: **`$600B` 2 = Cid's airship**, and seven vehicles with known grant
+scripts, flags and dialogue operands but no confirmed names.

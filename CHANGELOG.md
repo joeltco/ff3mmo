@@ -1,3 +1,39 @@
+## 1.9.28 — 2026-08-18
+
+### The eight `$600B` vehicles tabulated; one named solidly, seven left unnamed
+
+Every `$EE` grant verified (each script carries exactly one):
+
+| `$600B` | script | `$F1` operands | flag | referencing maps |
+|---|---|---|---|---|
+| 1 | 120 | 2 | 67 | none found |
+| **2** | **51** | **15 (`0x00F`)** | **19** | **10/t0 KAZUS** +7 |
+| 3 | 124 | 166,167,168 | 1,2,3 | none found |
+| 4 | 136 | — | — | none found |
+| 5 | 150 | 237,238,239 | 51 | none found |
+| 6 | 83 | 50-54 | 52 | 69,90,91,149,166,167,173,256 |
+| 7 | 84 | 55-58,226 | 72 | 69,90,91,149,166,167,256,313 |
+| 8 | 161 | — | 57 | none found |
+
+⭐ **`$600B` = 2 is CID'S AIRSHIP**, triangulated three ways: script 51 is reached
+from **map 10 = Kazus** trigId 0 (`SET 18, CLR 19`, and it sets flag 19 so it
+fires once); its `$f1.f` is message `0x00F` — *"Cid: ...You'll make great use of my
+airship."*; and it matches Joel's account of the event. The script is
+`$f1.f $ee.2 ... $f2.13 $ff` — message, grant, set-flag, end, with **no sequence
+opcode**. The grant never plays an animation; the orphaned block at `$A568`
+(v1.9.27) is the launch cutscene missing from it.
+
+⛔ **The other seven are NOT named.** `$F1` takes a one-byte operand completed by a
+bank in `$95`, which `$B6CE` sets to `$84` when `$78` == 0 and `$86` otherwise, so
+each operand decodes two ways — and **both are usually coherent scenes**. Script 83
+reads as Saronia thugs under `$84` and as Cid's mythril-ram airship under `$86`;
+script 84 as Doga's manor or as the Djinn/folding-canoe scene. The `$86` readings
+are the suggestive ones, which is precisely the circular evidence that produced the
+naming error retracted in v1.9.27. Resolving it needs `$78` per calling context,
+i.e. finishing the `$76`/`$92` -> `$EC8B` message path.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.27 — 2026-08-18
 
 ### CORRECTION: vehicle identity is `$600B`, not the movement mode
