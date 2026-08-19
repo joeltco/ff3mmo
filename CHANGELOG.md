@@ -1,3 +1,31 @@
+## 1.9.30 — 2026-08-18
+
+### The message box writes to nametable `$2000` — and that was never the blocker
+
+Hooking `ppu.vramWrite` and bucketing every VRAM write: **`$2000` 7551 writes,
+`$2400` 1532**. The message box uses `$2000` — exactly where the v1.9.29 screen
+reader was already looking. Text extraction works too; the hook recovered
+"Guard", "Item", "Goblin", "xHit", "Enemy defeated", "received", "Cap" by decoding
+written values through the ROM's own glyph table.
+
+⛔ **This corrects v1.9.29's diagnosis.** I said the dialogue box "does not appear
+in nametable 0". It does. The real problem is that **no dialogue renders at all**
+in the harness run — every captured string is battle text, and the opening
+script's own messages (6, 7, 8) never appear either, even with the tail patched to
+`fc 40 f1 <op> ff` (mirroring script 51's own `$fc.40 $f1.f`, so box setup is not
+the missing piece). The party cycles through encounters and never reaches the
+field dialogue state, though the tail itself demonstrably executes — the sequence
+captures in v1.9.25/26 fired from that same patch point.
+
+Next, and it sidesteps display entirely: **hook the string-pointer read**. The
+pointer table is file `0x30010` = bank 24, CPU `$8000`, so id N's pointer sits at
+`$8000 + N*2` — hook `cpu.load`, confirm bank 24 is mapped by comparing against
+ROM, and recover the id directly with no banking math and no rendering.
+
+⛔ Still unnamed: `$600B` 1, 3, 4, 5, 6, 7, 8.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.29 — 2026-08-18
 
 ### Message banking: rule confirmed, context NOT resolved — naming still open

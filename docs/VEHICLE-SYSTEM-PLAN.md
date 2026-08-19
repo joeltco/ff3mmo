@@ -1004,11 +1004,8 @@ each one runs**. Two attempts failed:
 - ⛔ **Static tracing of `$92`/`$95` does not converge.** Both are general-purpose
   zero-page temporaries reused across many banks — `$95` alone has 60+ readers,
   most of them unrelated. There is no single message-fetch site to disassemble.
-- ⛔ **Reading the rendered text off the screen did not work.** FF3's nametable
-  tile index is the char code, and the reader is sound — it correctly decoded a
-  battle menu ("Guard / Run / Item") — but the dialogue box does not appear in
-  nametable 0 where it reads. It renders elsewhere (likely `$2400`, or is written
-  per-scanline), so the message never showed up in the capture.
+- ⛔ **Reading the rendered text off the screen did not work** — but §22 shows the
+  reason I gave here was WRONG. The nametable was never the problem.
 
 ### The next thing to try
 
@@ -1020,3 +1017,43 @@ That calibrates the rule per context without needing to reach the real events.
 ⛔ **Until then the other seven vehicles stay unnamed.** The `$86` readings for
 scripts 83 and 84 mention an airship and a canoe and are tempting; picking them
 because they mention vehicles is the same circular reasoning retracted in §19.
+
+## 22. Which nametable? `$2000` — and that was never the blocker
+
+Hooking `ppu.vramWrite` and bucketing every VRAM write while the patched script
+tail runs:
+
+    $2000 : 7551 writes
+    $2400 : 1532 writes
+
+**The message box writes to nametable `$2000`** — which is exactly where the §21
+screen reader was already looking. Text extraction works too: the hook recovered
+`"Guard"`, `"Item"`, `"Goblin"`, `"xHit"`, `"Enemy defeated"`, `"received"`,
+`"Cap"` by decoding written values through the ROM's own glyph table.
+
+⛔ **So §21's diagnosis was wrong.** I said the dialogue box "does not appear in
+nametable 0". It does. The real problem is that **no dialogue renders at all** in
+this harness run — every captured string is battle text. The opening script's own
+messages (6, 7, 8) never appear either, with the tail patched to
+`fc 40 f1 <op> ff` (mirroring script 51's own `$fc.40 $f1.f` shape, so the box
+setup is not the missing piece).
+
+The party is cycling through encounters and the field dialogue state is never
+reached, even though the tail itself demonstrably executes — §16-§18 triggered
+sequences from that exact patch point and they ran.
+
+### What that means for the naming
+
+The blocker is **not** decoding and **not** the nametable. It is that the harness
+never puts the game in a state where a message displays. Options, in order of
+promise:
+
+1. **Hook the string-pointer read instead of the screen.** The pointer table is at
+   file `0x30010` = bank 24, CPU `$8000`, so string id N's pointer is at
+   `$8000 + N*2`. Hook `cpu.load`, confirm bank 24 is mapped by comparing memory
+   against ROM, and recover **the id directly** — no banking math, no rendering
+   required. This sidesteps the display problem entirely.
+2. Reach a real field state (suppress encounters outright rather than making them
+   1-HP) so dialogue can actually run.
+
+⛔ Still unnamed: `$600B` 1, 3, 4, 5, 6, 7, 8.
