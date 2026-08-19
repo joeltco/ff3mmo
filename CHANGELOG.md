@@ -1,3 +1,37 @@
+## 1.9.38 — 2026-08-19
+
+### Vehicle SFX: six exist, NONE captured; and the music table is 4 rows, not 5
+
+⛔ **Correcting v1.9.20's music table.** `$A027` and `$A047` are indexed by the
+SAME X, so the music table cannot exceed 32 bytes without overlapping the SFX
+table. It is **4 rows of 8** (`$A027`-`$A046`); `$A047` starts the SFX table. The
+row previously printed as music "`$78`=4" — `$ff $ff $ff $04 $26 $25 $27 $28` — is
+**SFX row 0**.
+
+| table | mode 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| music `$A027` | `$1e` | `$08` | `$1e` | `$22` | `$0a` | `$0a` | `$0a` | `$23` |
+| SFX `$A047` | `$ff` | `$ff` | `$ff` | `$04` | `$26` | `$25` | `$27` | `$28` |
+
+(SFX row 3 carries `$2b` in the mode-6 slot.) `$ff` = silent, so foot and canoe
+make no transition sound; every powered craft has its own cue. They fire from
+`$C93A` -> bank 59 `$A006`, which writes music to `$7F43` and `$A047,X | $80` to
+`$7F49`, and `$C93A` runs on every vehicle state change — boarding (`$C64A`),
+disembarking (`$C5D4`), shallow-water transform (`$C5F3`).
+
+⛔ **Coverage is zero of six.** Checking every `wrote:` value in
+`world-sfx-captured.js` and `spell-sfx-captured.js` against the writes these
+produce (`$80 | id` = `$84`, `$a5`, `$a6`, `$a7`, `$a8`, `$ab`): none are present.
+Not a failure of the earlier sound sweeps — they predate any vehicle work and had
+no vehicle to board — but a genuine new gap.
+
+Capturing them needs no story state: `$C93A` fires on boarding, `world-harness.cjs`
+already boots aboard any craft, and `onBatteryRamWrite` on `$7F49` is the same hook
+`world-sfx-sweep.cjs` uses. The `$ff` entries predict SILENCE for modes 0-2 — a
+falsifiable check worth running alongside.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.37 — 2026-08-19
 
 ### The transformation animation FOUND: script 180, the Time Wheel remodel

@@ -1376,3 +1376,55 @@ capture needs either:
 
 ⛔ Not captured yet. But it exists, it is located, and the reason my harness stalls
 is understood.
+
+## 30. Vehicle SFX — six exist, NONE captured. Plus a music-table correction.
+
+### Correction to §12: the music table is FOUR rows, not five
+
+`$A027` and `$A047` are read with the SAME index X, so the music table cannot be
+more than 32 bytes or the two would overlap. It is **4 rows of 8**
+(`$A027`-`$A046`), and `$A047` begins the SFX table. The row §12 printed as
+"`$78`=4" — `$ff $ff $ff $04 $26 $25 $27 $28` — is **SFX row 0, not music**.
+
+Read correctly:
+
+| table | mode 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| music `$A027` | `$1e` | `$08` | `$1e` | `$22` | `$0a` | `$0a` | `$0a` | `$23` |
+| **SFX `$A047`** | `$ff` | `$ff` | `$ff` | `$04` | `$26` | `$25` | `$27` | `$28` |
+
+(row 3 of the SFX table has `$2b` in the mode-6 slot instead of `$27`.)
+
+`$ff` = silent, so boarding on foot / canoe makes no sound; every powered craft has
+its own transition cue. These fire from `$C93A`, which maps bank 59 and jumps to
+`$A006` — the routine writes the music to `$7F43` **and** `$A047,X | $80` to
+`$7F49`. `$C93A` is called on every vehicle state change: boarding (`$C64A`),
+disembarking (`$C5D4`) and the shallow-water transform (`$C5F3`).
+
+### Coverage: zero of six
+
+Checking every `wrote:` value in `src/data/world-sfx-captured.js` and
+`spell-sfx-captured.js` against the writes these produce (`$80 | id`):
+
+| sfx id | writes | captured |
+|---|---|---|
+| `$04` | `$84` | ⛔ |
+| `$25` | `$a5` | ⛔ |
+| `$26` | `$a6` | ⛔ |
+| `$27` | `$a7` | ⛔ |
+| `$28` | `$a8` | ⛔ |
+| `$2b` | `$ab` | ⛔ |
+
+**None of the six vehicle transition SFX are captured.** That is not a failure of
+the earlier sound work — the world/battle/spell sweeps predate any vehicle
+investigation and never had a vehicle to board. It is a genuine, newly-identified
+gap.
+
+### Capturing them is straightforward
+
+Unlike the transformation animation, these need no story state. `$C93A` fires on
+boarding, and `world-harness.cjs` can already boot aboard any vehicle on the
+appropriate terrain (§10). Hook `onBatteryRamWrite` for `$7F49` — the mechanism
+`world-sfx-sweep.cjs` already uses — board each craft, and record the write. The
+`$ff` entries predict SILENCE for modes 0-2, which is a falsifiable check worth
+running alongside.
