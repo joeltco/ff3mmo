@@ -1,3 +1,38 @@
+## 1.9.29 — 2026-08-18
+
+### Message banking: rule confirmed, context NOT resolved — naming still open
+
+The rule is read directly from `$B6C6`-`$B6CE` and is not in doubt: `$95` = `$84`
+when `$78` == 0, else `$86`.
+
+⭐ **`$78` is the WORLD index, not a constant.** Restored at boot from save byte
+`$6008` (`$C0DE`), and changed by story events — bank 59 `$95F9` does
+`LDA #$3 / STA $78`. The vehicle music table is indexed by it over rows 0..5.
+**So a script's messages decode differently depending on WHEN in the story it
+runs** — the id is not a property of the script alone. That is exactly why both
+readings in v1.9.28 looked coherent.
+
+✅ One case pinned: running script 51's operand through the real ROM measured
+**`$78` = 0**, selecting bank `$84` -> `0x00F` -> *"Cid: ...You'll make great use
+of my airship."* `$600B` = 2 = **Cid's airship** now rests on the rule as well as
+on map and dialogue.
+
+⛔ **The other seven are still unnamed. Two approaches failed:**
+
+- Static tracing of `$92`/`$95` does not converge — both are general-purpose
+  zero-page temporaries with 60+ readers across unrelated banks.
+- Reading the rendered text off the screen did not work. The reader is sound (it
+  correctly decoded a battle menu, "Guard / Run / Item"), but the dialogue box is
+  not in nametable 0 where it reads — it renders elsewhere, so no message was
+  captured.
+
+Next: find which nametable the message box writes to, then patch the opening tail
+to `F1 <operand> FF`, render, read back, and compare against `decodeString(op)`
+versus `decodeString(0x200+op)`. That calibrates per context without reaching the
+real events.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.28 — 2026-08-18
 
 ### The eight `$600B` vehicles tabulated; one named solidly, seven left unnamed

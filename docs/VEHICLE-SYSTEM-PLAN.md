@@ -967,3 +967,56 @@ suggestive-but-circular evidence that produced the naming error retracted in §1
 which means finishing the `$76`/`$92` -> `$EC8B` message path. Until then the
 roster is: **`$600B` 2 = Cid's airship**, and seven vehicles with known grant
 scripts, flags and dialogue operands but no confirmed names.
+
+## 21. Message banking — the rule is confirmed, the CONTEXT is not. Naming still open.
+
+### What is now certain
+
+The banking rule is read directly from `$B6C6`-`$B6CE` and is not in doubt:
+
+    B6C6  LDA #$84
+    B6C8  LDX $78
+    B6CA  BEQ $B6CE
+    B6CC  LDA #$86
+    B6CE  STA $95        ; $95 = $84 when $78 == 0, else $86
+
+And **`$78` is the WORLD index, not a constant**. It is restored at boot from save
+byte `$6008` (`$C0DE`), and story events change it — bank 59 `$95F9` does
+`LDA #$3 / STA $78`. The vehicle music table (§12) is indexed by it over rows
+0..5, so it spans at least six values.
+
+**Consequence: a script's messages decode differently depending on WHEN in the
+story it runs.** The id is not a property of the script alone. That is the whole
+difficulty, and it is why the two readings in §20 were both coherent.
+
+### One case pinned empirically
+
+Running script 51's message operand through the real ROM, **`$78` measured 0**,
+which selects bank `$84` -> id `0x00F` -> *"Cid: ...You'll make great use of my
+airship."* So `$600B` = 2 = Cid's airship is confirmed by the rule as well as by
+map and dialogue. That case is closed.
+
+### What blocked the rest
+
+To decode scripts 83, 84, 120, 124, 136, 150 and 161 I need `$78` **at the moment
+each one runs**. Two attempts failed:
+
+- ⛔ **Static tracing of `$92`/`$95` does not converge.** Both are general-purpose
+  zero-page temporaries reused across many banks — `$95` alone has 60+ readers,
+  most of them unrelated. There is no single message-fetch site to disassemble.
+- ⛔ **Reading the rendered text off the screen did not work.** FF3's nametable
+  tile index is the char code, and the reader is sound — it correctly decoded a
+  battle menu ("Guard / Run / Item") — but the dialogue box does not appear in
+  nametable 0 where it reads. It renders elsewhere (likely `$2400`, or is written
+  per-scanline), so the message never showed up in the capture.
+
+### The next thing to try
+
+Find which nametable the message box actually writes to, then re-run the §21
+capture: patch the opening tail to `F1 <operand> FF`, render, read the text back,
+and compare against `decodeString(rom, op)` versus `decodeString(rom, 0x200+op)`.
+That calibrates the rule per context without needing to reach the real events.
+
+⛔ **Until then the other seven vehicles stay unnamed.** The `$86` readings for
+scripts 83 and 84 mention an airship and a canoe and are tempting; picking them
+because they mention vehicles is the same circular reasoning retracted in §19.
