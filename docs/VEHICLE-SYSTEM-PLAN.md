@@ -1324,3 +1324,55 @@ is very likely the gating for the transform, and is where I would look next.
 ⚠ §27's other claim — that no instruction stores the immediate 4 to `$42`/`$46` —
 is a separate measurement and still stands on its own. But it should not be read as
 evidence about the transformation, given the reasoning error above.
+
+## 29. The transformation animation FOUND — script 180, the Time Wheel remodel
+
+Joel: *"it's when Cid remodels the Enterprise with the Time Wheel."* That located it.
+
+### It is script 180
+
+Messages `0x08b` and `0x08c` are the remodel, and exactly one script shows them:
+
+    $e7.9c  $f1.8b  $59 $68 $60 $62 $62 $61 $62 $fe.3 $fc.10 $69 $fc.80
+    $f8.32  $fc.80 $f8.7e  $68 $63 $fe.3 $61 $63 $63 $60 $fc.10 $69 $58
+    $f1.8c  $f8.17 $fc.c0 $f8.7e  $f2.4  $ff
+
+- `$e7.9c` — **consume item `$9C`, the Time Wheel** (`$E7` -> `$B673`, which
+  decrements `$60E0,X` and clears `$60C0,X`). Without it in the bag the script
+  aborts on its first opcode.
+- `$f1.8b` — *"Cid: The Time Wheel. I can remodel the Enterprise now."*
+- **the run of single-byte opcodes `$58`-`$69` interleaved with `$fe` waits IS the
+  animation** — scripted inline, frame by frame.
+- `$f1.8c` — *"Done. Press the A Button to turn the Enterprise into an airship."*
+- `$f2.4` — sets flag 4, the capability the A-press then checks.
+
+⭐ **This is the mechanism §28 said I had missed.** Opcodes below `$C0` do not go
+through the `$B617` jump table at all — bank 59 `$812B` sends them to **`$ACD1`**,
+a dispatcher I had never looked at. So FF3 has (at least) three animation
+mechanisms: `$EF` sequences, native counter loops, and inline low-opcode
+choreography. I had only ever examined the first.
+
+### Confirmed running, and where it stops
+
+Repointing slot 48 at script 180 and granting the Time Wheel, the string-pointer
+hook shows **operand 139 resolving to `0x08b`** — the script really executes. But
+**operand 140 never resolves**: it halts between the two messages, i.e. *inside the
+animation*.
+
+That is the expected failure. The `$58`-`$69` opcodes choreograph actors — Cid, the
+Enterprise — that exist on the remodel's own map and not in Altar Cave, so the
+animation blocks waiting for something that is not there. Same class of problem as
+the launch captures needing the world map loaded (§17).
+
+### What capturing it needs
+
+Script 180 is **not referenced by any map event tile** — it is reached by the NPC
+path (talking to Cid), the same unmapped route as scripts 162/163 (§20). So the
+capture needs either:
+
+1. the NPC -> script path decoded (how talking to an NPC selects a script), or
+2. script 180 run on its own map, with the actors present — reachable by patching a
+   condition record on that map once the map is identified.
+
+⛔ Not captured yet. But it exists, it is located, and the reason my harness stalls
+is understood.

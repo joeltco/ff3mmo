@@ -1,3 +1,39 @@
+## 1.9.37 — 2026-08-19
+
+### The transformation animation FOUND: script 180, the Time Wheel remodel
+
+Joel pointed at it — "when Cid remodels the Enterprise with the Time Wheel" —
+and messages `0x08b`/`0x08c` lead to exactly one script:
+
+    $e7.9c  $f1.8b  $59 $68 $60 $62 $62 $61 $62 $fe.3 $fc.10 $69 $fc.80
+    $f8.32  $fc.80 $f8.7e  $68 $63 $fe.3 $61 $63 $63 $60 $fc.10 $69 $58
+    $f1.8c  $f8.17 $fc.c0 $f8.7e  $f2.4  $ff
+
+`$e7.9c` consumes item `$9C`, the **Time Wheel** (`$E7` -> `$B673`, decrementing
+`$60E0,X`); without it the script aborts on its first opcode. Then message `0x08b`,
+**the run of single-byte opcodes `$58`-`$69` interleaved with `$fe` waits — which
+IS the animation, scripted inline** — then message `0x08c` and `$f2.4`, the flag
+the later A-press checks.
+
+⭐ **This is the mechanism v1.9.36 admitted to missing.** Opcodes below `$C0` never
+reach the `$B617` jump table: bank 59 `$812B` routes them to **`$ACD1`**, a
+dispatcher never examined. FF3 has at least three animation mechanisms — `$EF`
+sequences, native counter loops, and inline low-opcode choreography — and only the
+first had ever been looked at.
+
+Confirmed running: repointing slot 48 at script 180 and granting the Time Wheel,
+the string-pointer hook shows **operand 139 resolving to `0x08b`**, so it executes.
+**Operand 140 never resolves** — it halts between the messages, inside the
+animation, because the `$58`-`$69` opcodes choreograph Cid and the Enterprise,
+actors that exist on the remodel's map and not in Altar Cave. Same class of issue
+as the launch captures needing the world map.
+
+⛔ Not captured yet. Script 180 is reached by the NPC path (talking to Cid), the
+same unmapped route as scripts 162/163, so capture needs either that path decoded
+or the script run on its own map with the actors present.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.36 — 2026-08-19
 
 ### RETRACTION: "there is no ship->airship transformation animation" was bad reasoning
