@@ -1428,3 +1428,57 @@ appropriate terrain (§10). Hook `onBatteryRamWrite` for `$7F49` — the mechani
 `world-sfx-sweep.cjs` already uses — board each craft, and record the write. The
 `$ff` entries predict SILENCE for modes 0-2, which is a falsifiable check worth
 running alongside.
+
+## 31. Vehicle SFX capture — attempted, and it CONTRADICTS §30
+
+### What was run
+
+Booted aboard every vehicle 0-7 on open ocean with land one tile east, hooked
+`onBatteryRamWrite` for `$7F49` (the sound port) and `$7F43` (music), then: idled,
+sailed back and forth, and drove east until the auto-disembark fired.
+
+### Result
+
+| vehicle | `$42` | sounds observed | music writes |
+|---|---|---|---|
+| 0, 1 | 0 | none | 0 |
+| 2 | 2 | none | 0 |
+| **3, 4** | 3 -> 0 (disembarked) | **`$05` `$06` `$15` `$18`** | 1 (value `$20`) |
+| 5, 6, 7 | unchanged | none | 0 |
+
+⛔ **None of the six `$A047` values fired** — not `$04`, `$25`, `$26`, `$27`, `$28`
+or `$2b`, in any run.
+
+⛔ **And `$A006` never executed.** That routine writes music, `$7F42` and the SFX
+together. Vehicles 0-2 and 5-7 produced **zero** music writes, and the single write
+in the 3/4 runs was value `$20`, which matches neither `$A027` index 0 (`$1e`) nor
+index 3 (`$22`) — so it came from some other routine, not `$A006`.
+
+### What that means
+
+§30 stated the `$A047` table is the vehicle SFX table and fires from `$C93A` on
+every vehicle state change. **That is read from code but NOT verified, and this
+test points against it.** A disembark demonstrably occurred (vehicles 3/4 went
+`$42` 3 -> 0) and `$C5D4` should have called `$C93A` on that path, yet no `$A006`
+music write appeared. Either the disembark takes a different path than `$C5B5`, or
+`$C93A`'s `JSR $FF09` / `JMP $A006` does not land where I assumed.
+
+⚠ **So §30's SFX table description is downgraded to unverified.** The table bytes
+are real; that they are vehicle sounds fired by `$C93A` is not established.
+
+### What WAS captured
+
+Four sounds do fire while a mode-3 craft moves and disembarks: **`$05`, `$06`,
+`$15`, `$18`** (writes `$85`, `$86`, `$95`, `$98`). They are not in
+`world-sfx-captured.js` either. What they correspond to is not attributed — by the
+standard that file sets, hearing a value does not identify the event.
+
+⛔ **Not captured: propeller/sail loops.** Modes 2, 5, 6 and 7 produced NO sound at
+all across idle and movement, so either those craft are silent in motion or the
+harness never reaches the state where their loops run.
+
+### Next
+
+Confirm whether `$C93A` executes at all — hook the PC or breakpoint `$A006`
+directly — before trusting any of §30's table reading. That is one measurement and
+it decides whether the six values mean anything.

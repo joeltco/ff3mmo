@@ -1,3 +1,42 @@
+## 1.9.39 — 2026-08-19
+
+### Vehicle SFX capture attempted — result CONTRADICTS v1.9.38
+
+Booted aboard every vehicle 0-7 on open ocean with land one tile east, hooked
+`onBatteryRamWrite` on `$7F49` and `$7F43`, then idled, sailed, and drove east
+until the auto-disembark fired.
+
+| vehicle | `$42` | sounds | music writes |
+|---|---|---|---|
+| 0,1 | 0 | none | 0 |
+| 2 | 2 | none | 0 |
+| **3,4** | 3 -> 0 | **`$05` `$06` `$15` `$18`** | 1 (`$20`) |
+| 5,6,7 | unchanged | none | 0 |
+
+⛔ **None of the six `$A047` values fired**, and **`$A006` never executed** — it
+writes music, `$7F42` and SFX together, yet six of eight runs produced zero music
+writes and the one write (`$20`) matches neither `$A027` index 0 (`$1e`) nor index
+3 (`$22`).
+
+⚠ **v1.9.38's claim that `$A047` is the vehicle SFX table fired by `$C93A` is
+downgraded to UNVERIFIED.** The table bytes are real; that they are vehicle sounds
+is not established. A disembark demonstrably happened (3 -> 0) and `$C5D4` should
+have called `$C93A`, yet no `$A006` write appeared — so either that path differs or
+`$C93A`'s `JSR $FF09` / `JMP $A006` does not land where assumed.
+
+✅ Genuinely captured: four sounds fire while a mode-3 craft moves and disembarks —
+**`$05` `$06` `$15` `$18`** (writes `$85` `$86` `$95` `$98`), none of which are in
+`world-sfx-captured.js`. Not attributed to events: by that file's own standard,
+hearing a value does not identify what it is for.
+
+⛔ Not captured: propeller/sail loops. Modes 2, 5, 6, 7 produced NO sound across
+idle and movement.
+
+Next: confirm whether `$C93A` executes at all (hook the PC / breakpoint `$A006`)
+before trusting the table reading. One measurement decides it.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.38 — 2026-08-19
 
 ### Vehicle SFX: six exist, NONE captured; and the music table is 4 rows, not 5
