@@ -13,7 +13,7 @@ import { computeJobStats } from './data/players.js';
 import { hudSt } from './hud-state.js';
 import { getTrashCanvas } from './data/inventory-icons.js';
 import { transSt, topBoxSt } from './transitions.js';
-import { AREA_NAMES } from './data/strings.js';
+import { AREA_NAMES } from './data/areas.js';
 import { songForMap } from './data/map-songs.js';
 import { mapSt } from './map-state.js';
 import { loadMapById, loadWorldMapAtPosition } from './map-loading.js';

@@ -14,6 +14,7 @@ import { fakePlayerPortraits, fakePlayerKneelPortraits } from './fake-player-spr
 import { bsc } from './battle-sprite-cache.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { ui } from './ui-state.js';
+import { ROSTER_LOC } from './data/areas.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
 import { battleSt } from './battle-state.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
@@ -60,70 +61,21 @@ let rosterBattleFading    = 'none'; // 'none'|'out'|'in'
 let _getLocState = () => ({ onWorldMap: false, currentMapId: 114 });
 export function setLocationGetter(fn) { _getLocState = fn; }
 
-// Ur interior building map IDs → roster location key. Each room is its own
-// roster location so players group by the room they're standing in (inn,
-// tavern, well, each shop, each elder/secret-house floor) instead of all
-// being lumped under one unified 'ur'. Keys stay ≤16 chars — ws-presence.js
-// clamps the wire `loc` to 16 (and prefix 'ur-' future-proofs against other
-// towns' interiors, e.g. a later 'kazus-inn').
-const UR_ROOM_LOC = new Map([
-  [2,   'ur-secret'],   // secret house (ground floor)
-  [1,   'ur-secret2'],  // secret room (secret house, upstairs)
-  [3,   'ur-magic'],    // white-magic shop
-  [4,   'ur-armor'],    // armor shop
-  [5,   'ur-weapon'],   // weapon shop
-  [6,   'ur-elder1'],   // elder's house (ground floor)
-  [7,   'ur-elder2'],   // elder's house (upstairs)
-  [8,   'ur-inn'],      // inn (ground floor)
-  [9,   'ur-tavern'],   // tavern (inn, upstairs)
-  [147, 'ur-well'],     // well
-]);
-
-// Castle Sasune. Map 18 is the courtyard, 29 the throne room (both named by
-// the game itself on entry); the rest of the block is castle interiors. Listed
-// for the same reason Kazus is: `rosterLocForMapId` DEFAULTS to 'ur', which is
-// a real answer rather than an "unknown", so an unlisted map reports players as
-// standing in Ur.
-// Kazus. Map 10 is the town (the game prints its name on entry), the rest are
-// its interiors.
+// Ur / Kazus / Castle Sasune room lists moved to `data/areas.js`, which is the
+// same declaration the top-box name banner reads. They were three hand-kept
+// Maps in this UI module, and the banner had its own separate idea of which
+// maps belong to a town; one table cannot disagree with itself.
 //
-// ⛔ These were LOST once already: they shipped in v1.8.12, the revert of that
-// version took them out, and the rebuild restored the NPCs without them — the
-// same way all three Kazus shops went missing. `rosterLocForMapId` DEFAULTS to
-// 'ur', so nothing looked broken; players standing in Kazus simply reported as
-// being in Ur. `check-roster-locs.mjs` pins this now.
-const KAZUS_ROOM_LOC = new Map([
-  [12, 'kazus-inn'],
-  [15, 'kazus-magic'],
-  [16, 'kazus-weapon'],
-  [17, 'kazus-armor'],
-  [11, 'kazus-house'],
-  [13, 'kazus-house2'],
-  [14, 'kazus-house3'],
-]);
-
-const SASUNE_ROOM_LOC = new Map([
-  [29, 'sasune-throne'],
-  [19, 'sasune-a'], [20, 'sasune-b'], [21, 'sasune-c'],
-  [23, 'sasune-d'], [24, 'sasune-e'], [25, 'sasune-f'],
-  [26, 'sasune-g'], [27, 'sasune-h'], [28, 'sasune-i'],
-  [30, 'sasune-j'],
-]);
+// Room keys stay <= 16 chars — ws-presence.js clamps the wire `loc` to 16.
 
 // Single source for "what roster location is this map?". getPlayerLocation()
 // delegates here so the live location and the transition-change check
 // (map-triggers.js) can never drift apart.
 export function rosterLocForMapId(mapId) {
   if (mapId === 'world') return 'world';
-  if (mapId === 114) return 'ur';
   if (mapId === 1004) return 'crystal';
   if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
-  if (mapId === 10) return 'kazus';
-  if (mapId === 18) return 'sasune';
-  return UR_ROOM_LOC.get(mapId)
-      || KAZUS_ROOM_LOC.get(mapId)
-      || SASUNE_ROOM_LOC.get(mapId)
-      || 'ur';
+  return ROSTER_LOC.get(mapId) || 'ur';
 }
 
 export function getPlayerLocation() {

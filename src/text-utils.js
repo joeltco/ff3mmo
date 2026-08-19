@@ -1,31 +1,15 @@
 import { getItemNameShrines } from './text-decoder.js';
 import { drawText, measureText } from './font-renderer.js';
 import { nesColorFade } from './palette.js';
+// `_nameToBytes` is `data/strings.js#encodeName`, re-exported under the name
+// every call site already uses. The body used to live here, which put the only
+// string->font-byte encoder behind a module that imports the renderer, so data
+// modules could not reach it without pulling canvas code into node tooling.
+// Imported (not bare re-exported) because this module calls it itself, and a
+// bare `export ... from` creates no local binding — eslint caught that.
+import { encodeName as _nameToBytes } from './data/strings.js';
+export { _nameToBytes };
 
-// Convert JS string to NES-encoded Uint8Array — AWJ font atlas
-// (A-Z $8A-$A3, a-z $A4-$BD, 0-9 $80-$89, space→0xFF)
-export function _nameToBytes(name) {
-  const bytes = [];
-  for (let i = 0; i < name.length; i++) {
-    const ch = name.charCodeAt(i);
-    if (ch >= 65 && ch <= 90) bytes.push(0x8A + (ch - 65));       // A-Z
-    else if (ch >= 97 && ch <= 122) bytes.push(0xA4 + (ch - 97)); // a-z (AWJ)
-    else if (ch >= 48 && ch <= 57) bytes.push(0x80 + (ch - 48));  // 0-9
-    else if (ch === 44)  bytes.push(0xC0); // , (AWJ comma — bottom curl)
-    else if (ch === 39)  bytes.push(0xBF); // ' (AWJ apostrophe — top curl)
-    else if (ch === 46)  bytes.push(0xC1); // .
-    else if (ch === 45)  bytes.push(0xC2); // -
-    else if (ch === 33)  bytes.push(0xC4); // !
-    else if (ch === 63)  bytes.push(0xC5); // ?
-    else if (ch === 37)  bytes.push(0xC6); // %
-    else if (ch === 47)  bytes.push(0xC7); // /
-    else if (ch === 58)  bytes.push(0xC8); // :
-    else if (ch === 34)  bytes.push(0xC3); // " (best-fit slot in AWJ)
-    else if (ch === 43)  bytes.push(0xC2); // + → render as hyphen for now (AWJ '+' tile not yet identified)
-    else bytes.push(0xFF); // space (unknown chars)
-  }
-  return new Uint8Array(bytes);
-}
 
 // Convert NES-encoded bytes back to JS string (AWJ encoding)
 export function _nesNameToString(bytes) {

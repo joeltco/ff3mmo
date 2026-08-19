@@ -1,3 +1,77 @@
+## 1.10.3 — 2026-08-19
+
+### Fix: Kazus, Castle Sasune and the Sasune Throne Room get their name banners
+
+`setupTopBox` tested `mapId === 114` — a literal, single map. Every other place
+the game names therefore opened with a battle-scene strip in the top box instead
+of its name. Measured against the real ROM before changing anything: warping to
+each map (the `$0700` + `$AB` path `tools/monscan/map-bundles.cjs` uses) and
+reading the banner off the PPU gives **"Kazus"** (map 10), **"Castle Sasune"**
+(18), **"Sasune Throne Room"** (29) and **"Ur"** (114). The game prints all four;
+we printed one.
+
+Ur's own interiors were one step from the same bug. They kept the banner only
+because the else-branch is skipped while `topBoxSt.isTown` is still latched true
+from walking in through the town — so a save made inside a shop, loaded cold,
+opened with a battle strip there too.
+
+**New: `src/data/areas.js`** — one declaration of the named places and every map
+that belongs to one, replacing two hand-kept sets of the same map ids that had
+already drifted:
+
+- the banner (`map-loading.js#setupTopBox`), which knew about exactly one map;
+- the roster location key, which lived as three separate `Map`s inside
+  `roster.js`, a UI module. `rosterLocForMapId` now reads `ROSTER_LOC` from the
+  data module and keeps every existing key byte-for-byte.
+
+Derived from that one list: `AREA_NAMES` (head maps), `BANNER_FOR_MAP` (head maps
+**and** their interiors, so a room entered directly still paints its town's name),
+`TOWN_MAPS` (the head maps reachable from the overworld — what `ps.lastTown`, the
+respawn fallback, actually means), and `ROSTER_LOC`.
+
+The lookup is **per map, not latched per town**: map 29 names itself from inside
+Castle Sasune's interior, so walking 18 → 25 → 29 has to repaint the banner.
+
+`ps.lastTown` now keys off `TOWN_MAPS` rather than "any map with a name", so the
+throne room names itself without becoming a respawn point.
+
+### Fix: one string→font-byte encoder
+
+`_nameToBytes` lived in `text-utils.js`, which imports the renderer — a data
+module could not call it without dragging canvas code into node tooling. The body
+moved to `data/strings.js` (a leaf, no imports) as `encodeName`; `text-utils.js`
+imports and re-exports it under the old name, so every call site is unchanged and
+there is still exactly one copy of the mapping.
+
+### New gate: `check-area-banners`
+
+Runs in `deploy.sh` after `check-roster-locs`. It calls the **real `setupTopBox`**
+rather than asserting on the tables — the tables were never what was broken, the
+consumer was, and a table-only test passes with `mapId === 114` still in place.
+Proven by reverting, three ways:
+
+- restore `mapId === 114` → 30 maps report falling through to the battle strip;
+- typo a measured name (`Kazus` → `Kazuz`) → caught against the PPU reading;
+- delete a room from an area → caught, but **only after** adding an independent
+  cross-check. The first version derived both of its tables from `areas.js`, so
+  deleting Kazus's armor shop deleted it from both and they agreed about a map
+  that no longer existed. It now also asserts that every map carrying a shop or
+  an NPC cast belongs to a named area.
+
+It further checks that each banner fits the 240px the top box gives it
+(`_drawTopBoxOverlay` centres and does not clip; widest is "Sasune Throne Room"
+at 144px), and that a map with a banner also has a roster location.
+
+### Fix: `data/strings.js` survives a partial `document` stub
+
+Caught by the gate suite mid-deploy, not by review. Half the tools in `tools/`
+stub `document` with only the methods they need, and `strings.js` guarded its
+`#version-badge` read with `typeof document !== 'undefined'` alone. The moment
+`data/areas.js` started importing this leaf, `check-dialogue-fit.mjs` died on
+"document.getElementById is not a function". It now checks the method exists.
+
+No behaviour change outside the top box and the module moves.
+
 ## 1.10.2 — 2026-08-19
 
 ### Docs brought in line with the shipped vehicle system

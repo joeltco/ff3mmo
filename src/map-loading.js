@@ -12,7 +12,8 @@ import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
 import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
-import { AREA_NAMES, DUNGEON_NAME } from './data/strings.js';
+import { DUNGEON_NAME } from './data/strings.js';
+import { BANNER_FOR_MAP, TOWN_MAPS } from './data/areas.js';
 import { mapEntryMusic } from './map-music.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -242,7 +243,7 @@ function _loadRegularMap(mapId, returnX, returnY) {
   mapSt.currentMapId = mapId;
   expireResettableChests(mapId);   // Ur chests respawn 24h after looting
   _replayConsumedTiles(mapId, mapData);
-  if (AREA_NAMES.has(mapId)) ps.lastTown = mapId;
+  if (TOWN_MAPS.has(mapId)) ps.lastTown = mapId;
   // v1.7.950 — a closed passage nothing can open is just a wall.
   //
   // Tiles $5B/$5C are FF3's closed passage ($5B -> $5D doorframe, $5C -> $5E
@@ -346,10 +347,23 @@ export function setupTopBox(mapId, isWorldMap) {
     topBoxSt.fadeStep = 4;
     return;
   }
-  if (mapId === 114) {
+  // ⭐ Keyed per map, not `mapId === 114`, and NOT latched on `topBoxSt.isTown`.
+  //
+  // The old test named exactly one map, so Kazus and Castle Sasune — both of
+  // which the real ROM names on entry, measured off the PPU — opened with a
+  // battle-scene strip. Ur's shops only kept the banner because the else-branch
+  // below is skipped while `isTown` is still true from walking in; load a save
+  // made inside a shop and `isTown` starts false, so even Ur's rooms lost it.
+  //
+  // `BANNER_FOR_MAP` covers head maps AND their interiors, so the name is right
+  // however the map was reached. Per-map rather than per-town because map 29
+  // names ITSELF ("Sasune Throne Room") from inside Castle Sasune's interior —
+  // a latched banner could never repaint on the way in.
+  const banner = BANNER_FOR_MAP.get(mapId);
+  if (banner) {
     if (!topBoxSt.isTown) { topBoxSt.state = 'pending'; }
     topBoxSt.isTown = true;
-    topBoxSt.nameBytes = AREA_NAMES.get(114);
+    topBoxSt.nameBytes = banner;
     hudSt.topBoxMode = 'name';
   } else if (!topBoxSt.isTown) {
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;

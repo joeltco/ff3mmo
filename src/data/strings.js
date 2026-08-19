@@ -1,5 +1,33 @@
 // NES-encoded text byte arrays — FF3 ROM font encoding (0x80-based)
 
+// The ONE string -> font-byte encoder. It lives in this leaf module (no imports)
+// so data modules can call it without dragging the renderer in; `text-utils.js`
+// re-exports it as `_nameToBytes`, which is the name every call site uses.
+// A second copy of this mapping is how a table and its labels drift apart.
+//   A-Z $8A-$A3, a-z $A4-$BD, 0-9 $80-$89, space -> $FF
+export function encodeName(name) {
+  const bytes = [];
+  for (let i = 0; i < name.length; i++) {
+    const ch = name.charCodeAt(i);
+    if (ch >= 65 && ch <= 90) bytes.push(0x8A + (ch - 65));       // A-Z
+    else if (ch >= 97 && ch <= 122) bytes.push(0xA4 + (ch - 97)); // a-z (AWJ)
+    else if (ch >= 48 && ch <= 57) bytes.push(0x80 + (ch - 48));  // 0-9
+    else if (ch === 44)  bytes.push(0xC0); // , (AWJ comma — bottom curl)
+    else if (ch === 39)  bytes.push(0xBF); // ' (AWJ apostrophe — top curl)
+    else if (ch === 46)  bytes.push(0xC1); // .
+    else if (ch === 45)  bytes.push(0xC2); // -
+    else if (ch === 33)  bytes.push(0xC4); // !
+    else if (ch === 63)  bytes.push(0xC5); // ?
+    else if (ch === 37)  bytes.push(0xC6); // %
+    else if (ch === 47)  bytes.push(0xC7); // /
+    else if (ch === 58)  bytes.push(0xC8); // :
+    else if (ch === 34)  bytes.push(0xC3); // " (best-fit slot in AWJ)
+    else if (ch === 43)  bytes.push(0xC2); // + → render as hyphen for now (AWJ '+' tile not yet identified)
+    else bytes.push(0xFF); // space (unknown chars)
+  }
+  return new Uint8Array(bytes);
+}
+
 // Battle / combat strings
 export const BATTLE_MISS       = new Uint8Array([0x96,0xAC,0xB6,0xB6]); // "Miss"
 export const BATTLE_ROAR       = new Uint8Array([0x9B,0x98,0x98,0x98,0x98,0x98,0x8A,0x9B,0xC4,0xC4]); // "ROOOOOAR!!"
@@ -44,14 +72,20 @@ export const BATTLE_MENU_ITEMS = [BATTLE_FIGHT, BATTLE_GUARD, PAUSE_ITEMS[0], BA
 
 // Version — read from the server-substituted #version-badge so package.json is the
 // single source. Falls back to 'dev' if the badge isn't in the DOM (non-browser tooling).
-export const VERSION = (typeof document !== 'undefined'
+//
+// ⛔ `typeof document !== 'undefined'` IS NOT ENOUGH. Half the tools in tools/
+// stub `document` with just the two or three methods they need, and this module
+// is a leaf that data modules import — `check-dialogue-fit.mjs` went down with
+// "document.getElementById is not a function" the moment `data/areas.js` started
+// importing this file. A leaf everything depends on must survive a partial DOM.
+export const VERSION = (typeof document !== 'undefined' && typeof document.getElementById === 'function'
   ? (document.getElementById('version-badge')?.textContent || '').replace(/^v/, '')
   : '') || 'dev';
 
 // Area / world strings
-export const AREA_NAMES = new Map([
-  [114, new Uint8Array([0x9E,0xB5])],  // "Ur"
-]);
+// ⛔ AREA_NAMES used to live here as a one-entry Map holding only Ur. It moved to
+// `data/areas.js`, which derives it from the same declaration that feeds the
+// roster location keys — import it from there, and do not re-add a copy here.
 export const DUNGEON_NAME = new Uint8Array([0x8A,0xAF,0xB7,0xA4,0xB5,0xFF,0x8C,0xA4,0xB9,0xA8]); // "Altar Cave"
 
 // Misc UI

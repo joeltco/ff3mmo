@@ -38,7 +38,7 @@ async function table(mod, name) {
   if (m[name] == null) throw new Error(`${mod} has no export '${name}' — fix the tool, don't report 0`);
   return m[name];
 }
-const AREA_NAMES = await table('../src/data/strings.js', 'AREA_NAMES');
+const AREA_NAMES = await table('../src/data/areas.js', 'AREA_NAMES');
 const SHOPS      = await table('../src/data/shops.js', 'SHOPS');
 const TOWN_NPCS  = await table('../src/data/town-npcs.js', 'TOWN_NPCS');
 const LOOT_POOLS = await table('../src/data/loot-pools.js', 'LOOT_POOLS');
