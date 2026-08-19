@@ -1,3 +1,46 @@
+## 1.9.25 — 2026-08-18
+
+### The Invincible launch animation CAPTURED, in its real context
+
+v1.9.24 captured sequence 9's motion but garbage art. The fix was in script 162 —
+the game's own invocation — whose prelude is:
+
+    $f0.1 $d0 $fe.3 $c9 $cd  $f9.19  $f8.31 $fc.80  $ef.9 ...
+                            ^^^^^^^ EXIT TO WORLD, *then* the sequence
+
+`$F9` exits to the world map **before** `$EF 09`. FF3 is CHR-RAM, so running the
+sequence from the opening script executed it inside Altar Cave where the craft's
+tiles are not resident, and it rendered as text/UI tiles. Exiting first loads the
+right CHR.
+
+Neither script 162 nor 163 is referenced by any map event tile, so the trigger
+cannot be reached normally. The opening script's tail is overwritten with the same
+prelude instead: `f2 2c f2 00 ff` is exactly 5 bytes and so is `f9 19 ef 09 ff` —
+a straight swap, no reflow.
+
+Captured and verified:
+
+- **All 340 buffered frames report ON THE WORLD MAP**, checked against the live
+  world tile-property table at `$0400`, not assumed.
+- Trajectory **X `$97`->`$80`, Y `$82`->`$77`**, one step per four frames — a
+  diagonal approach, unlike sequence 0's straight rise.
+- The craft draws from **40 OAM sprites** (tiles `$b7-$bb`, `$e2-$fb`) and **two
+  tile sets alternate**, so the craft is itself animated.
+- **Zero overlap** with mode 7's in-flight sprite (`$c6-$cd`, `$d0-$d5`) — the
+  cutscene uses a dedicated, much larger sprite.
+
+`docs/sprites/ff3-invincible-launch.png` (NEW) is the sprite rebuilt from OAM +
+pattern table + sprite palettes on a flat ground — a real rip, no background, two
+animation frames. A three-masted golden vessel, matching "the Great Ship...
+Invincible" (`0x0de`). `tools/monscan/launch-capture.cjs` reproduces it.
+
+⚠ Still open: **sequence 0** (the vehicle-5 rise) remains uncaptured as art — no
+script invokes it, so there is no prelude to copy and possibly no correct context.
+Cid's-airship-out-of-the-sand and the Enterprise transformation are still not
+located as sequences.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.24 — 2026-08-18
 
 ### tools+docs: launch-animation mechanism decoded; motion captured, ART NOT captured

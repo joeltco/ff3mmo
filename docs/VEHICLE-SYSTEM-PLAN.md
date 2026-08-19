@@ -746,17 +746,56 @@ garbage (letters appear inside the "craft"). Motion right, art wrong.
 `tools/monscan/launch-capture.cjs` (NEW) does the capture:
 `SEQ=9 WANT=7 node tools/monscan/launch-capture.cjs sheet.png strip.png`.
 
-### The remaining work
-
-Capture must run the sequence **in the context that loads the vehicle's CHR** —
-i.e. from its real calling script rather than bolted onto the opening. For
-sequence 9 that means reaching script 162's trigger; the flag decode (§14) now
-makes that tractable, since its condition records can be read and the gating flags
-forced. `world-harness.cjs` cannot be used for this as-is: it copies map 115's
-props over all 512 maps including byte 15, the event-table index, so no real
-events fire (§14).
+### The remaining work — RESOLVED for sequence 9, see §17
 
 ⚠ Cid's-airship-out-of-the-sand and the Enterprise transformation are NOT among
 the vehicle-granting sequences found. Sequence 0 grants vehicle 5 and is dead;
 mode 4 (the Enterprise flying) is reached by transformation, not by a cutscene.
 Whether a sand-launch animation exists in this ROM at all is **unanswered**.
+
+## 17. Sequence 9 CAPTURED — the Invincible launch
+
+### The exit-to-world was the whole trick
+
+Script 162 is the game's own invocation, and its prelude is:
+
+    $f0.1 $d0 $fe.3 $c9 $cd  $f9.19  $f8.31 $fc.80  $ef.9 ...
+                            ^^^^^^^ EXIT TO WORLD, *then* the sequence
+
+`$F9` exits to the world map **before** `$EF 09` runs. That is the entire reason
+§16's capture produced garbage: FF3 is CHR-RAM, the opening script executes inside
+Altar Cave, and the craft's tiles are not resident there. Doing what script 162
+does — exit first — loads the right CHR.
+
+Neither script 162 nor 163 is referenced by any map event tile, so the trigger
+could not be reached the normal way. Instead the opening script's tail is
+overwritten with the same prelude: `f2 2c f2 00 ff` is exactly 5 bytes, and so is
+**`f9 19 ef 09 ff`** — a straight swap with no reflow.
+
+### What was captured
+
+- **All 340 buffered frames report ON THE WORLD MAP**, checked against the live
+  world tile-property table at `$0400` — not assumed.
+- Trajectory **X `$97`->`$80`, Y `$82`->`$77`**, one step per four frames: a
+  diagonal approach, not sequence 0's straight rise.
+- The craft draws from **40 OAM sprites**, tiles `$b7-$bb` and `$e2-$fb`, and
+  **two tile sets alternate between frames** — the craft is itself animated.
+- Those tiles have **zero overlap** with mode 7's in-flight sprite
+  (`$c6-$cd`, `$d0-$d5`): the cutscene uses a dedicated, much larger sprite.
+
+`docs/sprites/ff3-invincible-launch.png` is the sprite rebuilt from OAM + pattern
+table + sprite palettes on a flat ground — a real rip, no background, two
+animation frames. A three-masted golden vessel, matching "the Great Ship...
+Invincible" (`0x0de`).
+
+`tools/monscan/launch-capture.cjs` reproduces it end to end.
+
+### Still open
+
+- **Sequence 0** (the vehicle-5 rise) remains uncaptured as ART. Its context is
+  unknown because **no script invokes it** (§16), so there is no prelude to copy.
+  It is dead code, so there may be no correct context at all.
+- Cid's-airship-out-of-the-sand and the Enterprise transformation are still not
+  located as sequences; mode 4 is reached by transformation, not a cutscene.
+- The `$f9.19` operand (`$19`) is the exit destination script 162 uses; capturing
+  from a different world position would mean changing it.
