@@ -1,3 +1,44 @@
+## 1.9.26 — 2026-08-18
+
+### The SAND LAUNCH exists — captured, and it names mode 5 as Cid's airship
+
+Joel located it: an event in the desert **west of Kazus**, after talking to Cid.
+
+**The desert checks out, and map 180 is not what we thought.** Kazus is world map
+10 at **(93,59)**. Three tiles west at **(90,59)**, trigId 0 leads to **map 180**,
+and the tiles either side — (89,59) and (91,59) — are metatile `$2`, the
+sand/desert tile. ⛔ **This corrects a comment in `src/world-map-renderer.js`**
+which calls map 180 "the ship... a wooden vessel on open water". It is in the
+desert, exactly where `0x232` says *"My airship's hidden in the west desert"*.
+**Map 180 is Cid's airship.**
+
+**Sequence 0 is the sand launch**, captured on the world map with the v1.9.25
+exit-to-world prelude (`f9 19 ef 00 ff`):
+
+- rises **straight up**, X pinned `$70`, Y `$6F`->`$60`, one pixel per four frames
+  — vertical, unlike the Invincible's diagonal approach;
+- **14 OAM sprites**: the vessel in `$7c-$7f` **alternating with `$78-$7b`** (two
+  animation frames) plus `$94-$97` and `$fe`/`$ff` — the **dust plume** beneath it;
+- ends by setting the vehicle to **5**.
+
+`docs/sprites/ff3-cid-airship-sand-launch.png` (NEW) is the rip — a masted vessel
+lifting out of a cloud of scattered particles, two frames.
+
+⭐ **Mode 5 is therefore Cid's airship**, upgrading v1.9.20's "airship, unnamed".
+
+### Corrections
+
+- ⛔ v1.9.24 said whether a sand-launch animation exists was "unanswered".
+  **It exists** and is complete — plume, two-frame craft, vertical rise.
+- ⚠ v1.9.23/24 called sequence 0 "dead code". The evidence for that — **no script
+  issues `$EF 00`** — still holds and is still verified. But a fully animated
+  launch with its own particle effect is not plausibly unused, so the honest
+  reading is that **the invocation path has not been found**, not that none
+  exists. `$A4FA` has one caller and `$A8A9` one caller, so if the game reaches
+  it, it is by a route outside the script table. That is the open question.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.25 — 2026-08-18
 
 ### The Invincible launch animation CAPTURED, in its real context

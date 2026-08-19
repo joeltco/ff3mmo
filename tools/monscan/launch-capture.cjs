@@ -57,7 +57,8 @@ let end=start; for(let n=0;n<200;n++){const op=b[end];
 const at=end-4;
 console.log('original tail: '+Array.from(b.slice(at,end+1)).map(v=>v.toString(16).padStart(2,'0')).join(' '));
 const EXITOP=parseInt(process.env.EXIT||'0x19',16);
-b[at]=0xF9; b[at+1]=EXITOP; b[at+2]=0xEF; b[at+3]=0x09; b[at+4]=0xFF;
+const SEQ=parseInt(process.env.SEQ||'9',10), WANT=parseInt(process.env.WANT||'7',10);
+b[at]=0xF9; b[at+1]=EXITOP; b[at+2]=0xEF; b[at+3]=SEQ; b[at+4]=0xFF;
 console.log('patched  tail: '+Array.from(b.slice(at,end+1)).map(v=>v.toString(16).padStart(2,'0')).join(' ')+'   (exit-to-world, then sequence 9)');
 const romPath=path.join(dir,'inv.nes'); fs.writeFileSync(romPath,b);
 const nes=new Nes(romPath); const cpu=nes.nes.cpu;
@@ -75,7 +76,7 @@ function step(){
   ring.push({f:frame,fb:Uint32Array.from(nes.fb),x:cpu.mem[0x40],y:cpu.mem[0x41],v:cpu.mem[0x42],w:onWorld(),tiles:tl,oam:oamCopy,chr,pal,big:!!ppu.f_spriteSize});
   if(ring.length>RING) ring.shift();
   if(sawWorld<0 && onWorld()) sawWorld=frame;
-  if(fired<0 && cpu.mem[0x42]===7) fired=frame;
+  if(fired<0 && cpu.mem[0x42]===WANT) fired=frame;
   return fired>=0;
 }
 const run=n=>{for(let i=0;i<n&&!step();i++);};
@@ -86,14 +87,14 @@ for(let bl=0;bl<10&&fired<0;bl++){for(let k=0;k<6&&fired<0;k++)press('a',8,25);p
 run(1200);
 for(let k=0;k<45&&fired<0;k++){press('a',6,18);run(90);}
 console.log(`world map first seen: frame ${sawWorld<0?'NEVER':sawWorld}`);
-console.log(fired<0?'⛔ vehicle 7 never reached':`✅ vehicle 7 at frame ${fired}`);
+console.log(fired<0?`⛔ vehicle ${WANT} never reached`:`✅ vehicle ${WANT} at frame ${fired}`);
 if(fired<0) process.exit(1);
 const anim=ring.filter(r=>r.w);
 console.log(`frames buffered ${ring.length}, of which ON THE WORLD MAP: ${anim.length}`);
 const sel=(anim.length?anim:ring).filter((r,i)=>i%4===0).slice(-24);
 sel.forEach(r=>console.log(`   f${r.f} X=$${r.x.toString(16)} Y=$${r.y.toString(16)} veh=${r.v} OAM=${r.tiles.length} tiles=[${[...new Set(r.tiles)].map(t=>'$'+t.toString(16)).join(' ')}]`));
 const animTiles=new Set(); sel.forEach(r=>r.tiles.forEach(t=>animTiles.add(t)));
-const INV=new Set([0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xd0,0xd1,0xd2,0xd3,0xd4,0xd5]);
+const INV=new Set([0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xd0,0xd1,0xd2,0xd3,0xd4,0xd5,0x7c,0x7d,0x7e,0x7f]);
 const hit=[...animTiles].filter(t=>INV.has(t));
 console.log(`\ndistinct OAM tiles during the animation: ${[...animTiles].map(t=>'$'+t.toString(16)).join(' ')}`);
 console.log(`overlap with the mode-7 Invincible sprite ($c6-$cd,$d0-$d5): ${hit.length ? hit.map(t=>'$'+t.toString(16)).join(' ') : 'NONE'}`);

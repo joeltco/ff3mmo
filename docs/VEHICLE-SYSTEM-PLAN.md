@@ -500,7 +500,7 @@ so themes vary by world.)
 | 2 | **canoe (afloat)** | high | shallow-water ONLY; small gold canoe sprite; plays the WALKING theme, so it is not a separate vehicle; reached only by transformation at `$C5ED`-`$C5FE` on a bit-1 tile |
 | 3 | **ship** | high | ocean only; own theme `$22`; **the only vehicle whose disembark records a mooring position** — you park it at a dock |
 | 4 | **the Enterprise, flying** | high | §13 — same craft as mode 3; collapses to 3 over water; matches "can only land on water" (`0x08c`) |
-| 5 | **airship, unnamed** | — | §13 — flies, does not land on water |
+| 5 | **Cid's airship** | high | §18 — granted by the SAND LAUNCH (seq 0), which rises out of the desert where `0x232` says Cid's airship is hidden |
 | 6 | **DEAD CODE — never granted** | high | §15 — no script issues `$CA`; fully implemented but unreachable |
 | 7 | **the Invincible** | high | flies; the ONLY flyer with its own theme `$23`; **14 sprites vs 4** for everything else — much the largest craft; granted by `$CB` via script #163. The script calls it "the Great Ship... Invincible" (`0x0de`) |
 
@@ -799,3 +799,52 @@ Invincible" (`0x0de`).
   located as sequences; mode 4 is reached by transformation, not a cutscene.
 - The `$f9.19` operand (`$19`) is the exit destination script 162 uses; capturing
   from a different world position would mean changing it.
+
+## 18. The sand launch EXISTS — sequence 0, and it names mode 5
+
+Joel: *"it's an event that happens in the desert west of Kazus after talking to Cid."*
+That located it.
+
+### The desert is real, and map 180 is not what the repo says
+
+Kazus is world map 10 at **(93,59)**. Three tiles west, at **(90,59)**, trigId 0
+leads to **map 180**. The tiles either side of it — (89,59) and (91,59) — are
+metatile `$2`, which the class render (§1) shows is the **sand/desert** tile.
+
+⛔ **This corrects a comment in `src/world-map-renderer.js`**, which calls map 180
+"the ship... a wooden vessel on open water". It is not on open water: it sits in
+the desert three tiles west of Kazus, exactly where the script says Cid's airship
+is hidden (`0x232`, *"My airship's hidden in the west desert"*). **Map 180 is
+Cid's airship.**
+
+### The animation
+
+**Sequence 0 is the sand launch.** Captured on the world map using the §17
+exit-to-world prelude (`f9 19 ef 00 ff`):
+
+- the craft rises **straight up**, X pinned at `$70`, Y `$6F` -> `$60`, one pixel
+  per four frames — a vertical launch, unlike the Invincible's diagonal approach;
+- it is drawn from **14 OAM sprites**: the vessel in tiles `$7c-$7f` **alternating
+  with `$78-$7b`** — two animation frames — plus `$94-$97` and `$fe`/`$ff`, which
+  are the **dust plume** billowing beneath it;
+- it ends by setting the vehicle to **5**.
+
+`docs/sprites/ff3-cid-airship-sand-launch.png` is the rip: a masted vessel lifting
+out of a cloud of scattered particles, two animation frames.
+
+⭐ **This names mode 5: Cid's airship.** §12 left it as "airship, unnamed"; the
+launch that grants it rises out of the sand at the spot the script says Cid's
+airship is buried.
+
+### What this corrects
+
+- ⛔ v1.9.24 said "whether a sand-launch animation exists in this ROM is
+  unanswered". **It exists**, and it is complete — dust plume, two-frame craft
+  animation, vertical rise.
+- ⚠ v1.9.23/24 called sequence 0 "dead code". That was based on **no script
+  issuing `$EF 00`**, which is still true and still verified. But a fully animated
+  launch with its own particle effect is not plausibly unused, so the honest
+  reading is that **the invocation path has not been found**, not that none
+  exists. `$A4FA` has one caller (the `$EF` handler) and `$A8A9` one caller (the
+  id-0 branch), so if the game reaches it, it is by a route outside the script
+  table — that is now the open question.
