@@ -1,3 +1,38 @@
+## 1.9.31 — 2026-08-19
+
+### tools: string-pointer hook recovers real string ids; `$78`==0 case measured
+
+`tools/monscan/string-id-hook.cjs` (NEW). The global 2-byte string-pointer table
+is at file `0x30010` = bank 24, CPU `$8000`, so id N's pointer sits at
+`$8000 + N*2`. Hook `cpu.load`, confirm bank 24 is genuinely mapped by comparing
+live memory against the ROM, and **the address is the id** — no banking
+arithmetic, no `$78`, no rendering.
+
+With the opening script's tail patched to `fc 40 f1 0f ff` it reports the
+opening's own `0x000`/`0x006`/`0x007`/`0x008`, the title screen `0x121`-`0x123`,
+and our operand resolving to **`0x00F`** — *"Cid: ...You'll make great use of my
+airship."* **`0x20F` was never read.** So for `$78` == 0 the id is the operand
+unchanged, measured rather than inferred, and `$600B` = 2 = **Cid's airship** now
+rests on three independent legs.
+
+⚠ **The `$78` != 0 direction is NOT confirmed.** Pinning `$78` to 1 makes the
+script branch elsewhere — the hook starts reporting map-name strings like `0x1BB`
+"Ancients' Maze" — and the message is never reached, so the test does not
+falsify the rule. The rule is not in doubt (four instructions at `$B6C6`), but
+only half of it has been observed firing.
+
+⛔ **The hook does not by itself name the other seven.** It reports the id a script
+resolves *in the context it is run in*; running a grant script's operands from the
+opening forces `$78` == 0, which says nothing about what that script resolves to
+when the game actually reaches it. The open question is now precisely: **what is
+`$78` at the moment each grant script runs?** Next step is to reach one grant
+script in its real story position — patch condition records so a reachable event
+resolves to it after the world has advanced — and read the id off this hook.
+
+⛔ Still unnamed: `$600B` 1, 3, 4, 5, 6, 7, 8.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.30 — 2026-08-18
 
 ### The message box writes to nametable `$2000` — and that was never the blocker

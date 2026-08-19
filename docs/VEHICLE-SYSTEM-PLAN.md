@@ -1057,3 +1057,52 @@ promise:
    1-HP) so dialogue can actually run.
 
 ⛔ Still unnamed: `$600B` 1, 3, 4, 5, 6, 7, 8.
+
+## 23. The string-pointer hook works — one direction measured, naming still short
+
+### The instrument
+
+`tools/monscan/string-id-hook.cjs` (NEW). The global 2-byte string-pointer table
+is at file `0x30010` = bank 24, CPU `$8000`, so id N's pointer sits at
+`$8000 + N*2`. Hook `cpu.load`, confirm bank 24 is genuinely mapped there by
+comparing live memory against the ROM at several offsets, and **the address is the
+id**. No banking arithmetic, no `$78`, no rendering.
+
+With the opening script's tail patched to `fc 40 f1 0f ff` it reports exactly what
+the game resolved:
+
+    0x000  The Gulgan spoke faintly...        <- the opening's own messages
+    0x006  We've fallen down a hole...
+    0x007  Is everyone okay...
+    0x008  Those monsters!...
+    0x121-0x123  New Game / Battle Speed      <- title screen
+    0x00f  Cid: ...You'll make great use of my airship.   <- OUR OPERAND
+
+**`0x00F` read, `0x20F` never.** So for `$78` == 0 the id is the operand
+unchanged — measured, not inferred. `$600B` = 2 = **Cid's airship** now rests on
+three independent legs: the Kazus map reference, the dialogue, and this.
+
+### What is still missing
+
+⚠ **The `$78` != 0 direction is NOT confirmed.** Pinning `$78` to 1 makes the
+script take a different branch — the hook starts reporting map-name strings such
+as `0x1BB` "Ancients' Maze" — and the message is never reached, so the test does
+not falsify the rule. The rule itself is not in doubt (it is four instructions at
+`$B6C6`), but I have observed only half of it firing.
+
+⛔ **And the hook does not by itself name the other seven.** It reports the id a
+script resolves *in the context it is run in*. Running a grant script's operands
+from the opening gives `$78` == 0 and therefore the bank-`$84` reading — which is
+not evidence about what that script resolves to **when the game actually reaches
+it**. The open question is unchanged and now precisely stated:
+
+> **What is `$78` at the moment each grant script runs?**
+
+The honest next step is to reach one grant script in its real story position — by
+patching the condition records so a reachable event resolves to it *after* the
+world has advanced — and read the id off this hook. Coherence arguments are not a
+substitute: script 83's operands read as a single Saronia scene under `$84` and as
+a mixed Cid/"beautiful face" jumble under `$86`, which argues for `$84`, but that
+is the same shape of reasoning already retracted twice in this document.
+
+⛔ Still unnamed: `$600B` 1, 3, 4, 5, 6, 7, 8.
