@@ -1228,7 +1228,9 @@ the `$30` layout offset, but does not change the craft.
   the craft by clustering OAM and dropping the party's walk tiles (`$00-$03`),
   not by a screen-x threshold.
 
-## 27. Ship -> airship transformation: there is no animation, and mode 4 looks unreachable
+## 27. Ship -> airship transformation — ⛔ THIS SECTION'S HEADLINE IS RETRACTED, see §28
+
+## 27 (retracted). Ship -> airship transformation: there is no animation, and mode 4 looks unreachable
 
 ### No transformation animation exists
 
@@ -1273,3 +1275,52 @@ The dialogue at `0x08c` is unambiguous that the Enterprise transforms
 (*"Press the A Button to turn the Enterprise into an airship"*), so the capability
 exists in the fiction. What is NOT established is which runtime state it produces,
 and there is no animation attached to it either way.
+
+## 28. RETRACTION — "there is no transformation animation" was bad reasoning
+
+Joel: *"yes there is one.... wtf?"* He is right and §27 is wrong.
+
+### The error
+
+§27 argued: `$A4FA` has one caller, so no native code can start a **sequence**;
+the sequence census is complete; therefore **no animation exists**.
+
+That last step does not follow. **A sequence is one animation mechanism, not the
+only one.** The two launches happen to use `$EF` sequences, and I generalised from
+that to "animation == sequence" without ever checking for animation code that does
+not go through the dispatcher.
+
+Native animation code plainly exists. Bank 59 has counter-driven loops of exactly
+the shape the launches use, e.g. at `$8683`:
+
+    8683  STA $BC                              ; counter = 0
+    8685  JSR $A870 / $A734 / $A7E2 / $C021    ; per-frame work
+    8691  LDA $F0 / AND #$03 / BNE $8685       ; advance every 4th frame
+    8697  INC $BC
+    869B  CMP #$40 / BCC $8685                 ; 64 steps
+    86A3  LDA #$07 / STA $42 / STA $46         ; then the vehicle changes
+
+and `$86AF` picks a draw frame from `$BC >> 3 & 7` — eight frames. Another loop of
+the same shape sits at `$866A`.
+
+### What I checked afterwards, and what it does not settle
+
+- `$866A` is sequence 9's dispatch target (`$A66A`), so that particular loop is
+  the Invincible approach already captured in §17. It is not a second animation.
+- The one transform I can find in code, `$C5DE`, is gated on `$602E` bit 0 and on
+  the tile's bit 1 being CLEAR (shallow water). Tested both on open ocean and,
+  after re-boarding in memory, on shallow water with `$602E` = `$FF`: **`$42` stayed
+  3 and no transform fired**. So either its trigger needs more state than I set, or
+  it is not the ship->airship transform.
+
+### Standing position
+
+⛔ **I have not located or captured the ship->airship transformation.** I should not
+have claimed it does not exist — that claim rested on the sequence/animation
+conflation above, and it is withdrawn. `$602E` bits are vehicle UPGRADE flags (set
+by sequences 6/7/8 via `ORA #$04`/`#$08`/`#$10` at `$A54B`/`$A561`/`$A577`), which
+is very likely the gating for the transform, and is where I would look next.
+
+⚠ §27's other claim — that no instruction stores the immediate 4 to `$42`/`$46` —
+is a separate measurement and still stands on its own. But it should not be read as
+evidence about the transformation, given the reasoning error above.

@@ -1,3 +1,36 @@
+## 1.9.36 — 2026-08-19
+
+### RETRACTION: "there is no ship->airship transformation animation" was bad reasoning
+
+v1.9.35 argued that because `$A4FA` has one caller no native code can start a
+**sequence**, and the sequence census is complete, therefore **no animation
+exists**. That last step does not follow. **A sequence is one animation mechanism,
+not the only one** — the two launches happen to use `$EF`, and I generalised from
+that to "animation == sequence" without checking for animation code outside the
+dispatcher.
+
+Native animation code plainly exists. Bank 59 `$8683` is a counter-driven loop of
+exactly the launches' shape — `STA $BC` / per-frame `JSR`s / `LDA $F0 / AND #$03`
+/ `INC $BC` / `CMP #$40` — ending `LDA #$07 / STA $42 / STA $46`, with `$86AF`
+picking a draw frame from `$BC >> 3 & 7` (eight frames). Another such loop sits at
+`$866A`.
+
+Checked afterwards: `$866A` is sequence 9's dispatch target (`$A66A`), so that one
+is the already-captured Invincible approach, not a second animation. And the only
+transform found in code, `$C5DE`, is gated on `$602E` bit 0 **and** the tile's
+bit 1 being clear (shallow water) — tested on open ocean and, after re-boarding in
+memory, on shallow with `$602E` = `$FF`: `$42` stayed 3, no transform fired.
+
+⛔ **Standing position: I have not located or captured the ship->airship
+transformation, and the claim that it does not exist is withdrawn.** `$602E` bits
+are vehicle UPGRADE flags (set by sequences 6/7/8 via `ORA #$04`/`#$08`/`#$10` at
+`$A54B`/`$A561`/`$A577`) and are the most likely gating — that is where to look.
+
+⚠ v1.9.35's separate measurement — no instruction stores the immediate 4 to
+`$42`/`$46` — still stands on its own, but is not evidence about the animation.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.35 — 2026-08-19
 
 ### No ship->airship transformation animation exists; mode 4 looks unreachable
