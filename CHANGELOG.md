@@ -1,3 +1,36 @@
+## 1.9.35 — 2026-08-19
+
+### No ship->airship transformation animation exists; mode 4 looks unreachable
+
+**There is nothing to capture.** Three established facts close it:
+
+- `$A4FA` has exactly ONE caller, the `$EF` opcode handler, so **no native code can
+  start a sequence** — a button-triggered transformation cannot play one;
+- the sequence census 0-14 is complete and only sequences **0** and **9** animate a
+  vehicle (the sand launch and the Invincible approach), neither a transformation;
+- no grant script contains a sequence opcode.
+
+The one transformation that demonstrably exists, `$C5F6` (`if $42 == 3 and the
+tile's bit 1 is clear -> $42 = 2`), is an instant state change that calls nothing.
+
+⚠ **And mode 4 appears unreachable.** Searching every immediate store to
+`$42`/`$46`: **no instruction ever writes 4 to either.** Mode 4 can only arrive via
+`$600F` at boot, and `$600F` is written FROM `$42` by the save routine — the same
+circular path that rules out mode 6.
+
+⛔ **This further undermines v1.9.21's "mode 4 = the Enterprise flying."** That
+rested on `$DAD8` suppressing on `$42` being 3 or 4, and on booting vehicle 4
+yielding `$42` = 3. The latter is better explained by mode 4 not being a valid
+runtime state — it normalises away like a mode nothing sets, and the suppression
+shows the code ANTICIPATES mode 4, not that the game enters it. v1.9.27 already
+retracted mode-based naming; this is a second independent reason.
+
+The dialogue at `0x08c` is clear that the Enterprise transforms, so the capability
+exists in the fiction — what is not established is which runtime state it produces,
+and there is no animation either way.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.34 — 2026-08-19
 
 ### Parked vehicle sprites ripped — and `$DC1A` is not a sprite table

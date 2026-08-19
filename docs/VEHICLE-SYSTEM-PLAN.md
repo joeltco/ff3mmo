@@ -1227,3 +1227,49 @@ the `$30` layout offset, but does not change the craft.
 - ⚠ The world map SCROLLS, so the party is not at a fixed screen position; select
   the craft by clustering OAM and dropping the party's walk tiles (`$00-$03`),
   not by a screen-x threshold.
+
+## 27. Ship -> airship transformation: there is no animation, and mode 4 looks unreachable
+
+### No transformation animation exists
+
+Three facts already established close this without new work:
+
+1. **`$A4FA` has exactly ONE caller** — the `$EF` opcode handler (§16). No native
+   code can start a sequence, so a transformation triggered by a button press
+   cannot play one.
+2. **The sequence census 0-14 is complete** (§25) and only sequences **0** and
+   **9** animate a vehicle. Neither is a transformation — 0 is the vertical sand
+   launch, 9 the Invincible's diagonal approach.
+3. **No grant script contains a sequence opcode** (§19).
+
+The one transformation that demonstrably exists in code, `$C5F6` (`if $42 == 3 and
+the tile's bit 1 is clear -> $42 = 2`), is an instant state change. It calls
+nothing.
+
+So **there is no ship-to-airship transformation animation to capture.** Nothing is
+missing; the game does not have one.
+
+### And mode 4 appears unreachable
+
+Searching every immediate store to `$42`/`$46` across the ROM: **no instruction
+ever writes the value 4 to either.** Mode 4 can therefore only arrive via
+`$600F` at boot (`$C0D7`) — and `$600F` is written FROM `$42` by the save routine
+(bank 61 `$8E61`), so it is the same circular path that rules out mode 6 (§15).
+
+⚠ **This undermines §13's "mode 4 = the Enterprise flying".** That rested on two
+observations: the parked-draw at `$DAD8` suppressing on `$42` being 3 **or** 4, and
+booting `vehicle` = 4 yielding `$42` = 3. The second is now better explained as
+mode 4 not being a valid runtime state at all — it normalises away, exactly like a
+mode nothing sets. The `$DAD8` suppression shows the code ANTICIPATES mode 4, not
+that the game enters it.
+
+§19 already retracted mode-based vehicle naming; this is a second, independent
+reason not to trust "mode 4 = the Enterprise". Whatever the Enterprise's airship
+form is, it is not demonstrably mode 4.
+
+### What that leaves
+
+The dialogue at `0x08c` is unambiguous that the Enterprise transforms
+(*"Press the A Button to turn the Enterprise into an airship"*), so the capability
+exists in the fiction. What is NOT established is which runtime state it produces,
+and there is no animation attached to it either way.
