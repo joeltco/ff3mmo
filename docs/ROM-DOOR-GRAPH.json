@@ -1,0 +1,1059 @@
+{
+ "_measured": "FF3-English.nes via tools/monscan/door-probe.cjs (ROM entrance patched to place the party; $48 read back)",
+ "_generated": "node tools/monscan/door-probe.cjs <door-map.json> docs/ROM-DOOR-GRAPH.json",
+ "doors": {
+  "1:0": {
+   "map": 1,
+   "trigId": 0,
+   "at": [
+    23,
+    16
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "2:0": {
+   "map": 2,
+   "trigId": 0,
+   "at": [
+    23,
+    16
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "6:0": {
+   "map": 6,
+   "trigId": 0,
+   "at": [
+    12,
+    13
+   ],
+   "romDest": 7,
+   "status": "measured"
+  },
+  "7:0": {
+   "map": 7,
+   "trigId": 0,
+   "at": [
+    3,
+    29
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "8:0": {
+   "map": 8,
+   "trigId": 0,
+   "at": [
+    4,
+    13
+   ],
+   "romDest": 9,
+   "status": "measured"
+  },
+  "9:0": {
+   "map": 9,
+   "trigId": 0,
+   "at": [
+    4,
+    13
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "10:0": {
+   "map": 10,
+   "trigId": 0,
+   "at": [
+    21,
+    11
+   ],
+   "romDest": 101,
+   "status": "measured"
+  },
+  "10:1": {
+   "map": 10,
+   "trigId": 1,
+   "at": [
+    17,
+    16
+   ],
+   "romDest": 14,
+   "status": "measured"
+  },
+  "10:2": {
+   "map": 10,
+   "trigId": 2,
+   "at": [
+    17,
+    21
+   ],
+   "romDest": 12,
+   "status": "measured"
+  },
+  "10:3": {
+   "map": 10,
+   "trigId": 3,
+   "at": [
+    9,
+    23
+   ],
+   "romDest": 11,
+   "status": "measured"
+  },
+  "10:4": {
+   "map": 10,
+   "trigId": 4,
+   "at": [
+    14,
+    25
+   ],
+   "romDest": 15,
+   "status": "measured"
+  },
+  "10:5": {
+   "map": 10,
+   "trigId": 5,
+   "at": [
+    16,
+    25
+   ],
+   "romDest": 16,
+   "status": "measured"
+  },
+  "10:6": {
+   "map": 10,
+   "trigId": 6,
+   "at": [
+    18,
+    25
+   ],
+   "romDest": 17,
+   "status": "measured"
+  },
+  "11:0": {
+   "map": 11,
+   "trigId": 0,
+   "at": [
+    14,
+    30
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "12:0": {
+   "map": 12,
+   "trigId": 0,
+   "at": [
+    3,
+    13
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "13:0": {
+   "map": 13,
+   "trigId": 0,
+   "at": [
+    3,
+    13
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "14:0": {
+   "map": 14,
+   "trigId": 0,
+   "at": [
+    4,
+    28
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "18:0": {
+   "map": 18,
+   "trigId": 0,
+   "at": [
+    7,
+    12
+   ],
+   "romDest": 19,
+   "status": "measured"
+  },
+  "18:1": {
+   "map": 18,
+   "trigId": 1,
+   "at": [
+    23,
+    12
+   ],
+   "romDest": 174,
+   "status": "measured"
+  },
+  "18:2": {
+   "map": 18,
+   "trigId": 2,
+   "at": [
+    15,
+    18
+   ],
+   "romDest": 25,
+   "status": "measured"
+  },
+  "19:0": {
+   "map": 19,
+   "trigId": 0,
+   "at": [
+    4,
+    5
+   ],
+   "romDest": 20,
+   "status": "measured"
+  },
+  "19:1": {
+   "map": 19,
+   "trigId": 1,
+   "at": [
+    4,
+    18
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "19:2": {
+   "map": 19,
+   "trigId": 2,
+   "at": [
+    27,
+    23
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "20:0": {
+   "map": 20,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 23,
+   "status": "measured"
+  },
+  "20:1": {
+   "map": 20,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 22,
+   "status": "measured"
+  },
+  "20:2": {
+   "map": 20,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "20:3": {
+   "map": 20,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "21:0": {
+   "map": 21,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "21:1": {
+   "map": 21,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 3,
+   "status": "measured"
+  },
+  "21:2": {
+   "map": 21,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "21:3": {
+   "map": 21,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "22:0": {
+   "map": 22,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 115,
+   "status": "measured"
+  },
+  "23:0": {
+   "map": 23,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 21,
+   "status": "measured"
+  },
+  "23:1": {
+   "map": 23,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 21,
+   "status": "measured"
+  },
+  "23:2": {
+   "map": 23,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "23:3": {
+   "map": 23,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "24:0": {
+   "map": 24,
+   "trigId": 0,
+   "at": [
+    17,
+    5
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (17,4) and nothing fired"
+  },
+  "24:1": {
+   "map": 24,
+   "trigId": 1,
+   "at": [
+    11,
+    12
+   ],
+   "romDest": 172,
+   "status": "measured"
+  },
+  "25:0": {
+   "map": 25,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": 27,
+   "status": "measured"
+  },
+  "25:1": {
+   "map": 25,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "25:2": {
+   "map": 25,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "25:3": {
+   "map": 25,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": 188,
+   "status": "measured"
+  },
+  "25:4": {
+   "map": 25,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": 26,
+   "status": "measured"
+  },
+  "25:5": {
+   "map": 25,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": 187,
+   "status": "measured"
+  },
+  "25:6": {
+   "map": 25,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "25:7": {
+   "map": 25,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "26:0": {
+   "map": 26,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": 27,
+   "status": "measured"
+  },
+  "26:1": {
+   "map": 26,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "26:2": {
+   "map": 26,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "26:3": {
+   "map": 26,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": 188,
+   "status": "measured"
+  },
+  "26:4": {
+   "map": 26,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (10,22) and nothing fired"
+  },
+  "26:5": {
+   "map": 26,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": 187,
+   "status": "measured"
+  },
+  "26:6": {
+   "map": 26,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "26:7": {
+   "map": 26,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "27:0": {
+   "map": 27,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (16,3) and nothing fired"
+  },
+  "27:1": {
+   "map": 27,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "27:2": {
+   "map": 27,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "27:3": {
+   "map": 27,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": 188,
+   "status": "measured"
+  },
+  "27:4": {
+   "map": 27,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": 26,
+   "status": "measured"
+  },
+  "27:5": {
+   "map": 27,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": 187,
+   "status": "measured"
+  },
+  "27:6": {
+   "map": 27,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "27:7": {
+   "map": 27,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "28:0": {
+   "map": 28,
+   "trigId": 0,
+   "at": [
+    10,
+    20
+   ],
+   "romDest": 29,
+   "status": "measured"
+  },
+  "28:1": {
+   "map": 28,
+   "trigId": 1,
+   "at": [
+    10,
+    24
+   ],
+   "romDest": 189,
+   "status": "measured"
+  },
+  "28:2": {
+   "map": 28,
+   "trigId": 2,
+   "at": [
+    14,
+    24
+   ],
+   "romDest": 190,
+   "status": "measured"
+  },
+  "29:0": {
+   "map": 29,
+   "trigId": 0,
+   "at": [
+    10,
+    14
+   ],
+   "romDest": 191,
+   "status": "measured"
+  },
+  "29:1": {
+   "map": 29,
+   "trigId": 1,
+   "at": [
+    4,
+    29
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "30:0": {
+   "map": 30,
+   "trigId": 0,
+   "at": [
+    10,
+    20
+   ],
+   "romDest": 29,
+   "status": "measured"
+  },
+  "30:1": {
+   "map": 30,
+   "trigId": 1,
+   "at": [
+    10,
+    24
+   ],
+   "romDest": 189,
+   "status": "measured"
+  },
+  "30:2": {
+   "map": 30,
+   "trigId": 2,
+   "at": [
+    14,
+    24
+   ],
+   "romDest": 190,
+   "status": "measured"
+  },
+  "114:0": {
+   "map": 114,
+   "trigId": 0,
+   "at": [
+    5,
+    7
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "114:1": {
+   "map": 114,
+   "trigId": 1,
+   "at": [
+    10,
+    19
+   ],
+   "romDest": 3,
+   "status": "measured"
+  },
+  "114:2": {
+   "map": 114,
+   "trigId": 2,
+   "at": [
+    18,
+    19
+   ],
+   "romDest": 5,
+   "status": "measured"
+  },
+  "114:3": {
+   "map": 114,
+   "trigId": 3,
+   "at": [
+    14,
+    20
+   ],
+   "romDest": 4,
+   "status": "measured"
+  },
+  "114:4": {
+   "map": 114,
+   "trigId": 4,
+   "at": [
+    9,
+    26
+   ],
+   "romDest": 6,
+   "status": "measured"
+  },
+  "114:5": {
+   "map": 114,
+   "trigId": 5,
+   "at": [
+    21,
+    26
+   ],
+   "romDest": 8,
+   "status": "measured"
+  },
+  "114:6": {
+   "map": 114,
+   "trigId": 6,
+   "at": [
+    28,
+    29
+   ],
+   "romDest": 147,
+   "status": "measured"
+  },
+  "174:0": {
+   "map": 174,
+   "trigId": 0,
+   "at": [
+    4,
+    5
+   ],
+   "romDest": 175,
+   "status": "measured"
+  },
+  "174:1": {
+   "map": 174,
+   "trigId": 1,
+   "at": [
+    4,
+    18
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "174:2": {
+   "map": 174,
+   "trigId": 2,
+   "at": [
+    27,
+    23
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "175:0": {
+   "map": 175,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 177,
+   "status": "measured"
+  },
+  "175:1": {
+   "map": 175,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 176,
+   "status": "measured"
+  },
+  "175:2": {
+   "map": 175,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "175:3": {
+   "map": 175,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "176:0": {
+   "map": 176,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 0,
+   "status": "measured"
+  },
+  "176:1": {
+   "map": 176,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 22,
+   "status": "measured"
+  },
+  "176:2": {
+   "map": 176,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "176:3": {
+   "map": 176,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "177:0": {
+   "map": 177,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 178,
+   "status": "measured"
+  },
+  "177:1": {
+   "map": 177,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 178,
+   "status": "measured"
+  },
+  "177:2": {
+   "map": 177,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "177:3": {
+   "map": 177,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "178:0": {
+   "map": 178,
+   "trigId": 0,
+   "at": [
+    4,
+    2
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "178:1": {
+   "map": 178,
+   "trigId": 1,
+   "at": [
+    27,
+    7
+   ],
+   "romDest": 3,
+   "status": "measured"
+  },
+  "178:2": {
+   "map": 178,
+   "trigId": 2,
+   "at": [
+    5,
+    25
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "178:3": {
+   "map": 178,
+   "trigId": 3,
+   "at": [
+    24,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "179:0": {
+   "map": 179,
+   "trigId": 0,
+   "at": [
+    29,
+    1
+   ],
+   "romDest": 122,
+   "status": "measured"
+  },
+  "179:1": {
+   "map": 179,
+   "trigId": 1,
+   "at": [
+    29,
+    4
+   ],
+   "romDest": 123,
+   "status": "measured"
+  },
+  "179:2": {
+   "map": 179,
+   "trigId": 2,
+   "at": [
+    26,
+    22
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "179:3": {
+   "map": 179,
+   "trigId": 3,
+   "at": [
+    2,
+    23
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "179:4": {
+   "map": 179,
+   "trigId": 4,
+   "at": [
+    25,
+    26
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  },
+  "179:5": {
+   "map": 179,
+   "trigId": 5,
+   "at": [
+    28,
+    27
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides — no player can reach this tile"
+  }
+ }
+}

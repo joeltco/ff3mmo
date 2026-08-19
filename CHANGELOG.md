@@ -1,3 +1,66 @@
+## 1.10.5 — 2026-08-19
+
+### Every door in Ur, Kazus and Castle Sasune is now measured, not believed
+
+102 doors. **69 measured inside a real emulator with ZERO disagreements** against
+what the engine resolves. 30 proven **sealed** — walled in on all four sides, no
+player can ever reach them. 3 point at their own map, which the cartridge treats
+as a no-op. Nothing left unexplained.
+
+The previous version had to say "Kazus's 7 doors and Sasune's interior doors were
+not emulator-measured — my router couldn't reach them." That is a harness fact
+dressed up as a limit, so the harness got fixed.
+
+**`tools/monscan/door-probe.cjs` — don't walk, PATCH THE ROM.** A map's entrance
+is 5 bits of byte 0 and 5 bits of byte 1 of its 16-byte property record. Rewrite
+them and the party spawns wherever you want. No route means nothing to block and
+no other trigger to cross — the crossing bug had already produced one full false
+"Ur door 0 is wrong" reading.
+
+It takes **two** patches, because each one alone is blind in a different way:
+
+- **spawn on the DOORSTEP, step in** — the everyday case; fails on the 33 doors
+  sitting in the far rooms of a shared tilemap.
+- **spawn ON the door, step off, step back on** — settles those. If no direction
+  moves, the tile is walled in and `sealed` is a fact about the map. It cannot
+  replace the first: FF3 disarms the trigger you arrive on, which is why every
+  `trigId 0` reads "nothing fired" under this one alone.
+
+Where both answer, they agreed on **all 56 doors**.
+
+**The self-test runs first, and includes a control.** It reproduces five doors
+measured earlier by hand with a completely different method (a step-by-step
+walk), and it spawns the party on plain floor and requires it moves — because
+"walled in on all four sides" is only evidence if the harness has not simply
+frozen movement, which is exactly the failure `world-harness.cjs` documents for
+poking `$27/$28`.
+
+Because the intro costs ~3000 frames, it is booted once and snapshotted; each
+door restores that state into a freshly patched ROM.
+
+### New gate: `check-door-table`
+
+`docs/ROM-DOOR-GRAPH.json` records the measurement. The gate re-derives
+`entranceData[trigId]` the way the engine does and compares it to what the
+cartridge actually did — cheap enough for every deploy, where re-running the
+emulator sweep (~4 min) is not. Proven by reverting the loader three ways:
+
+- per-type trigger counter → global counter: **62 failures**
+- entrance-pointer offset off by one: **65 failures**
+- one row of `TRIGGER_TYPE_TABLE` retyped: **2 failures**
+
+It also closes the loop on the barring rule using the MEASUREMENT rather than our
+own reachability flood: **21** measured doors walk the player out of the shipped
+set and every one is refused. Worth noting — `check-area-graph`'s flood had
+estimated 9. The cartridge says 21, and the cartridge is right.
+
+### `tools/rom-door-map.mjs`
+
+Now emits every viable doorstep per door (all four sides, filtered by the
+production `isPassable`), not just the from-below one.
+
+No gameplay change in this release — it is the proof for 1.10.4.
+
 ## 1.10.4 — 2026-08-19
 
 ### Fix: Castle Sasune had 24 doors leading out of the castle

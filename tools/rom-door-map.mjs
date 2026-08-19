@@ -75,7 +75,22 @@ for (const mapId of ids) {
   for (const [key, t] of md.triggerMap) {
     if (t.type !== 1) continue;
     const [x, y] = key.split(',').map(Number);
-    doors.push({ x, y, trigId: t.trigId, ourDest: md.entranceData[t.trigId] | 0 });
+    // The DOORSTEP: the tile the party stands on to step into this door, and the
+    // direction of that step. Same rule map-trigger-dump.mjs uses — from below
+    // first, because FF3 doors are entered walking UP into them — restricted to a
+    // tile the party can actually stand on. `door-probe.cjs` patches the map's
+    // ROM entrance to this tile, so the probe starts one step away and never has
+    // to route (and so can never cross another trigger on the way).
+    const cand = [[x, y + 1, 'up'], [x, y - 1, 'down'], [x + 1, y, 'left'], [x - 1, y, 'right']]
+      .filter(([cx, cy]) => cx >= 0 && cy >= 0 && cx < 32 && cy < 32 && r.isPassable(cx, cy));
+    // ALL viable doorsteps, not just the first. A door in a shared tilemap's
+    // far room often cannot be entered from below at all, and one candidate is
+    // the difference between "measured" and a harness fact dressed up as a
+    // finding — 33 doors came back unmeasured on the from-below-only version.
+    doors.push({ x, y, trigId: t.trigId, ourDest: md.entranceData[t.trigId] | 0,
+                 approach: cand.length ? [cand[0][0], cand[0][1]] : null,
+                 walk: cand.length ? cand[0][2] : null,
+                 approaches: cand.map(([cx, cy, w]) => ({ at: [cx, cy], walk: w })) });
   }
   doors.sort((a, b) => a.trigId - b.trigId);
 
