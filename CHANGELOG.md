@@ -1,3 +1,33 @@
+## 1.9.43 — 2026-08-19
+
+### npcIdx decoded; NPCs DO load (v1.9.42 was wrong); talk still not firing
+
+**The NPC loader is bank 59 `$9300`**, and map property byte 4 is its index:
+`LDA #$2C / JSR $FF06` maps bank `$2C`; `LDA $0784` reads npcIdx; `ASL A` (with
+carry into `$81`) indexes a pointer table at `$8000`/`$8100`; the pointer is
+dereferenced (high byte ORed with `$80`) to that map's NPC list, which is walked to
+a zero terminator with `JSR $B34E` per NPC.
+
+⭐ **NPCs DO load — v1.9.42's "loads no NPCs" was drawn from map 10 alone.** Max
+sprites while walking (party alone = 4): map 10 -> 4 (none near the spawn),
+**map 17 -> 8**, **map 114 -> 12**. `world-harness.cjs` populates a town fine.
+
+⚠ Also corrected: `$0780`-`$078F` is NOT a stable map-property mirror — it reads
+`58 5c 54 58 …` after boot because the region is reused. `$0784` holds npcIdx only
+while the loader runs, so it must be sampled by hooking the read, not inspected
+afterwards. (Confirmed: `$0784` reads `$0a` live for map 10, its correct byte 4.)
+
+⛔ **Talking still does not fire.** On map 114 with 8-12 NPCs on screen, pressing A
+— including steering toward the nearest non-party sprite and facing it from all
+four sides — produced **zero `$6C` writes and zero string-pointer reads**.
+
+The gap is now narrow: loader understood, index correct, cast on screen, `$6C` the
+right probe. Missing is whatever makes an A-press register as a talk — likely exact
+tile adjacency plus facing, and the sprite positions being steered by are OAM
+screen coordinates, not map tiles.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.42 — 2026-08-19
 
 ### NPC -> script path NOT decoded; `world-harness.cjs` gains `opts.map`

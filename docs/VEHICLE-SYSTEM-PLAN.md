@@ -1633,3 +1633,53 @@ state with NPCs in it.
 The realistic fix is not more static tracing. It is **a real save** at the relevant
 points, or working out what the map loader does with property byte 4 (`npcIdx`)
 that the forced-props boot is skipping.
+
+## 35. npcIdx DECODED and NPCs loading — talk interaction still not firing
+
+### The NPC loader
+
+Bank 59 `$9300`, and map property **byte 4 is the index into it**:
+
+    9307  LDA #$2C / JSR $FF06      ; map bank $2C
+    9314  LDA $0784                 ; npcIdx (map property byte 4)
+    9317  ASL A / BCC / INC $81     ; idx*2 into a pointer table at $8000/$8100
+    931D  LDA ($80),Y -> $8C        ; pointer low
+    9322  LDA ($80),Y | $80 -> $8D  ; pointer high, forced into the mapped window
+    9338  LDA ($8C),Y / BEQ $934D   ; walk the NPC list; a 0 byte ends it
+    933C  JSR $B34E                 ; process one NPC
+
+So: **npcIdx -> pointer table at bank `$2C` `$8000` -> that map's NPC list**,
+walked to a zero terminator.
+
+### It works — the earlier failure was a bad map
+
+`$0784` reads `$0a` live during boot with `opts.map` = 10, exactly map 10's
+byte 4, and the loader runs (294 reads). ⭐ **And NPCs do load**, measured by max
+sprites seen while walking (the party alone is 4):
+
+| map | max sprites |
+|---|---|
+| 10 | 4 — none in reach |
+| **17** | **8** |
+| **114** | **12** |
+
+§34 concluded "the harness loads no NPCs" from map 10 alone. That was wrong: map 10
+simply has none near the spawn. `world-harness.cjs` populates a town fine.
+
+⚠ Also corrected: `$0780`-`$078F` is NOT a stable mirror of the map properties. It
+reads `58 5c 54 58 …` after boot — the region is reused. `$0784` only holds npcIdx
+at the moment the loader runs, which is why it must be sampled by hooking the read
+rather than inspected afterwards.
+
+### What still does not work
+
+Talking. On map 114 with 8-12 NPCs present, pressing A — including navigating
+toward the nearest non-party sprite and facing it from all four sides — produced
+**zero `$6C` writes and zero string-pointer reads**. So no dialogue is triggered
+and the NPC -> script path still cannot be observed.
+
+⛔ **Not decoded.** But the remaining gap is now much narrower than §34 implied:
+the loader is understood, the index is right, the cast is on screen, and `$6C` is
+the correct probe. What is missing is whatever makes an A-press register as a talk
+— most likely the party must be exactly one tile away and facing, and the sprite
+positions I steer by are OAM screen coords, not map tiles.
