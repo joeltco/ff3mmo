@@ -1,3 +1,33 @@
+## 1.9.34 — 2026-08-19
+
+### Parked vehicle sprites ripped — and `$DC1A` is not a sprite table
+
+⛔ **Correcting v1.9.33.** `$DC1A` is 16 bytes of LAYOUT/facing offsets
+(`00 00 10 00 30 00 10 00 20 00 10 00 30 00 10 00`) indexed by `$A7`, OR'd into
+`$80` and used as an offset into the metasprite tables at `$DC6A`/`$DCAA`
+(`$DA07`/`$DA19` build the pointer). **The tile base is hard-coded per DRAW BLOCK,
+not per vehicle**; `$600B` only picks a layout when it equals 4. So there are
+**two** distinct parked craft, not eight — "a per-VEHICLE sprite set" was wrong.
+
+`docs/sprites/ff3-parked-vehicles.png` (NEW) via
+`tools/monscan/parked-vehicle-art.cjs` (NEW):
+
+| block | craft tiles | appearance |
+|---|---|---|
+| `$DAD8` | `$60-$63` | small angled sailing vessel, white sails, gold hull |
+| `$DB2F` | `$78-$7b` | larger front-on ship, white with a gold deck |
+
+`$600B` = 4 swaps a secondary element `$18-$1b` -> `$10-$13` (the `$30` layout
+offset) but does not change the craft.
+
+Traps recorded: setting `$6020` = `$FF` fires every draw block at once and they
+overlap, which is why all eight `$600B` values first rendered identically;
+`$DAD8` has no flag gate and draws whenever `$6000` != 0, so isolate `$DB2F` by
+clearing `$6000` instead; and the world map scrolls, so cluster OAM and drop the
+party's walk tiles (`$00-$03`) rather than filtering on screen-x.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.33 — 2026-08-19
 
 ### Animation coverage closed: sequence census complete, 2 launches exist, both captured

@@ -1182,11 +1182,48 @@ is intact.
 
 ### What is genuinely NOT captured
 
-- ⛔ **Per-vehicle PARKED art.** The world-map sprite for a vehicle sitting in the
-  world is selected from `$600B` — `$DB73` reads it and picks sprite `$30`, and the
-  draw blocks use `$50` (modes 3/4) and `$68` (modes 5/6), indexed through a table
-  at `$DC1A`. That is a per-VEHICLE sprite set and none of it has been ripped.
+- ✅ **Parked art — ripped in §26. But the premise here was wrong**: there is no
+  per-VEHICLE sprite set. See §26.
 - ⚠ **`vehicle-art.png` is per-MOVEMENT-MODE, not per-vehicle.** It captured modes
   0, 2, 3, 5, 6, 7; modes 1 and 4 normalise away (1 -> 0, 4 -> 3) so they have no
   distinct capture. Since §19 established identity lives in `$600B`, that sheet is
   a mode sheet — useful, but it is not "the eight vehicles".
+
+## 26. Parked vehicle art — ripped, and `$DC1A` is not what I said
+
+### The correction
+
+`$DC1A` is **not a sprite table**. It is 16 bytes of LAYOUT/facing offsets —
+`00 00 10 00 30 00 10 00 20 00 10 00 30 00 10 00` — indexed by `$A7`, OR'd into
+`$80`, and used as an offset into the metasprite tables at `$DC6A`/`$DCAA`
+(`$DA07`/`$DA19` build the pointer: `$80 + $AA`/`$6A`, high byte `$DC`).
+
+**The tile base is hard-coded per DRAW BLOCK, not per vehicle**, and `$600B` only
+selects a layout when it equals 4 (`$DB73`). So there are **two** distinct parked
+craft, not eight. My §25 claim of "a per-VEHICLE sprite set, none of it ripped"
+was wrong on the first half.
+
+### The rip
+
+`docs/sprites/ff3-parked-vehicles.png`, via
+`tools/monscan/parked-vehicle-art.cjs` (NEW). Two craft, measured:
+
+| block | gates | craft tiles |
+|---|---|---|
+| `$DAD8` | `$6000`, `$6003`==`$78`, `$42` not in {3,4} | `$60-$63` — a small angled sailing vessel, white sails, gold hull |
+| `$DB2F` | `$6020` bit 6, `$6003`==`$78`, `$42` != 6 | `$78-$7b` — a larger front-on ship, white with a gold deck |
+
+`$600B` = 4 swaps a secondary element from `$18-$1b` to `$10-$13`, consistent with
+the `$30` layout offset, but does not change the craft.
+
+### Traps that cost two runs
+
+- ⚠ **`$6020` = `$FF` fires every draw block at once.** The blocks then overlap and
+  every `$600B` value renders identically — which is what "all eight are the same"
+  actually meant the first time.
+- ⚠ **`$DAD8` cannot be isolated by flags** — it has no flag gate and draws
+  whenever `$6000` != 0. `$DB2F` does not check `$6000`, so clearing `$6000` is the
+  way to leave only it.
+- ⚠ The world map SCROLLS, so the party is not at a fixed screen position; select
+  the craft by clustering OAM and dropping the party's walk tiles (`$00-$03`),
+  not by a screen-x threshold.
