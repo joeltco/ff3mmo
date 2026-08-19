@@ -1,3 +1,38 @@
+## 1.9.44 — 2026-08-19
+
+### NPC map positions found in RAM; navigation blocked because the party never moves
+
+**The NPC record table is decoded.** The loader writes each NPC through `$8E`/`$8F`
+= **`$7000`**; bank 59 `$934E` gives the layout and a live dump on map 114 confirms
+it: **base `$7000`, stride 16**, with
+
+| offset | meaning |
+|---|---|
+| +0 | NPC id (mirrored at +10) |
+| +1 | flags (`byte & $F0`) |
+| **+2 / +3** | **map tile X / Y** |
+| +4 / +5 | X / Y home copy |
+| +6..+9 | zeroed at load (runtime state) |
+
+Map 114 holds 8 records — NPC #0 at (10,28), #1 at (17,28).
+
+⛔ **Navigation could not be exercised.** Diffing ALL RAM *and* SRAM across a
+down/up/right walk on map 114, the only responding addresses are `$20`, `$33d`,
+`$7f4a`, `$7f75`, `$7f98` — and the `$7f4x`/`$7f9x` ones are the SOUND ENGINE
+(`$7F42`/`$7F43`/`$7F49` are its ports). **No party tile coordinate moves at all.**
+`$27`/`$28` (proven to be the party's tile coords on the world map via the
+`$C681`/`$C689` pointer arithmetic) do not change here; `$68`/`$69` hold the map
+ENTRANCE, reading back exactly the spawn passed in.
+
+So the party does not walk on these forced indoor maps, at its own entrance or an
+override. **That — not adjacency, facing, or pixel-vs-tile steering — is why
+talking never fired in v1.9.43.** The party can never reach anyone.
+
+The NPC half is finished (`$7000 + n*16 + 2/+3`); the party's live tile coords on an
+indoor map are the missing piece.
+
+Reference-only; nothing under `src/`.
+
 ## 1.9.43 — 2026-08-19
 
 ### npcIdx decoded; NPCs DO load (v1.9.42 was wrong); talk still not firing

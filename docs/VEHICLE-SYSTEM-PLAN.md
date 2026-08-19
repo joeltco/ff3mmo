@@ -1683,3 +1683,49 @@ the loader is understood, the index is right, the cast is on screen, and `$6C` i
 the correct probe. What is missing is whatever makes an A-press register as a talk
 — most likely the party must be exactly one tile away and facing, and the sprite
 positions I steer by are OAM screen coords, not map tiles.
+
+## 36. NPC map positions FOUND in RAM; navigation blocked on a different problem
+
+### The NPC record table — decoded
+
+The loader (§35) writes each NPC through the `$8E`/`$8F` pointer, which it sets to
+**`$7000`**. Bank 59 `$934E` onward gives the layout, and a live dump on map 114
+confirms it exactly:
+
+    $7000: 05 c0 0a 1c 0a 1c 00 00 00 00 05 00 00 00 1a b4
+    $7010: 06 00 12 18 12 18 00 00 00 00 06 03 00 00 3a b4
+    $7020: 08 c0 1c 1c 1c 1c 00 00 00 00 08 00 00 00 2a b4
+
+**Base `$7000`, stride 16.** Fields:
+
+| offset | meaning |
+|---|---|
+| +0 | NPC id (also mirrored at +10) |
+| +1 | flags (`$c0` / `$00`, written as `byte & $F0`) |
+| **+2** | **map tile X** |
+| **+3** | **map tile Y** |
+| +4, +5 | X, Y again (the "home" copy the loader writes twice) |
+| +6..+9 | zeroed at load (runtime movement state) |
+
+Map 114 holds 8 populated records; NPC #0 sits at (10,28), #1 at (17,28).
+
+### Navigation could not be exercised — the party does not move
+
+Diffing all of RAM **and SRAM** across a down/up/right walk on map 114, the only
+addresses that respond are `$20`, `$33d`, `$7f4a`, `$7f75`, `$7f98` — and the
+`$7f4x`/`$7f9x` ones are the SOUND ENGINE (`$7F42`/`$7F43`/`$7F49` are its ports),
+not coordinates. **No party tile coordinate changes at all.**
+
+`$27`/`$28` — which are definitely the party's tile coords on the WORLD map, proven
+by the `$C681`/`$C689` pointer arithmetic — do not move here. `$68`/`$69` hold the
+map ENTRANCE (they read back exactly the `spawnX`/`spawnY` passed in), not a live
+position.
+
+So the party is not walking on these forced indoor maps at all, whether spawned at
+the map's own entrance or at an override. That is why talking never fired in §35 —
+not adjacency, not facing, and not the pixel-vs-tile steering I blamed: **the party
+never moves, so it can never reach anyone.**
+
+⛔ Navigation-by-tile is implemented-ready but untestable until that is fixed. The
+NPC side is done: positions are at `$7000 + n*16 + 2/+3`, and the party's live tile
+coords on an indoor map are the missing half.
