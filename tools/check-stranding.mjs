@@ -66,11 +66,26 @@ function waysOut(id) {
   return doors + exits;
 }
 
-// Maps walked in a real emulator: they HAVE a way out in the data, and the party
-// still cannot get to it. `tools/monscan/reach-flood.cjs <id>`.
+// ⭐ EVERY ENTRY IS WALKED. Not "has no exit in the data" — the party was driven
+// around each of these maps in a real emulator (`tools/monscan/reach-flood.cjs
+// <id>`, which walks with real button presses and reads $68/$69), and touched no
+// door and no exit. The tile counts are what the walk actually covered.
+//
+// This replaced a structural argument ("a verified tilemap with zero doors and
+// zero exit tiles has nothing to reach"). That argument is still true and is why
+// `waysOut` is checked below as a second opinion, but it is no longer what the
+// list rests on.
 const WALKED_STRANDING = new Map([
-  [34,  'spawn (22,27): 1 tile reachable, no door touched — its door at (4,12) is walled off'],
-  [135, 'spawn (15,14): 69 tiles reachable, no door and no exit touched'],
+  [0,   'spawn (15,7):  1024 tiles walked — the whole grid, no door and no exit'],
+  [34,  'spawn (22,27): 1 tile — cannot move at all; its door at (4,12) is walled off'],
+  [94,  'spawn (11,9):  13 tiles, no door touched'],
+  [135, 'spawn (15,14): 69 tiles, no door touched'],
+  [152, 'spawn (26,2):  1 tile — cannot move at all'],
+  [159, 'spawn (23,21): 1 tile — cannot move at all'],
+  [169, 'spawn (29,5):  1 tile — cannot move at all'],
+  [180, 'spawn (19,11): 101 tiles, no door touched'],
+  [193, 'spawn (0,0):   1019 tiles walked, no door touched'],
+  [255, 'spawn (10,4):  14 tiles, no door touched'],
 ]);
 
 let fails = 0;
@@ -84,24 +99,26 @@ let blind = 0;
 for (const [id, why] of CONTROLS) if (waysOut(id) === 0) { fail(`detector blind: map ${id} (${why}) counts 0 ways out`); blind++; }
 if (!blind) console.log(`  ✓ detector self-test: all ${CONTROLS.length} maps with a proven way out count more than zero`);
 
-// 1. every refused map is justified
-let structural = 0;
+// 1. every refused map is walked
 for (const id of declared) {
+  if (!WALKED_STRANDING.has(id)) {
+    fail(`map ${id} is refused at the door with no emulator measurement — walk it ` +
+         `(node tools/monscan/reach-flood.cjs ${id}) and record what it covers, or drop it`);
+  }
+}
+// 2. second opinion from the data: a map with a way out in a VERIFIED tilemap had
+//    better be one the walk explained (34 has a door it cannot reach; the rest
+//    have nothing at all). A disagreement means one of the two is stale.
+for (const id of declared) {
+  if (!WALKED_STRANDING.has(id)) continue;
   const n = waysOut(id);
-  // 135 is BOTH — it has nothing to reach and was walked anyway. Count it once,
-  // as walked, so the totals add up to the size of the list.
-  if (n === 0 && !WALKED_STRANDING.has(id)) { structural++; continue; }
-  if (n === 0) continue;
-  if (WALKED_STRANDING.has(id)) continue;                     // measured in the emulator
-  fail(`map ${id} is refused but has ${n} way(s) out in its data and no emulator measurement — ` +
-       `walk it (tools/monscan/reach-flood.cjs ${id}) or drop it from the list`);
+  if (n > 0 && id !== 34) {
+    fail(`map ${id} was walked as stranding but its data now shows ${n} way(s) out — re-walk it`);
+  }
 }
-if (!fails) {
-  console.log(`  ✓ ${declared.size} refused map(s): ${structural} contain no door and no exit at all, ` +
-              `${WALKED_STRANDING.size} walked in the emulator`);
-}
+if (!fails) console.log(`  ✓ all ${declared.size} refused map(s) walked in the emulator, none touching a door`);
 
-// 2. nothing we ship is refused
+// 3. nothing we ship is refused
 for (const id of declared) {
   if (SHIPPED_MAPS.has(id)) fail(`map ${id} is refused at the door but is a map we ship as a place`);
 }

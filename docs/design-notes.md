@@ -30,12 +30,13 @@ Intentional design decisions that aren't obvious from reading the code. One sect
   deleted rather than shipped. Use `node tools/monscan/reach-flood.cjs <id>` and
   look at whether it touches a door. All three REMOVALS (24, 140, 178) are
   walked end to end; map 140's door at (27,24) opens onto map 142 after left x4
-  and up x4 from its entrance. **Every remaining entry is now accounted for too**:
-  34 and 135 were walked in the emulator (1 tile / 69 tiles, no door touched), and
-  the other eight contain NO door with a destination and NO exit tile at all, on
-  tilemaps verified byte for byte against the cartridge — there is nothing to
-  reach. `check-stranding.mjs` pins that, and self-tests its detector against six
-  maps proven to have a way out before believing any negative.
+  and up x4 from its entrance. **ALL TEN entries are walked in the
+  emulator** — no structural argument left in it. Tile counts live in
+  `check-stranding.mjs`, which pins each entry to its measurement and refuses a new
+  one without a walk; maps 0 and 193 cover 1024 and 1019 tiles respectively, the
+  whole grid with nothing to walk out of. The gate also self-tests its exit
+  detector against six maps proven to HAVE a way out before believing any
+  negative.
 - ⭐ **The door graph is measured for the WHOLE GAME, not just the towns.**
   `docs/ROM-DOOR-GRAPH.json` holds **373 doors across 182 maps** — every map the
   engine can address that has one — walked in a real emulator with the fixed

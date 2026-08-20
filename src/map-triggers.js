@@ -426,10 +426,15 @@ export function findWorldExitIndex(mapId, worldMapData) {
 //     It was kept one release longer than the evidence required because the
 //     automated flood could not finish on it; a directed walk settled it.
 //
-// The maps still listed are NOT individually walked. That is deliberate and the
-// asymmetry is the reason: barring a map nothing can reach costs nothing, while
-// un-barring one that traps costs a player their run. Only REMOVALS need proof,
-// and all three of them have it.
+// ⭐ ALL TEN ENTRIES ARE NOW WALKED IN THE EMULATOR — every one driven around with
+// real button presses (`tools/monscan/reach-flood.cjs <id>`), touching no door and
+// no exit. Tile counts in `tools/check-stranding.mjs`, which pins each entry to
+// its measurement and fails if one is added without one. The largest are maps 0
+// and 193 at 1024 and 1019 tiles: the whole grid walkable, nothing to walk out of.
+//
+// This list is no longer an argument from map DATA. It used to be, and the data
+// was wrong for years (see v1.10.9) — which is exactly how 24, 140 and 178 came to
+// be barred while map 135, a real trap, was not.
 //
 // ⛔ DO NOT re-derive this from `isPassable` alone. A gate written that way
 // during this pass reported map 135 as having a reachable way out, which the

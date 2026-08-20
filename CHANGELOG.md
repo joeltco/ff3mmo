@@ -1,3 +1,41 @@
+## 1.10.14 — 2026-08-20
+
+### All ten stranding maps walked — no structural argument left
+
+The last eight rested on "a verified tilemap with no door and no exit has nothing
+to reach". True, but an argument. They are now measured the same way as the rest:
+the party driven around each map with real button presses
+(`tools/monscan/reach-flood.cjs`), reading `$68/$69` back.
+
+**None of the ten touches a door or an exit.**
+
+| map | walked |
+|---|---|
+| 0 | **1024 tiles** — the whole grid, nothing to walk out of |
+| 34 | 1 tile — cannot move at all; its door at (4,12) is walled off |
+| 94 | 13 tiles |
+| 135 | 69 tiles |
+| 152 / 159 / 169 | 1 tile each — cannot move at all |
+| 180 | 101 tiles |
+| 193 | **1019 tiles**, with a sealed one-tile pocket at (15,6) |
+| 255 | 14 tiles |
+
+`check-stranding` now pins every entry to its measurement and refuses a new one
+without a walk. The structural check is kept only as a **second opinion** — if a
+map walked as stranding later shows a way out in its data, one of the two is stale
+and it says so.
+
+Proven on two reverts: adding an unwalked map is caught by name, and undoing the
+v1.10.9 decompressor fix makes the *data* claim maps 0, 94, 180 and 193 have exits
+— directly contradicting the walks, which is precisely the disagreement the second
+opinion exists to surface.
+
+⛔ This list is no longer an argument from map data. It used to be, and that data
+was wrong for years — which is exactly how 24, 140 and 178 came to be barred while
+map 135, a real trap, was not.
+
+No gameplay change.
+
 ## 1.10.13 — 2026-08-20
 
 ### The door graph, re-measured for the whole game
