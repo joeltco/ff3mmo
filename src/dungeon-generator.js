@@ -3036,11 +3036,26 @@ function _generateFloor(romData, floorIndex, seed) {
   // assumed trigIds 0..N-1 were stair/trap; the v1.7.649 locked-room doors
   // insert another type-1 trigger between them in scan order, shifting all
   // later trigIds (v1.7.657).
+  //
+  // ⛔ NEVER OVERWRITE A DESTINATION A FLOOR BRANCH ALREADY SET. This loop is a
+  // fallback — "any type-1 trigger I have not been told about leads down" — and
+  // it used to run unconditionally, which clobbered floor 3's own wiring two
+  // lines after that branch wrote it:
+  //     dungeonDestinations.set('1:1', { goBack: true });  // stairs back up
+  // became `{ mapId: 1004 }`. Floor 3's entrance staircase is a type-1 trigger,
+  // so the player arrived on it, and `disabledTrigger` (map-loading.js) only
+  // suppresses it until they step OFF (movement.js clears it on the first move).
+  // Step off the stairs and back on and you warped straight to the CRYSTAL ROOM,
+  // skipping the whole floor and landing on the boss. Shipped and unnoticed
+  // because the sweep's "exit reachable" check looked for a $73 staircase and
+  // found this one — the entrance — and called it the exit.
   const _nextMapId = 1000 + floorIndex + 1;
   for (const [coord, trig] of triggerMap) {
     if (trig.type !== 1) continue;
     if (lockedRoomDoors.has(coord)) continue;  // wired below to locked-room mapId
-    dungeonDestinations.set(`${trig.type}:${trig.trigId}`, { mapId: _nextMapId });
+    const key = `${trig.type}:${trig.trigId}`;
+    if (dungeonDestinations.has(key)) continue;  // the floor branch knows better
+    dungeonDestinations.set(key, { mapId: _nextMapId });
   }
   // Rock puzzle exit (type 4)
   if (typeof rockExitX !== 'undefined') {

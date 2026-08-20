@@ -1,3 +1,60 @@
+## 1.10.16 — 2026-08-20
+
+### Fixed — floor 4 of Altar Cave could be skipped entirely, onto the boss
+
+The staircase the player **arrives on** was wired as a forward exit to the
+crystal room. `disabledTrigger` suppresses the tile you land on only until you
+step off it (`movement.js` clears it on the first move), so:
+
+1. arrive on floor 4 from floor 3, landing on the stairs at (16,28);
+2. take one step off;
+3. step back on — **warp to the crystal room**, skipping the floor and landing on
+   the Land Turtle.
+
+Floor 3's branch wires its own destinations, `'1:0'` to the boss-room door and
+`'1:1'` back up the stairs. The tail loop that wires "any type-1 trigger I have
+not been told about leads down" then ran unconditionally and **overwrote
+`'1:1'`** two lines later. The fallback now skips a key that is already set —
+the floor branch knows better. Present on every floor-3 seed tested (100/100).
+
+### The sweep was looking for the wrong thing
+
+v1.10.15's exit check was *find the first `$73` staircase, assert it is
+reachable*. That is wrong three ways:
+
+- floors 1 / 2 / 4 have **no `$73` at all** — trap holes, a rock-switch passage
+  and a boss chamber — so they counted as "noStairs" and were never checked;
+- floor 3's real exit is a **door `$70`** at the top of the map;
+- the only `$73` on floor 3 is the **entrance**, so the check asserted that the
+  tile the flood starts from is reachable.
+
+It did real work on floor 0 alone, which is how the wiring bug above shipped
+under a green gate.
+
+`exitAudit` replaces it and reads `dungeonDestinations` — the same map
+`_checkDynType1` / `_checkDynType4` consult — so the sweep asks the engine where
+a tile leads instead of guessing from its appearance. Rock-puzzle floors are
+audited against the post-switch map, since their way onward is behind the switch
+by design. Three hard invariants, each proven by injecting its fault:
+
+- **no way onward** — nothing wired to the next floor (proven: wire floor 3's
+  door to `goBack` instead, 100 failures);
+- **unreachable exit** — a wired destination no reachable tile touches (proven:
+  wall in floor 3's door, 100 failures);
+- **entrance wired as a forward exit** — the sequence break above (proven:
+  restore the clobber, 100 failures).
+
+Note on the second: simply deleting floor 3's explicit `'1:0'` wiring does *not*
+fail, and should not — the fallback correctly supplies it. A gate that fired
+there would be wrong.
+
+### Added — `tools/floor-png.mjs`
+
+Renders a **generated** floor to PNG through the same metatile → CHR → palette
+path `map-png.mjs` uses for ROM maps. Comparing our caves against the real Altar
+Cave previously meant putting a PNG next to an ASCII grid, which is not a
+comparison. No gameplay change.
+
 ## 1.10.15 — 2026-08-20
 
 ### Fixed — floor you could see and never stand on

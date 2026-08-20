@@ -38,7 +38,7 @@ import { generateLockedRoomMap } from '../src/dungeon-locked-room.js';
  * `MapRenderer.isPassable` before calling it a bug.
  */
 export const PASS = new Set([0x30, 0x09, 0x41, 0x49, 0x44, 0x73, 0x42, 0x68, 0x6a, 0x60]);
-const CHEST = 0x7c, STAIRS = 0x73;
+const CHEST = 0x7c;
 
 /**
  * Passable tiles reachable on foot from the entrance.
@@ -119,6 +119,49 @@ export function applyRockSwitch(tm, rockSwitch) {
 }
 
 /**
+ * Audit a floor's EXITS as the game wires them, not as a tile guess.
+ *
+ * ⛔ The old check was `find the first 0x73 STAIRS tile, assert it is reachable`.
+ * That is wrong three ways and shipped wrong in v1.10.15:
+ *   - floors 1 / 2 / 4 have no $73 at all (trap holes, a rock-switch passage, a
+ *     boss chamber), so they counted as "noStairs" and were never checked;
+ *   - floor 3's exit is a DOOR ($70 at the top of the map), not a staircase;
+ *   - the only $73 on floor 3 is the ENTRANCE, so the check asserted that the
+ *     tile the flood starts from is reachable. It did real work on floor 0 only.
+ *
+ * `dungeonDestinations` is the engine's own answer to "where does this tile
+ * take me" (`_checkDynType1` / `_checkDynType4` read exactly this map), so the
+ * audit walks it. A destination tile counts as reachable if it or an orthogonal
+ * neighbour is — door and passage tiles are passable in the game but are not in
+ * the conservative `PASS` set, same as chests.
+ *
+ * Returns { onward, unreachable[], entranceWiredForward }.
+ */
+export function exitAudit(r, seen) {
+  const out = { onward: 0, unreachable: [], entranceWiredForward: null };
+  if (!r.dungeonDestinations || !r.triggerMap) return out;
+  const entKey = `${r.entranceX},${r.entranceY}`;
+  for (const [coord, trig] of r.triggerMap) {
+    const dest = r.dungeonDestinations.get(`${trig.type}:${trig.trigId}`);
+    if (!dest) continue;
+    const [x, y] = coord.split(',').map(Number);
+    const ok = !!seen[y * 32 + x] || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx > 31 || ny < 0 || ny > 31) return false;
+      return !!seen[ny * 32 + nx];
+    });
+    if (!ok) out.unreachable.push(`${coord}->${dest.goBack ? 'goBack' : dest.mapId}`);
+    if (!dest.goBack) out.onward++;
+    // ⛔ The staircase the player ARRIVES on must never lead further in.
+    // `disabledTrigger` suppresses it only until they step off (movement.js
+    // clears it on the first move), so a forward-wired entrance is a one-step
+    // sequence break — on floor 3 it skipped the entire floor into the boss.
+    if (coord === entKey && !dest.goBack) out.entranceWiredForward = `${coord}->${dest.mapId}`;
+  }
+  return out;
+}
+
+/**
  * Sweep every floor over `n` seeds. Returns `{ hard, soft, rows }`.
  *
  * HARD failures are unambiguous breakage:
@@ -145,7 +188,7 @@ export function applyRockSwitch(tm, rockSwitch) {
 export function sweepFloors(rom, n = 150, base = 1754900000000) {
   const rows = []; const hard = []; const soft = [];
   for (const f of [0, 1, 2, 3, 4]) {
-    const t = { floor: f, seeds: 0, noStairs: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0 };
+    const t = { floor: f, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
@@ -158,10 +201,16 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       for (let i = 0; i < 1024; i++) if (seen[i]) reach++;
       if (reach < 20) { hard.push(`floor ${f} seed ${seed}: only ${reach} reachable tiles`); continue; }
 
-      let stairs = -1;
-      for (let i = 0; i < 1024; i++) if (tm[i] === STAIRS) { stairs = i; break; }
-      if (stairs < 0) t.noStairs++;
-      else if (!seen[stairs]) hard.push(`floor ${f} seed ${seed}: exit staircase unreachable`);
+      // Exits, from the engine's own wiring. On a rock-puzzle floor the way
+      // onward is behind the switch by design, so audit the OPENED map.
+      const exSeen = r.rockSwitch
+        ? reachableFrom(applyRockSwitch(tm, r.rockSwitch), r.entranceX, r.entranceY)
+        : seen;
+      const ex = exitAudit(r, exSeen);
+      if (f !== 4 && ex.onward === 0) hard.push(`floor ${f} seed ${seed}: no way onward — nothing wired to map ${1000 + f + 1}`);
+      if (ex.unreachable.length) hard.push(`floor ${f} seed ${seed}: unreachable exit ${ex.unreachable.join(' ')}`);
+      if (ex.entranceWiredForward) hard.push(`floor ${f} seed ${seed}: ENTRANCE wired as a forward exit (${ex.entranceWiredForward}) — step off and back on skips the floor`);
+      t.exits += ex.onward;
 
       const stranded = strandedTiles(tm, seen);
       const chests = chestAudit(tm, seen);
@@ -248,9 +297,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const { hard, soft, rows } = sweepFloors(rom, n, base);
   console.log(`dungeon-sweep — ${n} timestamp-style seeds per floor (base ${base})\n`);
-  console.log('floor   seeds  noStairs  strandedSeeds  strandedTiles  chests');
+  console.log('floor   seeds  exitsWired  strandedSeeds  strandedTiles  chests');
   for (const r of rows) {
-    console.log(String(r.floor).padEnd(8) + String(r.seeds).padStart(5) + String(r.noStairs).padStart(10)
+    console.log(String(r.floor).padEnd(8) + String(r.seeds).padStart(5) + String(r.exits).padStart(12)
       + String(r.strandedSeeds).padStart(15) + String(r.stranded).padStart(15) + String(r.chests).padStart(8));
   }
 
