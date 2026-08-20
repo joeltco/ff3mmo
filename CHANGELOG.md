@@ -1,3 +1,47 @@
+## 1.10.10 — 2026-08-20
+
+### The decompressor fix is verified on every tilemap the engine can load
+
+The v1.10.9 fix was measured on 31 maps. Swept the rest.
+
+`decompressTilemap` depends only on `tilemapId`, and maps sharing one have
+byte-identical tilemaps (checked across all nine sharing groups), so the complete
+sweep is **one representative per distinct tilemap**. There are 234; **103 are
+reachable** by the engine's one-byte map id, and the other 131 live only in slots
+>= 256, which `$0700` cannot address.
+
+All 103 captured from a running cartridge, none refused. `docs/ROM-LIVE-TILEMAPS.json`
+now holds **116 maps**:
+
+**0 disagreeing tiles.** Reverting the one-line fix shows **18,510** across those
+maps — the bug was three times worse than the 31-map sample showed.
+
+### `STRANDING_MAPS` was wrong in both directions, and is now walked
+
+That list refuses a destination with "The way is barred." It was derived through
+the broken decoder. Every change below was **walked in the emulator**, not modelled:
+
+- **ADDED 135.** The party walks **69 tiles and touches no door and no exit**. It
+  was never listed, so anyone who reached it was stuck — the exact failure the set
+  exists to prevent.
+- **REMOVED 24** — 31 tiles, reaches a door at (0,26).
+- **REMOVED 178** — 22 tiles, reaches a door at (27,30). This was the only entry
+  the old list called reachable today, i.e. the only one that ever actually fired.
+- **KEPT 140** — its flood does not complete (the party jumps (27,25) -> (1,9) and
+  the walk cannot be trusted after that), so it stays. Barring a map we cannot
+  reach costs nothing; un-barring an unverified one can trap a player.
+
+### A gate I wrote and deleted rather than ship
+
+I built `check-stranding.mjs` to re-derive that list from `isPassable`, counting
+"a tile adjacent to an exit tile" as a way out. It reported **map 135 as
+escapable**, which the emulator flatly contradicts. Two of my own tools
+disagreeing is not a basis for changing what the game refuses, so the gate was
+deleted and the rule written into `map-triggers.js` instead: re-derive this by
+WALKING, with `reach-flood.cjs`, and look at whether it touches a door.
+
+No gameplay change beyond the stranding list.
+
 ## 1.10.9 — 2026-08-20
 
 ### The tilemap decompressor: a run length of 0 means 256

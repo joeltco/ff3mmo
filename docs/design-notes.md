@@ -16,6 +16,21 @@ Intentional design decisions that aren't obvious from reading the code. One sect
   - the "wrong room" reports on maps 2/5/12/16;
   - 24 phantom trigger tiles (102 doors -> 78) and all 30 "sealed" doors;
   - map 178, the last WALLED IN map, is reachable.
+- ⭐ **The decoder is verified on EVERY tilemap the engine can address.**
+  `docs/ROM-LIVE-TILEMAPS.json` now holds 116 maps — one representative per
+  distinct `tilemapId` reachable by a one-byte map id (103 of them), plus the
+  original 31. **0 disagreeing tiles.** Reverting the fix shows **18,510** across
+  those maps, so the bug was three times worse than the 31-map sample suggested.
+  The remaining 131 tilemaps live only in slots >= 256, which the engine cannot
+  address (`$0700` is one byte), so nothing can load them.
+- ⛔ **`STRANDING_MAPS` must be re-derived by WALKING, not modelling.** A gate
+  written during the v1.10.10 sweep flooded with `isPassable` and counted "a tile
+  adjacent to an exit tile" as a way out; it reported map 135 as escapable when
+  the emulator walks 69 tiles there and touches no door at all. That gate was
+  deleted rather than shipped. Use `node tools/monscan/reach-flood.cjs <id>` and
+  look at whether it touches a door. Map 140 is still unverified — its flood does
+  not complete — and stays on the list on the asymmetry that barring an
+  unreachable map costs nothing while un-barring an unverified one can trap.
 - ⛔ **There are no in-map staircase warps.** Retracted in v1.10.8 and still
   true: all 75 measured doors land on the destination map's raw ROM entrance,
   because a door record carries a map id and no coordinate.

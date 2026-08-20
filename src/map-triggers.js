@@ -409,13 +409,28 @@ export function findWorldExitIndex(mapId, worldMapData) {
 //   180 spawn (19,11)  98 tiles, 1 exit,  none reachable
 // Only 180 is reachable on foot today; the rest are listed so opening a sea or
 // air route later cannot quietly re-introduce the same trap.
-// v1.7.952 — full sweep. `node tools/map-audit.mjs --every` audits all 195 real
-// maps (the 60 unused slots sharing tilemapId $00 collapse to one) using the
-// game's own spawn rule and `MapRenderer.isPassable`, and finds TWELVE where
-// the player lands with no reachable exit. Only 178 is reachable today, but
-// every one is listed: the cost of a wrong entry here is a player stuck with no
-// way out, and the cost of a spare entry is nothing.
-const STRANDING_MAPS = new Set([0, 24, 34, 94, 140, 152, 159, 169, 178, 180, 193, 255]);
+// v1.10.10 — RE-DERIVED against the fixed tilemap decompressor, and every change
+// WALKED IN THE EMULATOR (`tools/monscan/reach-flood.cjs`), not modelled. The
+// v1.7.952 list was measured through a decoder that dropped whole rows of fill,
+// so it was wrong in both directions:
+//
+//   ADDED 135 — the party walks 69 tiles and touches NO door and no exit. It was
+//     never listed, so anyone who got there was stuck. This is the exact failure
+//     the set exists to prevent.
+//   REMOVED 24  — 31 tiles, reaches a door at (0,26).
+//   REMOVED 178 — 22 tiles, reaches a door at (27,30). This was the only entry
+//     the old list said was reachable today, i.e. the only one that ever fired.
+//   KEPT 140 — its flood did not complete (the party jumped (27,25) -> (1,9) and
+//     the walk could not be trusted after that), so it stays. Barring a map we
+//     cannot reach costs nothing; un-barring one we have not verified can trap a
+//     player, and that asymmetry decides every unproven entry here.
+//
+// ⛔ DO NOT re-derive this from `isPassable` alone. A gate written that way
+// during this pass reported map 135 as having a reachable way out, which the
+// emulator flatly contradicts — "a tile adjacent to an exit tile" over-counts.
+// Re-derive by WALKING: `node tools/monscan/reach-flood.cjs <id>` and look at
+// whether it touches a door.
+const STRANDING_MAPS = new Set([0, 34, 94, 135, 140, 152, 159, 169, 180, 193, 255]);
 
 function _checkWorldMapTrigger(tileX, tileY) {
   const trigger = mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
