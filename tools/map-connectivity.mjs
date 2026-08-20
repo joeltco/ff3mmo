@@ -23,6 +23,12 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
+// ⭐ THE ENGINE OPENS PASSAGES BEFORE THE PLAYER WALKS. `map-loading.js` calls
+// `applyPassage` on every regular map load ($5B -> $5D doorframe, $5C -> $5E the
+// walkable passage). Every reachability tool here used to skip it, which models
+// each map more CLOSED than the game is — Ur's secret house read as 28 tiles
+// with its treasure room walled off, against 49 tiles and an open way in live.
+const { applyPassage } = await import('../src/map-passage.js');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -30,6 +36,7 @@ const mapId = parseInt(process.argv[2] || '180', 10);
 const W = 32;
 
 const md = loadMap(rom, mapId);
+  applyPassage(md.tilemap);
 
 // Same spawn rule as _loadRegularMap:249 — (ex, _calcSpawnY(ex, ey)).
 function calcSpawnY(m, ex, ey) {

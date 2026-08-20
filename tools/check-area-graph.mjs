@@ -30,7 +30,7 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
-const { AREAS, SHIPPED_MAPS, isShippedMap } = await import('../src/data/areas.js');
+const { AREAS, SHIPPED_MAPS, isShippedMap } = await import('../src/data/areas.js');const { applyPassage } = await import('../src/map-passage.js');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -56,6 +56,13 @@ function calcSpawnY(m, ex, ey) {
 /** Doors the player can actually walk to on this map, with their destinations. */
 function doorsOf(mapId) {
   const md = loadMap(rom, mapId);
+  // ⭐ THE ENGINE OPENS PASSAGES BEFORE THE PLAYER EVER WALKS. `map-loading.js`
+  // calls `applyPassage` on every regular load ($5B -> $5D, $5C -> $5E, the
+  // walkable passage). A flood that skips it models a map more CLOSED than the
+  // game is: Ur's secret house reads as 28 tiles with the treasure room walled
+  // off, when the live game gives 49 and opens the way to it. This gate reported
+  // map 1 unreachable for exactly that reason.
+  applyPassage(md.tilemap);
   const sx = md.entranceX, sy = calcSpawnY(md, md.entranceX, md.entranceY);
   const r = new MapRenderer(md, sx, sy);
   const seen = new Set([sy * W + sx]);

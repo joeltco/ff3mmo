@@ -21,6 +21,7 @@ import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
 import { isShippedMap } from './data/areas.js';
+import { applyPassage } from './map-passage.js';
 import { addItem, canAddItem } from './inventory.js';
 import { sendNetInvEvent, SERVER_ECONOMY, PVE_ARBITER, sendNetChestOpen, sendNetVaseSearch, nextChestTxnId } from './net.js';
 import { saveSlotsToDB } from './save-state.js';
@@ -367,13 +368,10 @@ export function handlePondHeal() {
 // --- Passage helpers ---
 
 // Pure — no shared state needed
-export function applyPassage(tm) {
-  // FF3 $D6/$D7: $5B → $5D (doorframe top), $5C → $5E (walkable passage)
-  for (let i = 0; i < tm.length; i++) {
-    if (tm[i] === 0x5B) tm[i] = 0x5D;
-    if (tm[i] === 0x5C) tm[i] = 0x5E;
-  }
-}
+// `applyPassage` is `map-passage.js` — a leaf, so map TOOLS can apply the same
+// rewrite the engine does without importing the roster and the message box with
+// it. Imported (not bare re-exported) because this module calls it itself.
+export { applyPassage };
 
 export function openPassage() {
   playSFX(SFX.EARTHQUAKE);

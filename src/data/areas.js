@@ -52,17 +52,13 @@ export const AREAS = [
       [9,   'ur-tavern'],   // tavern (inn, upstairs)
       [147, 'ur-well'],     // well
     ]),
-    // Map 1 is the secret ROOM, and it shares one 32x32 tilemap with map 2 (the
-    // secret house) the way FF3 packs several interiors per grid. From map 2's
-    // spawn the door to it at (23,16) is WALLED OFF — measured twice, by
-    // `map-connectivity.mjs` against the production `isPassable` and by the
-    // emulator prober, which could not walk to it either. Ur's door 0 at (5,7)
-    // is the one door in the game I could not measure cleanly: the transition
-    // fires somewhere my prober cannot attribute, and the tile it lands on is
-    // map 1's entrance region, so our table's answer (map 2) may be the thing
-    // that is wrong. Listed rather than deleted so the room keeps its name and
-    // roster key if that turns out to be it. See docs/design-notes.md#followups.
-    unreachable: new Set([1]),
+    // ⛔ Map 1 (the treasure room) was declared unreachable here in v1.10.4. That
+    // was WRONG, and the game was never broken — the GATE was. It flooded the map
+    // without `applyPassage`, the $5B/$5C -> $5D/$5E rewrite `map-loading.js`
+    // performs on every load, so Ur's secret house read as 28 tiles with the way
+    // to the treasure room sealed. With the passage opened, as the live game
+    // opens it, map 2 gives 49 tiles and the door at (23,16) is reachable.
+    unreachable: new Set()
   },
   {
     head: 10, banner: 'Kazus', loc: 'kazus', fromOverworld: true, unreachable: new Set(),

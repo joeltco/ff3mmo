@@ -4,15 +4,24 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 
 ## Followups
 
-- **Ur's door 0 at (5,7) is the one door in the game not cleanly measured.** Our
-  table says map 2 (the secret house); map 1 (the secret room) shares map 2's
-  tilemap and its connecting door at (23,16) is walled off from map 2's spawn —
-  measured by `map-connectivity.mjs` against the production `isPassable` and
-  again by the emulator prober. So map 1 is unreachable today. The ROM prober
-  could not attribute this door's transition (it lands in map 1's entrance
-  region), which is exactly what you would see if the ROM's answer were map 1
-  rather than map 2. Re-measure before building anything on top of it; the
-  hole is declared in `data/areas.js` (`Ur.unreachable`).
+- ⭐ **Map tools must call `applyPassage` (`src/map-passage.js`) before flooding.**
+  The engine runs it on every regular map load ($5B → $5D, $5C → $5E, the
+  walkable passage). Every reachability tool in `tools/` used to skip it, which
+  models each map more CLOSED than the game is — Ur's secret house read as 28
+  tiles with its treasure room walled off, against 49 tiles and an open way in
+  the live game. It is a leaf module precisely so tools can call it; it used to
+  live in `map-triggers.js`, which drags `ui-state.js` and a browser in with it.
+- **Ur's door 0 at (5,7) → map 2 is CONFIRMED** by `door-probe.cjs`, matching our
+  table. The earlier note doubting it is retracted.
+- **Four maps spawn the player in a different room than the cartridge does** —
+  map 5 (Ur weapon shop), 12 (Kazus inn), 16 (Kazus weapon shop), 21 (a Sasune
+  tower room). In each the ROM lands you at its literal entrance while
+  `_calcSpawnY` walks you elsewhere; measured with `door-probe.cjs` (39 of 44
+  maps agree, these 5 do not — map 2 is the fifth and its rooms connect anyway).
+  Three carry shop counters and keeper NPCs placed for the room we currently
+  open, so correct the spawn together with the NPC placement, never as a side
+  effect. ⛔ Do NOT "fix" `_calcSpawnY` itself — `map-audit.mjs` records what
+  bounding its scan does to the maps it rescues.
 - **Castle Sasune map 24** is listed as a room but is refused at the door by
   `STRANDING_MAPS` and nothing points at it (its own door 0 points at itself).
   Declared in `Castle Sasune.unreachable`.

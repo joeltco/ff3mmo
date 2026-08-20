@@ -1,3 +1,61 @@
+## 1.10.6 — 2026-08-19
+
+### Ur door 0 is correct, and map 1 was always reachable — the GATE was broken
+
+Both halves turned out to be about our tooling, not the game.
+
+**Ur door 0 → map 2 is CONFIRMED.** `door-probe.cjs` walked it: the ROM sends the
+player to map 2, exactly what we do. The doubt recorded in 1.10.4 is retracted.
+
+**Map 1 (Ur's treasure room) is reachable in the live game and has been.**
+`check-area-graph` said otherwise because it flooded maps without calling
+`applyPassage` — the `$5B → $5D` / `$5C → $5E` rewrite `map-loading.js` performs
+on **every regular map load**. Skipping it models a map more CLOSED than the game
+is: Ur's secret house read as 28 tiles with the way to the treasure room sealed,
+when the live game gives **49 tiles and an open route** to the door at (23,16).
+
+**Every reachability tool in `tools/` had the same hole** — `check-map-exits`
+(a deploy gate), `map-connectivity`, `map-audit`, `rom-door-map`. All four now
+apply it. `map-connectivity 2` went from reporting the door to map 1 "walled off"
+to `REACHABLE`.
+
+### `applyPassage` moved to `src/map-passage.js`, a leaf
+
+It lived in `map-triggers.js`, which pulls in the roster, the message box and
+`ui-state.js` — so a map tool that tried to use it got `window is not defined`
+and every one of them simply went without. That is the whole reason the hole
+existed. `map-triggers.js` re-exports it, so no call site changed.
+
+`check-area-graph` now proves it: commenting out the `applyPassage` call makes it
+fail with map 1 unreachable again.
+
+### Measured along the way, and deliberately NOT acted on
+
+`door-probe.cjs` compared our spawn against the cartridge's landing tile on 44
+maps: **39 agree.** The five that differ are maps 2, 5, 12, 16 and 21 — in each
+the ROM lands you at its literal entrance while `_calcSpawnY` walks you into a
+different room of the same tilemap.
+
+Map 2's rooms connect once the passage is open, so it needs nothing. The other
+four are recorded in `design-notes#followups` and left alone on purpose: three
+carry shop counters and keeper NPCs placed for the room we currently open, so
+moving the spawn would move the player away from working content. ⛔ And
+`_calcSpawnY` itself must not be "fixed" — `map-audit.mjs` records what bounding
+its scan does to the maps it rescues.
+
+### New tool: `tools/monscan/reach-flood.cjs`
+
+Floods a map by WALKING it in a real emulator — every step a button press, the
+party's own `$68/$69` deciding what worked. No passability rule is consulted or
+reimplemented, which is the point: when the model is the thing in question you
+cannot check it with the model. It is what showed that the cartridge's map 2 is
+the bottom room (27 tiles) and that the storage room and the staircase room are
+one-tile islands. Doors are avoided rather than walked through, re-running until
+no new one is touched.
+
+No gameplay change — the game was already right. The tools that judge it are now
+right too.
+
 ## 1.10.5 — 2026-08-19
 
 ### Every door in Ur, Kazus and Castle Sasune is now measured, not believed
