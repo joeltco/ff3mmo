@@ -1,3 +1,36 @@
+## 1.10.12 — 2026-08-20
+
+### Every refused map is now accounted for
+
+`STRANDING_MAPS` has ten entries. All ten are justified, two ways:
+
+- **34 and 135 were WALKED in the emulator.** Map 34 spawns the party on a single
+  tile it cannot leave — its door at (4,12) is walled off. Map 135 gives 69
+  walkable tiles and touches no door and no exit at all.
+- **The other eight contain no door carrying a destination and no exit tile
+  whatsoever** — 0 and 0 — on tilemaps verified byte for byte against a running
+  cartridge. There is nothing to reach, so no walk can find a way out.
+
+That second argument only became available with the v1.10.9 decoder fix: before
+it, "this map has no exits" was a statement about a tilemap that disagreed with
+the cartridge on thousands of tiles.
+
+### `check-stranding` — the version that self-tests
+
+I deleted a gate by this name in v1.10.10 for reporting map 135 as escapable. The
+replacement does not model reachability at all, which is where that one went
+wrong. It checks the half data can settle — a map with zero ways out in a verified
+tilemap strands whatever the walk does — and pins the two maps that DO have exits
+to their emulator measurements rather than re-deriving them.
+
+⭐ **It self-tests its detector first.** Six maps proven in the emulator to have a
+way out (140, 24, 178, 114, 12, 18) must count more than zero; a blind detector
+would otherwise call the whole game stranded and pass silently. Proven on two
+reverts: re-adding map 140 is caught ("has 7 ways out and no emulator
+measurement"), and refusing a map we ship as a place is caught twice over.
+
+No gameplay change.
+
 ## 1.10.11 — 2026-08-20
 
 ### Map 140 walked: it has a way out, and is no longer refused

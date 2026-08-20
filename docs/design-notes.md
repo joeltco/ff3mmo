@@ -30,9 +30,12 @@ Intentional design decisions that aren't obvious from reading the code. One sect
   deleted rather than shipped. Use `node tools/monscan/reach-flood.cjs <id>` and
   look at whether it touches a door. All three REMOVALS (24, 140, 178) are
   walked end to end; map 140's door at (27,24) opens onto map 142 after left x4
-  and up x4 from its entrance. The maps still listed are not individually walked,
-  on the asymmetry that barring a map nothing can reach costs nothing while
-  un-barring one that traps costs a player their run — only removals need proof.
+  and up x4 from its entrance. **Every remaining entry is now accounted for too**:
+  34 and 135 were walked in the emulator (1 tile / 69 tiles, no door touched), and
+  the other eight contain NO door with a destination and NO exit tile at all, on
+  tilemaps verified byte for byte against the cartridge — there is nothing to
+  reach. `check-stranding.mjs` pins that, and self-tests its detector against six
+  maps proven to have a way out before believing any negative.
 - ⛔ **There are no in-map staircase warps.** Retracted in v1.10.8 and still
   true: all 75 measured doors land on the destination map's raw ROM entrance,
   because a door record carries a map id and no coordinate.
