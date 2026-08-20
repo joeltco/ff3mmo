@@ -13,15 +13,31 @@ Intentional design decisions that aren't obvious from reading the code. One sect
   live in `map-triggers.js`, which drags `ui-state.js` and a browser in with it.
 - **Ur's door 0 at (5,7) → map 2 is CONFIRMED** by `door-probe.cjs`, matching our
   table. The earlier note doubting it is retracted.
-- **Four maps spawn the player in a different room than the cartridge does** —
-  map 5 (Ur weapon shop), 12 (Kazus inn), 16 (Kazus weapon shop), 21 (a Sasune
-  tower room). In each the ROM lands you at its literal entrance while
-  `_calcSpawnY` walks you elsewhere; measured with `door-probe.cjs` (39 of 44
-  maps agree, these 5 do not — map 2 is the fifth and its rooms connect anyway).
-  Three carry shop counters and keeper NPCs placed for the room we currently
-  open, so correct the spawn together with the NPC placement, never as a side
-  effect. ⛔ Do NOT "fix" `_calcSpawnY` itself — `map-audit.mjs` records what
-  bounding its scan does to the maps it rescues.
+- **Three maps still spawn the player in a different room than the cartridge
+  does, and MUST NOT be "fixed" by taking the ROM's spawn.** Measured with
+  `door-probe.cjs` (39 of 44 maps agree) and `reach-flood.cjs`:
+
+  | map | ROM spawn | ours | region from the ROM spawn, in THIS engine |
+  |---|---|---|---|
+  | 5 (Ur weapon shop) | (3,26) | (3,18) | 8 tiles, a vestibule with no route to the shop room |
+  | 12 (Kazus inn) | (14,31) | (14,21) | **one tile** — the player could not move |
+  | 16 (Kazus weapon shop) | (3,26) | (3,18) | 8 tiles, same as map 5 |
+
+  The cartridge reaches far more from those tiles — the emulator walked map 12
+  from (14,31) over **53 tiles holding all ten of its ROM NPCs** — because FF3
+  links rooms of one tilemap with in-map staircase warps, and its collision
+  differs from ours. Implementing those warps is the prerequisite; the spawn and
+  the NPC placement then move together. `check-spawn-content.mjs` refuses the
+  half-change. The ROM's own placement, for when that happens:
+  map 5 → ids 25 @(3,22), 231 @(3,23); map 16 → 40 @(3,22), 232 @(3,23), 37
+  @(3,24); map 12 → ten NPCs across x 2..14, y 23..28 including the inn marker
+  250 @(14,26).
+- **Map 21 is FIXED** (v1.10.7): the cartridge lands at (4,29), `_calcSpawnY`
+  moved it to (4,27). Safe because both flood the identical 45 tiles and the map
+  carries no NPCs.
+- **Map 2's passage is the torch puzzle**, not an automatic open — `_hasTorchOpener`
+  keeps it shut until the player examines the third torch at (8,16). Map 1 is
+  reachable through it.
 - **Castle Sasune map 24** is listed as a room but is refused at the door by
   `STRANDING_MAPS` and nothing points at it (its own door 0 points at itself).
   Declared in `Castle Sasune.unreachable`.

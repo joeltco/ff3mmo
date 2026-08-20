@@ -14,6 +14,7 @@ import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { DUNGEON_NAME } from './data/strings.js';
 import { BANNER_FOR_MAP, TOWN_MAPS } from './data/areas.js';
+import { MAP_SPAWNS } from './data/map-spawns.js';
 import { mapEntryMusic } from './map-music.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -260,8 +261,13 @@ function _loadRegularMap(mapId, returnX, returnY) {
   if (returnX !== undefined || !_hasTorchOpener) applyPassage(mapData.tilemap);
   const ex = mapData.entranceX;
   const ey = mapData.entranceY;
-  const playerX = returnX !== undefined ? returnX : ex;
-  const playerY = returnY !== undefined ? returnY : _calcSpawnY(ex, ey);
+  // A MEASURED landing beats the model. Only where the cartridge was actually
+  // walked and the destination is the same walkable region — data/map-spawns.js
+  // explains why the other four disagreements must not be applied here.
+  const _spawnFix = MAP_SPAWNS.get(mapId);
+  const playerX = returnX !== undefined ? returnX : (_spawnFix ? _spawnFix.at[0] : ex);
+  const playerY = returnY !== undefined ? returnY
+    : (_spawnFix ? _spawnFix.at[1] : _calcSpawnY(ex, ey));
   mapSt.worldX = playerX * TILE_SIZE;
   mapSt.worldY = playerY * TILE_SIZE;
   const mapRenderer = new MapRenderer(mapData, playerX, playerY);

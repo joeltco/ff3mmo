@@ -1,3 +1,59 @@
+## 1.10.7 — 2026-08-20
+
+### Map 21's spawn matches the cartridge; the other three would have broken the game
+
+Asked to fix all four spawn disagreements and their NPC placement. **One was safe
+and is fixed. Three are not, and shipping them would have hard-locked players** —
+so instead they are blocked by a gate, with the measurements and the ROM's own
+NPC placement written down for when the prerequisite lands.
+
+**Map 21 (Castle Sasune tower room)** — the cartridge lands at (4,29),
+`_calcSpawnY` moved it to (4,27). Safe: both flood the **identical 45 tiles**, and
+the map carries no NPCs and no shop, so nothing moves with it. Applied through
+`data/map-spawns.js`, a measured per-map override — ⛔ `_calcSpawnY` itself still
+must not be touched, `map-audit.mjs` records what bounding its scan does.
+
+**Maps 5, 12 and 16 cannot take the cartridge's spawn in this engine:**
+
+| map | ROM spawn | ours | region from the ROM spawn, here |
+|---|---|---|---|
+| 5 (Ur weapon shop) | (3,26) | (3,18) | 8 tiles — a vestibule with no route to the shop room |
+| 12 (Kazus inn) | (14,31) | (14,21) | **one tile.** The player could not move at all |
+| 16 (Kazus weapon shop) | (3,26) | (3,18) | 8 tiles, same as map 5 |
+
+The cartridge reaches far more from those tiles — `reach-flood.cjs` walked map 12
+from (14,31) across **53 tiles holding all ten of its ROM NPCs** — because FF3
+links rooms of one tilemap with **in-map staircase warps** and a collision model
+we do not reproduce. That is the prerequisite; the spawn and the NPC placement
+then move together, never separately. The ROM's placement is recorded in
+`design-notes#followups` for when it does.
+
+### New gate: `check-spawn-content`
+
+Every placed shop counter and NPC has to be reachable from its map's spawn. FF3
+packs several interiors per tilemap, so "the spawn moved two tiles" and "the spawn
+moved to another room and left the shopkeeper behind" look identical in a diff.
+Proven by trying each of the three unsafe moves — every one is caught by name:
+
+- map 5 → `weapon_keeper at (3,14) is not reachable from the spawn (3,26) — 8 tile region`
+- map 12 → all three inn NPCs, `1 tile region`
+- map 16 → `kazus_weapon_keeper`, `8 tile region`
+
+⛔ Its first version used "orthogonally adjacent to walkable" and **failed six
+shops that work**: a keeper stands BEHIND a counter, two tiles from anywhere
+standable, and `findShopAtCounter` only needs the player to face the counter. The
+gate measures the distance the game actually needs.
+
+### `reach-flood.cjs` now records in-map warps
+
+It used to die with "lost the party" whenever the party jumped rooms without the
+map id changing — three of four maps looked unmeasurable when they were simply
+bigger than one region. It now records the warp, avoids the tile and re-runs, the
+same way it handles doors, and retries dropped button presses instead of throwing
+the flood away. Map 12 went from unmeasurable to 53 tiles and four warps.
+
+No gameplay change beyond map 21's two-tile spawn correction.
+
 ## 1.10.6 — 2026-08-19
 
 ### Ur door 0 is correct, and map 1 was always reachable — the GATE was broken
