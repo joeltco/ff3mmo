@@ -28,9 +28,11 @@ Intentional design decisions that aren't obvious from reading the code. One sect
   adjacent to an exit tile" as a way out; it reported map 135 as escapable when
   the emulator walks 69 tiles there and touches no door at all. That gate was
   deleted rather than shipped. Use `node tools/monscan/reach-flood.cjs <id>` and
-  look at whether it touches a door. Map 140 is still unverified — its flood does
-  not complete — and stays on the list on the asymmetry that barring an
-  unreachable map costs nothing while un-barring an unverified one can trap.
+  look at whether it touches a door. All three REMOVALS (24, 140, 178) are
+  walked end to end; map 140's door at (27,24) opens onto map 142 after left x4
+  and up x4 from its entrance. The maps still listed are not individually walked,
+  on the asymmetry that barring a map nothing can reach costs nothing while
+  un-barring one that traps costs a player their run — only removals need proof.
 - ⛔ **There are no in-map staircase warps.** Retracted in v1.10.8 and still
   true: all 75 measured doors land on the destination map's raw ROM entrance,
   because a door record carries a map id and no coordinate.

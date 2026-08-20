@@ -1,3 +1,41 @@
+## 1.10.11 — 2026-08-20
+
+### Map 140 walked: it has a way out, and is no longer refused
+
+The last unverified entry on `STRANDING_MAPS`. It was kept in v1.10.10 only
+because the automated flood could not finish on it — the party jumped
+(27,25) -> (1,9) and the walk could not be trusted after that. A directed walk
+settles it.
+
+From map 140's ROM entrance (31,27), **left x4 along row 27, then up x4**, and the
+door at (27,24) opens onto **map 142**:
+
+```
+spawned on map 140 at (31,27)
+  left -> (30,27)   left -> (29,27)   left -> (28,27)   left -> (27,27)
+  up   -> (27,26)   up   -> (27,25)   up   -> (27,24)
+  up   -> map 142        <<< LEFT MAP 140
+```
+
+Tile-by-tile probing agrees and finds a **second** way out: stepping right off the
+spawn at (31,27) leaves the map directly. So map 140 never stranded anyone, and
+refusing it at the door was barring content for nothing. **Removed.**
+
+`STRANDING_MAPS` is now `{0, 34, 94, 135, 152, 159, 169, 180, 193, 255}`.
+
+### All three removals are now proven, and only removals need proof
+
+- **24** — 31 tiles, reaches a door at (0,26)
+- **178** — 22 tiles, reaches a door at (27,30)
+- **140** — reaches map 142 in eight steps from its entrance
+
+The maps still listed are deliberately **not** individually walked. The asymmetry
+decides it: barring a map nothing can reach costs nothing, while un-barring one
+that traps costs a player their run. Written into `map-triggers.js` so the next
+pass does not re-litigate it.
+
+No gameplay change beyond map 140 becoming enterable.
+
 ## 1.10.10 — 2026-08-20
 
 ### The decompressor fix is verified on every tilemap the engine can load

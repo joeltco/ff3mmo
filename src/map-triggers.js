@@ -420,17 +420,23 @@ export function findWorldExitIndex(mapId, worldMapData) {
 //   REMOVED 24  — 31 tiles, reaches a door at (0,26).
 //   REMOVED 178 — 22 tiles, reaches a door at (27,30). This was the only entry
 //     the old list said was reachable today, i.e. the only one that ever fired.
-//   KEPT 140 — its flood did not complete (the party jumped (27,25) -> (1,9) and
-//     the walk could not be trusted after that), so it stays. Barring a map we
-//     cannot reach costs nothing; un-barring one we have not verified can trap a
-//     player, and that asymmetry decides every unproven entry here.
+//   REMOVED 140 — walked end to end from its ROM entrance (31,27): left x4 along
+//     row 27, up x4, and the door at (27,24) opens onto MAP 142. Its spawn also
+//     sits beside a second way out (stepping right off (31,27) leaves the map).
+//     It was kept one release longer than the evidence required because the
+//     automated flood could not finish on it; a directed walk settled it.
+//
+// The maps still listed are NOT individually walked. That is deliberate and the
+// asymmetry is the reason: barring a map nothing can reach costs nothing, while
+// un-barring one that traps costs a player their run. Only REMOVALS need proof,
+// and all three of them have it.
 //
 // ⛔ DO NOT re-derive this from `isPassable` alone. A gate written that way
 // during this pass reported map 135 as having a reachable way out, which the
 // emulator flatly contradicts — "a tile adjacent to an exit tile" over-counts.
 // Re-derive by WALKING: `node tools/monscan/reach-flood.cjs <id>` and look at
 // whether it touches a door.
-const STRANDING_MAPS = new Set([0, 34, 94, 135, 140, 152, 159, 169, 180, 193, 255]);
+const STRANDING_MAPS = new Set([0, 34, 94, 135, 152, 159, 169, 180, 193, 255]);
 
 function _checkWorldMapTrigger(tileX, tileY) {
   const trigger = mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
