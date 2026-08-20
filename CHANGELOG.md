@@ -1,3 +1,63 @@
+## 1.10.8 — 2026-08-20
+
+### Retraction: there are no in-map staircase warps
+
+Asked to implement them. They do not exist, and the claim that they did was mine.
+
+**Every one of the 69 doors measured in the cartridge lands the party on the
+DESTINATION MAP'S RAW ROM ENTRANCE — 69 of 69, no exception.** An FF3 door record
+carries a destination map id and nothing else; there is no per-door coordinate,
+so "warp to (x,y) on this map" has nowhere to live. Two independent checks agree:
+the landing rule holds across every measured door, and probing the specific tiles
+I had called warps shows plain geometry — map 12's (2,21)/(3,21)/(4,21) are tile
+`$00`/`$01`, collision class 3, no trigger.
+
+What produced the false reading was `reach-flood.cjs` labelling two ordinary
+things as warps: a **one-way tile** (walk down onto it, cannot walk back up —
+measured at map 12 (3,21)) and a door firing mid-walk. That detection is gone; the
+tool now reports the anomaly with its numbers and refuses to name it.
+
+### The real cause: our tilemap decode disagrees with the cartridge
+
+Chasing it properly landed somewhere much better. **`decompressTilemap` produces a
+different tilemap than the engine walks.**
+
+`docs/ROM-LIVE-TILEMAPS.json` (new) holds `$7400-$77FF` read out of a running
+cartridge for 31 maps — the exact 1024 bytes the ROM's own trigger routine walks
+(3A/9197 sets `$80/$81 = $7400`). `check-tilemap-decode.mjs` (new) compares it
+against our decode, excluding the trigger tiles the ROM legitimately rewrites in
+place (3A/91B4).
+
+**5,385 tiles disagree across 31 maps. The worst, map 174, is 508.** Maps 25, 26,
+27, 28, 30 and 114 match exactly, so the decoder is right for some tilemaps and
+wrong for others.
+
+Two strong leads, both from the data:
+- the disagreements arrive in **whole rows of 32** — map 174 has y16, y17 and y19
+  entirely wrong — which points at row-level decompression, not a stray byte;
+- the wrong tiles are usually a **fill value**, and on map 174 we emit `$1f`
+  where the engine has `$5f`; `$1f` is a *different map's* fill tile.
+
+⛔ **This, not spawn logic, is why maps 2/5/12/16 "spawn in the wrong room".** Our
+indoor collision reads are correct — verified **128/128** against live `$0400` —
+and our collision rule matches the ROM's routine at 3B/90EB byte for byte (class 3
+blocked, `>= 4` passable, z-bit conflict). We have been applying a correct rule to
+tiles that are not the ones the engine has.
+
+`check-tilemap-decode` is deliberately **not** in `deploy.sh`: it fails today,
+because the bug is real. Fix the decompressor and the spawn tables, the NPC
+placement on maps 5/12/16 and `_calcSpawnY` itself all get re-judged — several may
+simply evaporate.
+
+### New tool: `tools/monscan/tile-probe.cjs`
+
+Stands the party on any tile (via the ROM entrance patch) and reports what each
+direction does — wall, ordinary step, door and where it goes. It is what settled
+the warp question tile by tile. Carries the caveat that a tile you SPAWN on has
+its arrival trigger disarmed, so it steps off and back to re-arm.
+
+No gameplay change.
+
 ## 1.10.7 — 2026-08-20
 
 ### Map 21's spawn matches the cartridge; the other three would have broken the game

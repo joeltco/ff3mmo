@@ -93,7 +93,7 @@ function floodOnce(mapId, start, avoid) {
     const key = (x, y) => y * 32 + x;
     const seen = new Set([key(...origin)]);
     const hitDoor = [];
-    const warps = [];
+    const oneWay = [];
     // Depth-first with real backtracking: the party IS the cursor, so the walk
     // has to physically retrace instead of teleporting to the next frontier.
     const stack = [{ at: origin, tried: [] }];
@@ -113,14 +113,13 @@ function floodOnce(mapId, start, avoid) {
           for (let t = 0; t < 6 && !back_ok; t++) {
             press(nes, OPPOSITE[d]);
             back_ok = m[TILE_X] === back.at[0] && m[TILE_Y] === back.at[1];
-            // ⭐ The warp can fire on the way BACK too, and direction matters:
-            // a staircase entered from below is not the same as leaving it
-            // downward, so a tile already walked can still warp later. Record it
-            // and let the outer loop retry with it avoided, exactly like a door.
-            if (!back_ok && m[MAP_ID] === mapId &&
-                Math.abs(m[TILE_X] - back.at[0]) + Math.abs(m[TILE_Y] - back.at[1]) > 1) {
-              warps.push({ from: back.at, to: [m[TILE_X], m[TILE_Y]], via: OPPOSITE[d], steppedFrom: top.at });
-              return { seen, origin, hitDoor, warps, incomplete: true };
+            // ⛔ A failed backtrack means the tile we are standing on is ONE-WAY
+            // (walk down onto it, cannot walk back up) — measured on map 12 at
+            // (3,21). It is not a warp. Record the tile so the outer loop can
+            // retry with it avoided, and keep the flood alive.
+            if (!back_ok && m[MAP_ID] === mapId && m[TILE_X] === top.at[0] && m[TILE_Y] === top.at[1]) {
+              oneWay.push({ at: top.at, blockedGoing: OPPOSITE[d] });
+              return { seen, origin, hitDoor, oneWay, incomplete: true };
             }
           }
           if (!back_ok) return { error: `lost the party backtracking to (${back.at}) — it is at (${m[TILE_X]},${m[TILE_Y]})` };
@@ -138,39 +137,40 @@ function floodOnce(mapId, start, avoid) {
       let moved = false;
       for (let t = 0; t < 3 && !moved; t++) {
         press(nes, dir);
-        if (m[MAP_ID] !== bm) { hitDoor.push([nx, ny]); return { seen, origin, hitDoor, warps, incomplete: true }; }
+        if (m[MAP_ID] !== bm) { hitDoor.push([nx, ny]); return { seen, origin, hitDoor, oneWay, incomplete: true }; }
         moved = m[TILE_X] !== bx || m[TILE_Y] !== by;
       }
       if (!moved) continue;                                    // wall
       if (m[TILE_X] !== nx || m[TILE_Y] !== ny) {
-        // ⭐ AN IN-MAP WARP. The party moved somewhere that is not the tile we
-        // stepped to and the map id did not change: FF3 links rooms of one
-        // tilemap with staircases that teleport WITHIN the map. The first
-        // version called this "lost the party" and threw the flood away, which
-        // is how maps 5, 16 and 21 looked unmeasurable — they are not, they are
-        // just bigger than one region.
-        warps.push({ from: [nx, ny], to: [m[TILE_X], m[TILE_Y]], via: dir, steppedFrom: [bx, by] });
-        return { seen, origin, hitDoor, warps, incomplete: true };
+        // ⛔ THIS IS ALMOST NEVER A WARP, and calling it one cost a whole
+        // release. FF3 has NO in-map warp: every one of the 69 doors measured by
+        // `door-probe.cjs` lands the party on the DESTINATION MAP'S RAW ROM
+        // ENTRANCE, because a door record carries a map id and nothing else.
+        // What actually produces a surprising position is a one-way tile (you
+        // walked down onto it and cannot walk back) or a dropped button press.
+        // Report it as an anomaly with the numbers; do not name it.
+        return { error: `stepped ${dir} from (${bx},${by}) aiming at (${nx},${ny}) and ended on ` +
+                        `(${m[TILE_X]},${m[TILE_Y]}) — one-way tile or a dropped press, NOT an in-map warp` };
       }
       seen.add(key(nx, ny));
       stack.push({ at: [nx, ny], tried: [] });
     }
-    return { seen, origin, hitDoor, warps, incomplete: false };
+    return { seen, origin, hitDoor, oneWay, incomplete: false };
   } finally { if (start) { try { fs.unlinkSync(romPath); } catch { /* temp */ } } }
 }
 
 function flood(mapId, start) {
   const avoid = new Set();
   const doorsTouched = [];
-  const warpsFound = [];
+  const oneWayFound = [];
   for (let pass = 0; pass < 40; pass++) {
     const r = floodOnce(mapId, start, avoid);
     if (r.error) return r;
-    if (!r.incomplete) return { ...r, doorsTouched, warpsFound };
+    if (!r.incomplete) return { ...r, doorsTouched, oneWayFound };
     for (const [x, y] of r.hitDoor) { avoid.add(y * 32 + x); doorsTouched.push([x, y]); }
-    for (const w of (r.warps || [])) {
-      avoid.add(w.from[1] * 32 + w.from[0]);
-      if (!warpsFound.some(v => v.from[0] === w.from[0] && v.from[1] === w.from[1])) warpsFound.push(w);
+    for (const w of (r.oneWay || [])) {
+      avoid.add(w.at[1] * 32 + w.at[0]);
+      if (!oneWayFound.some(v => v.at[0] === w.at[0] && v.at[1] === w.at[1])) oneWayFound.push(w);
     }
   }
   return { error: 'did not converge — too many doors/warps' };
@@ -186,7 +186,7 @@ if (r.error) { console.log(`map ${mapId}: ${r.error}`); process.exit(1); }
 const tiles = [...r.seen].map(k => [k % 32, (k - (k % 32)) / 32]);
 console.log(`map ${mapId}: spawned (${r.origin}) — ${r.seen.size} tiles reachable BY WALKING`);
 console.log(`  doors touched: ${r.doorsTouched.length ? r.doorsTouched.map(d => `(${d})`).join(' ') : 'none'}`);
-console.log(`  in-map warps : ${r.warpsFound.length ? r.warpsFound.map(w => `(${w.from}) -> (${w.to})`).join('  ') : 'none'}`);
+console.log(`  one-way tiles: ${r.oneWayFound.length ? r.oneWayFound.map(w => `(${w.at}) cannot go ${w.blockedGoing}`).join('  ') : 'none'}`);
 const minX = Math.min(...tiles.map(t => t[0])), maxX = Math.max(...tiles.map(t => t[0]));
 const minY = Math.min(...tiles.map(t => t[1])), maxY = Math.max(...tiles.map(t => t[1]));
 console.log(`  bounding box x ${minX}..${maxX}, y ${minY}..${maxY}`);
@@ -195,7 +195,7 @@ for (let y = minY; y <= maxY; y++) {
   for (let x = minX; x <= maxX; x++) {
     row += r.doorsTouched.some(d => d[0] === x && d[1] === y) ? 'D'
          : (x === r.origin[0] && y === r.origin[1]) ? '@'
-         : r.warpsFound.some(w => w.from[0] === x && w.from[1] === y) ? 'W'
+         : r.oneWayFound.some(w => w.at[0] === x && w.at[1] === y) ? '1'
          : r.seen.has(y * 32 + x) ? '.' : ' ';
   }
   console.log(row);
