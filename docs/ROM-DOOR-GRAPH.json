@@ -1,6 +1,6 @@
 {
- "_measured": "FF3-English.nes via tools/monscan/door-probe.cjs (ROM entrance patched to place the party; $48 read back). Re-measured for v1.10.9 after the tilemap decompressor fix — the previous fixture was taken against a decode that invented 24 trigger tiles.",
- "_generated": "node tools/rom-door-map.mjs --towns /tmp/dm.json && node tools/monscan/door-probe.cjs --selftest /tmp/dm.json && node tools/monscan/door-probe.cjs /tmp/dm.json docs/ROM-DOOR-GRAPH.json",
+ "_measured": "FF3-English.nes via tools/monscan/door-probe.cjs. The map ROM entrance is patched to place the party (no routing), and $48 is read back. EVERY map the engine can address that has a door — 182 maps, 373 doors — re-measured for v1.10.13 with the fixed tilemap decompressor.",
+ "_generated": "node tools/rom-door-map.mjs --all /tmp/dm.json && node tools/monscan/door-probe.cjs --selftest /tmp/dm.json && node tools/monscan/door-probe.cjs /tmp/dm.json docs/ROM-DOOR-GRAPH.json",
  "doors": {
   "1:0": {
    "map": 1,
@@ -585,6 +585,1048 @@
    "romDest": 190,
    "status": "measured"
   },
+  "31:0": {
+   "map": 31,
+   "trigId": 0,
+   "at": [
+    7,
+    7
+   ],
+   "romDest": 33,
+   "status": "measured"
+  },
+  "31:1": {
+   "map": 31,
+   "trigId": 1,
+   "at": [
+    11,
+    14
+   ],
+   "romDest": 32,
+   "status": "measured"
+  },
+  "31:2": {
+   "map": 31,
+   "trigId": 2,
+   "at": [
+    7,
+    15
+   ],
+   "romDest": 36,
+   "status": "measured"
+  },
+  "31:3": {
+   "map": 31,
+   "trigId": 3,
+   "at": [
+    23,
+    16
+   ],
+   "romDest": 38,
+   "status": "measured"
+  },
+  "31:4": {
+   "map": 31,
+   "trigId": 4,
+   "at": [
+    25,
+    22
+   ],
+   "romDest": 39,
+   "status": "measured"
+  },
+  "31:5": {
+   "map": 31,
+   "trigId": 5,
+   "at": [
+    6,
+    23
+   ],
+   "romDest": 41,
+   "status": "measured"
+  },
+  "31:6": {
+   "map": 31,
+   "trigId": 6,
+   "at": [
+    12,
+    23
+   ],
+   "romDest": 42,
+   "status": "measured"
+  },
+  "33:0": {
+   "map": 33,
+   "trigId": 0,
+   "at": [
+    4,
+    12
+   ],
+   "romDest": 35,
+   "status": "measured"
+  },
+  "34:0": {
+   "map": 34,
+   "trigId": 0,
+   "at": [
+    4,
+    12
+   ],
+   "romDest": 35,
+   "status": "measured"
+  },
+  "43:0": {
+   "map": 43,
+   "trigId": 0,
+   "at": [
+    8,
+    8
+   ],
+   "romDest": 44,
+   "status": "measured"
+  },
+  "43:1": {
+   "map": 43,
+   "trigId": 1,
+   "at": [
+    14,
+    15
+   ],
+   "romDest": 46,
+   "status": "measured"
+  },
+  "43:2": {
+   "map": 43,
+   "trigId": 2,
+   "at": [
+    19,
+    17
+   ],
+   "romDest": 47,
+   "status": "measured"
+  },
+  "43:3": {
+   "map": 43,
+   "trigId": 3,
+   "at": [
+    10,
+    19
+   ],
+   "romDest": 50,
+   "status": "measured"
+  },
+  "44:0": {
+   "map": 44,
+   "trigId": 0,
+   "at": [
+    29,
+    1
+   ],
+   "romDest": 122,
+   "status": "measured"
+  },
+  "44:1": {
+   "map": 44,
+   "trigId": 1,
+   "at": [
+    29,
+    4
+   ],
+   "romDest": 123,
+   "status": "measured"
+  },
+  "44:2": {
+   "map": 44,
+   "trigId": 2,
+   "at": [
+    26,
+    30
+   ],
+   "romDest": 45,
+   "status": "measured"
+  },
+  "44:3": {
+   "map": 44,
+   "trigId": 3,
+   "at": [
+    2,
+    31
+   ],
+   "romDest": 164,
+   "status": "measured"
+  },
+  "45:0": {
+   "map": 45,
+   "trigId": 0,
+   "at": [
+    29,
+    1
+   ],
+   "romDest": 122,
+   "status": "measured"
+  },
+  "45:1": {
+   "map": 45,
+   "trigId": 1,
+   "at": [
+    29,
+    4
+   ],
+   "romDest": 123,
+   "status": "measured"
+  },
+  "45:2": {
+   "map": 45,
+   "trigId": 2,
+   "at": [
+    26,
+    30
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (26,29) and nothing fired"
+  },
+  "45:3": {
+   "map": 45,
+   "trigId": 3,
+   "at": [
+    2,
+    31
+   ],
+   "romDest": 164,
+   "status": "measured"
+  },
+  "50:0": {
+   "map": 50,
+   "trigId": 0,
+   "at": [
+    29,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "50:1": {
+   "map": 50,
+   "trigId": 1,
+   "at": [
+    29,
+    4
+   ],
+   "romDest": 3,
+   "status": "measured"
+  },
+  "50:2": {
+   "map": 50,
+   "trigId": 2,
+   "at": [
+    26,
+    30
+   ],
+   "romDest": 5,
+   "status": "measured"
+  },
+  "50:3": {
+   "map": 50,
+   "trigId": 3,
+   "at": [
+    2,
+    31
+   ],
+   "romDest": 4,
+   "status": "measured"
+  },
+  "51:0": {
+   "map": 51,
+   "trigId": 0,
+   "at": [
+    25,
+    2
+   ],
+   "romDest": 52,
+   "status": "measured"
+  },
+  "51:1": {
+   "map": 51,
+   "trigId": 1,
+   "at": [
+    28,
+    3
+   ],
+   "romDest": 54,
+   "status": "measured"
+  },
+  "52:0": {
+   "map": 52,
+   "trigId": 0,
+   "at": [
+    15,
+    20
+   ],
+   "romDest": 160,
+   "status": "measured"
+  },
+  "52:1": {
+   "map": 52,
+   "trigId": 1,
+   "at": [
+    1,
+    27
+   ],
+   "romDest": 53,
+   "status": "measured"
+  },
+  "55:0": {
+   "map": 55,
+   "trigId": 0,
+   "at": [
+    13,
+    11
+   ],
+   "romDest": 56,
+   "status": "measured"
+  },
+  "55:1": {
+   "map": 55,
+   "trigId": 1,
+   "at": [
+    20,
+    20
+   ],
+   "romDest": 58,
+   "status": "measured"
+  },
+  "56:0": {
+   "map": 56,
+   "trigId": 0,
+   "at": [
+    5,
+    3
+   ],
+   "romDest": 57,
+   "status": "measured"
+  },
+  "57:0": {
+   "map": 57,
+   "trigId": 0,
+   "at": [
+    5,
+    3
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "58:0": {
+   "map": 58,
+   "trigId": 0,
+   "at": [
+    8,
+    3
+   ],
+   "romDest": 59,
+   "status": "measured"
+  },
+  "59:0": {
+   "map": 59,
+   "trigId": 0,
+   "at": [
+    8,
+    3
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "60:0": {
+   "map": 60,
+   "trigId": 0,
+   "at": [
+    7,
+    6
+   ],
+   "romDest": 61,
+   "status": "measured"
+  },
+  "60:1": {
+   "map": 60,
+   "trigId": 1,
+   "at": [
+    27,
+    8
+   ],
+   "romDest": 62,
+   "status": "measured"
+  },
+  "60:2": {
+   "map": 60,
+   "trigId": 2,
+   "at": [
+    18,
+    10
+   ],
+   "romDest": 63,
+   "status": "measured"
+  },
+  "60:3": {
+   "map": 60,
+   "trigId": 3,
+   "at": [
+    11,
+    14
+   ],
+   "romDest": 64,
+   "status": "measured"
+  },
+  "60:4": {
+   "map": 60,
+   "trigId": 4,
+   "at": [
+    20,
+    20
+   ],
+   "romDest": 66,
+   "status": "measured"
+  },
+  "67:0": {
+   "map": 67,
+   "trigId": 0,
+   "at": [
+    15,
+    19
+   ],
+   "romDest": 68,
+   "status": "measured"
+  },
+  "69:0": {
+   "map": 69,
+   "trigId": 0,
+   "at": [
+    3,
+    8
+   ],
+   "romDest": 77,
+   "status": "measured"
+  },
+  "69:1": {
+   "map": 69,
+   "trigId": 1,
+   "at": [
+    17,
+    8
+   ],
+   "romDest": 74,
+   "status": "measured"
+  },
+  "69:2": {
+   "map": 69,
+   "trigId": 2,
+   "at": [
+    4,
+    14
+   ],
+   "romDest": 72,
+   "status": "measured"
+  },
+  "69:3": {
+   "map": 69,
+   "trigId": 3,
+   "at": [
+    14,
+    17
+   ],
+   "romDest": 70,
+   "status": "measured"
+  },
+  "69:4": {
+   "map": 69,
+   "trigId": 4,
+   "at": [
+    6,
+    20
+   ],
+   "romDest": 75,
+   "status": "measured"
+  },
+  "72:0": {
+   "map": 72,
+   "trigId": 0,
+   "at": [
+    13,
+    5
+   ],
+   "romDest": 73,
+   "status": "measured"
+  },
+  "78:0": {
+   "map": 78,
+   "trigId": 0,
+   "at": [
+    3,
+    5
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "steppable off to (3,6) but not back on — no player can reach it"
+  },
+  "78:1": {
+   "map": 78,
+   "trigId": 1,
+   "at": [
+    27,
+    5
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "steppable off to (27,6) but not back on — no player can reach it"
+  },
+  "78:2": {
+   "map": 78,
+   "trigId": 2,
+   "at": [
+    14,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "78:3": {
+   "map": 78,
+   "trigId": 3,
+   "at": [
+    15,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "78:4": {
+   "map": 78,
+   "trigId": 4,
+   "at": [
+    16,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "81:0": {
+   "map": 81,
+   "trigId": 0,
+   "at": [
+    17,
+    5
+   ],
+   "romDest": 24,
+   "status": "measured"
+  },
+  "81:1": {
+   "map": 81,
+   "trigId": 1,
+   "at": [
+    11,
+    12
+   ],
+   "romDest": 172,
+   "status": "measured"
+  },
+  "82:0": {
+   "map": 82,
+   "trigId": 0,
+   "at": [
+    5,
+    1
+   ],
+   "romDest": 81,
+   "status": "measured"
+  },
+  "82:1": {
+   "map": 82,
+   "trigId": 1,
+   "at": [
+    24,
+    2
+   ],
+   "romDest": 84,
+   "status": "measured"
+  },
+  "82:2": {
+   "map": 82,
+   "trigId": 2,
+   "at": [
+    5,
+    18
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (5,19) and nothing fired"
+  },
+  "82:3": {
+   "map": 82,
+   "trigId": 3,
+   "at": [
+    28,
+    19
+   ],
+   "romDest": 171,
+   "status": "measured"
+  },
+  "83:0": {
+   "map": 83,
+   "trigId": 0,
+   "at": [
+    5,
+    1
+   ],
+   "romDest": 81,
+   "status": "measured"
+  },
+  "83:1": {
+   "map": 83,
+   "trigId": 1,
+   "at": [
+    24,
+    2
+   ],
+   "romDest": 84,
+   "status": "measured"
+  },
+  "83:2": {
+   "map": 83,
+   "trigId": 2,
+   "at": [
+    5,
+    18
+   ],
+   "romDest": 82,
+   "status": "measured"
+  },
+  "83:3": {
+   "map": 83,
+   "trigId": 3,
+   "at": [
+    28,
+    19
+   ],
+   "romDest": 171,
+   "status": "measured"
+  },
+  "84:0": {
+   "map": 84,
+   "trigId": 0,
+   "at": [
+    5,
+    1
+   ],
+   "romDest": 81,
+   "status": "measured"
+  },
+  "84:1": {
+   "map": 84,
+   "trigId": 1,
+   "at": [
+    24,
+    2
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (24,3) and nothing fired"
+  },
+  "84:2": {
+   "map": 84,
+   "trigId": 2,
+   "at": [
+    5,
+    18
+   ],
+   "romDest": 82,
+   "status": "measured"
+  },
+  "84:3": {
+   "map": 84,
+   "trigId": 3,
+   "at": [
+    28,
+    19
+   ],
+   "romDest": 171,
+   "status": "measured"
+  },
+  "85:0": {
+   "map": 85,
+   "trigId": 0,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 86,
+   "status": "measured"
+  },
+  "85:1": {
+   "map": 85,
+   "trigId": 1,
+   "at": [
+    6,
+    17
+   ],
+   "romDest": 87,
+   "status": "measured"
+  },
+  "85:2": {
+   "map": 85,
+   "trigId": 2,
+   "at": [
+    11,
+    17
+   ],
+   "romDest": 88,
+   "status": "measured"
+  },
+  "85:3": {
+   "map": 85,
+   "trigId": 3,
+   "at": [
+    16,
+    17
+   ],
+   "romDest": 89,
+   "status": "measured"
+  },
+  "85:4": {
+   "map": 85,
+   "trigId": 4,
+   "at": [
+    0,
+    23
+   ],
+   "romDest": 90,
+   "status": "measured"
+  },
+  "85:5": {
+   "map": 85,
+   "trigId": 5,
+   "at": [
+    23,
+    31
+   ],
+   "romDest": 91,
+   "status": "measured"
+  },
+  "86:0": {
+   "map": 86,
+   "trigId": 0,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (10,4) and nothing fired"
+  },
+  "86:1": {
+   "map": 86,
+   "trigId": 1,
+   "at": [
+    6,
+    17
+   ],
+   "romDest": 87,
+   "status": "measured"
+  },
+  "86:2": {
+   "map": 86,
+   "trigId": 2,
+   "at": [
+    11,
+    17
+   ],
+   "romDest": 88,
+   "status": "measured"
+  },
+  "86:3": {
+   "map": 86,
+   "trigId": 3,
+   "at": [
+    16,
+    17
+   ],
+   "romDest": 89,
+   "status": "measured"
+  },
+  "86:4": {
+   "map": 86,
+   "trigId": 4,
+   "at": [
+    0,
+    23
+   ],
+   "romDest": 90,
+   "status": "measured"
+  },
+  "86:5": {
+   "map": 86,
+   "trigId": 5,
+   "at": [
+    23,
+    31
+   ],
+   "romDest": 91,
+   "status": "measured"
+  },
+  "97:0": {
+   "map": 97,
+   "trigId": 0,
+   "at": [
+    1,
+    4
+   ],
+   "romDest": 98,
+   "status": "measured"
+  },
+  "97:1": {
+   "map": 97,
+   "trigId": 1,
+   "at": [
+    9,
+    4
+   ],
+   "romDest": 99,
+   "status": "measured"
+  },
+  "97:2": {
+   "map": 97,
+   "trigId": 2,
+   "at": [
+    11,
+    25
+   ],
+   "romDest": 184,
+   "status": "measured"
+  },
+  "98:0": {
+   "map": 98,
+   "trigId": 0,
+   "at": [
+    30,
+    5
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "99:0": {
+   "map": 99,
+   "trigId": 0,
+   "at": [
+    30,
+    5
+   ],
+   "romDest": 100,
+   "status": "measured"
+  },
+  "101:0": {
+   "map": 101,
+   "trigId": 0,
+   "at": [
+    1,
+    17
+   ],
+   "romDest": 102,
+   "status": "measured"
+  },
+  "102:0": {
+   "map": 102,
+   "trigId": 0,
+   "at": [
+    1,
+    17
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides"
+  },
+  "103:0": {
+   "map": 103,
+   "trigId": 0,
+   "at": [
+    26,
+    31
+   ],
+   "romDest": 104,
+   "status": "measured"
+  },
+  "104:0": {
+   "map": 104,
+   "trigId": 0,
+   "at": [
+    31,
+    7
+   ],
+   "romDest": 106,
+   "status": "measured"
+  },
+  "104:1": {
+   "map": 104,
+   "trigId": 1,
+   "at": [
+    26,
+    19
+   ],
+   "romDest": 105,
+   "status": "measured"
+  },
+  "105:0": {
+   "map": 105,
+   "trigId": 0,
+   "at": [
+    31,
+    7
+   ],
+   "romDest": 106,
+   "status": "measured"
+  },
+  "105:1": {
+   "map": 105,
+   "trigId": 1,
+   "at": [
+    26,
+    19
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides"
+  },
+  "107:0": {
+   "map": 107,
+   "trigId": 0,
+   "at": [
+    0,
+    30
+   ],
+   "romDest": 108,
+   "status": "measured"
+  },
+  "108:0": {
+   "map": 108,
+   "trigId": 0,
+   "at": [
+    1,
+    15
+   ],
+   "romDest": 109,
+   "status": "measured"
+  },
+  "109:0": {
+   "map": 109,
+   "trigId": 0,
+   "at": [
+    3,
+    1
+   ],
+   "romDest": 149,
+   "status": "measured"
+  },
+  "109:1": {
+   "map": 109,
+   "trigId": 1,
+   "at": [
+    22,
+    4
+   ],
+   "romDest": 110,
+   "status": "measured"
+  },
+  "109:2": {
+   "map": 109,
+   "trigId": 2,
+   "at": [
+    10,
+    23
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides"
+  },
+  "110:0": {
+   "map": 110,
+   "trigId": 0,
+   "at": [
+    3,
+    1
+   ],
+   "romDest": 149,
+   "status": "measured"
+  },
+  "110:1": {
+   "map": 110,
+   "trigId": 1,
+   "at": [
+    22,
+    4
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides"
+  },
+  "110:2": {
+   "map": 110,
+   "trigId": 2,
+   "at": [
+    10,
+    23
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "walled in on all four sides"
+  },
+  "111:0": {
+   "map": 111,
+   "trigId": 0,
+   "at": [
+    9,
+    9
+   ],
+   "romDest": 112,
+   "status": "measured"
+  },
+  "111:1": {
+   "map": 111,
+   "trigId": 1,
+   "at": [
+    3,
+    15
+   ],
+   "romDest": 113,
+   "status": "measured"
+  },
+  "112:0": {
+   "map": 112,
+   "trigId": 0,
+   "at": [
+    9,
+    9
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (8,9) and nothing fired"
+  },
+  "112:1": {
+   "map": 112,
+   "trigId": 1,
+   "at": [
+    3,
+    15
+   ],
+   "romDest": 113,
+   "status": "measured"
+  },
+  "113:0": {
+   "map": 113,
+   "trigId": 0,
+   "at": [
+    9,
+    12
+   ],
+   "romDest": 22,
+   "status": "measured"
+  },
   "114:0": {
    "map": 114,
    "trigId": 0,
@@ -653,6 +1695,793 @@
     29
    ],
    "romDest": 147,
+   "status": "measured"
+  },
+  "115:0": {
+   "map": 115,
+   "trigId": 0,
+   "at": [
+    1,
+    1
+   ],
+   "romDest": 148,
+   "status": "measured"
+  },
+  "116:0": {
+   "map": 116,
+   "trigId": 0,
+   "at": [
+    30,
+    5
+   ],
+   "romDest": 118,
+   "status": "measured"
+  },
+  "116:1": {
+   "map": 116,
+   "trigId": 1,
+   "at": [
+    28,
+    19
+   ],
+   "romDest": 117,
+   "status": "measured"
+  },
+  "117:0": {
+   "map": 117,
+   "trigId": 0,
+   "at": [
+    30,
+    5
+   ],
+   "romDest": 118,
+   "status": "measured"
+  },
+  "117:1": {
+   "map": 117,
+   "trigId": 1,
+   "at": [
+    28,
+    19
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (27,19) and nothing fired"
+  },
+  "118:0": {
+   "map": 118,
+   "trigId": 0,
+   "at": [
+    7,
+    9
+   ],
+   "romDest": 119,
+   "status": "measured"
+  },
+  "120:0": {
+   "map": 120,
+   "trigId": 0,
+   "at": [
+    28,
+    8
+   ],
+   "romDest": 121,
+   "status": "measured"
+  },
+  "121:0": {
+   "map": 121,
+   "trigId": 0,
+   "at": [
+    26,
+    2
+   ],
+   "romDest": 179,
+   "status": "measured"
+  },
+  "121:1": {
+   "map": 121,
+   "trigId": 1,
+   "at": [
+    1,
+    4
+   ],
+   "romDest": 123,
+   "status": "measured"
+  },
+  "122:0": {
+   "map": 122,
+   "trigId": 0,
+   "at": [
+    29,
+    1
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (29,2) and nothing fired"
+  },
+  "122:1": {
+   "map": 122,
+   "trigId": 1,
+   "at": [
+    29,
+    4
+   ],
+   "romDest": 123,
+   "status": "measured"
+  },
+  "122:2": {
+   "map": 122,
+   "trigId": 2,
+   "at": [
+    26,
+    30
+   ],
+   "romDest": 45,
+   "status": "measured"
+  },
+  "122:3": {
+   "map": 122,
+   "trigId": 3,
+   "at": [
+    2,
+    31
+   ],
+   "romDest": 164,
+   "status": "measured"
+  },
+  "123:0": {
+   "map": 123,
+   "trigId": 0,
+   "at": [
+    26,
+    2
+   ],
+   "romDest": 179,
+   "status": "measured"
+  },
+  "123:1": {
+   "map": 123,
+   "trigId": 1,
+   "at": [
+    1,
+    4
+   ],
+   "romDest": 183,
+   "status": "measured"
+  },
+  "125:0": {
+   "map": 125,
+   "trigId": 0,
+   "at": [
+    12,
+    8
+   ],
+   "romDest": 126,
+   "status": "measured"
+  },
+  "126:0": {
+   "map": 126,
+   "trigId": 0,
+   "at": [
+    1,
+    3
+   ],
+   "romDest": 127,
+   "status": "measured"
+  },
+  "127:0": {
+   "map": 127,
+   "trigId": 0,
+   "at": [
+    9,
+    10
+   ],
+   "romDest": 128,
+   "status": "measured"
+  },
+  "128:0": {
+   "map": 128,
+   "trigId": 0,
+   "at": [
+    1,
+    8
+   ],
+   "romDest": 129,
+   "status": "measured"
+  },
+  "129:0": {
+   "map": 129,
+   "trigId": 0,
+   "at": [
+    6,
+    8
+   ],
+   "romDest": 130,
+   "status": "measured"
+  },
+  "130:0": {
+   "map": 130,
+   "trigId": 0,
+   "at": [
+    11,
+    8
+   ],
+   "romDest": 131,
+   "status": "measured"
+  },
+  "131:0": {
+   "map": 131,
+   "trigId": 0,
+   "at": [
+    7,
+    3
+   ],
+   "romDest": 132,
+   "status": "measured"
+  },
+  "132:0": {
+   "map": 132,
+   "trigId": 0,
+   "at": [
+    3,
+    10
+   ],
+   "romDest": 133,
+   "status": "measured"
+  },
+  "133:0": {
+   "map": 133,
+   "trigId": 0,
+   "at": [
+    12,
+    8
+   ],
+   "romDest": 134,
+   "status": "measured"
+  },
+  "136:0": {
+   "map": 136,
+   "trigId": 0,
+   "at": [
+    0,
+    13
+   ],
+   "romDest": 137,
+   "status": "measured"
+  },
+  "137:0": {
+   "map": 137,
+   "trigId": 0,
+   "at": [
+    1,
+    3
+   ],
+   "romDest": 141,
+   "status": "measured"
+  },
+  "137:1": {
+   "map": 137,
+   "trigId": 1,
+   "at": [
+    22,
+    6
+   ],
+   "romDest": 140,
+   "status": "measured"
+  },
+  "137:2": {
+   "map": 137,
+   "trigId": 2,
+   "at": [
+    27,
+    24
+   ],
+   "romDest": 142,
+   "status": "measured"
+  },
+  "138:0": {
+   "map": 138,
+   "trigId": 0,
+   "at": [
+    1,
+    3
+   ],
+   "romDest": 141,
+   "status": "measured"
+  },
+  "138:1": {
+   "map": 138,
+   "trigId": 1,
+   "at": [
+    22,
+    6
+   ],
+   "romDest": 140,
+   "status": "measured"
+  },
+  "138:2": {
+   "map": 138,
+   "trigId": 2,
+   "at": [
+    27,
+    24
+   ],
+   "romDest": 142,
+   "status": "measured"
+  },
+  "139:0": {
+   "map": 139,
+   "trigId": 0,
+   "at": [
+    1,
+    3
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "139:1": {
+   "map": 139,
+   "trigId": 1,
+   "at": [
+    22,
+    6
+   ],
+   "romDest": 3,
+   "status": "measured"
+  },
+  "139:2": {
+   "map": 139,
+   "trigId": 2,
+   "at": [
+    27,
+    24
+   ],
+   "romDest": 5,
+   "status": "measured"
+  },
+  "140:0": {
+   "map": 140,
+   "trigId": 0,
+   "at": [
+    1,
+    3
+   ],
+   "romDest": 141,
+   "status": "measured"
+  },
+  "140:1": {
+   "map": 140,
+   "trigId": 1,
+   "at": [
+    22,
+    6
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (23,6) and nothing fired"
+  },
+  "140:2": {
+   "map": 140,
+   "trigId": 2,
+   "at": [
+    27,
+    24
+   ],
+   "romDest": 142,
+   "status": "measured"
+  },
+  "141:0": {
+   "map": 141,
+   "trigId": 0,
+   "at": [
+    12,
+    2
+   ],
+   "romDest": 138,
+   "status": "measured"
+  },
+  "141:1": {
+   "map": 141,
+   "trigId": 1,
+   "at": [
+    6,
+    11
+   ],
+   "romDest": 144,
+   "status": "measured"
+  },
+  "141:2": {
+   "map": 141,
+   "trigId": 2,
+   "at": [
+    12,
+    11
+   ],
+   "romDest": 145,
+   "status": "measured"
+  },
+  "141:3": {
+   "map": 141,
+   "trigId": 3,
+   "at": [
+    18,
+    11
+   ],
+   "romDest": 146,
+   "status": "measured"
+  },
+  "142:0": {
+   "map": 142,
+   "trigId": 0,
+   "at": [
+    19,
+    15
+   ],
+   "romDest": 143,
+   "status": "measured"
+  },
+  "143:0": {
+   "map": 143,
+   "trigId": 0,
+   "at": [
+    9,
+    8
+   ],
+   "romDest": 139,
+   "status": "measured"
+  },
+  "150:0": {
+   "map": 150,
+   "trigId": 0,
+   "at": [
+    9,
+    12
+   ],
+   "romDest": 22,
+   "status": "measured"
+  },
+  "151:0": {
+   "map": 151,
+   "trigId": 0,
+   "at": [
+    21,
+    12
+   ],
+   "romDest": 153,
+   "status": "measured"
+  },
+  "152:0": {
+   "map": 152,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 0,
+   "status": "measured"
+  },
+  "153:0": {
+   "map": 153,
+   "trigId": 0,
+   "at": [
+    16,
+    27
+   ],
+   "romDest": 154,
+   "status": "measured"
+  },
+  "154:0": {
+   "map": 154,
+   "trigId": 0,
+   "at": [
+    0,
+    13
+   ],
+   "romDest": 155,
+   "status": "measured"
+  },
+  "156:0": {
+   "map": 156,
+   "trigId": 0,
+   "at": [
+    30,
+    14
+   ],
+   "romDest": 165,
+   "status": "measured"
+  },
+  "158:0": {
+   "map": 158,
+   "trigId": 0,
+   "at": [
+    31,
+    7
+   ],
+   "romDest": 177,
+   "status": "measured"
+  },
+  "158:1": {
+   "map": 158,
+   "trigId": 1,
+   "at": [
+    26,
+    19
+   ],
+   "romDest": 176,
+   "status": "measured"
+  },
+  "159:0": {
+   "map": 159,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 0,
+   "status": "measured"
+  },
+  "160:0": {
+   "map": 160,
+   "trigId": 0,
+   "at": [
+    25,
+    2
+   ],
+   "romDest": 52,
+   "status": "measured"
+  },
+  "160:1": {
+   "map": 160,
+   "trigId": 1,
+   "at": [
+    28,
+    3
+   ],
+   "romDest": 163,
+   "status": "measured"
+  },
+  "161:0": {
+   "map": 161,
+   "trigId": 0,
+   "at": [
+    15,
+    20
+   ],
+   "romDest": 160,
+   "status": "measured"
+  },
+  "161:1": {
+   "map": 161,
+   "trigId": 1,
+   "at": [
+    1,
+    27
+   ],
+   "romDest": 162,
+   "status": "measured"
+  },
+  "164:0": {
+   "map": 164,
+   "trigId": 0,
+   "at": [
+    8,
+    8
+   ],
+   "romDest": 44,
+   "status": "measured"
+  },
+  "164:1": {
+   "map": 164,
+   "trigId": 1,
+   "at": [
+    14,
+    15
+   ],
+   "romDest": 46,
+   "status": "measured"
+  },
+  "164:2": {
+   "map": 164,
+   "trigId": 2,
+   "at": [
+    19,
+    17
+   ],
+   "romDest": 47,
+   "status": "measured"
+  },
+  "164:3": {
+   "map": 164,
+   "trigId": 3,
+   "at": [
+    10,
+    19
+   ],
+   "romDest": 50,
+   "status": "measured"
+  },
+  "165:0": {
+   "map": 165,
+   "trigId": 0,
+   "at": [
+    22,
+    2
+   ],
+   "romDest": 170,
+   "status": "measured"
+  },
+  "165:1": {
+   "map": 165,
+   "trigId": 1,
+   "at": [
+    11,
+    18
+   ],
+   "romDest": 166,
+   "status": "measured"
+  },
+  "166:0": {
+   "map": 166,
+   "trigId": 0,
+   "at": [
+    3,
+    21
+   ],
+   "romDest": 168,
+   "status": "measured"
+  },
+  "167:0": {
+   "map": 167,
+   "trigId": 0,
+   "at": [
+    3,
+    21
+   ],
+   "romDest": 168,
+   "status": "measured"
+  },
+  "168:0": {
+   "map": 168,
+   "trigId": 0,
+   "at": [
+    22,
+    2
+   ],
+   "romDest": 170,
+   "status": "measured"
+  },
+  "168:1": {
+   "map": 168,
+   "trigId": 1,
+   "at": [
+    11,
+    18
+   ],
+   "romDest": 166,
+   "status": "measured"
+  },
+  "169:0": {
+   "map": 169,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 0,
+   "status": "measured"
+  },
+  "170:0": {
+   "map": 170,
+   "trigId": 0,
+   "at": [
+    30,
+    14
+   ],
+   "romDest": 165,
+   "status": "measured"
+  },
+  "171:0": {
+   "map": 171,
+   "trigId": 0,
+   "at": [
+    3,
+    5
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "steppable off to (3,6) but not back on — no player can reach it"
+  },
+  "171:1": {
+   "map": 171,
+   "trigId": 1,
+   "at": [
+    27,
+    5
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "steppable off to (27,6) but not back on — no player can reach it"
+  },
+  "171:2": {
+   "map": 171,
+   "trigId": 2,
+   "at": [
+    14,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "171:3": {
+   "map": 171,
+   "trigId": 3,
+   "at": [
+    15,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "171:4": {
+   "map": 171,
+   "trigId": 4,
+   "at": [
+    16,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "172:0": {
+   "map": 172,
+   "trigId": 0,
+   "at": [
+    3,
+    5
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "steppable off to (3,6) but not back on — no player can reach it"
+  },
+  "172:1": {
+   "map": 172,
+   "trigId": 1,
+   "at": [
+    27,
+    5
+   ],
+   "romDest": null,
+   "status": "sealed",
+   "note": "steppable off to (27,6) but not back on — no player can reach it"
+  },
+  "172:2": {
+   "map": 172,
+   "trigId": 2,
+   "at": [
+    14,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "172:3": {
+   "map": 172,
+   "trigId": 3,
+   "at": [
+    15,
+    27
+   ],
+   "romDest": 83,
+   "status": "measured"
+  },
+  "172:4": {
+   "map": 172,
+   "trigId": 4,
+   "at": [
+    16,
+    27
+   ],
+   "romDest": 83,
    "status": "measured"
   },
   "174:0": {
@@ -783,6 +2612,1148 @@
     31
    ],
    "romDest": 164,
+   "status": "measured"
+  },
+  "181:0": {
+   "map": 181,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 115,
+   "status": "measured"
+  },
+  "183:0": {
+   "map": 183,
+   "trigId": 0,
+   "at": [
+    28,
+    8
+   ],
+   "romDest": 179,
+   "status": "measured"
+  },
+  "186:0": {
+   "map": 186,
+   "trigId": 0,
+   "at": [
+    7,
+    12
+   ],
+   "romDest": 19,
+   "status": "measured"
+  },
+  "186:1": {
+   "map": 186,
+   "trigId": 1,
+   "at": [
+    23,
+    12
+   ],
+   "romDest": 174,
+   "status": "measured"
+  },
+  "186:2": {
+   "map": 186,
+   "trigId": 2,
+   "at": [
+    15,
+    18
+   ],
+   "romDest": 25,
+   "status": "measured"
+  },
+  "187:0": {
+   "map": 187,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": 27,
+   "status": "measured"
+  },
+  "187:1": {
+   "map": 187,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "187:2": {
+   "map": 187,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "187:3": {
+   "map": 187,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": 188,
+   "status": "measured"
+  },
+  "187:4": {
+   "map": 187,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": 26,
+   "status": "measured"
+  },
+  "187:5": {
+   "map": 187,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (16,22) and nothing fired"
+  },
+  "187:6": {
+   "map": 187,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "187:7": {
+   "map": 187,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "188:0": {
+   "map": 188,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": 27,
+   "status": "measured"
+  },
+  "188:1": {
+   "map": 188,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "188:2": {
+   "map": 188,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "188:3": {
+   "map": 188,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": null,
+   "status": "no-op",
+   "note": "stood on the door from (9,9) and nothing fired"
+  },
+  "188:4": {
+   "map": 188,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": 26,
+   "status": "measured"
+  },
+  "188:5": {
+   "map": 188,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": 187,
+   "status": "measured"
+  },
+  "188:6": {
+   "map": 188,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "188:7": {
+   "map": 188,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "189:0": {
+   "map": 189,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": 27,
+   "status": "measured"
+  },
+  "189:1": {
+   "map": 189,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "189:2": {
+   "map": 189,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "189:3": {
+   "map": 189,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": 188,
+   "status": "measured"
+  },
+  "189:4": {
+   "map": 189,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": 26,
+   "status": "measured"
+  },
+  "189:5": {
+   "map": 189,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": 187,
+   "status": "measured"
+  },
+  "189:6": {
+   "map": 189,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "189:7": {
+   "map": 189,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "190:0": {
+   "map": 190,
+   "trigId": 0,
+   "at": [
+    16,
+    2
+   ],
+   "romDest": 27,
+   "status": "measured"
+  },
+  "190:1": {
+   "map": 190,
+   "trigId": 1,
+   "at": [
+    10,
+    5
+   ],
+   "romDest": 28,
+   "status": "measured"
+  },
+  "190:2": {
+   "map": 190,
+   "trigId": 2,
+   "at": [
+    14,
+    7
+   ],
+   "romDest": 30,
+   "status": "measured"
+  },
+  "190:3": {
+   "map": 190,
+   "trigId": 3,
+   "at": [
+    10,
+    9
+   ],
+   "romDest": 188,
+   "status": "measured"
+  },
+  "190:4": {
+   "map": 190,
+   "trigId": 4,
+   "at": [
+    10,
+    21
+   ],
+   "romDest": 26,
+   "status": "measured"
+  },
+  "190:5": {
+   "map": 190,
+   "trigId": 5,
+   "at": [
+    16,
+    21
+   ],
+   "romDest": 187,
+   "status": "measured"
+  },
+  "190:6": {
+   "map": 190,
+   "trigId": 6,
+   "at": [
+    19,
+    25
+   ],
+   "romDest": 182,
+   "status": "measured"
+  },
+  "190:7": {
+   "map": 190,
+   "trigId": 7,
+   "at": [
+    10,
+    31
+   ],
+   "romDest": 186,
+   "status": "measured"
+  },
+  "191:0": {
+   "map": 191,
+   "trigId": 0,
+   "at": [
+    10,
+    20
+   ],
+   "romDest": 29,
+   "status": "measured"
+  },
+  "191:1": {
+   "map": 191,
+   "trigId": 1,
+   "at": [
+    10,
+    24
+   ],
+   "romDest": 189,
+   "status": "measured"
+  },
+  "191:2": {
+   "map": 191,
+   "trigId": 2,
+   "at": [
+    14,
+    24
+   ],
+   "romDest": 190,
+   "status": "measured"
+  },
+  "192:0": {
+   "map": 192,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "194:0": {
+   "map": 194,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "195:0": {
+   "map": 195,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "196:0": {
+   "map": 196,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "197:0": {
+   "map": 197,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "198:0": {
+   "map": 198,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "199:0": {
+   "map": 199,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "200:0": {
+   "map": 200,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "201:0": {
+   "map": 201,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "202:0": {
+   "map": 202,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "203:0": {
+   "map": 203,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "204:0": {
+   "map": 204,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "205:0": {
+   "map": 205,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "206:0": {
+   "map": 206,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "207:0": {
+   "map": 207,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "208:0": {
+   "map": 208,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "209:0": {
+   "map": 209,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "210:0": {
+   "map": 210,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "211:0": {
+   "map": 211,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "212:0": {
+   "map": 212,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "213:0": {
+   "map": 213,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "214:0": {
+   "map": 214,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "215:0": {
+   "map": 215,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "216:0": {
+   "map": 216,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "217:0": {
+   "map": 217,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "218:0": {
+   "map": 218,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "219:0": {
+   "map": 219,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "220:0": {
+   "map": 220,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "221:0": {
+   "map": 221,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "222:0": {
+   "map": 222,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "223:0": {
+   "map": 223,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "224:0": {
+   "map": 224,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "225:0": {
+   "map": 225,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "226:0": {
+   "map": 226,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "227:0": {
+   "map": 227,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "228:0": {
+   "map": 228,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "229:0": {
+   "map": 229,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "230:0": {
+   "map": 230,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "231:0": {
+   "map": 231,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "232:0": {
+   "map": 232,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "233:0": {
+   "map": 233,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "234:0": {
+   "map": 234,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "235:0": {
+   "map": 235,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "236:0": {
+   "map": 236,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "237:0": {
+   "map": 237,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "238:0": {
+   "map": 238,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "239:0": {
+   "map": 239,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "240:0": {
+   "map": 240,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "241:0": {
+   "map": 241,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "242:0": {
+   "map": 242,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "243:0": {
+   "map": 243,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "244:0": {
+   "map": 244,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "245:0": {
+   "map": 245,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "246:0": {
+   "map": 246,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "247:0": {
+   "map": 247,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "248:0": {
+   "map": 248,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "249:0": {
+   "map": 249,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "250:0": {
+   "map": 250,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "251:0": {
+   "map": 251,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "252:0": {
+   "map": 252,
+   "trigId": 0,
+   "at": [
+    13,
+    1
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "253:0": {
+   "map": 253,
+   "trigId": 0,
+   "at": [
+    5,
+    7
+   ],
+   "romDest": 2,
+   "status": "measured"
+  },
+  "253:1": {
+   "map": 253,
+   "trigId": 1,
+   "at": [
+    10,
+    19
+   ],
+   "romDest": 3,
+   "status": "measured"
+  },
+  "253:2": {
+   "map": 253,
+   "trigId": 2,
+   "at": [
+    18,
+    19
+   ],
+   "romDest": 5,
+   "status": "measured"
+  },
+  "253:3": {
+   "map": 253,
+   "trigId": 3,
+   "at": [
+    14,
+    20
+   ],
+   "romDest": 4,
+   "status": "measured"
+  },
+  "253:4": {
+   "map": 253,
+   "trigId": 4,
+   "at": [
+    9,
+    26
+   ],
+   "romDest": 6,
+   "status": "measured"
+  },
+  "253:5": {
+   "map": 253,
+   "trigId": 5,
+   "at": [
+    21,
+    26
+   ],
+   "romDest": 8,
+   "status": "measured"
+  },
+  "253:6": {
+   "map": 253,
+   "trigId": 6,
+   "at": [
+    28,
+    29
+   ],
+   "romDest": 147,
+   "status": "measured"
+  },
+  "254:0": {
+   "map": 254,
+   "trigId": 0,
+   "at": [
+    7,
+    7
+   ],
+   "romDest": 33,
+   "status": "measured"
+  },
+  "254:1": {
+   "map": 254,
+   "trigId": 1,
+   "at": [
+    11,
+    14
+   ],
+   "romDest": 32,
+   "status": "measured"
+  },
+  "254:2": {
+   "map": 254,
+   "trigId": 2,
+   "at": [
+    7,
+    15
+   ],
+   "romDest": 36,
+   "status": "measured"
+  },
+  "254:3": {
+   "map": 254,
+   "trigId": 3,
+   "at": [
+    23,
+    16
+   ],
+   "romDest": 38,
+   "status": "measured"
+  },
+  "254:4": {
+   "map": 254,
+   "trigId": 4,
+   "at": [
+    25,
+    22
+   ],
+   "romDest": 39,
+   "status": "measured"
+  },
+  "254:5": {
+   "map": 254,
+   "trigId": 5,
+   "at": [
+    6,
+    23
+   ],
+   "romDest": 41,
+   "status": "measured"
+  },
+  "254:6": {
+   "map": 254,
+   "trigId": 6,
+   "at": [
+    12,
+    23
+   ],
+   "romDest": 42,
    "status": "measured"
   }
  }

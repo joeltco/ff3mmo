@@ -59,10 +59,23 @@ const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const TOWNS = [114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147,
                10, 11, 12, 13, 14, 15, 16, 17,
                18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 174, 175, 176, 177, 178, 179];
-const ids = process.argv.includes('--towns')
-  ? TOWNS
+// `--all`: every map slot the engine can address ($0700 is one byte) that has at
+// least one door. 182 maps, 373 doors. Empty maps are skipped rather than
+// emitted as noise — `door-probe.cjs` has nothing to do with them.
+function everyMapWithDoors() {
+  const out = [];
+  for (let id = 0; id < 256; id++) {
+    let md;
+    try { md = loadMap(rom, id); } catch { continue; }
+    for (const [, t] of md.triggerMap) { if (t.type === 1) { out.push(id); break; } }
+  }
+  return out;
+}
+const wide = process.argv.includes('--all');
+const ids = wide ? everyMapWithDoors()
+  : process.argv.includes('--towns') ? TOWNS
   : (args[0] || '18').split(',').map(n => parseInt(n, 10));
-const outPath = args[process.argv.includes('--towns') ? 0 : 1] || 'door-map.json';
+const outPath = args[(wide || process.argv.includes('--towns')) ? 0 : 1] || 'door-map.json';
 
 const out = {};
 for (const mapId of ids) {

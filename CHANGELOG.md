@@ -1,3 +1,41 @@
+## 1.10.13 — 2026-08-20
+
+### The door graph, re-measured for the whole game
+
+The fixture held 78 doors across 28 maps — the Ur / Kazus / Sasune block. The game
+has **373 doors across 182 maps**. All of them are now walked in a real emulator
+with the fixed decoder.
+
+**349 measured. 0 mismatches.** Every door the player can use resolves to exactly
+what `entranceData[trigId]` says.
+
+The remaining 24 are accounted for, not skipped:
+- **13 point at their own map** — the cartridge treats it as a no-op; standing on
+  them fires nothing.
+- **11 are sealed**, in two shapes the fixture now distinguishes:
+  - **5 walled in on all four sides**;
+  - **6 steppable OFF the tile but not back ON** — maps 78, 171 and 172, whose
+    doors at (3,5) and (27,5) let the party walk down and then refuse the way back
+    up. The party can only ever be on those tiles because the probe patched the
+    spawn onto them, so no player reaches them. The first sweep filed these as
+    "unmeasured", which understated what had actually been established.
+
+`rom-door-map.mjs` gained `--all` (every addressable map with a door, skipping
+empty slots rather than emitting them as noise).
+
+### Proven at the new scale
+
+`check-door-table` now gates 349 measured doors, and the reverts bite harder for
+it:
+
+- per-type trigger counter → global counter: **144 failures** (was 62)
+- undo the v1.10.9 decompressor fix: **31 failures**
+
+Both were single-digit-to-double-digit on the 78-door fixture. The wider net
+catches more of what it is for.
+
+No gameplay change.
+
 ## 1.10.12 — 2026-08-20
 
 ### Every refused map is now accounted for

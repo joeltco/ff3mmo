@@ -91,7 +91,12 @@ for (const [key, d] of Object.entries(FIXTURE.doors)) {
 
 if (!fails) console.log(`  ✓ ${checked} measured door(s) match the cartridge exactly`);
 if (!fails) console.log(`  ✓ ${barred} measured door(s) leave the shipped set and are refused at the door`);
-console.log(`  · ${sealed} sealed (walled in on all four sides), ${noop} pointing at their own map — nothing to compare`);
+// Two shapes of sealed, and the fixture records which: walled in on all four
+// sides, or steppable OFF the tile but not back ON, so the party can only ever be
+// there because we patched the spawn. Both mean no player reaches the door.
+const sealedWalled = Object.values(FIXTURE.doors).filter(d => d.status === 'sealed' && !/steppable/.test(d.note || '')).length;
+console.log(`  · ${sealed} sealed (${sealedWalled} walled in on all four sides, ${sealed - sealedWalled} steppable off but not back on), ` +
+            `${noop} pointing at their own map — nothing to compare`);
 console.log(`  · ${measured + sealed + noop} doors accounted for, none unexplained`);
 
 console.log(fails ? `\ncheck-door-table: ${fails} FAILURE(S)` : '\ncheck-door-table: OK');

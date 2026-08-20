@@ -36,6 +36,15 @@ Intentional design decisions that aren't obvious from reading the code. One sect
   tilemaps verified byte for byte against the cartridge — there is nothing to
   reach. `check-stranding.mjs` pins that, and self-tests its detector against six
   maps proven to have a way out before believing any negative.
+- ⭐ **The door graph is measured for the WHOLE GAME, not just the towns.**
+  `docs/ROM-DOOR-GRAPH.json` holds **373 doors across 182 maps** — every map the
+  engine can address that has one — walked in a real emulator with the fixed
+  decoder. **349 measured, 0 mismatches.** The rest: 13 doors point at their own
+  map (a no-op in the cartridge) and 11 are sealed, in two shapes the fixture
+  distinguishes — 5 walled in on all four sides, 6 steppable OFF the tile but not
+  back ON, so the party can only ever be there because the probe patched the
+  spawn. Regenerate with `rom-door-map.mjs --all` then `door-probe.cjs`, and run
+  the probe's `--selftest` first.
 - ⛔ **There are no in-map staircase warps.** Retracted in v1.10.8 and still
   true: all 75 measured doors land on the destination map's raw ROM entrance,
   because a door record carries a map id and no coordinate.

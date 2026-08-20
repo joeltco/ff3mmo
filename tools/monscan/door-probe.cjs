@@ -155,9 +155,18 @@ function fromDoorTile(mapId, door) {
       press(nes, OPPOSITE[d], 16, 8);
       for (let t = 0; t < 6 && m[MAP_ID] === mapId; t++) run(nes, 30);
       if (m[MAP_ID] !== mapId) return { dest: m[MAP_ID], land: [m[TILE_X], m[TILE_Y]], via: `off to (${off}) and back` };
+      // ⭐ COULD NOT GET BACK ON. The door tile is enterable only because we
+      // PATCHED the spawn onto it; from the adjacent tile the move is refused, so
+      // no player can ever step on it. That is sealed — the same fact as "walled
+      // in on all four sides", reached the other way round. Measured on maps 78 /
+      // 171 / 172, whose doors at (3,5) and (27,5) let the party walk down and
+      // then refuse the way back up.
+      if (m[TILE_X] !== door.x || m[TILE_Y] !== door.y) {
+        return { sealed: true, note: `steppable off to (${off}) but not back on — no player can reach it` };
+      }
       return { error: `stepped back onto the door from (${off}) and nothing fired — the arrival trigger is disarmed`, disarmed: true };
     }
-    return { sealed: true };
+    return { sealed: true, note: 'walled in on all four sides' };
   } finally { try { fs.unlinkSync(romPath); } catch { /* temp file */ } }
 }
 
@@ -252,7 +261,7 @@ for (const md of Object.values(MAPS)) {
     results[`${md.mapId}:${d.trigId}`] = rec;
     const tail = r.dest != null
       ? `ROM ${String(r.dest).padStart(3)} @(${r.land}) | ours ${String(d.ourDest).padStart(3)} ${rec.match ? '✓' : '⛔ MISMATCH'}`
-      : r.sealed ? `SEALED — walled in on all four sides, no player can reach it | ours ${d.ourDest}`
+      : r.sealed ? `SEALED — ${r.note || 'walled in on all four sides, no player can reach it'} | ours ${d.ourDest}`
       : `NOT MEASURED — ${r.error}`;
     console.log(`  map ${String(md.mapId).padStart(3)} door ${d.trigId} @(${d.x},${d.y}) -> ${tail}`);
     fs.writeFileSync(args[1] || 'door-probe.json', JSON.stringify(results, null, 1));
