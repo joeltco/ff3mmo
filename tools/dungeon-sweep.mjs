@@ -7,13 +7,18 @@
 // actually asks for. Both share `reachableFrom` below so the picture you look
 // at and the numbers you trust can never disagree.
 //
+// It covers EVERY generated surface the player can stand on, not just the five
+// floors: `sweepSideMaps` walks the secret teleport room and the two standalone
+// locked rooms (1010 / 1011), which had no gate of any kind before v1.10.15.
+//
 // Usage:
 //   node tools/dungeon-sweep.mjs [seeds] [base]     # default 150, timestamp base
 //
-// Exit code is 1 if a HARD invariant fails (see `sweepFloors`).
+// Exit code is 1 if a HARD invariant fails (see `sweepFloors` / `sweepSideMaps`).
 
 import fs from 'node:fs';
-import { generateFloor } from '../src/dungeon-generator.js';
+import { generateFloor, generateSecretRoomMap } from '../src/dungeon-generator.js';
+import { generateLockedRoomMap } from '../src/dungeon-locked-room.js';
 
 /**
  * Tiles treated as walkable when flooding a generated floor.
@@ -62,24 +67,85 @@ export function reachableFrom(tm, ex, ey) {
 }
 
 /**
+ * Is every chest on this map OPENABLE?
+ *
+ * ⛔ A chest tile is NOT walkable — you stand beside it and face it. Flooding
+ * and asking `seen[chestIndex]` therefore reports EVERY chest in the game as
+ * unreachable; the first version of this check did exactly that and called
+ * 300/300 locked-room chests broken. Openable = some orthogonal neighbour is
+ * reachable.
+ */
+export function chestAudit(tm, seen) {
+  let total = 0; const sealed = [];
+  for (let i = 0; i < 1024; i++) {
+    if (tm[i] !== CHEST) continue;
+    total++;
+    const x = i % 32, y = (i - x) / 32;
+    const ok = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx > 31 || ny < 0 || ny > 31) return false;
+      return !!seen[ny * 32 + nx];
+    });
+    if (!ok) sealed.push(`${x},${y}`);
+  }
+  return { total, sealed };
+}
+
+/**
+ * Passable tiles that nothing can reach, excluding rows >= 22 — the secret
+ * teleport room is an INTENTIONAL separate island.
+ */
+export function strandedTiles(tm, seen) {
+  const out = [];
+  for (let i = 0; i < 1024; i++) {
+    if (!PASS.has(tm[i]) || seen[i]) continue;
+    if (((i - (i % 32)) / 32) >= 22) continue;
+    out.push(`${i % 32},${(i - (i % 32)) / 32}`);
+  }
+  return out;
+}
+
+/**
+ * Apply the rock-switch result exactly as the game does — `handleRockPuzzle`
+ * in `map-triggers.js` runs `_consumeTile(wt.x, wt.y, wt.newTile)` per wall
+ * tile. Use `newTile`, NOT a blanket floor fill: the list mixes WALL_ROCKY
+ * (0x01) with FLOOR (0x30), so blanket-filling models the puzzle as opening
+ * MORE than pulling the switch actually opens.
+ */
+export function applyRockSwitch(tm, rockSwitch) {
+  const out = tm.slice();
+  for (const wt of rockSwitch?.wallTiles || []) out[wt.y * 32 + wt.x] = wt.newTile;
+  return out;
+}
+
+/**
  * Sweep every floor over `n` seeds. Returns `{ hard, soft, rows }`.
  *
- * HARD failures are unambiguous breakage: a floor that throws, a floor with no
- * reachable space at all, or an exit staircase the player cannot walk to.
+ * HARD failures are unambiguous breakage:
+ *   - a floor that throws, or with no reachable space at all;
+ *   - an exit staircase the player cannot walk to;
+ *   - a CHEST no reachable tile is adjacent to;
+ *   - a SEALED POCKET — passable floor nothing can reach. Hard since v1.10.15,
+ *     when `sealTinyPockets` closed the last two sources (floor 3's branch
+ *     chest landing on the dead-end tile, and floor 0's organic outline
+ *     closing a 2-tile hole). It was 26 tiles across 24 seeds; it is now 0,
+ *     so anything above 0 is a regression rather than a known wart.
  *
- * Everything else is counted, not failed, because the generator has documented
- * intentional exceptions that a naive checker reads as bugs:
- *   - floors 1 / 2 / 4 have no `0x73` staircase (trap holes, a rock-switch
- *     passage, and the boss chamber respectively);
- *   - floor 2 seals a rock-switch puzzle room — its tiles and one chest are
- *     unreachable until `rockSwitch.wallTiles` turn to floor;
- *   - floor 0's entrance frame is rocky-with-void-above by original design;
- *   - floor 3's alcove chests sit at fat-stretch ends, not 2x2 corners.
+ * Floor 2 is the ONE exception and it is checked, not excused. Its rock-switch
+ * puzzle room is sealed BY DESIGN — ~21 tiles and one chest per seed. Rather
+ * than skipping the floor, the sweep pulls the switch (`applyRockSwitch`) and
+ * asserts the room opens completely: stranded 0, every chest openable. If a
+ * floor-2 tile is stranded AFTER the switch, that is a real fault and fails.
+ * Before v1.10.15 this floor just printed "150/150 seeds strand 3187 tiles" as
+ * a soft count with a comment claiming it was the puzzle — nothing tested it.
+ *
+ * Still counted rather than failed: floors 1 / 2 / 4 have no `0x73` staircase
+ * (trap holes, a rock-switch passage, and the boss chamber respectively).
  */
 export function sweepFloors(rom, n = 150, base = 1754900000000) {
   const rows = []; const hard = []; const soft = [];
   for (const f of [0, 1, 2, 3, 4]) {
-    const t = { floor: f, seeds: 0, noStairs: 0, stranded: 0, strandedSeeds: 0, chests: 0 };
+    const t = { floor: f, seeds: 0, noStairs: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
@@ -97,19 +163,80 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       if (stairs < 0) t.noStairs++;
       else if (!seen[stairs]) hard.push(`floor ${f} seed ${seed}: exit staircase unreachable`);
 
-      let stranded = 0;
-      for (let i = 0; i < 1024; i++) {
-        if (!PASS.has(tm[i]) || seen[i]) continue;
-        if (((i - (i % 32)) / 32) >= 22) continue;      // secret teleport room
-        stranded++;
+      const stranded = strandedTiles(tm, seen);
+      const chests = chestAudit(tm, seen);
+      t.chests += chests.total;
+
+      if (r.rockSwitch) {
+        // Sealed-by-design puzzle room: count it, then PROVE the switch opens it.
+        t.puzzleTiles += stranded.length;
+        const openTm = applyRockSwitch(tm, r.rockSwitch);
+        const openSeen = reachableFrom(openTm, r.entranceX, r.entranceY);
+        const left = strandedTiles(openTm, openSeen);
+        const lockedChests = chestAudit(openTm, openSeen).sealed;
+        if (left.length) hard.push(`floor ${f} seed ${seed}: ${left.length} tiles STILL stranded after the rock switch (${left.slice(0, 6).join(' ')})`);
+        if (lockedChests.length) hard.push(`floor ${f} seed ${seed}: chest at ${lockedChests.join(' ')} unopenable even after the rock switch`);
+      } else {
+        if (stranded.length) {
+          t.stranded += stranded.length; t.strandedSeeds++;
+          hard.push(`floor ${f} seed ${seed}: ${stranded.length} sealed pocket tiles (${stranded.slice(0, 6).join(' ')})`);
+        }
+        if (chests.sealed.length) hard.push(`floor ${f} seed ${seed}: chest at ${chests.sealed.join(' ')} has no reachable neighbour`);
       }
-      if (stranded) { t.stranded += stranded; t.strandedSeeds++; }
-      for (let i = 0; i < 1024; i++) if (tm[i] === CHEST) t.chests++;
     }
-    if (t.strandedSeeds) soft.push(`floor ${f}: ${t.strandedSeeds}/${t.seeds} seeds strand ${t.stranded} tiles`);
+    if (t.puzzleTiles) soft.push(`floor ${f}: ${t.puzzleTiles} tiles sealed behind the rock switch — all ${t.seeds} seeds open fully when it is pulled`);
     rows.push(t);
   }
   return { hard, soft, rows };
+}
+
+/**
+ * The generated maps that are NOT one of the five floors: the secret teleport
+ * room (two variants, `goLeft` true/false) and the standalone locked rooms
+ * 1010 / 1011. `map-loading.js` builds all three through the same
+ * `_loadDungeonFloor` path the floors use, so a break here strands the player
+ * exactly as badly — yet none of them was swept at all before v1.10.15.
+ *
+ * The seed the game feeds a locked room is `(dungeonSeed ^ mapId) | 0`
+ * (`map-loading.js`), so the sweep uses that expression rather than a bare
+ * counter — a room keyed off a differently-derived seed is a different sample.
+ */
+export function sweepSideMaps(rom, n = 150, base = 1754900000000) {
+  const hard = []; const rows = [];
+  const audit = (label, r) => {
+    const seen = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
+    let reach = 0; for (let i = 0; i < 1024; i++) if (seen[i]) reach++;
+    const stranded = strandedTiles(r.tilemap, seen);
+    const chests = chestAudit(r.tilemap, seen);
+    if (reach < 4) hard.push(`${label}: only ${reach} reachable tiles`);
+    if (stranded.length) hard.push(`${label}: ${stranded.length} sealed pocket tiles (${stranded.slice(0, 6).join(' ')})`);
+    if (chests.sealed.length) hard.push(`${label}: chest at ${chests.sealed.join(' ')} has no reachable neighbour`);
+    return { reach, stranded: stranded.length, chests: chests.total };
+  };
+
+  for (const goLeft of [true, false]) {
+    let r;
+    try { r = generateSecretRoomMap(rom, goLeft); }
+    catch (e) { hard.push(`secret room goLeft=${goLeft} threw: ${e.message}`); continue; }
+    const a = audit(`secret room goLeft=${goLeft}`, r);
+    rows.push({ map: `secret goLeft=${goLeft}`, seeds: 1, minReach: a.reach, stranded: a.stranded, chests: a.chests });
+  }
+
+  for (const mapId of [1010, 1011]) {
+    const t = { map: `locked ${mapId}`, seeds: 0, minReach: Infinity, stranded: 0, chests: 0 };
+    for (let k = 0; k < n; k++) {
+      const seed = ((base + k * 7919) | 0) ^ mapId | 0;   // exactly map-loading.js
+      let r;
+      try { r = generateLockedRoomMap(rom, seed); }
+      catch (e) { hard.push(`locked room ${mapId} seed ${seed} threw: ${e.message}`); continue; }
+      t.seeds++;
+      const a = audit(`locked room ${mapId} seed ${seed}`, r);
+      t.minReach = Math.min(t.minReach, a.reach);
+      t.stranded += a.stranded; t.chests += a.chests;
+    }
+    rows.push(t);
+  }
+  return { hard, rows };
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────────
@@ -118,6 +245,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const rom = new Uint8Array(fs.readFileSync(romPath));
   const n = parseInt(process.argv[2] || '150', 10);
   const base = parseInt(process.argv[3] || '1754900000000', 10);
+
   const { hard, soft, rows } = sweepFloors(rom, n, base);
   console.log(`dungeon-sweep — ${n} timestamp-style seeds per floor (base ${base})\n`);
   console.log('floor   seeds  noStairs  strandedSeeds  strandedTiles  chests');
@@ -125,10 +253,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(String(r.floor).padEnd(8) + String(r.seeds).padStart(5) + String(r.noStairs).padStart(10)
       + String(r.strandedSeeds).padStart(15) + String(r.stranded).padStart(15) + String(r.chests).padStart(8));
   }
-  if (soft.length) { console.log('\nsoft (counted, not failed):'); for (const s of soft) console.log('  ' + s); }
-  if (hard.length) {
-    console.log('\nHARD FAILURES:');
-    for (const h of hard) console.log('  ' + h);
+
+  const side = sweepSideMaps(rom, n, base);
+  console.log('\nside maps (secret teleport room + standalone locked rooms)');
+  console.log('map                    seeds  minReach  stranded  chests');
+  for (const r of side.rows) {
+    console.log(String(r.map).padEnd(23) + String(r.seeds).padStart(5)
+      + String(r.minReach).padStart(10) + String(r.stranded).padStart(10) + String(r.chests).padStart(8));
+  }
+
+  if (soft.length) { console.log('\nby design (checked, not excused):'); for (const s2 of soft) console.log('  ' + s2); }
+
+  const allHard = [...hard, ...side.hard];
+  if (allHard.length) {
+    console.log(`\nHARD FAILURES (${allHard.length}):`);
+    for (const h of allHard.slice(0, 40)) console.log('  ' + h);
+    if (allHard.length > 40) console.log(`  ... and ${allHard.length - 40} more`);
     process.exit(1);
   }
   console.log('\nno hard invariant violations');

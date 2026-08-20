@@ -1042,6 +1042,81 @@ function openEntranceLanding(tilemap, entranceX, topRow, clamp) {
   }
 }
 
+// ── Tiny sealed pockets ────────────────────────────────────────────────────
+// Fill 1-4 tile islands of floor that NOTHING can reach, left behind by the
+// carve passes. Two shapes were measured over 150 timestamp seeds per floor:
+//   - floor 3, 24 tiles / 23 seeds: the branch-alcove chest is placed ON the
+//     dead-end tile, so a fat stretch hanging off that end (or a leftover row
+//     of the 3-row carve) has the chest as its only non-solid neighbour;
+//   - floor 0, 2 tiles / 1 seed: the organic outline closed a 2-tile pocket
+//     inside the rock.
+// Both are the same defect — floor you can see and can never stand on.
+//
+// ⛔ A pocket is sealed ONLY if every neighbouring tile is solid under BOTH
+// passability models. `dungeon-sweep.mjs`'s PASS set is deliberately stricter
+// than the game's `isPassable` (0x70, 0x04, 0x61, 0x3a-0x3f), so a generic
+// "fill what the flood didn't reach" pass would delete real, walkable content.
+// SOLID below holds only tiles impassable either way; anything else joins the
+// component and grows it past `maxSize`, which is the point.
+//
+// The other guards, each protecting a documented intentional formation:
+//   - the entrance's own component is never touched;
+//   - rows >= 22 are the secret teleport room, an INTENTIONAL separate island;
+//   - floor 2's rock-switch puzzle room is sealed on purpose and is ~21 tiles,
+//     so `maxSize` 4 excludes it (proven in the sweep by opening the switch);
+//   - a pocket holding anything but FLOOR/BONES, or any registered trigger, is
+//     reported rather than filled — it is carrying content, not decoration.
+// Fill material follows `addOverhang`'s rule: rock may hang under rock, so a
+// pocket tile with ceiling/rocky above becomes WALL_ROCKY, otherwise CEILING.
+// Top-down order so a stacked pocket sees the tile it just filled.
+function sealTinyPockets(tilemap, entranceX, entranceY, triggerMap, maxSize = 4) {
+  const SOLID = new Set([CEILING, WALL_ROCKY, CHEST, FILL_VOID]);
+  const seen = new Uint8Array(1024);
+  const entI = entranceY * 32 + entranceX;
+  const filled = [];
+
+  for (let start = 0; start < 1024; start++) {
+    if (seen[start] || SOLID.has(tilemap[start])) continue;
+    // Flood the WHOLE component. ⛔ Do not break out early once it passes
+    // `maxSize`: the tiles already queued stop being expanded, whatever sits
+    // behind them is never marked `seen`, and the outer scan re-walks that
+    // remainder as a fresh "small pocket" and fills it. Measured — an early
+    // break took 6 floor-2 seeds DOWN a reachable tile each and cost one seed
+    // a whole chest. A 1024-tile flood is free; correctness is not.
+    const comp = []; const q = [start]; seen[start] = 1;
+    while (q.length) {
+      const i = q.pop(); comp.push(i);
+      const x = i % 32, y = (i - x) / 32;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+        const ni = ny * 32 + nx;
+        if (seen[ni] || SOLID.has(tilemap[ni])) continue;
+        seen[ni] = 1; q.push(ni);
+      }
+    }
+    if (comp.length > maxSize) continue;
+
+    let skip = false;
+    for (const i of comp) {
+      const x = i % 32, y = (i - x) / 32;
+      if (i === entI) skip = true;                                  // the party's own region
+      if (y >= 22) skip = true;                                     // secret teleport room
+      if (tilemap[i] !== FLOOR && tilemap[i] !== BONES) skip = true; // carries content
+      if (triggerMap && triggerMap.has(`${x},${y}`)) skip = true;    // carries a trigger
+    }
+    if (skip) continue;
+
+    comp.sort((a, b) => a - b); // ascending index == top-down
+    for (const i of comp) {
+      const above = i >= 32 ? tilemap[i - 32] : CEILING;
+      tilemap[i] = (above === CEILING || above === WALL_ROCKY) ? WALL_ROCKY : CEILING;
+      filled.push(i);
+    }
+  }
+  return filled;
+}
+
 // Floor feature counts per floor index
 const FLOOR_CONFIG = [
   { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
@@ -2467,7 +2542,18 @@ function _generateFloor(romData, floorIndex, seed) {
     dungeonDestinations.set('1:0', { mapId: 1004 }); // door → boss room
     dungeonDestinations.set('1:1', { goBack: true }); // stairs → back to floor 3
 
-    // BFS seal unreachable floor
+    // BFS seal unreachable floor.
+    //
+    // ⛔ This flood walks THROUGH chests on purpose — it drives the chest
+    // DELETION below, and a chest tile can never be entered, so a flood that
+    // blocks on chests marks every chest unreachable and the cleanup wipes
+    // all of them. That permissiveness is also why it cannot catch a pocket
+    // sealed BY a chest: floor 3's branch chest lands on the dead-end tile,
+    // and this BFS strolls straight over it into the fat stretch behind.
+    // Sealing those is `sealTinyPockets`'s job (see the end of generateFloor),
+    // which uses the game's own rule that a chest blocks. The two are not
+    // duplicates: this one deletes unreachable CONTENT in bulk, that one fills
+    // tiny decorative holes and never removes anything.
     const reachable = new Set();
     const bfsQ = [[entranceX, entranceY]];
     reachable.add(entranceY * 32 + entranceX);
@@ -2977,6 +3063,10 @@ function _generateFloor(romData, floorIndex, seed) {
     const [x, y] = key.split(',').map(Number);
     tilemap[y * 32 + x] = FLOOR;
   }
+
+  // Last pass on the tilemap — AFTER the trap swap, so the map it walks is the
+  // one the player gets. `dungeon-sweep.mjs` gates the result at 0.
+  sealTinyPockets(tilemap, entranceX, entranceY, triggerMap);
 
   const entranceData = new Uint8Array(16);
 

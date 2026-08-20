@@ -1,3 +1,73 @@
+## 1.10.15 — 2026-08-20
+
+### Fixed — floor you could see and never stand on
+
+Altar Cave was leaving tiny sealed islands of floor: **26 tiles across 24 of 150
+seeds**, in two shapes with two different causes.
+
+- **Floor 3, 24 tiles / 23 seeds.** The branch-alcove chest is placed ON the
+  dead-end tile of the alcove, and a chest is not walkable — you stand beside one
+  and face it. So a fat stretch hanging off that end, or a leftover row of the
+  3-row carve, had the chest as its only non-solid neighbour. Confirmed by
+  re-flooding with chests treated as walkable: **24 of 24 explained**, and the
+  offenders repeat at the same two columns seed after seed.
+- **Floor 0, 2 tiles / 1 seed.** The organic outline closed a 2-tile hole inside
+  the rock.
+
+`sealTinyPockets`, a last pass over the finished tilemap, fills both. It only
+touches a pocket whose every neighbour is solid under **both** passability models
+— the sweep's `PASS` set is deliberately stricter than the game's `isPassable`, so
+a generic "fill whatever the flood missed" pass would delete real walkable
+content. It never fills the entrance's own region, rows ≥ 22 (the secret teleport
+room is an intentional island), a pocket carrying a trigger or any tile that isn't
+floor/bones, or anything over 4 tiles (floor 2's puzzle room is ~21 and sealed by
+design).
+
+**Verified as a per-seed diff against the unpatched generator**, not as a total:
+across 750 floor-generations the ONLY differences are the 26 tiles. Chest counts,
+reachable-tile counts and floors 1 / 2 / 4 are byte-identical. 600 further seeds
+from a different base hold at 0.
+
+That diff is also what caught a bug in the fix itself. Breaking the component
+flood early once it passed the size cap left tiles behind the frontier unmarked;
+the outer scan then re-walked that remainder as a fresh "small pocket" and filled
+it — taking **6 floor-2 seeds down a reachable tile each, and one seed a whole
+chest**. A total would have shown "stranding down, looks good".
+
+### `dungeon-sweep` is a deploy gate now, and it covers the whole dungeon
+
+Altar Cave regenerates with a `Date.now()` seed on every entry, so a layout bug
+ships as "some players get a broken floor" and never as something reproducible.
+The sweep existed since v1.7.866 and had **never been wired to a gate** — it only
+ran when I remembered to run it. It is now `run_gate 60 node
+tools/dungeon-sweep.mjs 400` (~1.5s).
+
+Three generated maps had no gate of any kind: the **secret teleport room** (both
+variants) and the **standalone locked rooms 1010/1011**. `map-loading.js` builds
+all three through the same path the floors use, so a break there strands the
+player exactly as badly. Now swept — 300 locked-room generations, min 26 reachable
+tiles, 0 sealed pockets, 600/600 chests openable.
+
+Two invariants are new, and one old number stopped being taken on trust:
+
+- **Chest openability.** A chest tile is never walkable, so "is the chest
+  reachable" is the wrong question — the first version of this check asked it and
+  called 300/300 locked-room chests broken. Openable = some orthogonal neighbour
+  is reachable.
+- **Sealed pockets are now a HARD failure**, not a counted wart. They are at 0, so
+  anything above 0 is a regression.
+- **Floor 2's puzzle room is checked instead of excused.** It printed "150/150
+  seeds strand 3187 tiles" as a soft count beside a comment claiming it was the
+  rock-switch room — nothing tested that. The sweep now pulls the switch and
+  asserts the room opens completely on every seed. It applies `wt.newTile` exactly
+  as `handleRockPuzzle` does; a blanket floor fill models the switch as opening
+  more than it really does.
+
+Every one of the four gates was proven by injecting the fault it guards: removing
+`sealTinyPockets` (24 failures), walling in the chests `scatterRoomLoot` places
+(812), making the rock switch open one tile less (300), and cutting the secret
+room's corridor (6).
+
 ## 1.10.14 — 2026-08-20
 
 ### All ten stranding maps walked — no structural argument left
