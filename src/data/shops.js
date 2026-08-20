@@ -11,7 +11,8 @@ export const SHOPS = new Map([
   // --- Town of Ur ---
   ['ur_weapon', {
     type: 'weapon',
-    mapId: 5, counter: { x: 3, y: 15 },
+    // Counter on the ROM's marker tile (id231 @(3,23)) — see town-npcs.js.
+    mapId: 5, counter: { x: 3, y: 23 },
     items: [0x1F, 0x24, 0x0E, 0x06, 0x4A, 0x4F, 0x50, 0x51],
     // Dagger, Longsword, Staff, Nunchuck, Bow, Wooden/Holy/Iron arrows.
     // The bow tier stocked here is the one an Onion Knight can actually hold:
@@ -45,7 +46,8 @@ export const SHOPS = new Map([
   // which is bare floor.
   ['kazus_weapon', {
     type: 'weapon',
-    mapId: 16, counter: { x: 3, y: 15 },
+    // Counter on the ROM's marker tile (id232 @(3,23)), mirroring Ur map 5.
+    mapId: 16, counter: { x: 3, y: 23 },
     items: [0x09, 0x20, 0x27],
     // MythrilRod 400, MythrilKnife 500, MythrilSwrd 500 — captured stock, in
     // captured order. A tier above Ur, whose dearest is a 100 gil Longsword.

@@ -4,36 +4,21 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 
 ## Followups
 
-- ⛔ **THERE ARE NO IN-MAP STAIRCASE WARPS. Retracted.** v1.10.7 said FF3 links
-  rooms of one tilemap with staircases that teleport within the map, and that
-  this was the prerequisite for fixing the spawn maps. It is not true. **All 69
-  doors measured by `door-probe.cjs` land the party on the DESTINATION MAP'S RAW
-  ROM ENTRANCE — 69 of 69, no exception** — because a door record carries a map
-  id and nothing else. There is no per-door coordinate, so the mechanism cannot
-  exist. The "warps" came from `reach-flood.cjs` mislabelling one-way tiles and
-  ordinary door transitions; that detection is removed.
-- ⭐ **THE REAL DIVERGENCE IS THE TILEMAP DECODE**, and it is measured.
-  `docs/ROM-LIVE-TILEMAPS.json` holds $7400-$77FF read out of a running
-  cartridge for 31 maps — the exact block the ROM's trigger routine walks
-  (3A/9197 sets $80/$81 = $7400). `check-tilemap-decode.mjs` compares it against
-  `decompressTilemap`, excluding the trigger tiles the ROM legitimately rewrites
-  in place (3A/91B4). **5,385 tiles disagree across 31 maps; the worst map is 174
-  at 508.** Several maps match exactly (25, 26, 27, 28, 30, 114), so the decoder
-  is right for some tilemaps and wrong for others.
-  - The disagreements come in WHOLE ROWS of 32 — map 174 has y16, y17, y19
-    entirely wrong — which points at row-level decompression, not a stray byte.
-  - The wrong tiles are usually a FILL value: on map 174 we emit `$1f` where the
-    engine has `$5f`, and `$1f` is a different map's fill tile.
-  - ⛔ This is the cause of the "spawn is in the wrong room" reports, not the
-    spawn logic. Our indoor collision reads are CORRECT — verified 128/128
-    against live `$0400` — and the collision rule matches the ROM's own routine
-    at 3B/90EB byte for byte (class 3 blocked, `>= 4` passable, z-bit conflict).
-    We are applying a correct rule to tiles that are not the ones the engine has.
-  - Fix the decompressor first. The spawn tables, the NPC placement on maps 5,
-    12 and 16, and `_calcSpawnY` itself should all be re-judged afterwards —
-    several may simply evaporate.
-
-
+- ⭐ **FIXED in v1.10.9 — the tilemap decompressor.** A run length of **0 means
+  256**, not "write nothing". `decompressTilemap` wrote zero tiles for those
+  runs, dropped whole rows of fill and pulled the rest of the stream forward.
+  It disagreed with the cartridge on **5,385 tiles across 31 maps**; it is now
+  **0**. `check-tilemap-decode.mjs` gates it against
+  `docs/ROM-LIVE-TILEMAPS.json` (live `$7400-$77FF`).
+  Everything below was a symptom and is now closed:
+  - the five spawn disagreements — `_calcSpawnY` agrees with the cartridge on
+    **all 44** measured maps, so the `map-spawns.js` override table was deleted;
+  - the "wrong room" reports on maps 2/5/12/16;
+  - 24 phantom trigger tiles (102 doors -> 78) and all 30 "sealed" doors;
+  - map 178, the last WALLED IN map, is reachable.
+- ⛔ **There are no in-map staircase warps.** Retracted in v1.10.8 and still
+  true: all 75 measured doors land on the destination map's raw ROM entrance,
+  because a door record carries a map id and no coordinate.
 - ⭐ **Map tools must call `applyPassage` (`src/map-passage.js`) before flooding.**
   The engine runs it on every regular map load ($5B → $5D, $5C → $5E, the
   walkable passage). Every reachability tool in `tools/` used to skip it, which

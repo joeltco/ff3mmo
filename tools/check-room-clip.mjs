@@ -150,13 +150,30 @@ for (const id of IDS) {
       const dd = dr._clipDiag;
       if (!dr._roomClip || !dd || dd.rminY === undefined) continue;
       const dTop = dr._roomClip.y / TILE;
-      // One row above the room is its CEILING and must draw — cutting it is
-      // what made the inn "missing top rows of tiles". Two or more is another
-      // room bleeding in.
-      if (dTop < dd.rminY - 1) {
+      // ⛔ COUNT FOREIGN FLOOR, NOT ROWS. This used to fail whenever the clip
+      // started more than one row above the room, on the reasoning that "one row
+      // is the ceiling, two is another room bleeding in". That is a proxy, and
+      // the v1.10.9 tilemap fix broke it: Kazus's inn (maps 12/13) genuinely has
+      // a TWO-ROW drawn wall above the door at (3,21), and drawing both is
+      // correct. Rows 19 and 20 there hold wall tiles and no floor at all.
+      //
+      // What the check is actually for is its own sentence — another room
+      // bleeding in — so look for that: a WALKABLE tile above the room that is
+      // not part of it. Walls and void above the ceiling are the map's own
+      // scenery and must draw.
+      // `rminY` IS the room's first walkable row, so anything walkable above it
+      // belongs to some other room by definition — no room-set lookup needed,
+      // and none is available on the renderer.
+      const foreign = [];
+      for (let y = dTop; y < dd.rminY; y++) {
+        for (let x = dd.rminX; x <= dd.rmaxX; x++) {
+          if (dr.isPassable(x, y)) foreign.push(`(${x},${y})`);
+        }
+      }
+      if (foreign.length) {
         console.error(`  ✗ map ${id}: coming back through the door at (${dx},${dy}) starts the clip at ` +
-          `row ${dTop} for a room beginning at row ${dd.rminY} — ` +
-          `${dd.rminY - 1 - dTop} foreign row(s) above the ceiling`);
+          `row ${dTop} for a room beginning at row ${dd.rminY}, and ${foreign.length} walkable tile(s) ` +
+          `of a NEIGHBOURING room fall in the gap — ${foreign.slice(0, 6).join(' ')}`);
         failed++;
         break;                                        // one report per map
       }

@@ -34,7 +34,6 @@ globalThis.document = { addEventListener() {}, createElement: () => ({ width: 0,
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
 const { applyPassage } = await import('../src/map-passage.js');
-const { MAP_SPAWNS } = await import('../src/data/map-spawns.js');
 const { SHIPPED_MAPS } = await import('../src/data/areas.js');
 const { SHOPS } = await import('../src/data/shops.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
@@ -66,9 +65,8 @@ function spawnAndRegion(mapId) {
   // Same condition map-loading.js uses: maps carrying the torch puzzle keep it
   // closed until the player solves it.
   if (md.tilemap[16 * 32 + 8] !== 0x32) applyPassage(md.tilemap);
-  const fix = MAP_SPAWNS.get(mapId);
-  const sx = fix ? fix.at[0] : md.entranceX;
-  const sy = fix ? fix.at[1] : calcSpawnY(md, md.entranceX, md.entranceY);
+  const sx = md.entranceX;
+  const sy = calcSpawnY(md, md.entranceX, md.entranceY);
   const r = new MapRenderer(md, sx, sy);
   const seen = new Set([sy * W + sx]);
   const q = [[sx, sy]];

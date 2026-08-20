@@ -1,28 +1,26 @@
 {
- "_measured": "FF3-English.nes via tools/monscan/door-probe.cjs (ROM entrance patched to place the party; $48 read back)",
- "_generated": "node tools/monscan/door-probe.cjs <door-map.json> docs/ROM-DOOR-GRAPH.json",
+ "_measured": "FF3-English.nes via tools/monscan/door-probe.cjs (ROM entrance patched to place the party; $48 read back). Re-measured for v1.10.9 after the tilemap decompressor fix — the previous fixture was taken against a decode that invented 24 trigger tiles.",
+ "_generated": "node tools/rom-door-map.mjs --towns /tmp/dm.json && node tools/monscan/door-probe.cjs --selftest /tmp/dm.json && node tools/monscan/door-probe.cjs /tmp/dm.json docs/ROM-DOOR-GRAPH.json",
  "doors": {
   "1:0": {
    "map": 1,
    "trigId": 0,
    "at": [
     23,
-    16
+    24
    ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
+   "romDest": 2,
+   "status": "measured"
   },
   "2:0": {
    "map": 2,
    "trigId": 0,
    "at": [
     23,
-    16
+    24
    ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
+   "romDest": 1,
+   "status": "measured"
   },
   "6:0": {
    "map": 6,
@@ -33,17 +31,6 @@
    ],
    "romDest": 7,
    "status": "measured"
-  },
-  "7:0": {
-   "map": 7,
-   "trigId": 0,
-   "at": [
-    3,
-    29
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
   },
   "8:0": {
    "map": 8,
@@ -135,49 +122,25 @@
    "romDest": 17,
    "status": "measured"
   },
-  "11:0": {
-   "map": 11,
-   "trigId": 0,
-   "at": [
-    14,
-    30
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "12:0": {
    "map": 12,
    "trigId": 0,
    "at": [
     3,
-    13
+    21
    ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
+   "romDest": 13,
+   "status": "measured"
   },
   "13:0": {
    "map": 13,
    "trigId": 0,
    "at": [
     3,
-    13
+    21
    ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "14:0": {
-   "map": 14,
-   "trigId": 0,
-   "at": [
-    4,
-    28
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
+   "romDest": 2,
+   "status": "measured"
   },
   "18:0": {
    "map": 18,
@@ -219,28 +182,6 @@
    "romDest": 20,
    "status": "measured"
   },
-  "19:1": {
-   "map": 19,
-   "trigId": 1,
-   "at": [
-    4,
-    18
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "19:2": {
-   "map": 19,
-   "trigId": 2,
-   "at": [
-    27,
-    23
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "20:0": {
    "map": 20,
    "trigId": 0,
@@ -261,28 +202,6 @@
    "romDest": 22,
    "status": "measured"
   },
-  "20:2": {
-   "map": 20,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "20:3": {
-   "map": 20,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "21:0": {
    "map": 21,
    "trigId": 0,
@@ -302,28 +221,6 @@
    ],
    "romDest": 3,
    "status": "measured"
-  },
-  "21:2": {
-   "map": 21,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "21:3": {
-   "map": 21,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
   },
   "22:0": {
    "map": 22,
@@ -354,28 +251,6 @@
    ],
    "romDest": 21,
    "status": "measured"
-  },
-  "23:2": {
-   "map": 23,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "23:3": {
-   "map": 23,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
   },
   "24:0": {
    "map": 24,
@@ -680,17 +555,6 @@
    "romDest": 191,
    "status": "measured"
   },
-  "29:1": {
-   "map": 29,
-   "trigId": 1,
-   "at": [
-    4,
-    29
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "30:0": {
    "map": 30,
    "trigId": 0,
@@ -801,28 +665,6 @@
    "romDest": 175,
    "status": "measured"
   },
-  "174:1": {
-   "map": 174,
-   "trigId": 1,
-   "at": [
-    4,
-    18
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "174:2": {
-   "map": 174,
-   "trigId": 2,
-   "at": [
-    27,
-    23
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "175:0": {
    "map": 175,
    "trigId": 0,
@@ -842,28 +684,6 @@
    ],
    "romDest": 176,
    "status": "measured"
-  },
-  "175:2": {
-   "map": 175,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "175:3": {
-   "map": 175,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
   },
   "176:0": {
    "map": 176,
@@ -885,28 +705,6 @@
    "romDest": 22,
    "status": "measured"
   },
-  "176:2": {
-   "map": 176,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "176:3": {
-   "map": 176,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "177:0": {
    "map": 177,
    "trigId": 0,
@@ -927,28 +725,6 @@
    "romDest": 178,
    "status": "measured"
   },
-  "177:2": {
-   "map": 177,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "177:3": {
-   "map": 177,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
   "178:0": {
    "map": 178,
    "trigId": 0,
@@ -968,28 +744,6 @@
    ],
    "romDest": 3,
    "status": "measured"
-  },
-  "178:2": {
-   "map": 178,
-   "trigId": 2,
-   "at": [
-    5,
-    25
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "178:3": {
-   "map": 178,
-   "trigId": 3,
-   "at": [
-    24,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
   },
   "179:0": {
    "map": 179,
@@ -1016,44 +770,20 @@
    "trigId": 2,
    "at": [
     26,
-    22
+    30
    ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
+   "romDest": 45,
+   "status": "measured"
   },
   "179:3": {
    "map": 179,
    "trigId": 3,
    "at": [
     2,
-    23
+    31
    ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "179:4": {
-   "map": 179,
-   "trigId": 4,
-   "at": [
-    25,
-    26
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
-  },
-  "179:5": {
-   "map": 179,
-   "trigId": 5,
-   "at": [
-    28,
-    27
-   ],
-   "romDest": null,
-   "status": "sealed",
-   "note": "walled in on all four sides — no player can reach this tile"
+   "romDest": 164,
+   "status": "measured"
   }
  }
 }

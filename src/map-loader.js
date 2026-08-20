@@ -170,7 +170,20 @@ function decompressTilemap(romData, mapId, fillTile) {
       tilemap[writePos++] = byte;
     } else {
       const tile = byte & 0x7F;
-      const runLen = romData[readPos++];
+      // ⭐ A RUN LENGTH OF 0 MEANS 256, not "write nothing".
+      //
+      // The counter is a single byte and a run of 256 has to be expressible, so
+      // 0 is the wrap-around. Writing nothing instead silently dropped whole
+      // rows of fill and pulled the rest of the stream forward, which is why our
+      // tilemap disagreed with the cartridge on 5,385 tiles across 31 maps while
+      // still looking plausible.
+      //
+      // Measured on map 4 (tilemapId 41): the stream carries `df 00`, `df 00`,
+      // `df b9` at output index 327. With 0 == 256 that is 327 + 256 + 256 + 185
+      // = EXACTLY 1024, and `$df & 0x7F` = `$5f`, the fill the live map has
+      // there. Ground truth is `docs/ROM-LIVE-TILEMAPS.json`, read out of
+      // $7400-$77FF on a running cartridge; `check-tilemap-decode.mjs` gates it.
+      const runLen = romData[readPos++] || 256;
       for (let i = 0; i < runLen && writePos < 1024; i++) {
         tilemap[writePos++] = tile;
       }

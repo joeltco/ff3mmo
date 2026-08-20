@@ -700,11 +700,20 @@ export const TOWN_NPCS = new Map([
   // x2-6 / y16-20). Map 12's own ROM roster coords are sealed pockets —
   // check-npc-placement refused all three guests on them.
   [12, [
-    { key: 'kazus_inn_keep',    x: 3, y: 17, spec: KAZUS_INN_KEEP },
-    { key: 'kazus_inn_guest_a', x: 5, y: 17, spec: KAZUS_INN_GUEST_A },
-    { key: 'kazus_inn_guest_b', x: 3, y: 19, spec: KAZUS_INN_GUEST_B },
+      // ⭐ ROM POSITION. Our tilemap decode dropped whole rows of fill until
+      // v1.10.9 (run length 0 means 256), so these three sat in a room that
+      // does not exist; `check-npc-placement` called them sealed in the moment
+      // the decode was fixed. Coordinates are the cartridge's own NPC table
+      // for map 12 — id40 @(14,25) beside the inn marker id250 @(14,26),
+      // id39 @(5,27), id41 @(3,27).
+    { key: 'kazus_inn_keep',    x: 14, y: 25, spec: KAZUS_INN_KEEP },
+    { key: 'kazus_inn_guest_a', x: 5,  y: 27, spec: KAZUS_INN_GUEST_A },
+    { key: 'kazus_inn_guest_b', x: 3,  y: 27, spec: KAZUS_INN_GUEST_B },
   ]],
-  [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 14, spec: KAZUS_WEAPON_KEEPER }]],
+  // ROM position: id40 @(3,22), behind the Kazus weapon marker id232 @(3,23)
+  // which is where the counter goes. Was (3,14) — a room the broken tilemap
+  // decode invented. Same story as map 5 below.
+  [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 22, spec: KAZUS_WEAPON_KEEPER }]],
   [17, [{ key: 'kazus_armor_keeper',  x: 3, y: 4,  spec: KAZUS_ARMOR_KEEPER }]],
 
   [8, [
@@ -716,7 +725,10 @@ export const TOWN_NPCS = new Map([
     // as twins. If FF3's gfx-id -> bundle mapping is ever decoded, or the inn is
     // seen loading more bundles, they can come back.
   ]],
-  [5, [{ key: 'weapon_keeper',   x: 3, y: 14, spec: WEAPON_KEEPER }]],
+  // ROM position: id25 @(3,22), behind the Ur weapon marker id231 @(3,23).
+  // Every shop that already worked follows this exact rule — our keeper sits
+  // on the cartridge's non-marker NPC tile, the counter on the marker's.
+  [5, [{ key: 'weapon_keeper',   x: 3, y: 22, spec: WEAPON_KEEPER }]],
   // Ur tavern — ROM roster (tools/npc-dump.mjs 9), bar room top-right.
   [9, [
     { key: 'ur_tavern_keep',      x: 23, y: 3, spec: UR_TAVERN_KEEP },

@@ -87,8 +87,17 @@ const ok = (m) => console.log('  ✓ ' + m);
 // ── 4. Ur is untouched ────────────────────────────────────────────────────
 // The object pass runs for every tileset now; Ur's interiors must come out
 // exactly as they did when only the background scan existed.
+//
+// ⭐ COUNTS RE-BASELINED IN v1.10.9, and not by taking whatever the code now
+// prints. Flames are scanned out of the tilemap, and until v1.10.9 that tilemap
+// was wrong — `decompressTilemap` dropped whole rows of fill (a run length of 0
+// means 256, not "write nothing"). It now matches the cartridge's own tilemap
+// **1024/1024 on all 31 captured maps** (`check-tilemap-decode.mjs` against
+// `docs/ROM-LIVE-TILEMAPS.json`, read from live $7400-$77FF), so a count derived
+// from it IS the cartridge's count. Map 4 went 1 -> 0 and map 12 went 3 -> 2
+// because the extra flames were standing on tiles that were never there.
 {
-  for (const [mapId, want] of [[8, 3], [4, 1], [12, 3]]) {
+  for (const [mapId, want] of [[8, 3], [4, 0], [12, 2]]) {
     const md = loadMap(rom, mapId);
     flame.rebuildFlameSprites(md, null, 16);
     const n = flame.getFlameSprites().length;

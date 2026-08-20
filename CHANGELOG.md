@@ -1,3 +1,67 @@
+## 1.10.9 — 2026-08-20
+
+### The tilemap decompressor: a run length of 0 means 256
+
+One line. **`decompressTilemap` disagreed with the cartridge on 5,385 tiles
+across 31 maps. It now disagrees on none.**
+
+The RLE stream encodes a run as `tile | 0x80` followed by a length byte. The
+counter is a single byte, so a run of 256 has to be expressible, and 0 is the
+wrap-around. We read it literally and wrote **nothing** — which dropped whole
+rows of fill and pulled the remainder of the stream forward, producing a map that
+was wrong in large blocks while still looking plausible.
+
+Caught on map 4 (tilemapId 41), where the stream carries `df 00`, `df 00`,
+`df b9` at output index 327. With 0 == 256 that is **327 + 256 + 256 + 185 =
+exactly 1024**, and `$df & 0x7F` is `$5f` — precisely the fill the live cartridge
+has there. Ground truth is `docs/ROM-LIVE-TILEMAPS.json`, `$7400-$77FF` read off a
+running machine; `check-tilemap-decode.mjs` gates it and fails with 5,385 on
+revert.
+
+### Everything else in this release is that bug's wake
+
+Four releases of symptoms closed themselves:
+
+- **All five spawn disagreements are gone.** `_calcSpawnY` now agrees with the
+  cartridge's landing tile on **all 44** measured maps (was 39). The
+  `data/map-spawns.js` override table added in v1.10.7 is **deleted** — with the
+  map right it had nothing to do. Ur's weapon shop opens at (3,26) and Kazus's
+  inn at (14,31), the cartridge's own entrances, with no adjustment.
+- **24 phantom doors.** The town block went from 102 doors to **78**, and all
+  **30 "sealed" doors vanished** — they were trigger tiles the broken decode
+  invented out of shifted fill. Re-measured in the emulator: **75 measured, 0
+  mismatches, 0 sealed.** `docs/ROM-DOOR-GRAPH.json` regenerated, because the old
+  fixture was taken against the broken decode.
+- **Map 178 is reachable.** `map-audit --play` reports **WALLED IN: 0 maps**.
+
+### NPC placement on maps 5, 12 and 16
+
+Now unblocked, and placed from the cartridge's own NPC table rather than by eye.
+Every shop that already worked follows one rule — **our keeper sits on the ROM's
+non-marker NPC tile, the counter on the marker's** (map 4: keeper (3,4) = id25,
+counter (3,5) = marker id238). Applying it:
+
+| | keeper | counter |
+|---|---|---|
+| map 5, Ur weapon | (3,14) → **(3,22)** (id25) | (3,15) → **(3,23)** (marker id231) |
+| map 16, Kazus weapon | (3,14) → **(3,22)** (id40) | (3,15) → **(3,23)** (marker id232) |
+| map 12, Kazus inn | keeper → **(14,25)** (id40), guests → **(5,27)**, **(3,27)** | — |
+
+Beds needed no change: `beds.js` keys off metatile ids, so they follow the map.
+
+### Two gates re-derived, not silenced
+
+- **`check-room-clip`** failed on maps 12/13 because Kazus's inn genuinely has a
+  **two-row drawn wall** above its door and the gate counted rows — "one row is
+  the ceiling, two is another room bleeding in". It now checks for what its own
+  comment says: a **walkable tile** above the room's first walkable row. Proven
+  still sharp by widening the scan band until it catches real floor.
+- **`check-map-objects`** flame baselines went 4: 1→0 and 12: 3→2. Not accepted
+  because the code printed them — the tilemap they are scanned from is now
+  verified identical to the cartridge's on all 31 captured maps, so a count taken
+  from it *is* the cartridge's count. The extra flames stood on tiles that were
+  never there.
+
 ## 1.10.8 — 2026-08-20
 
 ### Retraction: there are no in-map staircase warps
