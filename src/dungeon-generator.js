@@ -27,7 +27,7 @@ import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
-  finishCaveShape, reachableFloorMask,
+  finishCaveShape, reachableFloorMask, sealFloorToVoid,
 } from './dungeon/shape.js';
 
 // Reference map for tileset/palette/CHR loading
@@ -2702,6 +2702,11 @@ function _generateFloor(romData, floorIndex, seed) {
   // the boulder switch (floor 2's `rockSwitch`): a rock you push, which opens a
   // wall. That reads as a puzzle element instead of a mistake. Do not re-add a
   // walk-through-wall secret whose passage is drawn open.
+
+  // ⛔ FLOOR MUST NEVER TOUCH VOID — the cartridge always walls it. Runs after
+  // every shaping and placement pass, since the entrance frame is what mostly
+  // leaves floor hanging over black. See `tools/tile-grammar.mjs`.
+  sealFloorToVoid(tilemap);
 
   // Last pass on the tilemap — AFTER the trap swap, so the map it walks is the
   // one the player gets. `dungeon-sweep.mjs` gates the result at 0.

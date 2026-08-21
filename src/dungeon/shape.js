@@ -313,3 +313,50 @@ export function reachableFloorMask(tilemap, entranceX, entranceY) {
 // itself is a constant two. Do not re-add depth variation to make the caves look
 // less boxy — it moves the flatness metric while breaking the rule that metric
 // was only ever a proxy for.
+
+/**
+ * Give every floor tile a wall. FLOOR MUST NEVER TOUCH VOID.
+ *
+ * ⛔ DERIVED FROM THE CARTRIDGE, not from a rule I made up. Censusing what sits
+ * around floor in ROM maps 111, 112, 113, 22 and 115 (`tools/tile-grammar.mjs`):
+ *   below floor — FLOOR 213, CEIL 120.            Never VOID, never ROCK.
+ *   above floor — FLOOR 213, ROCK 112.            Never VOID, never CEIL.
+ *   beside floor — FLOOR, CEIL 113, ROCK 64.      Never VOID.
+ * So a void tile touching floor becomes CEILING, except where it sits directly
+ * ABOVE floor, where the cartridge puts rock — the overhang.
+ *
+ * We produced 281 floor-touching-void tiles per 120 floor-0 generations, mostly
+ * at the entrance frame: `placeEntrance` lays a 3-wide floor landing, and where
+ * the cave beneath it is narrower the outer two tiles hang over black.
+ */
+export function sealFloorToVoid(tilemap) {
+  const fixes = [];
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const i = y * 32 + x;
+      if (tilemap[i] !== FILL_VOID) continue;
+      const at = (dx, dy) => {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx > 31 || ny < 0 || ny > 31) return -1;
+        return tilemap[ny * 32 + nx];
+      };
+      const isFl = (t) => t === FLOOR || t === BONES;
+      const floorBelow = isFl(at(0, 1));
+      const floorAbove = isFl(at(0, -1));
+      const touches = floorBelow || floorAbove || isFl(at(-1, 0)) || isFl(at(1, 0));
+      if (!touches) continue;
+      // ⛔ A void tile with floor BOTH above and below is a hole punched through
+      // walkable ground, and the cartridge's only legal filling there is FLOOR:
+      // it never puts rock below floor (0 of 348) and never puts ceiling above
+      // it (0 of 348). Walling such a gap either way just trades one violation
+      // for another — the first version of this pass did exactly that, turning
+      // 58 `FLOOR over VOID` into 58 `FLOOR over ROCK`.
+      const tile = (floorBelow && floorAbove) ? FLOOR
+        : floorBelow ? WALL_ROCKY      // void sitting ON TOP of floor = overhang
+        : CEILING;                     // everything else the cartridge walls with ceiling
+      fixes.push([i, tile]);
+    }
+  }
+  for (const [i, t] of fixes) tilemap[i] = t;
+  return fixes.length;
+}

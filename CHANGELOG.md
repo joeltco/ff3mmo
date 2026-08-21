@@ -1,3 +1,47 @@
+## 1.10.41 — 2026-08-21
+
+### The tile grammar now comes from the ROM instead of from my comments
+
+I shipped a wall arrangement that exists nowhere — a ceiling-looking tile with
+rock above it — because I was checking rules I had written down rather than what
+the cartridge does. `tools/tile-grammar.mjs` censuses every ordered vertical and
+horizontal tile pair across ROM cave maps 111, 112, 113, 22 and 115, and fails on
+any arrangement we produce that they never contain. It is a deploy gate.
+
+⛔ **Sample size decides what counts as a law.** The five ROM caves hold CEIL
+2664, VOID 1712, FLOOR 348 and ROCK 326 — then CHEST 16, BONES 12, WATER 7,
+DOOR 1. "The cartridge never puts rock above a door" is not a rule when the
+cartridge contains ONE door; it is noise. Only the four structural tiles are
+treated as grammar. My first pass listed 17 vertical "violations"; 15 were
+small-sample artifacts, and reporting them as law would have been the same
+mistake in a new costume.
+
+⛔ **Judge a tile by what it LOOKS like, not by its id.** The first version of the
+gate did not catch the reported bug. `$44` FALSE_CEILING draws identically to
+`$00` CEILING, and the ROM caves contain no `$44` at all — so every arrangement
+involving it fell into "insufficient evidence" and was excused. That is exactly
+where the bug lived. The gate now canonicalises look-alikes, and re-adding the
+tunnel mouth fails it with `255  ROCK over FAKECEIL (renders as ROCK over CEIL)`.
+The ROM does that **zero** times.
+
+### Fixed — floor touching black void
+
+The research found a second, older defect I had not been told about: **281
+floor tiles touching VOID per 120 floor-0 generations**, mostly at the entrance
+frame. `placeEntrance` lays a 3-wide floor landing, and where the cave beneath is
+narrower the outer two tiles hang over black with no wall.
+
+The cartridge always walls floor, and the census says exactly how:
+below it FLOOR (213) or CEIL (120); above it FLOOR (213) or ROCK (112); beside it
+FLOOR, CEIL (113) or ROCK (64). Never VOID, in any direction. `sealFloorToVoid`
+applies that rule.
+
+⛔ Its first version traded one violation for another — 58 `FLOOR over VOID`
+became 58 `FLOOR over ROCK`, because a void tile sandwiched between two floors was
+being walled. The cartridge never puts rock below floor (0 of 348) or ceiling
+above it (0 of 348); a hole punched through walkable ground can only legally
+become FLOOR. Both axes now report zero violations.
+
 ## 1.10.40 — 2026-08-21
 
 ### Reverted — the "secret" rock tunnels were an open corridor with a stray wall tile
