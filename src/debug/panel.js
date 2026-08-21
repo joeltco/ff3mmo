@@ -5,6 +5,7 @@ const TAB_DEFS = [
   { id: 'sprites',   label: 'SPRITES',   loader: () => import('./tabs/sprites.js') },
   { id: 'emu',       label: 'EMU',       loader: () => import('./tabs/emu.js') },
   { id: 'maps',      label: 'MAPS',      loader: () => import('./tabs/maps.js') },
+  { id: 'dungeon',   label: 'DUNGEON',   loader: () => import('./tabs/dungeon.js') },
   { id: 'formation', label: 'FORMATION', loader: () => import('./tabs/formation.js') },
   { id: 'bestiary',  label: 'BESTIARY',  loader: () => import('./tabs/bestiary.js') },
   { id: 'magic',     label: 'MAGIC',     loader: () => import('./tabs/magic.js') },
@@ -66,7 +67,10 @@ function _buildOverlay() {
     font-family:monospace;color:#e0e0e0;`;
 
   const header = document.createElement('div');
-  header.style.cssText = `display:flex;align-items:center;gap:4px;border-bottom:1px solid #333;padding-bottom:4px;margin-bottom:6px;flex-shrink:0;`;
+  // ⛔ WRAPS. With ten-plus tabs at ~60px each the row is ~700px wide, and a
+  // phone viewport is under 400 — without wrapping the later tabs are simply
+  // unreachable, scrolled off the right edge with no scrollbar to find them.
+  header.style.cssText = `display:flex;flex-wrap:wrap;align-items:center;gap:4px;border-bottom:1px solid #333;padding-bottom:4px;margin-bottom:6px;flex-shrink:0;`;
 
   for (const def of TAB_DEFS) {
     const btn = document.createElement('button');

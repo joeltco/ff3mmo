@@ -1,3 +1,53 @@
+## 1.10.38 — 2026-08-21
+
+### DUNGEON tab in the Konami panel
+
+`tools/floor-view.mjs` and `floor-png.mjs` answer "what does the generator
+actually produce" at a terminal, which is no use while you are playing. The panel
+now shows the same thing:
+
+- **five floor buttons**, prev / reroll / next seed, and three overlay toggles;
+- the floor **painted the way the game paints it** — real metatiles, CHR and
+  palettes, not an ASCII stand-in;
+- **rings for everything**: entrance (green, inset), exits (pink), the way back
+  (orange), chests (yellow), secret mouths (cyan), the boss warp (white);
+- **walkable-but-unreachable tiles filled red** — the one thing a picture of a
+  floor cannot tell you;
+- the **plan** underneath: topology, every chamber with its role and span, every
+  link, plus exits and what each is wired to, secrets, locked doors and the rock
+  switch.
+
+**Built for the phone.** Controls are ≥40px tall and wrap; the canvas is full
+width, square and `pixelated`; everything below scrolls. The tab header also
+**wraps now** — with eleven tabs the row is ~700px against a phone's ~390, so the
+last tabs were simply unreachable off the right edge with no scrollbar to find
+them.
+
+⛔ **The tab is pure.** `generateFloor` takes ROM bytes and a seed; it touches no
+live game state. That matters because debug tabs import a SECOND copy of every
+module (no `?_v=` cache-bust), so anything leaning on the game's singletons reads
+a blank instance. The only thing taken from the game is the ROM buffer.
+
+### A gate, because "it lints" is not "it runs"
+
+⛔ Nothing else in the suite executes debug-panel code — it runs only when a human
+opens the panel, on a phone, mid-session, so a typo in a property name stays
+invisible until then. `tools/check-debug-dungeon.mjs` mounts the tab against a
+REAL canvas (`@napi-rs/canvas`) with a stub DOM, drives it, and checks it painted
+and reported.
+
+Its first version was too weak, and proving it showed that: misspelling
+`md.entranceX` still passed, because the check only looked for the *strings*
+"walkable " and "entrance " in the report. The flood seeded from `undefined`,
+reached nothing, and every walkable tile came back unreachable — the tab would
+have rendered a solid red square and the gate would have called it fine. It
+checks the numbers now, and that revert fails with "ALL 140 walkable tiles read as
+unreachable".
+
+Rendering it also caught a display bug: on the deeper floors the tile you arrive
+on is ALSO the way back, and the exit ring painted straight over the entrance
+ring. The entrance is drawn last and inset now, so both read at once.
+
 ## 1.10.37 — 2026-08-21
 
 ### Floor 0 rolls a topology — and two shipped bugs surfaced doing it
