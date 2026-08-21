@@ -18,6 +18,7 @@ import {
   STAIRS_DOWN, TRAP_HOLE, CHEST,
 } from './dungeon/tiles.js';
 import { carveChamber } from './dungeon/chambers.js';
+import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 
 // Reference map for tileset/palette/CHR loading
 const REF_MAP_ID = 111;
@@ -1081,16 +1082,7 @@ function carvePathway(tilemap, startX, startFloorY, pathDir, pathLength, rng) {
   let x = startX;
   const fy = startFloorY;
 
-  for (let s = 0; s < pathLength; s++) {
-    x += pathDir;
-    if (x < 1 || x > 30) break;
-    // 3 rows of floor: top 2 get eaten by overhang, bottom 1 is walkable
-    for (let dy = -2; dy <= 0; dy++) {
-      const row = fy + dy;
-      if (row >= 0 && row < 32) tilemap[row * 32 + x] = FLOOR;
-    }
-  }
-
+  x = carveHRun(tilemap, { x0: startX, y: fy, dir: pathDir, steps: pathLength }).endX;
   return { endX: x, endFloorY: fy };
 }
 
@@ -1101,14 +1093,9 @@ function carveVerticalPathway(tilemap, startX, startY, vertDir, pathLength, rng)
   let y = startY;
   const fx = startX;
 
-  for (let s = 0; s < pathLength; s++) {
-    y += vertDir;
-    if (y < 2 || y > 28) break;
-    // 2 tiles wide, straight down
-    if (fx >= 0 && fx < 32 && y >= 0 && y < 32) tilemap[y * 32 + fx] = FLOOR;
-    if (fx + 1 >= 0 && fx + 1 < 32 && y >= 0 && y < 32) tilemap[y * 32 + fx + 1] = FLOOR;
-  }
-
+  // 2 tiles wide, and yMax is 28 here against 29 for the floor-1/2 corridors —
+  // both preserved rather than unified, since either change moves tiles.
+  y = carveVRun(tilemap, { x: fx, y0: y, dir: vertDir, steps: pathLength, width: 2, yMax: 28 }).endY;
   return { endX: fx, endY: y };
 }
 
@@ -1506,14 +1493,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const horizStartX = entrCornerX;
     const horizFloorY = entrFloorY;
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
-    for (let s = 1; s <= pathLength; s++) {
-      const hx = horizStartX + s * horizDir;
-      if (hx < 1 || hx > 30) break;
-      for (let dy = -2; dy <= 0; dy++) {
-        const hy = horizFloorY + dy;
-        if (hy >= 0 && hy < 32) tilemap[hy * 32 + hx] = FLOOR;
-      }
-    }
+    carveHRun(tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength });
     const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
     const pathResult = { endX: pathEndX, endFloorY: horizFloorY };
 
@@ -1526,11 +1506,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const vertLength = 5 + Math.floor(rng() * 3);
     const vertX = pathResult.endX + 2 * horizDir;
     let vertY = pathResult.endFloorY + 2;
-    for (let s = 0; s < vertLength; s++) {
-      vertY += vertDir;
-      if (vertY < 2 || vertY > 29) break;
-      tilemap[vertY * 32 + vertX] = FLOOR;
-    }
+    vertY = carveVRun(tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
 
     // 7×7 trap chamber — direct copy of floor 2's 7×7 chamber primitive
     // (lines 1566-1586), minus the exit-path keep-clear adjustment since
@@ -1642,14 +1618,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const horizDir = rng() < 0.5 ? -1 : 1;
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
     const horizStartX = horizDir === 1 ? entranceX + 2 : entranceX;
-    for (let s = 1; s <= pathLength; s++) {
-      const hx = horizStartX + s * horizDir;
-      if (hx < 1 || hx > 30) break;
-      for (let dy = -2; dy <= 0; dy++) {
-        const hy = startFloorY + dy;
-        if (hy >= 0 && hy < 32) tilemap[hy * 32 + hx] = FLOOR;
-      }
-    }
+    carveHRun(tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength });
     const pathEndX = horizStartX + pathLength * horizDir;
     const pathResult = { endX: Math.max(1, Math.min(30, pathEndX)), endFloorY: startFloorY };
 
@@ -1661,11 +1630,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const vertLength = 5 + Math.floor(rng() * 3); // 5-7 steps
     const vertX = pathResult.endX + 2 * horizDir; // middle of 5×5 room
     let vertY = vertDir === -1 ? pathResult.endFloorY - 2 : pathResult.endFloorY + 2;
-    for (let s = 0; s < vertLength; s++) {
-      vertY += vertDir;
-      if (vertY < 2 || vertY > 29) break;
-      tilemap[vertY * 32 + vertX] = FLOOR;
-    }
+    vertY = carveVRun(tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
 
     // 7×7 room with irregular edges
     const roomDyMin = vertDir === -1 ? -8 : -2;
@@ -1973,23 +1938,9 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Long vertical corridor from row 26 up to roomBotCarve
     // Fattens 1 tile left or right in stretches, never both
-    let fatSide = rng() < 0.5 ? -1 : 1; // current fatten direction
-    let fatLen = 0; // rows remaining in current fat stretch
-    for (let y = corridorBottomY; y >= roomBotCarve; y--) {
-      tilemap[y * 32 + entranceX] = FLOOR;
-      if (fatLen <= 0) {
-        // 40% chance to start a new fat stretch (2-4 rows)
-        if (rng() < 0.4) {
-          fatSide = rng() < 0.5 ? -1 : 1;
-          fatLen = 2 + Math.floor(rng() * 3); // 2-4 rows
-        }
-      }
-      if (fatLen > 0) {
-        const sx = entranceX + fatSide;
-        if (sx >= 1 && sx < 31) tilemap[y * 32 + sx] = FLOOR;
-        fatLen--;
-      }
-    }
+    carveFatteningVRun(tilemap, rng, {
+      x: entranceX, yFrom: corridorBottomY, yTo: roomBotCarve,
+    });
 
     // Center room — organic carving (top rows narrow for cave ceiling shape)
     for (let y = roomTopCarve; y <= roomBotCarve; y++) {
@@ -2017,19 +1968,17 @@ function _generateFloor(romData, floorIndex, seed) {
     const rightRoomRight = Math.min(30, rightRoomLeft + 4);
 
     // Narrow path left (carve 3 rows, overhang eats 2 → 1 walkable)
-    for (let x = roomLeft - 1; x >= leftRoomRight + 1; x--) {
-      for (let dy = -2; dy <= 0; dy++) {
-        const y = roomCenterY + dy;
-        if (y >= 1 && y < 31 && x >= 1) tilemap[y * 32 + x] = FLOOR;
-      }
-    }
+    carveHRun(tilemap, {
+      x0: roomLeft - 1, y: roomCenterY, dir: -1, startStep: 0,
+      steps: (roomLeft - 1) - (leftRoomRight + 1) + 1,
+      yMin: 1, yMax: 30,
+    });
     // Narrow path right
-    for (let x = roomRight + 1; x <= rightRoomLeft - 1; x++) {
-      for (let dy = -2; dy <= 0; dy++) {
-        const y = roomCenterY + dy;
-        if (y >= 1 && y < 31 && x < 31) tilemap[y * 32 + x] = FLOOR;
-      }
-    }
+    carveHRun(tilemap, {
+      x0: roomRight + 1, y: roomCenterY, dir: 1, startStep: 0,
+      steps: (rightRoomLeft - 1) - (roomRight + 1) + 1,
+      yMin: 1, yMax: 30,
+    });
 
     // Left side room — organic carving (keep right edge full at path row)
     const sideRoomTopCarve = roomCenterY - 3;
@@ -2079,35 +2028,11 @@ function _generateFloor(romData, floorIndex, seed) {
     for (const side of [-1, 1]) {
       if (side !== firstSide && rng() < 0.5) continue; // first side guaranteed, second 50%
       const len = 6 + Math.floor(rng() * 5); // 6-10 tiles
-      let fatDir = 0, fatLen = 0;
-      const startX = entranceX + side;
-      let lastValidX = startX;
-      for (let i = 0; i < len; i++) {
-        const x = startX + side * i;
-        if (x < 1 || x >= 31) break;
-        // Don't bleed into side rooms (stop 1 tile before room edge)
-        if (side === -1 && x <= leftRoomRight + 1) break;
-        if (side === 1 && x >= rightRoomLeft - 1) break;
-        lastValidX = x;
-        // Base 3-row carve (overhang eats top 2 → 1 walkable)
-        for (let dy = -2; dy <= 0; dy++) {
-          const y = branchSlotY + dy;
-          if (y >= 1 && y < 31) tilemap[y * 32 + x] = FLOOR;
-        }
-        // Fat stretch (up or down, never both)
-        if (fatLen <= 0 && rng() < 0.2) {
-          fatDir = rng() < 0.5 ? -1 : 1;
-          fatLen = 2 + Math.floor(rng() * 3); // 2-4 tiles
-        }
-        if (fatLen > 0) {
-          if (fatDir === 1 && branchSlotY + 1 < 31) {
-            tilemap[(branchSlotY + 1) * 32 + x] = FLOOR; // fat down
-          } else if (fatDir === -1 && branchSlotY - 3 >= 1) {
-            tilemap[(branchSlotY - 3) * 32 + x] = FLOOR; // fat up
-          }
-          fatLen--;
-        }
-      }
+      const { endX: lastValidX } = carveFatteningHRun(tilemap, rng, {
+        x0: entranceX + side, y: branchSlotY, dir: side, steps: len,
+        // Stop one tile short of the side room so the branch never bleeds in.
+        stopAt: (x) => (side === -1 ? x <= leftRoomRight + 1 : x >= rightRoomLeft - 1),
+      });
       branchChestPos.push({ x: lastValidX, y: branchSlotY });
     }
 
@@ -2346,10 +2271,7 @@ function _generateFloor(romData, floorIndex, seed) {
       }
     }
     // Overhang margin at entrance column (connects entrance to corridor)
-    for (let dy = -2; dy <= 0; dy++) {
-      const row = startFloorY + dy;
-      if (row >= 0 && row < 32) tilemap[row * 32 + entranceX] = FLOOR;
-    }
+    carveBand(tilemap, entranceX, startFloorY);
 
     // 1a. Entrance breathing room — small cave around the entrance landing so
     //     the player steps into a room, not a 1-wide drop, before the corridor.

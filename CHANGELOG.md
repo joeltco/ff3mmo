@@ -1,3 +1,46 @@
+## 1.10.23 — 2026-08-20
+
+### Phase 1 — corridors
+
+Nine inline corridor carves collapse into `src/dungeon/corridors.js`. **Zero
+3-row carve loops remain in `dungeon-generator.js`.** Byte-identical throughout,
+verified after every single replacement against `docs/FLOOR-SNAPSHOT.json` —
+tiles and wiring, 5 floors × 400 seeds plus the side maps.
+
+- `carveHRun` — the straight horizontal run. Replaced floor 1's and floor 2's H
+  corridors, floor 3's two narrow side-room paths, and the body of `carvePathway`.
+- `carveVRun` — the straight vertical run. Replaced floor 1's and floor 2's V
+  corridors (floor 1's own comment read *"Direct copy of floor 2's V corridor"*)
+  and the body of `carveVerticalPathway`.
+- `carveFatteningVRun` — floor 3's spine, the one corridor in the game that
+  varies its width along its run and the only one that reads as cave rather than
+  as a drawn line. The model for phase 3.
+- `carveFatteningHRun` — floor 3's branch alcoves, with the caller supplying a
+  `stopAt` predicate so the branch cannot bleed into a side room.
+- `carveBand` — one column's worth of headroom, shared with the lone
+  "overhang margin" band at an entrance column.
+
+Two things the module documents because they are easy to "tidy" into bugs:
+
+⛔ **The horizontal/vertical asymmetry is load-bearing.** A horizontal corridor is
+carved THREE ROWS tall so `addOverhang` can eat the top two into rock — rock hangs
+*below* a ceiling lip, so a sideways passage needs headroom above it. A vertical
+corridor is simply 1–2 columns wide. A `carveLine` that treats both axes the same
+produces floating rock or pinched ceiling, and the overhang pass fights it.
+
+⛔ **The bounds were never uniform.** The inline copies clamp rows to `0..31` in
+some places and `1..30` in others, and `carveVerticalPathway`'s yMax is 28 against
+29 for the floor-1/2 corridors. Both are parameters now and callers pass what they
+always passed; unifying them would move tiles at the map edge.
+
+The extraction also caught one thing worth recording: the floor-2 V corridor
+appeared **twice**, and the replacement assertion refused to run rather than
+silently rewriting both — the second copy was floor 1's. Deduping it was then a
+deliberate two-for-one instead of an accident.
+
+Still to come in phase 1: `bossChamber.js` (§4c — one shape, crystal pedestal
+moved into the crystal skin) and `shape.js` (the cleanup chain).
+
 ## 1.10.22 — 2026-08-20
 
 ### Phase 1 started — the generator gets a vocabulary, and a gate that proves nothing moved
