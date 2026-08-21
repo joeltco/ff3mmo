@@ -19,6 +19,7 @@ import {
 } from './dungeon/tiles.js';
 import { carveChamber } from './dungeon/chambers.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
+import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 
 // Reference map for tileset/palette/CHR loading
 const REF_MAP_ID = 111;
@@ -1132,42 +1133,13 @@ function carveSmallCaveRoom(tilemap, cx, cy, rng) {
 
 // ⛔ REMOVED in v1.10.22 (phase 1): `carvePathwayRoom` was dead — superseded by the inline room carves.
 
+// The boss chamber's SHAPE lives in `dungeon/boss-chamber.js` — one shape for
+// every dungeon, dressed by a per-dungeon skin (§4c of the chambers plan). The
+// crystal pedestal moved out of the layout and into `CRYSTAL_SKIN`, so Altar
+// Cave's room is unchanged and a cave-skinned dungeon gets floor where the altar
+// would be instead of whatever $3a-$3f render as in tileset 0.
 function generateBossRoom(tilemap, floorIndex) {
-  // Crystal room — diamond layout from ROM map 148 (tileset 2, blue palettes)
-  // Copy the original layout directly
-  const layout = [
-    // y, x, tile
-    // Top narrowing approach (rows 2-4)
-    [2,5,0x01],[2,6,0x01],[2,7,0x01],
-    [3,5,0x02],[3,6,0x02],[3,7,0x02],
-    [4,5,0x30],[4,6,0x30],[4,7,0x30],
-    // Diamond widens (rows 5-6)
-    [5,4,0x01],[5,5,0x30],[5,6,0x61],[5,7,0x30],[5,8,0x01],
-    [6,3,0x01],[6,4,0x02],[6,5,0x30],[6,6,0x30],[6,7,0x30],[6,8,0x02],[6,9,0x01],
-    [7,3,0x02],[7,4,0x30],[7,5,0x30],[7,6,0x30],[7,7,0x30],[7,8,0x30],[7,9,0x02],
-    // Crystal pedestal + widest rows (8-10)
-    [8,3,0x30],[8,4,0x30],[8,5,0x3a],[8,6,0x3f],[8,7,0x3e],[8,8,0x30],[8,9,0x30],
-    [9,1,0x01],[9,2,0x01],[9,3,0x30],[9,4,0x30],[9,5,0x3a],[9,6,0x3f],[9,7,0x3e],[9,8,0x30],[9,9,0x30],[9,10,0x01],[9,11,0x01],
-    [10,1,0x02],[10,2,0x02],[10,3,0x30],[10,4,0x30],[10,5,0x3b],[10,6,0x3c],[10,7,0x3d],[10,8,0x30],[10,9,0x30],[10,10,0x02],[10,11,0x02],
-    [11,1,0x30],[11,2,0x30],[11,3,0x30],[11,4,0x30],[11,5,0x30],[11,6,0x30],[11,7,0x30],[11,8,0x30],[11,9,0x30],[11,10,0x30],[11,11,0x30],
-    // Diamond narrows (rows 12-13)
-    [12,3,0x30],[12,4,0x30],[12,5,0x30],[12,6,0x30],[12,7,0x30],[12,8,0x30],[12,9,0x30],
-    [13,3,0x30],[13,4,0x30],[13,5,0x30],[13,6,0x30],[13,7,0x30],[13,8,0x30],[13,9,0x30],
-    // Narrowing exit (rows 14-17)
-    [14,3,0x30],[14,6,0x30],[14,9,0x30],
-    [15,3,0x30],[15,5,0x01],[15,6,0x30],[15,7,0x01],[15,9,0x30],
-    [16,5,0x02],[16,6,0x30],[16,7,0x02],
-    [17,5,0x30],[17,6,0x30],[17,7,0x30],
-    // Exit (row 18-19)
-    [18,6,0x42],
-    [19,6,0x6b],
-  ];
-  for (const [y, x, t] of layout) {
-    tilemap[y * 32 + x] = t;
-  }
-
-  // Entrance at exit_prev tile, warp at crystal pedestal top
-  return { entranceX: 6, entranceY: 19, warpTile: { x: 6, y: 5 } };
+  return carveBossChamber(tilemap, CRYSTAL_SKIN);
 }
 
 // Cache ROM data across floors (same seed = same dungeon run)

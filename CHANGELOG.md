@@ -1,3 +1,36 @@
+## 1.10.24 — 2026-08-20
+
+### Phase 1 — the boss chamber is one shape with a skin
+
+`src/dungeon/boss-chamber.js`. `generateBossRoom` was never a boss chamber: it
+was *the crystal room*, with the altar baked into its tile list, which is why
+every dungeon would have ended in the same room. The shape is now shared and the
+dressing is a per-dungeon skin (plan §4c).
+
+**Byte-identical.** The pedestal moved into `CRYSTAL_SKIN.decorate`, which stamps
+it back over the shape, so Altar Cave's room does not move a tile.
+
+**Then I rendered it instead of arguing about it.** The layout was transcribed
+from ROM map 148 in tileset 2, and nothing said its tile ids meant the same thing
+in the cave tileset. `tools/floor-png.mjs --boss cave|crystal` renders the chamber
+under a skin with the CAVE assets:
+
+- **cave skin** — reads as a proper cave chamber. `$01`/`$02` are the rock band in
+  both tilesets, the overhang lands correctly, `$42`/`$6b` still draw the entrance
+  arch and staircase, and there is plain floor where the altar would be. The
+  shape survives a tileset it was not drawn for, which is the thing the whole
+  one-shape design rests on.
+- **crystal skin** — the pedestal renders as a **flat yellow slab**. `$3a`–`$3f`
+  depict an altar only in tileset 2. That is precisely the artifact a Cave of
+  Seals would have inherited, and it is now a picture rather than a prediction.
+
+The warp tile `$61` stays in the shape on purpose: every dungeon's boss chamber
+has a way out, gated on `battleSt.enemyDefeated` since v1.10.19.
+
+Still open, and unchanged by this: `_updateBossDissolve` still plays the crystal
+reveal and sets `ps.unlockedJobs |= 0x3E` for ANY boss. Skin is sorted; **ending
+kind is not**, and it remains the gating item for a second dungeon.
+
 ## 1.10.23 — 2026-08-20
 
 ### Phase 1 — corridors

@@ -10,6 +10,13 @@
 //
 //   node tools/floor-png.mjs <floor> <seed> out.png [--scale 2]
 //   node tools/floor-png.mjs 3 1761000000000 /tmp/f3.png --scale 2
+//
+// `--boss <crystal|cave>` renders the BOSS CHAMBER under a skin instead of a
+// floor, which is how you check that the one shared shape (§4c) still reads as a
+// room in a tileset it was not drawn for. The layout was transcribed from ROM
+// map 148 in tileset 2; rendering it with the cave assets is the only way to see
+// whether $01/$02/$42/$61/$6b still depict rock, arch, warp and entrance.
+//   node tools/floor-png.mjs 4 0 /tmp/boss-cave.png --boss cave
 
 import fs from 'node:fs';
 import zlib from 'node:zlib';
@@ -26,7 +33,20 @@ const outPath = args[2] || `floor-${floorIndex}.png`;
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : args[i + 1]; };
 const SCALE = Math.max(1, parseInt(flag('scale', '2'), 10));
 
-const md = generateFloor(rom, floorIndex, seed);
+const BOSS = flag('boss', null);
+let md;
+if (BOSS) {
+  const { carveBossChamber, CRYSTAL_SKIN, CAVE_SKIN } = await import('../src/dungeon/boss-chamber.js');
+  const { loadRomAssets } = await import('../src/dungeon-generator.js');
+  const skin = BOSS === 'crystal' ? CRYSTAL_SKIN : CAVE_SKIN;
+  const tilemap = new Uint8Array(1024).fill(0x00);   // ceiling slab, as the deep floors are
+  const info = carveBossChamber(tilemap, skin);
+  // Deliberately the CAVE assets even for the crystal skin unless asked: the
+  // point of the flag is to see the shape in a tileset it was not drawn for.
+  md = { tilemap, ...loadRomAssets(rom), ...info };
+} else {
+  md = generateFloor(rom, floorIndex, seed);
+}
 const W = 32, TILE = 16, pxW = W * TILE, pxH = W * TILE;
 const rgb = new Uint8Array(pxW * pxH * 3);
 const px = (x, y, c) => { if (x < 0 || x >= pxW || y < 0 || y >= pxH) return;
@@ -82,4 +102,6 @@ fs.writeFileSync(outPath, Buffer.concat([
   Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
   chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(filtered)), chunk('IEND', Buffer.alloc(0)),
 ]));
-console.log(`floor ${floorIndex} seed ${seed} -> ${outPath} (${outW}x${outH}, entrance ${md.entranceX},${md.entranceY})`);
+console.log(BOSS
+  ? `boss chamber, ${BOSS} skin, cave assets -> ${outPath} (${outW}x${outH}, entrance ${md.entranceX},${md.entranceY})`
+  : `floor ${floorIndex} seed ${seed} -> ${outPath} (${outW}x${outH}, entrance ${md.entranceX},${md.entranceY})`);

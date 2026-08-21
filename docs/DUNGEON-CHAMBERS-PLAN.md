@@ -450,7 +450,26 @@ hardcoded ternaries on `floorIndex === 4` / `mapId === 1004`.
 - **Cave of Seals** → its own donor map, tileset 0, cave music. **No crystal
   palettes, no music change.**
 
-### ⛔ One shape means the crystal pedestal cannot be in the shape
+### ✅ Done (v1.10.24) — and the shape IS tileset-neutral, verified by looking
+
+`src/dungeon/boss-chamber.js` holds the one shape; `generateBossRoom` delegates.
+Byte-identical: the pedestal moved into `CRYSTAL_SKIN.decorate`, which stamps it
+back over the shape, so Altar Cave's room is unchanged.
+
+Both halves were then RENDERED with the cave assets
+(`floor-png.mjs --boss cave|crystal`), because the shape's tile ids were
+transcribed from ROM map 148 in tileset 2 and nothing said they meant the same
+in tileset 0:
+
+- **cave skin + cave assets** — reads as a proper cave chamber. `$01`/`$02` are
+  the rock band in both tilesets, the overhang lands correctly, `$42`/`$6b` still
+  draw the entrance arch and staircase, and there is plain floor where the altar
+  would be. The shape survives a skin it was not drawn for.
+- **crystal skin + cave assets** — the pedestal renders as a **flat yellow slab**.
+  `$3a`–`$3f` depict an altar only in tileset 2. This is the artifact the split
+  exists to prevent, and it is now a picture rather than an argument.
+
+### ⛔ Why the crystal pedestal cannot be in the shape
 
 `generateBossRoom` bakes the pedestal into its tile list — tiles `$3a`–`$3f` at
 rows 8–10, cols 5–7. Those ids only depict a crystal altar **in tileset 2**. Leave
