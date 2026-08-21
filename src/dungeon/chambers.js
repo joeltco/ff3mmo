@@ -45,3 +45,52 @@ export function carveChamber(tilemap, rng, { x, y, dir = 1, w = 5, h = 7 }) {
     }
   }
 }
+
+/**
+ * The wide chamber — floor 1's trap chamber and floor 2's rock-puzzle room.
+ * Centred on `x`, spanning `dyMin..dyMax` rows with a half-width of `halfW`,
+ * and jittered more heavily than `carveChamber` (up to 2 tiles per side on the
+ * edge rows, up to 1 elsewhere) so a big room does not read as a big rectangle.
+ *
+ * ⛔ `keepClear(dy)` returns 'left' | 'right' | null and zeroes that side's
+ * jitter for the row — floor 2 uses it so the exit path always meets the room.
+ * It is applied AFTER both draws, never instead of them: the rng call count per
+ * row is fixed at two whatever the answer, which is what keeps the stream
+ * aligned with floor 1, which passes no predicate at all.
+ */
+export function carveWideChamber(tilemap, rng, { x, y, dyMin, dyMax, halfW = 3, keepClear = null }) {
+  for (let dy = dyMin; dy <= dyMax; dy++) {
+    const distFromTop = dy - dyMin;
+    const distFromBot = dyMax - dy;
+    const isEdge = (distFromTop <= 1 || distFromBot <= 1);
+    let jl = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
+    let jr = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
+    const clear = keepClear && keepClear(dy);
+    if (clear === 'left') jl = 0;
+    else if (clear === 'right') jr = 0;
+    for (let dx = -halfW + jl; dx <= halfW - jr; dx++) {
+      const ax = x + dx, ay = y + dy;
+      if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
+    }
+  }
+}
+
+/**
+ * A plain rectangular chamber, no jitter — floor 2's entrance room.
+ *
+ * ⛔ It is deliberately NOT jittered. The room is only 3-4 tiles wide, and
+ * `enforceMinCeilingGap` eats thin runs, so a jittered edge here can close the
+ * room's own mouth. Small rooms stay square on purpose.
+ *
+ * Draws no rng at all, which is why it is a separate primitive rather than
+ * `carveChamber` with jitter turned off: a zero-jitter path through
+ * `carveChamber` would still have to decide whether to make the draws.
+ */
+export function carveBoxChamber(tilemap, { x, y, w, dyMin = -4, dyMax = 0 }) {
+  for (let dy = dyMin; dy <= dyMax; dy++) {
+    for (let dx = 0; dx <= w; dx++) {
+      const ax = x + dx, ay = y + dy;
+      if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
+    }
+  }
+}

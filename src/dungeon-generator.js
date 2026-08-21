@@ -17,7 +17,11 @@ import {
   PASSAGE_BTM, FILL_VOID, EVENT_TILE, EXIT_PREV, PASSAGE_ENTRY, DOOR,
   STAIRS_DOWN, TRAP_HOLE, CHEST, isFloorTile,
 } from './dungeon/tiles.js';
-import { carveChamber } from './dungeon/chambers.js';
+import { carveChamber, carveWideChamber, carveBoxChamber } from './dungeon/chambers.js';
+import {
+  createPlan, planChamber, planWideChamber, planBoxChamber,
+  planHLink, planVLink, planSpine, planBranch, planNote,
+} from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 import {
@@ -1080,6 +1084,12 @@ function _generateFloor(romData, floorIndex, seed) {
   // chest into each. Empty on every other branch.
   const extraRooms = [];
 
+  // Floors 1 and 2 build every chamber through a primitive, so their plans are
+  // COMPLETE. Floor 0's shape is a traced ceiling snake and floor 3 still carves
+  // its centre and side rooms inline, so theirs record only part of the map —
+  // `complete: false` says so rather than letting a partial plan read as whole.
+  const plan = createPlan(floorIndex, floorIndex === 1 || floorIndex === 2);
+
   if (floorIndex === 4) {
     const pos = generateBossRoom(tilemap, floorIndex);
     entranceX = pos.entranceX;
@@ -1249,7 +1259,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const entrFarDir = -horizDir;
     const entrCornerX = entranceX;
     const entrFloorY = 7;
-    carveChamber(tilemap, rng, { x: entrCornerX, y: entrFloorY, dir: entrFarDir });
+    planChamber(plan, tilemap, rng, 'entrance', { x: entrCornerX, y: entrFloorY, dir: entrFarDir });
 
     // Short H corridor — 4-6 steps, 3-row carve (1 walkable row after
     // overhang), no jitter. Same primitive as floor 2's H corridor
@@ -1257,37 +1267,27 @@ function _generateFloor(romData, floorIndex, seed) {
     const horizStartX = entrCornerX;
     const horizFloorY = entrFloorY;
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
-    carveHRun(tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength });
+    planHLink(plan, tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength });
     const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
     const pathResult = { endX: pathEndX, endFloorY: horizFloorY };
 
     // 5×5 mid room — direct copy of floor 2's first 5×5 mid room
     // (lines 1544-1553 in the floor-2 branch).
-    carveChamber(tilemap, rng, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
+    planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     // V corridor — 5-7 steps DOWN from middle of mid room.
     // Direct copy of floor 2's V corridor (lines 1557-1564).
     const vertLength = 5 + Math.floor(rng() * 3);
     const vertX = pathResult.endX + 2 * horizDir;
     let vertY = pathResult.endFloorY + 2;
-    vertY = carveVRun(tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
+    vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
 
     // 7×7 trap chamber — direct copy of floor 2's 7×7 chamber primitive
     // (lines 1566-1586), minus the exit-path keep-clear adjustment since
     // floor 1 has no exit path.
     const roomDyMin = -2;
     const roomDyMax = 6;
-    for (let dy = roomDyMin; dy <= roomDyMax; dy++) {
-      const distFromTop = dy - roomDyMin;
-      const distFromBot = roomDyMax - dy;
-      const isEdge = (distFromTop <= 1 || distFromBot <= 1);
-      const jl = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
-      const jr = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
-      for (let dx = -3 + jl; dx <= 3 - jr; dx++) {
-        const ax = vertX + dx, ay = vertY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    planWideChamber(plan, tilemap, rng, 'trap', { x: vertX, y: vertY, dyMin: roomDyMin, dyMax: roomDyMax });
 
     // Cleanup + overhang — same pass order as floor 2.
     finishCaveShape(tilemap);
@@ -1367,30 +1367,25 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Entrance room: 3-4 wide, no jitter (too small — enforceMinCeilingGap eats thin runs)
     const entrBaseW = 2 + Math.floor(rng() * 2); // dx 0..2 or 0..3
-    for (let dy = -4; dy <= 0; dy++) {
-      for (let dx = 0; dx <= entrBaseW; dx++) {
-        const ax = entranceX + dx, ay = startFloorY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    planBoxChamber(plan, tilemap, 'entrance', { x: entranceX, y: startFloorY, w: entrBaseW });
 
     // Short horizontal pathway (1 walkable row after overhang)
     const horizDir = rng() < 0.5 ? -1 : 1;
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
     const horizStartX = horizDir === 1 ? entranceX + 2 : entranceX;
-    carveHRun(tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength });
+    planHLink(plan, tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength });
     const pathEndX = horizStartX + pathLength * horizDir;
     const pathResult = { endX: Math.max(1, Math.min(30, pathEndX)), endFloorY: startFloorY };
 
     // 5×5 room with irregular edges
-    carveChamber(tilemap, rng, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
+    planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     // Vertical pathway (1 tile wide)
     const vertDir = vertDirEarly;
     const vertLength = 5 + Math.floor(rng() * 3); // 5-7 steps
     const vertX = pathResult.endX + 2 * horizDir; // middle of 5×5 room
     let vertY = vertDir === -1 ? pathResult.endFloorY - 2 : pathResult.endFloorY + 2;
-    vertY = carveVRun(tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
+    vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
 
     // 7×7 room with irregular edges
     const roomDyMin = vertDir === -1 ? -8 : -2;
@@ -1398,21 +1393,10 @@ function _generateFloor(romData, floorIndex, seed) {
     const exitDir = -horizDir;
     const exitPathFloorY = vertDir === -1 ? vertY - 2 : vertY + 2;
     const exitPathDy = exitPathFloorY - vertY;
-    for (let dy = roomDyMin; dy <= roomDyMax; dy++) {
-      const distFromTop = dy - roomDyMin;
-      const distFromBot = roomDyMax - dy;
-      const isEdge = (distFromTop <= 1 || distFromBot <= 1);
-      let jl = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
-      let jr = isEdge ? Math.floor(rng() * 3) : Math.floor(rng() * 2);
-      // Keep exit path connection clear
-      if (Math.abs(dy - exitPathDy) <= 1) {
-        if (exitDir === -1) jl = 0; else jr = 0;
-      }
-      for (let dx = -3 + jl; dx <= 3 - jr; dx++) {
-        const ax = vertX + dx, ay = vertY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    planWideChamber(plan, tilemap, rng, 'puzzle', {
+      x: vertX, y: vertY, dyMin: roomDyMin, dyMax: roomDyMax,
+      keepClear: (dy) => (Math.abs(dy - exitPathDy) <= 1 ? (exitDir === -1 ? 'left' : 'right') : null),
+    });
 
     // Exit pathway from 7×7 room — the Z-shape (1 tile wide, NO jitter)
     const exitPathWidth = 1;
@@ -1429,7 +1413,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const exitPathEndX = exitPathStartX + exitPathLength * exitDir;
 
     // 5×5 exit room with irregular edges
-    carveChamber(tilemap, rng, { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
+    planChamber(plan, tilemap, rng, 'exit', { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
 
     // Cleanup + overhang
     finishCaveShape(tilemap);
@@ -1694,9 +1678,8 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Long vertical corridor from row 26 up to roomBotCarve
     // Fattens 1 tile left or right in stretches, never both
-    carveFatteningVRun(tilemap, rng, {
-      x: entranceX, yFrom: corridorBottomY, yTo: roomBotCarve,
-    });
+    planSpine(plan, tilemap, rng, { x: entranceX, yFrom: corridorBottomY, yTo: roomBotCarve });
+    planNote(plan, 'centre', 'floor 3 carves its centre and side rooms inline — not yet a primitive');
 
     // Center room — organic carving (top rows narrow for cave ceiling shape)
     for (let y = roomTopCarve; y <= roomBotCarve; y++) {
@@ -1784,7 +1767,7 @@ function _generateFloor(romData, floorIndex, seed) {
     for (const side of [-1, 1]) {
       if (side !== firstSide && rng() < 0.5) continue; // first side guaranteed, second 50%
       const len = 6 + Math.floor(rng() * 5); // 6-10 tiles
-      const { endX: lastValidX } = carveFatteningHRun(tilemap, rng, {
+      const { endX: lastValidX } = planBranch(plan, tilemap, rng, {
         x0: entranceX + side, y: branchSlotY, dir: side, steps: len,
         // Stop one tile short of the side room so the branch never bleeds in.
         stopAt: (x) => (side === -1 ? x <= leftRoomRight + 1 : x >= rightRoomLeft - 1),
@@ -2524,5 +2507,6 @@ function _generateFloor(romData, floorIndex, seed) {
     rockSwitch: typeof rockSwitch !== 'undefined' ? rockSwitch : null,
     warpTile,
     pondTiles,
+    plan,
   };
 }

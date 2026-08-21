@@ -1,3 +1,52 @@
+## 1.10.27 — 2026-08-21
+
+### Phase 2 started — a floor now knows what it is made of
+
+`src/dungeon/plan.js`. A floor's structure used to exist only as the side effects
+of a long branch: you could not ask "what chambers does floor 1 have and how are
+they joined" without re-reading the carve code. Now it is a value.
+
+```
+floor 1 — 3 chamber(s), 2 link(s)
+  chamber entrance   room   at 14,7 dir -
+  chamber junction   room   at 18,7 dir +
+  chamber trap       wide   at 20,14 rows -2..6
+  link    h          from 14,7 dir + steps 4 -> x18
+  link    v          from 20,9 dir down steps 5 -> y14
+```
+
+⛔ **The obvious design would have broken every floor.** "Describe the whole
+floor, then render it" REORDERS THE RNG DRAWS: a floor draws from one seeded
+stream, and the draws that size a corridor are interleaved with the draws that
+jitter a chamber's edges — chamber, corridor length, chamber, corridor length.
+Build-then-render moves every sizing draw in front of every jitter draw. So the
+plan is **recorded while carving**: the plan functions carve immediately and
+record what they carved. Byte-identical by construction, and still a value you
+can print and diff. Making it a true build-then-render is a phase-3 change that
+arrives with the re-baseline.
+
+⛔ **Coverage is partial and the plan says so.** Floors 1 and 2 record every
+chamber. Floor 0's shape is a traced ceiling snake and floor 3 still carves its
+centre and side rooms inline, so their plans record part of the map and are
+marked `complete: false`. A partial record that reads as whole is worse than none.
+
+Two more carves folded in on the way, completing the vocabulary:
+`carveWideChamber` (floor 1's trap chamber and floor 2's puzzle room — the same
+carve, floor 2 additionally keeping its exit path clear AFTER both draws, so the
+rng count is identical either way) and `carveBoxChamber` (floor 2's entrance
+room, deliberately unjittered because `enforceMinCeilingGap` eats thin runs and
+the room is only 3–4 wide).
+
+**New deploy gate, `tools/check-floor-plan.mjs`** — 1,050 chamber records and 980
+link records per run. It checks each recorded chamber's declared FOOTPRINT
+contains carved floor, rather than that its recorded coordinate is walkable: for
+a jittered room the origin column can be jittered away, so the stricter check
+would be wrong. It also pins which floors are complete. Proven on two reverts —
+a chamber recorded at the wrong coordinate, and a partial floor claiming to be
+complete.
+
+`node tools/floor-view.mjs <floor> <seed> 1 --plan` prints it next to the map.
+
 ## 1.10.26 — 2026-08-21
 
 ### The crystal belongs to the crystal dungeon

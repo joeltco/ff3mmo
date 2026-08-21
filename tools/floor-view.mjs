@@ -10,6 +10,12 @@
 //     seed  : int   (default 1)
 //     count : int   (default 1) — render this many consecutive seeds
 //   node tools/floor-view.mjs 0 1 5      # floor 0, seeds 1..5
+//   node tools/floor-view.mjs 1 1761000000000 1 --plan   # + the floor's PLAN
+//
+// `--plan` prints what the floor is MADE OF — its chambers and the links between
+// them (see dungeon/plan.js) — rather than the tiles it ended up with. Floors 1
+// and 2 record every chamber; floor 0 and floor 3 mark themselves PARTIAL,
+// because some of their carves are still inline.
 //   FF3_ROM=/path/to.nes node tools/floor-view.mjs 0 7
 
 import fs from 'node:fs';
@@ -17,6 +23,7 @@ import os from 'node:os';
 import { join } from 'node:path';
 import { generateFloor } from '../src/dungeon-generator.js';
 import { reachableFrom } from './dungeon-sweep.mjs';
+import { describePlan } from '../src/dungeon/plan.js';
 
 // ── Locate the ROM (env → repo root → ~/roms) ──────────────────────────────
 function findRom() {
@@ -62,8 +69,11 @@ function glyph(t) { return GLYPH[t] ?? t.toString(16).padStart(2, '0')[0]; }
 // file used to carry its own copy, seeded only downward from the entrance —
 // see that function's note for what that cost. v1.7.865.
 
+const SHOW_PLAN = process.argv.includes('--plan');
+
 function render(floor, seed) {
   const r = generateFloor(rom, floor, seed);
+  if (SHOW_PLAN && r.plan) console.log('\n' + describePlan(r.plan));
   const tm = r.tilemap;
   const seen = reachableFrom(tm, r.entranceX, r.entranceY);
 

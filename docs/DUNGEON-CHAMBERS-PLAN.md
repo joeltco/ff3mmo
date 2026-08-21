@@ -267,7 +267,28 @@ describes `buildCaveShape` as live.
 list, snapshot before, assert after. Phase 1 lands only when 5 floors × 400 seeds
 hash identically.
 
-### Phase 2 — A floor becomes a declaration
+### Phase 2 — A floor becomes a declaration ◐ STARTED v1.10.27
+
+⛔ **The obvious design does not work.** "Describe the whole floor, then render
+it" REORDERS THE RNG DRAWS and changes every floor: a floor draws from one seeded
+stream, and today the draws that size a corridor are interleaved with the draws
+that jitter a chamber's edges — chamber, corridor length, chamber, corridor
+length. Build-then-render moves all the sizing draws in front of all the jitter
+draws.
+
+So the plan is **recorded while carving**: `planChamber` and friends carve
+immediately and record what they carved. Byte-identical by construction, and the
+plan is still a value you can print, diff, and — in phase 3 — generate rather
+than transcribe. Turning it into a true build-then-render is a phase-3 change
+that comes WITH the re-baseline, not before it.
+
+Coverage is partial and says so. Floors 1 and 2 record every chamber
+(`complete: true`); floor 0's shape is a traced ceiling snake and floor 3 still
+carves its centre and side rooms inline, so theirs record part of the map.
+`tools/check-floor-plan.mjs` pins that, and checks every recorded chamber's
+footprint actually contains carved floor.
+
+#### Original sketch (still the phase-3 target)
 
 Replace the `if/else` with a spec per floor and one renderer:
 
