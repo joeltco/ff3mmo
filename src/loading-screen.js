@@ -9,6 +9,7 @@ import { hudSt } from './hud-state.js';
 import { getLandTurtleFrames, getLandTurtleFadeFrames, getLoadingMoogleFadeFrames } from './npc.js';
 import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
+import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 // Constants
 const LOAD_FADE_STEP_MS = 133;
@@ -27,7 +28,7 @@ const _LOADING_BYTES = new Uint8Array([0x95,0xB2,0xA4,0xA7,0xAC,0xB1,0xAA,0xFF,0
 const _LOADED_BYTES  = new Uint8Array([0x8D,0xB8,0xB1,0xAA,0xA8,0xB2,0xB1,0xFF,0x95,0xB2,0xA4,0xA7,0xA8,0xA7]);
 const _FLOORS_BYTES  = new Uint8Array([0x84,0xFF,0x95,0xA8,0xB9,0xA8,0xAF,0xB6]);
 // "HP " + boss HP digits (NES encoding: 0x80='0', 0x81='1', etc.)
-const _bossHP = String((MONSTERS.get(0xCC) || { hp: 120 }).hp);
+const _bossHP = String((MONSTERS.get(DEFAULT_BOSS_ID) || { hp: 120 }).hp);
 const _LODHP_BYTES = new Uint8Array([0x91, 0x99, 0xFF, ...Array.from(_bossHP, ch => 0x80 + parseInt(ch))]);
 
 function _calcFadeLevel() {

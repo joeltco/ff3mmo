@@ -51,6 +51,7 @@ import { isTieredSummon, resolveSummonEffect, summonEffectAsSpell } from './summ
 import { applyMagicDamage, applyMagicStatus, applyMagicHeal,
          applyMagicCureStatus, applyMagicSight, playSpellImpactSFX } from './combatant-cast.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
+import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 // Per-turn re-seed for wire-PvP. Both clients converge to the same rand state
@@ -102,7 +103,7 @@ const BOSS_BOX_EXPAND_MS     = 300;
 const PVP_BOX_RESIZE_MS      = 300;
 const BATTLE_SHAKE_MS        = 300;
 const BATTLE_DMG_SHOW_MS     = 550;
-const BOSS_ATK               = (MONSTERS.get(0xCC) || { atk: 8 }).atk;
+const BOSS_ATK               = (MONSTERS.get(DEFAULT_BOSS_ID) || { atk: 8 }).atk;
 const BATTLE_FLASH_FRAMES    = 65;
 const BATTLE_FLASH_FRAME_MS  = 16.67;
 const MONSTER_DEATH_MS       = 250;

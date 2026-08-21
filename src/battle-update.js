@@ -60,6 +60,7 @@ import { tryStartFenixRevive, updateFenixRevive, resetFenixRevive, isFenixRevivi
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { startCrystalReveal } from './npc.js';
+import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 // BATTLE_TEXT_STEPS / BATTLE_TEXT_STEP_MS now imported from battle-state.js (single source).
@@ -1051,7 +1052,13 @@ function _updateBossDissolve(dt) {
       battleSt.battleTimer = 0;
       return true;
     }
-    const _bossData = MONSTERS.get(0xCC);
+    // ⭐ Rewards come from the boss the encounter actually set, not a literal.
+    // This read was `MONSTERS.get(0xCC)` — correct only because the Land Turtle
+    // is the game's one non-random encounter. `_updateBossDissolve` is the
+    // GENERIC boss-death handler (battle-update, battle-ally and spell-cast all
+    // route any non-random, non-PVP kill here), so a second boss would have paid
+    // out Land Turtle exp, gil and cp regardless of what died.
+    const _bossData = MONSTERS.get(battleSt.bossId ?? DEFAULT_BOSS_ID);
     const rawBossExp = _bossData?.exp || 132;
     grantExp(rawBossExp);
     battleSt.encounterExpGained = Math.max(1, Math.floor(rawBossExp / 4));

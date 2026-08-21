@@ -31,6 +31,7 @@ import { initCastAnim } from './cast-anim.js';
 import { initSpellAnim } from './spell-anim.js';
 import { initSummonAnim } from './summon-anim.js';
 import { setStage } from './boot-stage.js';
+import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 const TITLE_FADE_MAX = 4;
 
@@ -90,7 +91,7 @@ export function initSpriteAssets(rom) {
   setStage('sa:roster');
   initRoster();
   setStage('sa:bossSprite');
-  loadBossSprite(0xCC); // Land Turtle — only boss in game
+  loadBossSprite(DEFAULT_BOSS_ID); // Land Turtle — the only boss so far
   setCrystalFrames(initCrystalSprite()); // Wind Crystal (Land Turtle defeat reveal)
 
   setStage('sa:goblinSprite');

@@ -390,6 +390,73 @@ pass on a comment. It also re-asserts the reachability fact, so if the room is
 ever reshaped to make the boss a genuine chokepoint, the check says so instead of
 silently protecting nothing.
 
+## 4c. Two kinds of dungeon ending
+
+Decided 2026-08-20. Altar Cave is a **crystal dungeon** — it ends in a crystal
+room with a crystal and job unlocks. The Cave of Seals is a **regular dungeon** —
+just a boss at the end, and its boss room must NOT use the crystal room's
+palettes or change the music.
+
+Today those are the same code path. `generateBossRoom` is not a boss chamber; it
+is *the crystal room*, and eight things key off `floorIndex === 4` or "a boss
+died":
+
+| # | coupling | where |
+|---|---|---|
+| 1 | tileset 2 + map-148 CHR / palettes | `assets = floorIndex === 4 ? loadCrystalAssets(…)` |
+| 2 | `tileset: floorIndex === 4 ? 2 : 0` | returned mapData |
+| 3 | **crystal pedestal baked into the layout** (`$3a`–`$3f`, rows 8–10) | `generateBossRoom`'s tile list |
+| 4 | `TRACKS.CRYSTAL_ROOM` on entry | `map-loading.js` |
+| 5 | `TRACKS.CRYSTAL_CAVE` on exit | `map-triggers.js` ×2 |
+| 6 | turtle → `addCrystalNpc(6,8)` after defeat | `map-loading.js` |
+| 7 | warp tile at the pedestal top | `generateBossRoom` (defeat-gated, v1.10.19) |
+| 8 | **`startCrystalReveal()` + `ps.unlockedJobs \|= 0x3E`** | `battle-update.js` `_updateBossDissolve` |
+
+⛔ **#8 is not dressing.** `_updateBossDissolve` is the GENERIC boss-death
+handler — `battle-update.js`, `battle-ally.js` and `spell-cast.js` all route any
+non-random, non-PVP kill into `'boss-dissolve'`. It then unconditionally plays
+the crystal reveal and unlocks the five Wind Crystal jobs. A Cave of Seals boss
+dropped in as-is would dissolve into a Wind Crystal and re-unlock Warrior / Monk
+/ White / Black / Red.
+
+### The split
+
+**Ending kind becomes a property of the dungeon, not of floor index 4.**
+
+- **`crystal`** — crystal chamber: tileset 2, map-148 assets, pedestal,
+  `CRYSTAL_ROOM` music, crystal NPC, job-unlock mask, warp out. Altar Cave.
+- **`boss`** — boss chamber: tileset 0, normal cave assets, **normal cave music,
+  no pedestal, no crystal NPC, no job unlock**. A boss, and the warp out.
+  Cave of Seals.
+
+Both share the chamber *layout* — which is what phase 1's `carveChamber` is for.
+The crystal pedestal moves out of the layout and into the crystal dressing, since
+`$3a`–`$3f` only mean anything in tileset 2. `generateBossRoom` stops being one
+hardcoded room and becomes an authored template selected by ending kind.
+
+Rewards are the part with real work in them: `_updateBossDissolve` must take the
+ending kind as well as the boss id before a second boss ships. Half of that is
+done (v1.10.20, below); the crystal-reveal and job-unlock half is not, and is the
+gating item for the Cave of Seals.
+
+### Done — the boss id has one home (v1.10.20)
+
+`MONSTERS.get(0xCC)` was written out in **seven modules**: `boot.js` (sprite
+load), `battle-state.js` (`BOSS_ATK` / `BOSS_DEF` / `BOSS_MAX_HP`),
+`battle-update.js` (victory rewards), `pvp.js`, `input-handler.js` and
+`loading-screen.js`. `pvp.js` and `input-handler.js` re-derived atk and def that
+`battle-state.js` already exports.
+
+It now lives in `src/data/bosses.js` as `DEFAULT_BOSS_ID` — a hand-maintained
+leaf with no imports, so there is no cycle (`battle-state.js` imports `pvp.js`,
+so `pvp.js` cannot import back). **Not in `data/monsters.js`**, which is
+auto-generated and overwritten wholesale.
+
+The victory-reward path reads `battleSt.bossId ?? DEFAULT_BOSS_ID` instead of a
+literal. That read was correct only because the Land Turtle is the game's one
+non-random encounter — a second boss would have paid out Land Turtle exp, gil and
+cp regardless of what died. Gated by `tools/check-boss-id.mjs`.
+
 ## 5. Risks
 
 - ⛔ **Never identify an exit by its tile.** The v1.10.15 sweep looked for the

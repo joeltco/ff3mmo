@@ -1,3 +1,53 @@
+## 1.10.20 — 2026-08-20
+
+### The boss's bestiary id now has one home
+
+`MONSTERS.get(0xCC)` was written out as a bare literal in **seven modules** —
+`boot.js` (sprite load), `battle-state.js` (`BOSS_ATK` / `BOSS_DEF` /
+`BOSS_MAX_HP`), `battle-update.js` (victory rewards), `pvp.js`,
+`input-handler.js` and `loading-screen.js`. `pvp.js` and `input-handler.js`
+re-derived atk and def that `battle-state.js` already exports, which is exactly
+the shape where a later change lands in some copies and not others.
+
+It lives in `src/data/bosses.js` as `DEFAULT_BOSS_ID`: a hand-maintained leaf
+with no imports, so nothing gets an import cycle (`battle-state.js` imports
+`pvp.js`, so `pvp.js` cannot import back). **Deliberately not in
+`data/monsters.js`** — that file is auto-generated and overwritten wholesale, so
+a constant added there disappears on the next regeneration.
+
+**Victory rewards now read `battleSt.bossId ?? DEFAULT_BOSS_ID`.** To be exact
+about what this was: the old literal was *correct today*, because the Land Turtle
+is the game's only non-random encounter. But `_updateBossDissolve` is the GENERIC
+boss-death handler — `battle-update.js`, `battle-ally.js` and `spell-cast.js` all
+route any non-random, non-PVP kill into `'boss-dissolve'` — so the moment a second
+boss exists it would pay out Land Turtle exp, gil and cp regardless of what died.
+A second boss is now a field write instead of a hunt through seven files.
+
+**New deploy gate, `tools/check-boss-id.mjs`**, with two halves that test
+different things: textual (no module outside `data/bosses.js` writes the id as a
+monster-id literal — a grep is the right instrument, since textual duplication IS
+the defect) and behavioural (`battleSt.bossId` defaults to it and resolves in
+`MONSTERS`). Both proven by reverting. It skips comment lines: the first version
+failed on the very comment explaining the fix, and a check that trips on its own
+documentation trains you to ignore it.
+
+⛔ What it does not prove: that a second boss pays out its own rewards. There is
+only one non-random encounter, so that path cannot be exercised yet.
+
+### Planned — crystal dungeons vs regular dungeons
+
+`docs/DUNGEON-CHAMBERS-PLAN.md` §4c. Altar Cave is a **crystal dungeon** (crystal
+room, crystal, job unlocks). The Cave of Seals is a **regular dungeon** — a boss
+at the end, no crystal palettes, no music change.
+
+Today they are one code path: `generateBossRoom` is not a boss chamber, it is the
+crystal room, with the pedestal tiles `$3a`–`$3f` baked into its layout. Eight
+couplings are catalogued. Seven are dressing; the eighth is not — the generic
+boss-death handler unconditionally plays the crystal reveal and sets
+`ps.unlockedJobs |= 0x3E`, so a Cave of Seals boss dropped in as-is would dissolve
+into a Wind Crystal and re-unlock five jobs. **That is the gating item for the
+Cave of Seals**, and it is still open.
+
 ## 1.10.19 — 2026-08-20
 
 ### Fixed — you could leave the dungeon without fighting the boss

@@ -11,13 +11,18 @@
 import { pvpSt } from './pvp.js';
 import { DMG_SHOW_MS } from './damage-numbers.js';
 import { MONSTERS } from './data/monsters.js';
+import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
-const _BOSS_DATA = MONSTERS.get(0xCC) || { hp: 120, atk: 8, def: 1 };
+const _BOSS_DATA = MONSTERS.get(DEFAULT_BOSS_ID) || { hp: 120, atk: 8, def: 1 };
 
 export const battleSt = {
   // ── State machine ─────────────────────────────────────────────────
   battleState: 'none',
   battleTimer: 0,
+  // Which boss this encounter is. Defaults to the Land Turtle, the only
+  // non-random encounter in the game today. The victory-reward path reads it
+  // rather than a literal, so a second boss is a field write, not a code hunt.
+  bossId: DEFAULT_BOSS_ID,
   battleShakeTimer: 0,
   bossFlashTimer: 0,
   critFlashTimer: -1,
@@ -172,7 +177,9 @@ export function getActiveCast() {
   return battleSt.activeCast;
 }
 
-// Boss constants (Adamantoise — monster 0xCC)
+// Boss constants (Adamantoise — `DEFAULT_BOSS_ID`). Module-level, so these are
+// the DEFAULT boss's numbers; a per-encounter boss sets `battleSt.bossId` and the
+// reward path reads that.
 export const BOSS_ATK = _BOSS_DATA.atk;
 export const BOSS_DEF = _BOSS_DATA.def;
 export const BOSS_MAX_HP = _BOSS_DATA.hp;

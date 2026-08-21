@@ -33,6 +33,7 @@ import { openTradePick, cancelTrade, isTradingWith, isTradePicking, isTradeOnCoo
 import { openInspect } from './inspect.js';
 import { playerInventory, addItem, removeItem, buildItemSelectList, releaseOffhandForTwoHanded } from './inventory.js';
 import { sendNetEquipFromInv, sendNetEquipSwapHands } from './net.js';   // v1.7.808 atomic equip
+import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 // Battle Item menu rows-per-page. The pause inventory uses a single
 // scrollable list of bag-cap slots (16); the battle menu uses horizontal
@@ -99,7 +100,7 @@ export function initKeyboardListeners() {
 
 // Local constants (must match game.js)
 const HUD_VIEW_X = 0, HUD_VIEW_Y = 32, HUD_VIEW_W = 144, HUD_VIEW_H = 144;
-const BOSS_DEF = (MONSTERS.get(0xCC) || { def: 1 }).def;
+const BOSS_DEF = (MONSTERS.get(DEFAULT_BOSS_ID) || { def: 1 }).def;
 const ROSTER_VISIBLE = 3;
 // ROSTER_MENU_ITEMS imported from roster.js (single source, v1.7.221 dedup).
 
