@@ -1290,6 +1290,14 @@ function _generateFloor(romData, floorIndex, seed) {
     const horizDir = entranceX > 16 ? -1 : entranceX < 16 ? 1 : (rng() < 0.5 ? -1 : 1);
     const vertDir = 1;
 
+    // ── Topology (v1.10.35) ────────────────────────────────────────────
+    // `chain`  — both rooms on one row, then down to the chamber. An L, and
+    //            what this floor always built.
+    // `zigzag` — the mid room sits at its own height, reached by an ELBOW, so
+    //            the route steps down twice instead of once.
+    const topology = rng() < 0.5 ? 'chain' : 'zigzag';
+    plan.topology = topology;
+
     // 5×5 entrance room — identical primitive to floor 2's exit room
     // (lines 1602-1611 in the floor-2 branch). The corridor exits the
     // room on +horizDir side, so the room body extends in -horizDir
@@ -1297,6 +1305,16 @@ function _generateFloor(romData, floorIndex, seed) {
     const entrFarDir = -horizDir;
     const entrCornerX = entranceX;
     const entrFloorY = 7;
+    // ⛔ DOWNWARD ONLY, and not clamped. Offsetting either way and clamping to
+    // 6..11 looked symmetric and was not: the entrance row is 7, so every
+    // upward roll hit the clamp and produced a ONE-row step. Measured 91 of 205
+    // zigzags sitting at row 6 against 51 and 63 at rows 9 and 10 — nearly half
+    // of them barely zigzagged. Down is also the only direction with room:
+    // floor 0's south stairs land the player at this floor's top, so the
+    // entrance room has to stay there.
+    const midFloorY = topology === 'zigzag'
+      ? entrFloorY + 2 + Math.floor(rng() * 3)   // 9-11
+      : entrFloorY;
     planChamber(plan, tilemap, rng, 'entrance', { x: entrCornerX, y: entrFloorY, dir: entrFarDir });
 
     // Short H corridor — 4-6 steps, 3-row carve (1 walkable row after
@@ -1305,9 +1323,10 @@ function _generateFloor(romData, floorIndex, seed) {
     const horizStartX = entrCornerX;
     const horizFloorY = entrFloorY;
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
-    planHLink(plan, tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength });
+    // Straight when `midFloorY` matches (the `chain` topology), an L otherwise.
+    planElbow(plan, tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
     const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
-    const pathResult = { endX: pathEndX, endFloorY: horizFloorY };
+    const pathResult = { endX: pathEndX, endFloorY: midFloorY };
 
     // 5×5 mid room — direct copy of floor 2's first 5×5 mid room
     // (lines 1544-1553 in the floor-2 branch).
@@ -1403,6 +1422,19 @@ function _generateFloor(romData, floorIndex, seed) {
     const vertDirEarly = rng() < 0.5 ? -1 : 1; // peek ahead so we can position entrance
     const startFloorY = vertDirEarly === -1 ? 24 : 8; // bottom if going up, top if going down
 
+    // ── Topology (v1.10.35) ────────────────────────────────────────────
+    // Same pair as floor 1, whose architecture this floor's was copied into.
+    // `zigzag` puts the mid room at its own height, reached by an ELBOW.
+    const topology = rng() < 0.5 ? 'chain' : 'zigzag';
+    plan.topology = topology;
+    // ⛔ The offset must move the mid room AWAY from the vertical corridor's
+    // travel, not into it: this floor runs up from row 24 or down from row 8, so
+    // a mid room nudged the wrong way crowds the 7x7 chamber it is about to drop
+    // into. Offsetting against `vertDirEarly` keeps the run length intact.
+    const midFloorY = topology === 'zigzag'
+      ? startFloorY - vertDirEarly * (2 + Math.floor(rng() * 2))
+      : startFloorY;
+
     // Entrance room: 3-4 wide, no jitter (too small — enforceMinCeilingGap eats thin runs)
     const entrBaseW = 2 + Math.floor(rng() * 2); // dx 0..2 or 0..3
     planBoxChamber(plan, tilemap, 'entrance', { x: entranceX, y: startFloorY, w: entrBaseW });
@@ -1411,9 +1443,9 @@ function _generateFloor(romData, floorIndex, seed) {
     const horizDir = rng() < 0.5 ? -1 : 1;
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
     const horizStartX = horizDir === 1 ? entranceX + 2 : entranceX;
-    planHLink(plan, tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength });
+    planElbow(plan, tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
     const pathEndX = horizStartX + pathLength * horizDir;
-    const pathResult = { endX: Math.max(1, Math.min(30, pathEndX)), endFloorY: startFloorY };
+    const pathResult = { endX: Math.max(1, Math.min(30, pathEndX)), endFloorY: midFloorY };
 
     // 5×5 room with irregular edges
     planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });

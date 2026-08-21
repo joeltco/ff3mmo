@@ -1,3 +1,37 @@
+## 1.10.35 — 2026-08-21
+
+### Floors 1 and 2 roll a topology
+
+Both built the same L — two rooms on one row, then a drop to the chamber. Floor 1
+is a hand-copy of floor 2's architecture, so they were the same shape twice. They
+now roll `chain` (that) or `zigzag` (the mid room at its own height, reached by an
+**elbow**), ~50/50 on both.
+
+| | Jaccard before | after | fixed tiles |
+|---|---|---|---|
+| floor 1 | 0.258 | **0.189** | 2 → 0 |
+| floor 2 | 0.175 | **0.130** | 0 → 0 |
+
+Walkable area rose on both (87 → 91, 82 → 91).
+
+⛔ **A symmetric offset with a clamp is not symmetric.** Floor 1's first version
+offset the mid room either way and clamped to rows 6..11. Its entrance row is 7,
+so every upward roll hit the clamp and produced a **one-row step**: 91 of 205
+zigzags sat at row 6, against 51 and 63 at rows 9 and 10. Nearly half of them
+barely zigzagged — and nothing showed it. The topology counts were a healthy
+50/50, the Jaccard improved, every correctness gate passed. It took printing the
+distribution of the mid room's row to see that half the variation was a clamp.
+
+Downward only now (rows 9–11), which is also the only direction with room: floor
+0's south stairs land the player at floor 1's top, so its entrance room has to
+stay there. Floor 2's offset runs against its corridor's travel direction for the
+same reason — a mid room nudged the wrong way crowds the chamber it is about to
+drop into.
+
+The variety gate requires two topologies on each; proven by pinning both to
+`chain`. Snapshot re-baselined for floors 1 and 2 only. Verified across three seed
+bases.
+
 ## 1.10.34 — 2026-08-21
 
 ### Contour irregularity — the caves stop having straight lids

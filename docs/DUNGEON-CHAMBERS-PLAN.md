@@ -400,8 +400,21 @@ This is the number that actually separated our look from the cartridge's. Two
 earlier attempts at measuring "boxiness" (§0) did not discriminate at all — one
 scored ROM map 115 *boxier* than our floor 3.
 
-Still to do here: topologies for floors 1 and 2, and floor 2's two entrance
-positions.
+**Floors 1 and 2 topologies (v1.10.35) — DONE.** Both built the same L: two rooms
+on one row, then a drop to the chamber. They now roll `chain` (that) or `zigzag`
+(the mid room at its own height, reached by an elbow), ~50/50. Jaccard fell to
+**0.189** and **0.130**, with zero fixed tiles on either.
+
+⛔ **A symmetric offset with a clamp is not symmetric.** Floor 1's first version
+offset the mid room either way and clamped to rows 6..11; its entrance row is 7,
+so every upward roll hit the clamp and produced a ONE-row step — 91 of 205
+zigzags sat at row 6 against 51 and 63 at rows 9 and 10. Nearly half barely
+zigzagged, and the topology counts looked perfectly healthy throughout. Downward
+only now, which is also the only direction with room: floor 0's south stairs land
+the player at floor 1's top.
+
+Phase 3's remaining item is floor 2's two entrance positions, which are structural
+(it enters at row 8 or row 24 depending on which way its corridor runs).
 
 #### Original plan
 
