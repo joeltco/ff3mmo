@@ -34,7 +34,7 @@ const LIMITS = new Map([
   [0, { jaccard: 0.50, always: 35,  entrances: 6, secretRate: 0.45, lockedRate: 0.35 }],  // v1.10.31: was 0.610 / 72 / 2
   [1, { jaccard: 0.40, always: 20,  entrances: 15 }],
   [2, { jaccard: 0.30, always: 10,  entrances: 2 }],
-  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 2 }],  // v1.10.29-30: was 0.749 / 85 / 1
+  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4 }],  // v1.10.29-32: was 0.749 / 85 / 1
   [4, null],
 ]);
 

@@ -1,3 +1,38 @@
+## 1.10.32 — 2026-08-21
+
+### Phase 3 — loop and hub topologies
+
+Floor 3 rolls four shapes now, near-evenly at 49/52/54/45 over 200 seeds:
+
+- **`row`** — three rooms on one band, straight runs.
+- **`stagger`** — each side room at its own height, reached by an elbow.
+- **`loop`** — one branch runs *under* a side room and climbs into it, so the
+  floor is a **circuit**: out through the centre, back underneath. That branch
+  gets no chest — its end is a way through, not a reward.
+- **`hub`** — a fourth room due north of the centre, on its own spoke, giving the
+  centre four: spine from the south, two sides, one north.
+
+Walkable area rose 126 → 134 (hub adds a room, loop adds a link) while mean
+pairwise Jaccard held at 0.262.
+
+⛔ **"There is an extra link" is not "you can go around".** A loop that is the
+only path to somewhere is just a corridor with a fancy name. `check-floor-plan`
+now **cuts the closing link and re-floods**: if anything is stranded, it was the
+sole path and the topology is lying. **40/40 loop seeds are genuine circuits** —
+cutting the link strands nothing. Proven by deleting the ordinary elbow on that
+side: half the seeds stop being circuits and the gate fires with
+"it is the only path, not a circuit".
+
+⛔ **`hub` constrains its own geometry.** A room due north needs six clear rows
+above the centre's top edge, so hub seeds sample `roomCenterY` from 10–11 rather
+than 7–11. At 7 there would be one row. The topology picks the constraint rather
+than the constraint being global — which is what lets the other three keep their
+full range.
+
+The variety gate now requires **four** topologies, and still fails any that
+appears in under 15% of seeds. Snapshot re-baselined; only floor 3's hash moved.
+Verified across three seed bases plus every other dungeon gate.
+
 ## 1.10.31 — 2026-08-21
 
 ### Phase 3 — floor 0, and a sealed corridor it uncovered

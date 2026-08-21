@@ -354,8 +354,21 @@ while all three rooms shared a band; wrong the moment they do not, and they show
 up as sealed pockets and an unreachable exit rather than as anything that looked
 like a row bug. The gates caught all of it.
 
-Still to do here: more topologies (loop and hub), floors 0/1/2 given the same
-treatment, rock-tunnelling secret corridors (§3b), and contour irregularity.
+**Four topologies (v1.10.32).** `row`, `stagger`, `loop` and `hub`, distributed
+49/52/54/45 across 200 seeds. `loop` runs one branch under a side room and up into
+it, so the floor is a **circuit**; `hub` adds a fourth room due north of the
+centre, giving the centre four spokes.
+
+⛔ **"There is an extra link" is not "you can go around".** `check-floor-plan` cuts
+the loop's closing link and re-floods: if anything is stranded, the link was the
+only path and the topology name is a lie. 40/40 loop seeds are genuine circuits.
+Proven by removing the ordinary elbow on that side — half the seeds stop being
+circuits and the gate fires.
+
+Floor 3 walkable area rose 126 → 134; `hub` adds a room and `loop` adds a link.
+
+Still to do here: floors 1/2 topologies, rock-tunnelling secret corridors (§3b),
+and contour irregularity.
 
 #### Original plan
 

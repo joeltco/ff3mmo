@@ -17,7 +17,7 @@ import fs from 'node:fs';
 
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
-const { PASS } = await import('./dungeon-sweep.mjs');
+const { PASS, reachableFrom } = await import('./dungeon-sweep.mjs');
 
 const SEEDS = parseInt(process.argv[2] || '150', 10);
 const BASE = 1754900000000;
@@ -81,6 +81,31 @@ for (const [f, shouldBeComplete] of COMPLETE) {
     }
   }
 }
+// ── A `loop` topology must be a genuine CIRCUIT ───────────────────────────
+// "There is an extra link" is not "you can go around". If cutting the link
+// strands anything, it was the only path to that area and the floor is still a
+// tree — the topology name would be a lie. Cut it and re-flood.
+let loopSeeds = 0, circuits = 0;
+for (let k = 0; k < SEEDS; k++) {
+  const r = generateFloor(rom, 3, BASE + k * 7919);
+  if (r.plan?.topology !== 'loop') continue;
+  loopSeeds++;
+  const v = r.plan.links.find(l => l.kind === 'v');
+  if (!v) { fails.push(`floor 3 seed ${BASE + k * 7919}: topology 'loop' but no closing link recorded`); continue; }
+  const before = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
+  const tm = r.tilemap.slice();
+  for (let step = 1; step <= v.steps; step++) {
+    const y = v.y0 + v.dir * step;
+    if (y >= 0 && y < 32) tm[y * 32 + v.x] = 0x00;
+  }
+  const after = reachableFrom(tm, r.entranceX, r.entranceY);
+  let lost = 0;
+  for (let i = 0; i < 1024; i++) if (before[i] && !after[i] && PASS.has(tm[i])) lost++;
+  if (lost === 0) circuits++;
+  else fails.push(`floor 3 seed ${BASE + k * 7919}: cutting the 'loop' link strands ${lost} tiles — it is the only path, not a circuit`);
+}
+console.log(`loop topology: ${circuits}/${loopSeeds} seeds are a genuine circuit (cutting the link strands nothing)`);
+
 console.log(`checked ${checkedChambers} chamber records and ${checkedLinks} link records across ${SEEDS} seeds/floor`);
 console.log(`complete plans: ${[...COMPLETE].filter(([, v]) => v).map(([f]) => f).join(', ')}   partial: ${[...COMPLETE].filter(([, v]) => !v).map(([f]) => f).join(', ')}`);
 

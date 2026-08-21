@@ -1722,23 +1722,35 @@ function _generateFloor(romData, floorIndex, seed) {
     const corridorBottomY = stairY - 1;
     const pondSide = rng() < 0.5 ? -1 : 1; // -1=left, 1=right
 
-    // Room band, sampled. Kept clear of the spine's bottom by construction:
-    // `roomBotCarve` is at most 15 and `corridorBottomY` at least 25.
-    const roomCenterY = 7 + Math.floor(rng() * 5); // 7-11
-    const roomTopCarve = roomCenterY - 3;
-    const roomBotCarve = roomCenterY + 3;
-
-    // ── Topology (v1.10.30) ────────────────────────────────────────────
     // `row`     — all three rooms share one band, joined by straight runs.
     //             This is what the floor ALWAYS did.
     // `stagger` — each side room sits at its own height, reached by an ELBOW.
     // Offsets are clamped so a side room stays on the map and above the branch
     // slot (~row 20); a room hanging into the branches would have them carve
     // straight through it.
-    const topology = rng() < 0.5 ? 'row' : 'stagger';
+    // `row`     — all three rooms share one band, joined by straight runs.
+    // `stagger` — each side room sits at its own height, reached by an elbow.
+    // `loop`    — as `row`, plus one branch climbing into a side room, so the
+    //             floor is a CIRCUIT: out through the centre, back underneath.
+    // `hub`     — a fourth room due north of the centre, giving the centre four
+    //             spokes (spine from the south, two sides, one north).
+    const topology = ['row', 'stagger', 'loop', 'hub'][Math.floor(rng() * 4)];
     plan.topology = topology;
+
+    // Room band, sampled. Kept clear of the spine's bottom by construction:
+    // `roomBotCarve` is at most 15 and `corridorBottomY` at least 25.
+    // ⛔ `hub` puts a whole room ABOVE the centre, so the centre has to sit low
+    // enough to leave rows for it: its top is `roomCenterY - 3`, and the north
+    // room needs six rows clear above that. 7 would leave one.
+    const roomCenterY = topology === 'hub'
+      ? 10 + Math.floor(rng() * 2)      // 10-11
+      : 7 + Math.floor(rng() * 5);      // 7-11
+    const roomTopCarve = roomCenterY - 3;
+    const roomBotCarve = roomCenterY + 3;
+
+    // ── Topology (v1.10.30) ────────────────────────────────────────────
     const rollOffset = () => {
-      if (topology === 'row') return 0;
+      if (topology !== 'stagger') return 0;
       const mag = 2 + Math.floor(rng() * 3);            // 2-4
       const dir = rng() < 0.5 ? -1 : 1;
       const want = dir * mag;
@@ -1829,15 +1841,48 @@ function _generateFloor(romData, floorIndex, seed) {
     // Single branch slot centered in corridor — avoids removeCeilingProtrusions merging
     const branchSlotY = Math.round((corridorBottomY + roomBotCarve) / 2) + 1; // ~row 20
     const firstSide = rng() < 0.5 ? -1 : 1;
+    // `loop` closes the circuit on ONE side: that branch is allowed under the
+    // side room and then climbs into it, so the floor can be walked as a ring
+    // rather than as a tree of dead ends. It gets no chest — its end is a way
+    // through, not a reward.
+    const loopSide = topology === 'loop' ? firstSide : 0;
     for (const side of [-1, 1]) {
       if (side !== firstSide && rng() < 0.5) continue; // first side guaranteed, second 50%
       const len = 6 + Math.floor(rng() * 5); // 6-10 tiles
+      const isLoop = side === loopSide;
+      const roomMidX = side === -1
+        ? Math.round((leftRoomLeft + leftRoomRight) / 2)
+        : Math.round((rightRoomLeft + rightRoomRight) / 2);
+      const sideBot = side === -1 ? leftBot : rightBot;
       const { endX: lastValidX } = planBranch(plan, tilemap, rng, {
-        x0: entranceX + side, y: branchSlotY, dir: side, steps: len,
-        // Stop one tile short of the side room so the branch never bleeds in.
-        stopAt: (x) => (side === -1 ? x <= leftRoomRight + 1 : x >= rightRoomLeft - 1),
+        x0: entranceX + side, y: branchSlotY, dir: side,
+        // A looping branch needs to REACH the room's middle column, so it is
+        // given the length to get there rather than a rolled one.
+        steps: isLoop ? Math.abs(roomMidX - (entranceX + side)) + 1 : len,
+        // Normally stop one tile short of the side room so the branch never
+        // bleeds in; a looping branch is meant to arrive under it.
+        stopAt: isLoop ? null : (x) => (side === -1 ? x <= leftRoomRight + 1 : x >= rightRoomLeft - 1),
       });
-      branchChestPos.push({ x: lastValidX, y: branchSlotY });
+      if (isLoop) {
+        // Climb from the branch up to the room's bottom edge, closing the ring.
+        const steps = branchSlotY - (sideBot + 1);
+        if (steps > 0) planVLink(plan, tilemap, { x: lastValidX, y0: branchSlotY, dir: -1, steps });
+      } else {
+        branchChestPos.push({ x: lastValidX, y: branchSlotY });
+      }
+    }
+
+    // ── hub: a fourth room due north of the centre, on its own spoke ────
+    if (topology === 'hub') {
+      const hubBot = roomTopCarve - 2;
+      const hubTop = hubBot - 4;
+      const hubHalf = 2 + Math.floor(rng() * 2);   // 2-3 either side of the spine
+      planOrganicRoom(plan, tilemap, rng, 'north', {
+        left: Math.max(1, entranceX - hubHalf), right: Math.min(30, entranceX + hubHalf),
+        top: hubTop, bot: hubBot,
+      });
+      // Spoke: centre room's top up to the north room's bottom.
+      planVLink(plan, tilemap, { x: entranceX, y0: roomTopCarve, dir: -1, steps: roomTopCarve - hubBot });
     }
 
     // Cleanup + overhang
