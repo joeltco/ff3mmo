@@ -1,3 +1,54 @@
+## 1.10.25 — 2026-08-20
+
+### Phase 1 complete — `shape.js`, and a comment that was lying
+
+`src/dungeon/shape.js` takes the seven cave-shaping passes
+(`fixDiagonalCeilingPinch`, `removeCeilingProtrusions`, `enforceMinCeilingGap`,
+`ensureCeilingConnectivity`, `addOverhang`, `openEntranceLanding`,
+`sealTinyPockets`) plus `finishCaveShape` — the five-pass chain that was written
+out **four times**. Byte-identical, like everything else in phase 1.
+
+⛔ **Order is the contract.** Each pass assumes the previous one ran, and
+`addOverhang` must be last because it reads the finished ceiling to decide where
+rock hangs. `openEntranceLanding` and `sealTinyPockets` are deliberately NOT in
+the chain: the first has to run AFTER `addOverhang` or the overhang pass re-walls
+its pocket, the second runs at the very end of `generateFloor` once the trap swap
+has happened.
+
+⛔ **Floor 0 does not run the same passes, and its comment said it did.** It read
+"Standard cleanup — exact passes/order as every other floor". It runs three of the
+five, skipping the pinch fix and the protrusion removal — correctly, because its
+shape comes from one traced ceiling snake rather than carved rooms joined by
+corridors. Extracting the chain is what surfaced it: collapsing four identical
+copies left floor 0 visibly not matching. The comment now says what floor 0
+actually does and why, and warns against "fixing" it into the chain.
+
+`isFloorTile` moved to `tiles.js` — it is a tile predicate, and it is where the
+"bones count as floor, chests do not" rule lives. Every reachability question in
+the generator turns on that distinction.
+
+### Phase 1 is done
+
+`dungeon-generator.js` 3,098 → 2,528 lines, with 608 lines now in five named
+leaf modules: `tiles.js`, `chambers.js`, `corridors.js`, `boss-chamber.js`,
+`shape.js`. What it removed:
+
+- four copies of the room carve → `carveChamber`;
+- nine inline corridor carves → five corridor primitives, zero 3-row loops left;
+- four copies of the five-pass shaping chain → `finishCaveShape`;
+- a mirrored tile-constant vocabulary in `dungeon-locked-room.js`;
+- a `WATER_EDGE` that was two constants with the same name and different values;
+- 213 lines of dead code;
+- the crystal pedestal, out of the shared boss-chamber shape and into the skin.
+
+**Every step verified byte-identical** against `docs/FLOOR-SNAPSHOT.json` — tiles
+AND wiring, 5 floors × 400 seeds plus the three side maps — re-run after each
+individual replacement rather than once at the end.
+
+Next: phase 2 (a floor becomes a declaration), or the ending-kind split that
+still gates a second dungeon — `_updateBossDissolve` plays the crystal reveal and
+sets `ps.unlockedJobs |= 0x3E` for any boss.
+
 ## 1.10.24 — 2026-08-20
 
 ### Phase 1 — the boss chamber is one shape with a skin

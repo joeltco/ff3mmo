@@ -239,7 +239,7 @@ Five phases. Phases 1–2 change no output at all; the dungeon only starts looki
 different in phase 3. That split is deliberate — a refactor and a behaviour
 change in one commit means neither can be verified.
 
-### Phase 1 — Extract the vocabulary (output must not change)
+### Phase 1 — Extract the vocabulary (output must not change) ✅ DONE v1.10.22–25
 
 New `src/dungeon/` leaf modules, no `window`/DOM, so tools can import them:
 

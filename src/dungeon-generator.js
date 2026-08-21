@@ -15,11 +15,16 @@ import {
   CEILING, WALL_ROCKY, ENTRANCE_TOP, WATER, WATER_EDGE_POND, BONES, WATER_EDGE_N,
   FLOOR, WARP_A, WARP_B, WARP_C, WARP_D, PASSAGE, STAIR_ARCH, FALSE_CEILING,
   PASSAGE_BTM, FILL_VOID, EVENT_TILE, EXIT_PREV, PASSAGE_ENTRY, DOOR,
-  STAIRS_DOWN, TRAP_HOLE, CHEST,
+  STAIRS_DOWN, TRAP_HOLE, CHEST, isFloorTile,
 } from './dungeon/tiles.js';
 import { carveChamber } from './dungeon/chambers.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
+import {
+  ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
+  addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
+  finishCaveShape,
+} from './dungeon/shape.js';
 
 // Reference map for tileset/palette/CHR loading
 const REF_MAP_ID = 111;
@@ -147,135 +152,13 @@ function generateCaveOutlinePath(anchorX, startRow, endRow, rng, maxWidth = 10) 
 
 // ⛔ REMOVED in v1.10.22 (phase 1): `buildCaveShape` was dead — nothing called it, yet design-notes documented its parameters as though it were live.
 
-// Ensure every $00 tile connects to at least one other $00 (cardinal).
-// Isolated $00 tiles get demoted to $01 so they don't float alone.
-function ensureCeilingConnectivity(tilemap) {
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      if (tilemap[y * 32 + x] !== CEILING) continue;
-      const connected =
-        (x > 0 && tilemap[y * 32 + x - 1] === CEILING) ||
-        (x < 31 && tilemap[y * 32 + x + 1] === CEILING) ||
-        (y > 0 && tilemap[(y - 1) * 32 + x] === CEILING) ||
-        (y < 31 && tilemap[(y + 1) * 32 + x] === CEILING);
-      if (!connected) tilemap[y * 32 + x] = WALL_ROCKY;
-    }
-  }
-}
 
-// Enforce minimum 3-tile vertical gap between ceiling tiles in each column.
-// If a non-ceiling run BETWEEN two ceilings is shorter than 3, close it to ceiling.
-// This prevents overhang from filling narrow gaps entirely with wall (no walkable floor).
-// FALSE_CEILING ($44) counts as ceiling for gap purposes (visually identical).
-// Only converts safe tiles (FLOOR, WALL_ROCKY, FILL_VOID, BONES) — never special tiles.
-// NEVER touches entrance or exit blocks — runs at the top/bottom of a column (no ceiling
-// above or below) are not gaps and are left untouched.
-function enforceMinCeilingGap(tilemap) {
-  const isCeiling = t => t === CEILING || t === FALSE_CEILING;
-  const safeToConvert = t => t === FLOOR || t === WALL_ROCKY || t === FILL_VOID || t === BONES;
-  for (let x = 0; x < 32; x++) {
-    let y = 0;
-    let seenCeiling = false;
-    while (y < 32) {
-      if (isCeiling(tilemap[y * 32 + x])) { seenCeiling = true; y++; continue; }
-      const runStart = y;
-      while (y < 32 && !isCeiling(tilemap[y * 32 + x])) y++;
-      const runLen = y - runStart;
-      // Only fill gaps BETWEEN two ceilings (ceiling above AND below)
-      if (seenCeiling && runLen < 3 && y < 32) {
-        for (let ry = runStart; ry < runStart + runLen; ry++) {
-          if (safeToConvert(tilemap[ry * 32 + x])) {
-            tilemap[ry * 32 + x] = CEILING;
-          }
-        }
-      }
-    }
-  }
-}
 
-// Fix diagonal ceiling pairs that block floor paths after overhang.
-// If CEILING at (x,y) and (x±1,y+1) with both cross tiles non-ceiling,
-// the staggered overhang creates walls at different rows in adjacent columns,
-// blocking horizontal movement. Fix by converting the lower ceiling to FLOOR.
-function fixDiagonalCeilingPinch(tilemap) {
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let y = 0; y < 31; y++) {
-      for (let x = 0; x < 31; x++) {
-        // SE diagonal: CEILING at (x,y) and (x+1,y+1)
-        if (tilemap[y * 32 + x] === CEILING && tilemap[(y + 1) * 32 + (x + 1)] === CEILING) {
-          if (tilemap[y * 32 + (x + 1)] !== CEILING && tilemap[(y + 1) * 32 + x] !== CEILING) {
-            tilemap[(y + 1) * 32 + (x + 1)] = FLOOR;
-            changed = true;
-          }
-        }
-        // SW diagonal: CEILING at (x+1,y) and (x,y+1)
-        if (tilemap[y * 32 + (x + 1)] === CEILING && tilemap[(y + 1) * 32 + x] === CEILING) {
-          if (tilemap[y * 32 + x] !== CEILING && tilemap[(y + 1) * 32 + (x + 1)] !== CEILING) {
-            tilemap[(y + 1) * 32 + x] = FLOOR;
-            changed = true;
-          }
-        }
-      }
-    }
-  }
-}
 
-// Add $01 rocky wall overhang below ALL $00 tiles.
-// Every ceiling tile must have something under it: another $00, or 2 rows of $01.
-function addOverhang(tilemap) {
-  const marks = [];
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      if (tilemap[y * 32 + x] !== CEILING) continue;
-      for (let dy = 1; dy <= 2; dy++) {
-        const ny = y + dy;
-        if (ny < 32) marks.push(ny * 32 + x);
-      }
-    }
-  }
-  for (const idx of marks) {
-    const t = tilemap[idx];
-    if (t === FLOOR || t === FILL_VOID || t === BONES) {
-      tilemap[idx] = WALL_ROCKY;
-    }
-  }
-}
 
-// Remove thin ceiling protrusions BEFORE overhang.
-// A 1-wide ceiling column/row sticking into floor creates overhang walls
-// that protrude into the walkable area. Removing the ceiling tile at the
-// source prevents overhang from ever generating those walls.
-// Only removes ceiling tiles with FLOOR on opposing cardinal sides.
-function removeCeilingProtrusions(tilemap) {
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let y = 1; y < 31; y++) {
-      for (let x = 1; x < 31; x++) {
-        if (tilemap[y * 32 + x] !== CEILING) continue;
-        const left  = tilemap[y * 32 + (x - 1)];
-        const right = tilemap[y * 32 + (x + 1)];
-        const up    = tilemap[(y - 1) * 32 + x];
-        const down  = tilemap[(y + 1) * 32 + x];
-        if (isFloorTile(left) && isFloorTile(right)) {
-          tilemap[y * 32 + x] = FLOOR;
-          changed = true;
-          continue;
-        }
-        if (isFloorTile(up) && isFloorTile(down)) {
-          tilemap[y * 32 + x] = FLOOR;
-          changed = true;
-        }
-      }
-    }
-  }
-}
 
 // ── Feature Placement Helpers ────────────────────────────────────────────
 
-function isFloorTile(t) { return t === FLOOR || t === BONES; }
 
 export function findRandomFloor(tilemap, rng, used, bounds) {
   const candidates = [];
@@ -836,101 +719,7 @@ function placeEntrance(tilemap, x, y, floorIndex) {
   }
 }
 
-// LOCKED — Entrance landing template. Opens a 3x3 floor pocket directly below
-// the entrance frame so the player ALWAYS arrives in an open area, never a
-// 1-tile-wide neck. Pairs with placeEntrance: the frame's bottom row is already
-// 3 floor tiles; this carries that width down through the top rocky overhang
-// band into the room.
-//   MUST be called AFTER addOverhang — otherwise the overhang pass re-walls the
-//   pocket. The frame floor sits directly above the landing, so no ceiling
-//   pinches it (no overhang-rule violation). `clamp` [x0,x1] keeps the pocket
-//   inside the room's column span. DO NOT inline or fork — this is the single
-//   source for entrance landings.
-function openEntranceLanding(tilemap, entranceX, topRow, clamp) {
-  const lo = clamp ? clamp[0] : 1, hi = clamp ? clamp[1] : 30;
-  for (let y = topRow; y <= topRow + 2; y++) {
-    for (let x = entranceX - 1; x <= entranceX + 1; x++) {
-      if (x >= lo && x <= hi && x >= 0 && x < 32 && y >= 0 && y < 32) {
-        tilemap[y * 32 + x] = FLOOR;
-      }
-    }
-  }
-}
 
-// ── Tiny sealed pockets ────────────────────────────────────────────────────
-// Fill 1-4 tile islands of floor that NOTHING can reach, left behind by the
-// carve passes. Two shapes were measured over 150 timestamp seeds per floor:
-//   - floor 3, 24 tiles / 23 seeds: the branch-alcove chest is placed ON the
-//     dead-end tile, so a fat stretch hanging off that end (or a leftover row
-//     of the 3-row carve) has the chest as its only non-solid neighbour;
-//   - floor 0, 2 tiles / 1 seed: the organic outline closed a 2-tile pocket
-//     inside the rock.
-// Both are the same defect — floor you can see and can never stand on.
-//
-// ⛔ A pocket is sealed ONLY if every neighbouring tile is solid under BOTH
-// passability models. `dungeon-sweep.mjs`'s PASS set is deliberately stricter
-// than the game's `isPassable` (0x70, 0x04, 0x61, 0x3a-0x3f), so a generic
-// "fill what the flood didn't reach" pass would delete real, walkable content.
-// SOLID below holds only tiles impassable either way; anything else joins the
-// component and grows it past `maxSize`, which is the point.
-//
-// The other guards, each protecting a documented intentional formation:
-//   - the entrance's own component is never touched;
-//   - rows >= 22 are the secret teleport room, an INTENTIONAL separate island;
-//   - floor 2's rock-switch puzzle room is sealed on purpose and is ~21 tiles,
-//     so `maxSize` 4 excludes it (proven in the sweep by opening the switch);
-//   - a pocket holding anything but FLOOR/BONES, or any registered trigger, is
-//     reported rather than filled — it is carrying content, not decoration.
-// Fill material follows `addOverhang`'s rule: rock may hang under rock, so a
-// pocket tile with ceiling/rocky above becomes WALL_ROCKY, otherwise CEILING.
-// Top-down order so a stacked pocket sees the tile it just filled.
-function sealTinyPockets(tilemap, entranceX, entranceY, triggerMap, maxSize = 4) {
-  const SOLID = new Set([CEILING, WALL_ROCKY, CHEST, FILL_VOID]);
-  const seen = new Uint8Array(1024);
-  const entI = entranceY * 32 + entranceX;
-  const filled = [];
-
-  for (let start = 0; start < 1024; start++) {
-    if (seen[start] || SOLID.has(tilemap[start])) continue;
-    // Flood the WHOLE component. ⛔ Do not break out early once it passes
-    // `maxSize`: the tiles already queued stop being expanded, whatever sits
-    // behind them is never marked `seen`, and the outer scan re-walks that
-    // remainder as a fresh "small pocket" and fills it. Measured — an early
-    // break took 6 floor-2 seeds DOWN a reachable tile each and cost one seed
-    // a whole chest. A 1024-tile flood is free; correctness is not.
-    const comp = []; const q = [start]; seen[start] = 1;
-    while (q.length) {
-      const i = q.pop(); comp.push(i);
-      const x = i % 32, y = (i - x) / 32;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
-        const ni = ny * 32 + nx;
-        if (seen[ni] || SOLID.has(tilemap[ni])) continue;
-        seen[ni] = 1; q.push(ni);
-      }
-    }
-    if (comp.length > maxSize) continue;
-
-    let skip = false;
-    for (const i of comp) {
-      const x = i % 32, y = (i - x) / 32;
-      if (i === entI) skip = true;                                  // the party's own region
-      if (y >= 22) skip = true;                                     // secret teleport room
-      if (tilemap[i] !== FLOOR && tilemap[i] !== BONES) skip = true; // carries content
-      if (triggerMap && triggerMap.has(`${x},${y}`)) skip = true;    // carries a trigger
-    }
-    if (skip) continue;
-
-    comp.sort((a, b) => a - b); // ascending index == top-down
-    for (const i of comp) {
-      const above = i >= 32 ? tilemap[i - 32] : CEILING;
-      tilemap[i] = (above === CEILING || above === WALL_ROCKY) ? WALL_ROCKY : CEILING;
-      filled.push(i);
-    }
-  }
-  return filled;
-}
 
 // Floor feature counts per floor index
 const FLOOR_CONFIG = [
@@ -1398,7 +1187,10 @@ function _generateFloor(romData, floorIndex, seed) {
     }
     placeExit(tilemap, exitX, roomBot);
 
-    // Standard cleanup — exact passes/order as every other floor.
+    // ⛔ NOT `finishCaveShape`. This comment used to read "exact passes/order as
+    // every other floor", which was false: floor 0 skips the pinch fix and the
+    // protrusion removal. Its shape is one traced ceiling snake, not carved
+    // rooms joined by corridors, so those two passes have nothing to do here.
     enforceMinCeilingGap(tilemap);
     ensureCeilingConnectivity(tilemap);
     addOverhang(tilemap);
@@ -1498,11 +1290,7 @@ function _generateFloor(romData, floorIndex, seed) {
     }
 
     // Cleanup + overhang — same pass order as floor 2.
-    fixDiagonalCeilingPinch(tilemap);
-    removeCeilingProtrusions(tilemap);
-    enforceMinCeilingGap(tilemap);
-    ensureCeilingConnectivity(tilemap);
-    addOverhang(tilemap);
+    finishCaveShape(tilemap);
 
     // Entrance arch — direct copy of floor 2's exit-block placement
     // (lines 1621-1623). Arch sits 3 tiles INTO the room from the
@@ -1644,11 +1432,7 @@ function _generateFloor(romData, floorIndex, seed) {
     carveChamber(tilemap, rng, { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
 
     // Cleanup + overhang
-    fixDiagonalCeilingPinch(tilemap);
-    removeCeilingProtrusions(tilemap);
-    enforceMinCeilingGap(tilemap);
-    ensureCeilingConnectivity(tilemap);
-    addOverhang(tilemap);
+    finishCaveShape(tilemap);
 
     // Exit block in exit room — passage entry to next floor
     const exitBlockX = exitPathEndX + 3 * exitDir;
@@ -2009,11 +1793,7 @@ function _generateFloor(romData, floorIndex, seed) {
     }
 
     // Cleanup + overhang
-    fixDiagonalCeilingPinch(tilemap);
-    removeCeilingProtrusions(tilemap);
-    enforceMinCeilingGap(tilemap);
-    ensureCeilingConnectivity(tilemap);
-    addOverhang(tilemap);
+    finishCaveShape(tilemap);
 
     // Pond — 2 water lines in one side room, extending into wall
     // 50% vertical (south wall), 50% horizontal (north wall into side wall)
@@ -2326,11 +2106,7 @@ function _generateFloor(romData, floorIndex, seed) {
     }
 
     // Clean up ceiling artifacts, then overhang
-    fixDiagonalCeilingPinch(tilemap);
-    removeCeilingProtrusions(tilemap);
-    enforceMinCeilingGap(tilemap);
-    ensureCeilingConnectivity(tilemap);
-    addOverhang(tilemap);
+    finishCaveShape(tilemap);
 
     // Place entrance using the entrance rule (after overhang)
     placeDeepEntrance(tilemap, entranceX, pathDir, entranceBaseRow);

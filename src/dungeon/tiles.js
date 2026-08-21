@@ -46,3 +46,12 @@ export const DOOR          = 0x70;
 export const STAIRS_DOWN   = 0x73;
 export const TRAP_HOLE     = 0x74;
 export const CHEST         = 0x7C;
+
+/**
+ * Is this tile something the player stands on?
+ *
+ * Bones are decoration painted onto floor, so they count. Chests, stairs, doors
+ * and passages do NOT — they are things you stand BESIDE or step through, and
+ * every reachability question in the generator depends on that distinction.
+ */
+export function isFloorTile(t) { return t === FLOOR || t === BONES; }
