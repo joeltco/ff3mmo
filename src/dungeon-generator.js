@@ -7,30 +7,17 @@ import {
 } from './map-loader.js';
 import { placeLockedRoom, placeChamberDoor, findChamberDoorPos } from './dungeon-locked-room.js';
 
-// Tile IDs (tileset 0 metatile indices)
-const CEILING = 0x00;
-const WALL_ROCKY = 0x01;
-const FALSE_CEILING = 0x44;  // same visual as $00 but z=0 (passable)
-const ENTRANCE_TOP = 0x03;   // arch above exit_prev
-const PASSAGE = 0x41;        // passable doorway/passage tile
-const PASSAGE_BTM = 0x49;    // passage bottom transition
-const FLOOR = 0x30;
-const BONES = 0x09;         // skeleton/bone decoration (scattered on floor)
-const WATER_CENTER = 0x04;
-const WATER_EDGE = 0x08;
-// $0B/$0C — NOT skeletons, these render as teleport/warp sprites in tileset 0. Do not use.
-const STAIRS_DOWN = 0x73;
-const TRAP_HOLE = 0x74;
-const CHEST = 0x7C;
-const EXIT_PREV = 0x68;
-const EVENT_TILE = 0x60;
-const WARP_A = 0x3A;
-const WARP_B = 0x3B;
-const WARP_C = 0x3C;
-const WARP_D = 0x3D;
-const STAIR_ARCH = 0x42;     // decoration above stairs ($73)
-const PASSAGE_ENTRY = 0x6a;  // passage from above (exit_prev, deeper floors)
-const FILL_VOID = 0x5f;      // black void tile
+// Tile ids live in `dungeon/tiles.js` — a leaf, so tools can read them too.
+// `WATER_EDGE_N` used to be TWO constants of the same name here: 0x08 at module
+// scope and 0x23 redefined inside floor 3's branch, which shadowed it for
+// everything below. They are `WATER_EDGE_POND` and `WATER_EDGE_N` now.
+import {
+  CEILING, WALL_ROCKY, ENTRANCE_TOP, WATER, WATER_EDGE_POND, BONES, WATER_EDGE_N,
+  FLOOR, WARP_A, WARP_B, WARP_C, WARP_D, PASSAGE, STAIR_ARCH, FALSE_CEILING,
+  PASSAGE_BTM, FILL_VOID, EVENT_TILE, EXIT_PREV, PASSAGE_ENTRY, DOOR,
+  STAIRS_DOWN, TRAP_HOLE, CHEST,
+} from './dungeon/tiles.js';
+import { carveChamber } from './dungeon/chambers.js';
 
 // Reference map for tileset/palette/CHR loading
 const REF_MAP_ID = 111;
@@ -47,67 +34,7 @@ export function mulberry32(seed) {
 
 // ── Cave Outline Generation ──────────────────────────────────────────────
 
-function generateCaveOutline(anchorX, startRow, endRow, rng) {
-  const left = new Array(32).fill(0);
-  const right = new Array(32).fill(31);
-
-  // L-shaped cave matching Map 113 feel:
-  //   narrow passage from entrance → L-bend → large open chamber
-  //
-  // Chamber is positioned so passage sits at its trailing edge —
-  // this guarantees smooth column overlap through the bend (no disconnections).
-  const passageHalfW = 3 + Math.floor(rng() * 2); // 3-4 (width 7-9)
-  const chamberHalfW = 5 + Math.floor(rng() * 3); // 5-7 (width 11-15)
-
-  // Turn direction: away from entrance to maximize chamber space
-  const turnDir = anchorX > 16 ? -1 : anchorX < 16 ? 1 : (rng() < 0.5 ? -1 : 1);
-
-  // Zone sizes
-  const passageLen = 5 + Math.floor(rng() * 3); // 5-7 rows
-  const passageEnd = startRow + passageLen;
-  const bendLen = 3 + Math.floor(rng() * 2);    // 3-4 rows
-  const bendEnd = passageEnd + bendLen;
-
-  // Phase 1: Fill passage rows (narrow, drifts toward turn direction)
-  let cx = anchorX;
-  for (let y = startRow; y < passageEnd; y++) {
-    if (y > startRow + 1 && rng() < 0.35) {
-      cx += turnDir;
-      cx = Math.max(passageHalfW + 1, Math.min(30 - passageHalfW, cx));
-    }
-    const jL = (rng() < 0.25) ? 1 : 0;
-    const jR = (rng() < 0.25) ? 1 : 0;
-    left[y]  = Math.max(1, cx - passageHalfW + jL);
-    right[y] = Math.min(30, cx + passageHalfW - jR);
-  }
-
-  // Phase 2: Position chamber so passage's final position is at its trailing edge.
-  // Chamber extends in turnDir from passage. Guarantees column overlap at bend.
-  const extraOffset = Math.floor(rng() * 3); // 0-2 extra separation
-  const rawChamberX = cx + turnDir * (chamberHalfW - passageHalfW + extraOffset);
-  const chamberX = Math.max(chamberHalfW + 1, Math.min(30 - chamberHalfW, rawChamberX));
-
-  // Phase 3: Fill bend rows (smooth interpolation from passage to chamber)
-  const pL = cx - passageHalfW;
-  const pR = cx + passageHalfW;
-  const cL = chamberX - chamberHalfW;
-  const cR = chamberX + chamberHalfW;
-  for (let y = passageEnd; y < bendEnd; y++) {
-    const t = (y - passageEnd + 1) / bendLen;
-    left[y]  = Math.max(1, Math.round(pL + t * (cL - pL)));
-    right[y] = Math.min(30, Math.round(pR + t * (cR - pR)));
-  }
-
-  // Phase 4: Fill chamber rows (wide area with organic edge jitter)
-  for (let y = bendEnd; y <= endRow; y++) {
-    const jL = (rng() < 0.4) ? Math.floor(rng() * 2) : 0;
-    const jR = (rng() < 0.4) ? Math.floor(rng() * 2) : 0;
-    left[y]  = Math.max(1, chamberX - chamberHalfW + jL);
-    right[y] = Math.min(30, chamberX + chamberHalfW - jR);
-  }
-
-  return { left, right };
-}
+// ⛔ REMOVED in v1.10.22 (phase 1): `generateCaveOutline` was dead — its only caller was `buildCaveShape`.
 
 // Outline generator for path mode: run-based movement with bottom convergence.
 // Each wall picks a direction and holds it for several rows (smooth curves, not zigzag).
@@ -216,100 +143,7 @@ function generateCaveOutlinePath(anchorX, startRow, endRow, rng, maxWidth = 10) 
   return { left, right };
 }
 
-// Build cave shape: $00 perimeter, $30 interior, $5f outside
-// pathMode: trace perimeter as a path (exactly 2 $00 neighbors per tile)
-function buildCaveShape(tilemap, anchorX, startRow, endRow, rng, pathMode, clamp, maxWidth) {
-  if (pathMode) {
-    const { left, right } = generateCaveOutlinePath(anchorX, startRow, endRow, rng, maxWidth);
-
-    // Left wall: snake down from startRow to endRow
-    tilemap[startRow * 32 + left[startRow]] = CEILING;
-    for (let y = startRow; y < endRow; y++) {
-      const curr = left[y], next = left[y + 1];
-      if (next !== curr) tilemap[y * 32 + next] = CEILING; // L-bend horizontal
-      tilemap[(y + 1) * 32 + next] = CEILING;              // then down
-    }
-
-    // Bottom edge
-    for (let x = left[endRow]; x <= right[endRow]; x++) {
-      tilemap[endRow * 32 + x] = CEILING;
-    }
-
-    // Right wall: snake up from endRow to startRow
-    tilemap[startRow * 32 + right[startRow]] = CEILING;
-    for (let y = endRow; y > startRow; y--) {
-      const curr = right[y], next = right[y - 1];
-      if (next !== curr) tilemap[y * 32 + next] = CEILING; // L-bend horizontal
-      tilemap[(y - 1) * 32 + next] = CEILING;              // then up
-    }
-
-    // Fill interior: scan each row for outermost $00 tiles, fill between.
-    // `clamp` [x0,x1] restricts the scan to this chamber's columns so a second
-    // side-by-side chamber in the same row range doesn't merge with it.
-    const fl = clamp ? clamp[0] : 0, fr = clamp ? clamp[1] : 31;
-    for (let y = startRow; y <= endRow; y++) {
-      let minX = 32, maxX = -1;
-      for (let x = fl; x <= fr; x++) {
-        if (tilemap[y * 32 + x] === CEILING) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-        }
-      }
-      for (let x = minX + 1; x < maxX; x++) {
-        if (tilemap[y * 32 + x] !== CEILING) {
-          tilemap[y * 32 + x] = FLOOR;
-        }
-      }
-    }
-    return;
-  }
-
-  // ── Non-path mode (deeper floors): inside mask + boundary detection ──
-  const { left, right } = generateCaveOutline(anchorX, startRow, endRow, rng);
-
-  const inside = new Uint8Array(1024);
-  for (let y = startRow; y <= endRow; y++) {
-    for (let x = left[y]; x <= right[y]; x++) {
-      inside[y * 32 + x] = 1;
-    }
-  }
-  // Bridge row connects entrance to cave's first row
-  const connRow = startRow - 1;
-  if (connRow >= 0) {
-    const bridgeL = Math.min(anchorX - 2, left[startRow]);
-    const bridgeR = Math.max(anchorX + 2, right[startRow]);
-    for (let x = bridgeL; x <= bridgeR; x++) {
-      if (x >= 0 && x < 32) inside[connRow * 32 + x] = 1;
-    }
-  }
-
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      if (!inside[y * 32 + x]) continue;
-      const isEdge =
-        x === 0 || !inside[y * 32 + x - 1] ||
-        x === 31 || !inside[y * 32 + x + 1] ||
-        y === 0 || !inside[(y - 1) * 32 + x] ||
-        y === 31 || !inside[(y + 1) * 32 + x];
-      tilemap[y * 32 + x] = isEdge ? CEILING : FLOOR;
-    }
-  }
-
-  for (let y = startRow; y < endRow; y++) {
-    if (left[y + 1] < left[y]) {
-      for (let x = left[y + 1]; x <= left[y]; x++) tilemap[(y + 1) * 32 + x] = CEILING;
-    }
-    if (left[y + 1] > left[y]) {
-      for (let x = left[y]; x <= left[y + 1]; x++) tilemap[y * 32 + x] = CEILING;
-    }
-    if (right[y + 1] > right[y]) {
-      for (let x = right[y]; x <= right[y + 1]; x++) tilemap[(y + 1) * 32 + x] = CEILING;
-    }
-    if (right[y + 1] < right[y]) {
-      for (let x = right[y + 1]; x <= right[y]; x++) tilemap[y * 32 + x] = CEILING;
-    }
-  }
-}
+// ⛔ REMOVED in v1.10.22 (phase 1): `buildCaveShape` was dead — nothing called it, yet design-notes documented its parameters as though it were live.
 
 // Ensure every $00 tile connects to at least one other $00 (cardinal).
 // Isolated $00 tiles get demoted to $01 so they don't float alone.
@@ -538,28 +372,7 @@ function findExitWallPosition(tilemap, entranceX, entranceY, used, southWall) {
   return best;
 }
 
-function findInteriorFloor(tilemap, rng, used, bounds) {
-  const candidates = [];
-  for (let i = 0; i < 1024; i++) {
-    if (tilemap[i] !== FLOOR) continue;
-    const x = i % 32, y = (i - x) / 32;
-    if (used.has(`${x},${y}`)) continue;
-    if (x < 2 || x > 29 || y < 2 || y > 29) continue;
-    if (bounds && (y < bounds.top || y > bounds.bot || x < bounds.left || x > bounds.right)) continue;
-    const allFloor =
-      isFloorTile(tilemap[(y - 1) * 32 + x]) &&
-      isFloorTile(tilemap[(y - 2) * 32 + x]) &&
-      isFloorTile(tilemap[(y + 1) * 32 + x]) &&
-      isFloorTile(tilemap[(y + 2) * 32 + x]) &&
-      isFloorTile(tilemap[y * 32 + x - 1]) &&
-      isFloorTile(tilemap[y * 32 + x - 2]) &&
-      isFloorTile(tilemap[y * 32 + x + 1]) &&
-      isFloorTile(tilemap[y * 32 + x + 2]);
-    if (allFloor) candidates.push({ x, y });
-  }
-  if (candidates.length === 0) return null;
-  return candidates[Math.floor(rng() * candidates.length)];
-}
+// ⛔ REMOVED in v1.10.22 (phase 1): `findInteriorFloor` was dead — superseded by `findCornerFloor`.
 
 export function findCornerFloor(tilemap, rng, used, bounds) {
   const candidates = [];
@@ -689,7 +502,7 @@ function placePond(tilemap, rng, used) {
       for (let dx = 0; dx < pw; dx++) {
         const nx = pos.x + dx, ny = pos.y + dy;
         const isEdge = dx === 0 || dx === pw - 1 || dy === 0 || dy === ph - 1;
-        tilemap[ny * 32 + nx] = (isEdge && pw > 2) ? WATER_EDGE : WATER_CENTER;
+        tilemap[ny * 32 + nx] = (isEdge && pw > 2) ? WATER_EDGE_POND : WATER;
         used.add(`${nx},${ny}`);
       }
     }
@@ -1330,42 +1143,7 @@ function carveSmallCaveRoom(tilemap, cx, cy, rng) {
   return bR >= bL ? { top: bT, bot: bB, left: bL, right: bR } : null;
 }
 
-// Carve a jagged room at the pathway endpoint, then connect down to the cave.
-// Runs BEFORE addOverhang — just places FLOOR tiles.
-// Room is roughly 6-8 wide × 4-6 tall with random edge jitter.
-function carvePathwayRoom(tilemap, endX, endFloorY, pathDir, caveTopFloorY, rng) {
-  const rw = 6 + Math.floor(rng() * 3); // 6-8 wide
-  const rh = 4 + Math.floor(rng() * 3); // 4-6 tall
-
-  // Room positioned so the pathway enters from pathDir side
-  const roomLeft = pathDir === 1
-    ? Math.max(1, endX - 1)
-    : Math.max(1, endX - rw + 2);
-  const roomRight = Math.min(30, roomLeft + rw - 1);
-  // Room centered vertically on pathway end, with 2 extra rows on top for overhang
-  const roomTop = Math.max(2, endFloorY - 2 - Math.floor(rh / 2));
-  const roomBot = roomTop + rh - 1 + 2; // +2 for overhang rows
-
-  // Carve the room with jagged edges — all FLOOR, overhang handles walls
-  for (let row = roomTop; row <= roomBot; row++) {
-    const jl = Math.floor(rng() * 2);
-    const jr = Math.floor(rng() * 2);
-    const left = roomLeft + jl;
-    const right = roomRight - jr;
-    for (let cx = left; cx <= right; cx++) {
-      if (cx >= 0 && cx < 32) tilemap[row * 32 + cx] = FLOOR;
-    }
-  }
-
-  // Connect room down to the cave (3-wide shaft, all FLOOR)
-  const shaftX = Math.floor((roomLeft + roomRight) / 2);
-  for (let row = roomBot + 1; row <= caveTopFloorY; row++) {
-    for (const dx of [-1, 0, 1]) {
-      const cx = shaftX + dx;
-      if (cx >= 0 && cx < 32) tilemap[row * 32 + cx] = FLOOR;
-    }
-  }
-}
+// ⛔ REMOVED in v1.10.22 (phase 1): `carvePathwayRoom` was dead — superseded by the inline room carves.
 
 function generateBossRoom(tilemap, floorIndex) {
   // Crystal room — diamond layout from ROM map 148 (tileset 2, blue palettes)
@@ -1720,15 +1498,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const entrFarDir = -horizDir;
     const entrCornerX = entranceX;
     const entrFloorY = 7;
-    for (let dy = -4; dy <= 2; dy++) {
-      const isEdge = (dy <= -3 || dy >= 1);
-      const jl = isEdge ? Math.floor(rng() * 2) : 0;
-      const jr = isEdge ? Math.floor(rng() * 2) : 0;
-      for (let dx = jl; dx <= 4 - jr; dx++) {
-        const ax = entrCornerX + dx * entrFarDir, ay = entrFloorY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    carveChamber(tilemap, rng, { x: entrCornerX, y: entrFloorY, dir: entrFarDir });
 
     // Short H corridor — 4-6 steps, 3-row carve (1 walkable row after
     // overhang), no jitter. Same primitive as floor 2's H corridor
@@ -1749,15 +1519,7 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // 5×5 mid room — direct copy of floor 2's first 5×5 mid room
     // (lines 1544-1553 in the floor-2 branch).
-    for (let dy = -4; dy <= 2; dy++) {
-      const isEdge = (dy <= -3 || dy >= 1);
-      const jl = isEdge ? Math.floor(rng() * 2) : 0;
-      const jr = isEdge ? Math.floor(rng() * 2) : 0;
-      for (let dx = jl; dx <= 4 - jr; dx++) {
-        const ax = pathResult.endX + dx * horizDir, ay = pathResult.endFloorY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    carveChamber(tilemap, rng, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     // V corridor — 5-7 steps DOWN from middle of mid room.
     // Direct copy of floor 2's V corridor (lines 1557-1564).
@@ -1892,15 +1654,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const pathResult = { endX: Math.max(1, Math.min(30, pathEndX)), endFloorY: startFloorY };
 
     // 5×5 room with irregular edges
-    for (let dy = -4; dy <= 2; dy++) {
-      const isEdge = (dy <= -3 || dy >= 1);
-      const jl = isEdge ? Math.floor(rng() * 2) : 0;
-      const jr = isEdge ? Math.floor(rng() * 2) : 0;
-      for (let dx = jl; dx <= 4 - jr; dx++) {
-        const ax = pathResult.endX + dx * horizDir, ay = pathResult.endFloorY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    carveChamber(tilemap, rng, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     // Vertical pathway (1 tile wide)
     const vertDir = vertDirEarly;
@@ -1950,15 +1704,7 @@ function _generateFloor(romData, floorIndex, seed) {
     const exitPathEndX = exitPathStartX + exitPathLength * exitDir;
 
     // 5×5 exit room with irregular edges
-    for (let dy = -4; dy <= 2; dy++) {
-      const isEdge = (dy <= -3 || dy >= 1);
-      const jl = isEdge ? Math.floor(rng() * 2) : 0;
-      const jr = isEdge ? Math.floor(rng() * 2) : 0;
-      for (let dx = jl; dx <= 4 - jr; dx++) {
-        const ax = exitPathEndX + dx * exitDir, ay = exitPathFloorY + dy;
-        if (ax >= 1 && ax <= 30 && ay >= 0 && ay < 32) tilemap[ay * 32 + ax] = FLOOR;
-      }
-    }
+    carveChamber(tilemap, rng, { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
 
     // Cleanup + overhang
     fixDiagonalCeilingPinch(tilemap);
@@ -2374,12 +2120,11 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Pond — 2 water lines in one side room, extending into wall
     // 50% vertical (south wall), 50% horizontal (north wall into side wall)
-    const WATER = 0x04, WATER_EDGE = 0x23;
     const pondHorizontal = rng() < 0.5;
     {
       if (pondHorizontal) {
         // Horizontal: hugs north wall inside room, below overhang
-        // Top row = all WATER_EDGE ($23) — north wall water detail
+        // Top row = all WATER_EDGE_N ($23) — north wall water detail
         // Bottom row = all WATER ($04) — water body
         // Top row 1 tile longer, both extend into outer side wall
         const topY = sideRoomTopCarve + 2;    // inside room, below overhang
@@ -2389,7 +2134,7 @@ function _generateFloor(romData, floorIndex, seed) {
           // Top row (edge detail): starts 1 tile inside room, 6 into wall = 7 tiles
           for (let i = -1; i < 6; i++) {
             const x = leftRoomLeft - i;
-            if (x >= 0 && x < 32) tilemap[topY * 32 + x] = WATER_EDGE;
+            if (x >= 0 && x < 32) tilemap[topY * 32 + x] = WATER_EDGE_N;
           }
           // Bottom row (water): starts at boundary, 6 into wall = 6 tiles
           for (let i = 0; i < 6; i++) {
@@ -2401,7 +2146,7 @@ function _generateFloor(romData, floorIndex, seed) {
           // Top row (edge detail): starts 1 tile inside room, 6 into wall = 7 tiles
           for (let i = -1; i < 6; i++) {
             const x = rightRoomRight + i;
-            if (x >= 0 && x < 32) tilemap[topY * 32 + x] = WATER_EDGE;
+            if (x >= 0 && x < 32) tilemap[topY * 32 + x] = WATER_EDGE_N;
           }
           // Bottom row (water): starts at boundary, 6 into wall = 6 tiles
           for (let i = 0; i < 6; i++) {
@@ -2411,7 +2156,7 @@ function _generateFloor(romData, floorIndex, seed) {
         }
         // 2 rows of rocky wall above pond (covers full width including into-wall tiles)
         for (let x = 0; x < 32; x++) {
-          if (tilemap[topY * 32 + x] === WATER_EDGE) {
+          if (tilemap[topY * 32 + x] === WATER_EDGE_N) {
             tilemap[(topY - 1) * 32 + x] = WALL_ROCKY;
             tilemap[(topY - 2) * 32 + x] = WALL_ROCKY;
           }
@@ -2421,12 +2166,12 @@ function _generateFloor(romData, floorIndex, seed) {
         const outerX = pondSide === -1 ? leftRoomLeft : rightRoomRight;
         const innerX = pondSide === -1 ? leftRoomLeft + 1 : rightRoomRight - 1;
         // Outer: edge at sideRoomBotCarve-1, water from sideRoomBotCarve to +5 (6 into wall)
-        tilemap[(sideRoomBotCarve - 1) * 32 + outerX] = WATER_EDGE;
+        tilemap[(sideRoomBotCarve - 1) * 32 + outerX] = WATER_EDGE_N;
         for (let y = sideRoomBotCarve; y <= sideRoomBotCarve + 5; y++) {
           if (y < 32) tilemap[y * 32 + outerX] = WATER;
         }
         // Inner: edge at sideRoomBotCarve, water from +1 to +5 (5 into wall)
-        tilemap[sideRoomBotCarve * 32 + innerX] = WATER_EDGE;
+        tilemap[sideRoomBotCarve * 32 + innerX] = WATER_EDGE_N;
         for (let y = sideRoomBotCarve + 1; y <= sideRoomBotCarve + 5; y++) {
           if (y < 32) tilemap[y * 32 + innerX] = WATER;
         }
@@ -2437,7 +2182,7 @@ function _generateFloor(romData, floorIndex, seed) {
     pondTiles = new Set();
     for (let i = 0; i < 1024; i++) {
       const t = tilemap[i];
-      if (t === WATER || t === WATER_EDGE) {
+      if (t === WATER || t === WATER_EDGE_N) {
         pondTiles.add(`${i % 32},${(i - i % 32) / 32}`);
       }
     }
@@ -2449,7 +2194,7 @@ function _generateFloor(romData, floorIndex, seed) {
       const pondUsed = new Set();
       for (let i = 0; i < 1024; i++) {
         const t = tilemap[i];
-        if (t === WATER || t === WATER_EDGE) {
+        if (t === WATER || t === WATER_EDGE_N) {
           const x = i % 32, y = (i - x) / 32;
           for (let dy = -1; dy <= 1; dy++)
             for (let dx = -1; dx <= 1; dx++)

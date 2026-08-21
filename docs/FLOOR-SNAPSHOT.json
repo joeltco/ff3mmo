@@ -1,0 +1,15 @@
+{
+  "_what": "Structural digest of every generated dungeon map. Phase-1 refactors must not change it. Regenerate with --update ONLY for an intentional change, and say so in the changelog.",
+  "seeds": 400,
+  "base": 1754900000000,
+  "rows": {
+    "floor0": "b4a175a519342aec",
+    "floor1": "c1040b3c33044414",
+    "floor2": "0ea8edfa51a8002f",
+    "floor3": "7507b5da53dfc031",
+    "floor4": "12f8dacc9a1d2013",
+    "secretRooms": "790d9de0c108f76c",
+    "locked1010": "ecf0979dca89eaa1",
+    "locked1011": "38d52f85a8979cc1"
+  }
+}

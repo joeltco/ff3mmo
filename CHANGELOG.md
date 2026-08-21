@@ -1,3 +1,52 @@
+## 1.10.22 — 2026-08-20
+
+### Phase 1 started — the generator gets a vocabulary, and a gate that proves nothing moved
+
+`docs/DUNGEON-CHAMBERS-PLAN.md` §4 phase 1. Every change below is
+**byte-identical**: same tiles, same wiring, same everything, across 5 floors ×
+400 seeds plus the three side maps.
+
+**`tools/check-floor-snapshot.mjs` — the safety net, built first.** It hashes
+every generated map against `docs/FLOOR-SNAPSHOT.json`. Crucially it hashes the
+**wiring, not just the tilemap** — `triggerMap`, `dungeonDestinations`,
+`falseWalls`, `secretWalls`, `hiddenTraps`, `lockedDoors`, `rockSwitch`,
+`warpTile`. A refactor can preserve every tile and still break the way out, which
+is how a floor ends up looking perfect and being a trap. Proven on both a tile
+change (one extra chest on floor 1) and a **wiring-only** change (one destination
+rewritten, tilemap untouched) — the second is the one that matters.
+
+**`src/dungeon/tiles.js`** — one source for cave tile ids.
+`dungeon-locked-room.js` carried a hand-mirrored copy under a second set of names
+(`CEILING_TILE`, `ROCK_TILE`, `FLOOR_TILE`, `VOID_TILE`, `CHEST_TILE`,
+`BONES_TILE`, `DOOR_TILE`) beneath a header that literally said "mirrored from
+dungeon-generator.js". Its `LOCKED_ROOM_DOOR_TILE` export was imported by nothing
+and is gone.
+
+⛔ **`WATER_EDGE` was two constants with the same name and different values** —
+`0x08` at module scope, read only by the dead `placePond`, and `0x23` redefined
+inside floor 3's branch, shadowing it for every line below. One file, one name,
+two meanings. They are `WATER_EDGE_POND` and `WATER_EDGE_N` now, so the shadow
+cannot return.
+
+**`src/dungeon/chambers.js`** — `carveChamber` replaces the room carve that was
+written out **four times** (floor 1's entrance and mid rooms, floor 2's mid and
+exit rooms). Only three things ever varied: origin column, direction, floor row.
+The module documents the constraint that makes this dangerous: **rng call order
+is part of the contract** — one floor draws from one seeded stream, so a carve
+making one more or one fewer `rng()` call shifts every later chest, skeleton and
+corridor on that floor. It reads as "the whole floor changed", not as a carve bug.
+
+**213 lines of dead code removed** — `buildCaveShape` (94) and its only caller's
+callee `generateCaveOutline` (61), `carvePathwayRoom` (36), `findInteriorFloor`
+(22). `design-notes.md` documented `buildCaveShape`'s parameters as though it
+were live; that entry is corrected. **Kept on purpose:** `placePond` and
+`placeLockedRoom` are also unreachable, but the plan schedules reviving both for
+the chamber pool, so deleting them would be throwing away scheduled content.
+
+Still to come in phase 1: `corridors.js` (seven implementations, three named,
+four inline), `bossChamber.js` (§4c — one shape, pedestal moved into the crystal
+skin), and `shape.js` (the cleanup chain).
+
 ## 1.10.21 — 2026-08-20
 
 ### Planned — one boss-chamber shape, per-dungeon skins

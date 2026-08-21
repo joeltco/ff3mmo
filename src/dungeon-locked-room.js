@@ -21,6 +21,7 @@
 
 import { loadMap, processTriggerTiles } from './map-loader.js';
 import { loadRomAssets, mulberry32, scatterRoomLoot } from './dungeon-generator.js';
+import { CEILING, WALL_ROCKY, BONES, FLOOR, FILL_VOID, CHEST, DOOR } from './dungeon/tiles.js';
 
 // ── Source map ────────────────────────────────────────────────────────────
 
@@ -72,25 +73,10 @@ const SHOP_TO_CAVE = new Map([
   [0x7c, 0x7c],
 ]);
 
-// ── Cave tileset constants (mirrored from dungeon-generator.js) ───────────
-
-const CEILING_TILE = 0x00;
-const ROCK_TILE    = 0x01;
-const BONES_TILE   = 0x09;
-const FLOOR_TILE   = 0x30;
-const VOID_TILE    = 0x5f;
-const CHEST_TILE   = 0x7c;
-// Cave-tileset closed-door tile. The engine recognizes this as a door via
-// its collisionByte2 attribute ((cb2[0x70] >> 4) & 0x0F === 5) and runs the
-// open-on-touch animation (swaps to 0x7E for the open state, restores on
-// move-off via `_openReturnDoor` + movement.js). Same tile ID is the door
-// in the shop tileset too — engine logic is collisionByte2-driven, not
-// tile-ID-driven. v1.7.654.
-const DOOR_TILE    = 0x70;
-
-// Door tile this module places on the host chamber's wall. Exported so
-// caller / engine teleport-trigger code can register it.
-export const LOCKED_ROOM_DOOR_TILE = DOOR_TILE;
+// ── Cave tileset constants ────────────────────────────────────────────────
+// These used to be a hand-mirrored copy of dungeon-generator.js's block under a
+// second set of names — CEILING_TILE, ROCK_TILE, FLOOR_TILE, VOID_TILE,
+// CHEST_TILE, BONES_TILE, DOOR_TILE. One source now: `dungeon/tiles.js`.
 
 // Shop interior cache — map 3 is identical every load.
 let _replicaCache = null;
@@ -155,10 +141,10 @@ export function placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, opts = {}) 
     for (let c = 0; c < gw; c++) {
       const tile = grid[r][c];
       const wx = anchorX + c, wy = anchorY + r;
-      if (tile === VOID_TILE) continue;  // leave whatever was there
+      if (tile === FILL_VOID) continue;  // leave whatever was there
       tilemap[wy * 32 + wx] = tile;
       used.add(`${wx},${wy}`);
-      if (tile === FLOOR_TILE) interior.add(`${wx},${wy}`);
+      if (tile === FLOOR) interior.add(`${wx},${wy}`);
     }
   }
 
@@ -203,7 +189,7 @@ export function placeChamberDoor(tilemap, doorX, doorY) {
   // returns a coord, all required rocks are already in place. Modifying
   // anything here risks disconnecting the ceiling snake the dungeon
   // generator relies on.
-  tilemap[doorY * 32 + doorX] = DOOR_TILE;
+  tilemap[doorY * 32 + doorX] = DOOR;
 }
 
 /**
@@ -246,12 +232,12 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
     // chamber-adjacent rock pockets with full rock surrounds.
     for (let y = yMin; y <= yMax; y++) {
       for (let x = xMin; x <= xMax; x++) {
-        if (tilemap[y * 32 + x] !== ROCK_TILE) continue;
-        if (tilemap[y * 32 + x - 1] !== ROCK_TILE) continue;
-        if (tilemap[y * 32 + x + 1] !== ROCK_TILE) continue;
-        if (tilemap[(y - 1) * 32 + x] !== ROCK_TILE) continue;
-        if (tilemap[(y - 1) * 32 + x - 1] !== ROCK_TILE) continue;
-        if (tilemap[(y - 1) * 32 + x + 1] !== ROCK_TILE) continue;
+        if (tilemap[y * 32 + x] !== WALL_ROCKY) continue;
+        if (tilemap[y * 32 + x - 1] !== WALL_ROCKY) continue;
+        if (tilemap[y * 32 + x + 1] !== WALL_ROCKY) continue;
+        if (tilemap[(y - 1) * 32 + x] !== WALL_ROCKY) continue;
+        if (tilemap[(y - 1) * 32 + x - 1] !== WALL_ROCKY) continue;
+        if (tilemap[(y - 1) * 32 + x + 1] !== WALL_ROCKY) continue;
         if (!_isWalkable(tilemap[(y + 1) * 32 + x])) continue;
         candidates.push({ x, y });
       }
@@ -287,7 +273,7 @@ export function generateLockedRoomMap(rom, seed) {
   const rng = mulberry32(seed | 0);
 
   // Fill with void; place replica centered.
-  const tilemap = new Uint8Array(1024).fill(VOID_TILE);
+  const tilemap = new Uint8Array(1024).fill(FILL_VOID);
   const anchorX = 11;
   const anchorY = 10;
   placeLockedRoom(tilemap, rom, anchorX, anchorY, rng, { chests: 2, skeletons: 3 });
@@ -308,7 +294,7 @@ export function generateLockedRoomMap(rom, seed) {
 
   return {
     tileset: 0,
-    fillTile: VOID_TILE,
+    fillTile: FILL_VOID,
     skipRoomClip: true,
     // Spawn the player TWO ROWS ABOVE the door (on the 0x44 false-ceiling
     // at the top of the door spine), matching the magic shop's ROM entrance
@@ -343,5 +329,5 @@ export function generateLockedRoomMap(rom, seed) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function _isWall(t)     { return t === CEILING_TILE || t === ROCK_TILE; }
-function _isWalkable(t) { return t === FLOOR_TILE || t === BONES_TILE || t === DOOR_TILE; }
+function _isWall(t)     { return t === CEILING || t === WALL_ROCKY; }
+function _isWalkable(t) { return t === FLOOR || t === BONES || t === DOOR; }
