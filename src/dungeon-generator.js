@@ -17,10 +17,10 @@ import {
   PASSAGE_BTM, FILL_VOID, EVENT_TILE, EXIT_PREV, PASSAGE_ENTRY, DOOR,
   STAIRS_DOWN, TRAP_HOLE, CHEST, isFloorTile,
 } from './dungeon/tiles.js';
-import { carveChamber, carveWideChamber, carveBoxChamber } from './dungeon/chambers.js';
+import { carveChamber, carveWideChamber, carveBoxChamber, carveBottomBump } from './dungeon/chambers.js';
 import {
   createPlan, planChamber, planWideChamber, planBoxChamber,
-  planHLink, planVLink, planSpine, planBranch, planNote,
+  planHLink, planVLink, planSpine, planBranch, planOrganicRoom,
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
@@ -1084,11 +1084,12 @@ function _generateFloor(romData, floorIndex, seed) {
   // chest into each. Empty on every other branch.
   const extraRooms = [];
 
-  // Floors 1 and 2 build every chamber through a primitive, so their plans are
-  // COMPLETE. Floor 0's shape is a traced ceiling snake and floor 3 still carves
-  // its centre and side rooms inline, so theirs record only part of the map —
-  // `complete: false` says so rather than letting a partial plan read as whole.
-  const plan = createPlan(floorIndex, floorIndex === 1 || floorIndex === 2);
+  // Floors 1, 2 and 3 build every chamber through a primitive, so their plans
+  // are COMPLETE. Floor 0's shape is a traced ceiling snake — one boundary, not
+  // a set of rooms — and floor 4's chamber is authored, so neither is a chamber
+  // list. `complete: false` says so rather than letting a partial plan read as
+  // whole.
+  const plan = createPlan(floorIndex, floorIndex >= 1 && floorIndex <= 3);
 
   if (floorIndex === 4) {
     const pos = generateBossRoom(tilemap, floorIndex);
@@ -1679,24 +1680,14 @@ function _generateFloor(romData, floorIndex, seed) {
     // Long vertical corridor from row 26 up to roomBotCarve
     // Fattens 1 tile left or right in stretches, never both
     planSpine(plan, tilemap, rng, { x: entranceX, yFrom: corridorBottomY, yTo: roomBotCarve });
-    planNote(plan, 'centre', 'floor 3 carves its centre and side rooms inline — not yet a primitive');
 
     // Center room — organic carving (top rows narrow for cave ceiling shape)
-    for (let y = roomTopCarve; y <= roomBotCarve; y++) {
-      let rowL = roomLeft, rowR = roomRight;
-      const fromTop = y - roomTopCarve;
-      const fromBot = roomBotCarve - y;
-      if (fromTop === 0) { rowL += 1 + (rng() < 0.5 ? 1 : 0); rowR -= 1 + (rng() < 0.5 ? 1 : 0); }
-      else if (fromTop === 1) { rowL += (rng() < 0.5 ? 1 : 0); rowR -= (rng() < 0.5 ? 1 : 0); }
-      if (fromBot === 0) { if (rng() < 0.5) rowL++; if (rng() < 0.5) rowR--; }
-      for (let x = rowL; x <= rowR; x++) {
-        if (x >= 1 && x < 31 && y >= 1 && y < 31) tilemap[y * 32 + x] = FLOOR;
-      }
-    }
+    planOrganicRoom(plan, tilemap, rng, 'centre', {
+      left: roomLeft, right: roomRight, top: roomTopCarve, bot: roomBotCarve, topInset: 1,
+    });
     // Center room bottom bumps (1-2 columns extend down 1 tile)
     for (let i = 0, nb = 1 + Math.floor(rng() * 2); i < nb; i++) {
-      const bx = roomLeft + 1 + Math.floor(rng() * Math.max(1, roomRight - roomLeft - 1));
-      if (bx >= 1 && bx < 31) tilemap[(roomBotCarve + 1) * 32 + bx] = FLOOR;
+      carveBottomBump(tilemap, rng, { left: roomLeft, right: roomRight, row: roomBotCarve + 1 });
     }
 
     // Side rooms: 5 wide × 7 tall carved (5×5 walkable)
@@ -1722,41 +1713,23 @@ function _generateFloor(romData, floorIndex, seed) {
     // Left side room — organic carving (keep right edge full at path row)
     const sideRoomTopCarve = roomCenterY - 3;
     const sideRoomBotCarve = roomCenterY + 3;
-    for (let y = sideRoomTopCarve; y <= sideRoomBotCarve; y++) {
-      let rowL = leftRoomLeft, rowR = leftRoomRight;
-      const fromTop = y - sideRoomTopCarve;
-      const fromBot = sideRoomBotCarve - y;
-      if (fromTop === 0) { rowL += (rng() < 0.5 ? 1 : 0); rowR -= (rng() < 0.5 ? 1 : 0); }
-      else if (fromTop === 1) { rowL += (rng() < 0.5 ? 1 : 0); rowR -= (rng() < 0.5 ? 1 : 0); }
-      if (fromBot === 0) { if (rng() < 0.5) rowL++; if (rng() < 0.5) rowR--; }
-      if (y === roomCenterY) rowR = leftRoomRight; // path connects on right
-      for (let x = rowL; x <= rowR; x++) {
-        if (x >= 1 && x < 31 && y >= 1 && y < 31) tilemap[y * 32 + x] = FLOOR;
-      }
-    }
+    planOrganicRoom(plan, tilemap, rng, 'side-left', {
+      left: leftRoomLeft, right: leftRoomRight, top: sideRoomTopCarve, bot: sideRoomBotCarve,
+      keepEdge: (y) => (y === roomCenterY ? 'right' : null),   // the path meets it here
+    });
     // Left room bottom bump
     if (rng() < 0.6) {
-      const bx = leftRoomLeft + 1 + Math.floor(rng() * Math.max(1, leftRoomRight - leftRoomLeft - 1));
-      if (bx >= 1 && bx < 31) tilemap[(sideRoomBotCarve + 1) * 32 + bx] = FLOOR;
+      carveBottomBump(tilemap, rng, { left: leftRoomLeft, right: leftRoomRight, row: sideRoomBotCarve + 1 });
     }
 
     // Right side room — organic carving (keep left edge full at path row)
-    for (let y = sideRoomTopCarve; y <= sideRoomBotCarve; y++) {
-      let rowL = rightRoomLeft, rowR = rightRoomRight;
-      const fromTop = y - sideRoomTopCarve;
-      const fromBot = sideRoomBotCarve - y;
-      if (fromTop === 0) { rowL += (rng() < 0.5 ? 1 : 0); rowR -= (rng() < 0.5 ? 1 : 0); }
-      else if (fromTop === 1) { rowL += (rng() < 0.5 ? 1 : 0); rowR -= (rng() < 0.5 ? 1 : 0); }
-      if (fromBot === 0) { if (rng() < 0.5) rowL++; if (rng() < 0.5) rowR--; }
-      if (y === roomCenterY) rowL = rightRoomLeft; // path connects on left
-      for (let x = rowL; x <= rowR; x++) {
-        if (x >= 1 && x < 31 && y >= 1 && y < 31) tilemap[y * 32 + x] = FLOOR;
-      }
-    }
+    planOrganicRoom(plan, tilemap, rng, 'side-right', {
+      left: rightRoomLeft, right: rightRoomRight, top: sideRoomTopCarve, bot: sideRoomBotCarve,
+      keepEdge: (y) => (y === roomCenterY ? 'left' : null),
+    });
     // Right room bottom bump
     if (rng() < 0.6) {
-      const bx = rightRoomLeft + 1 + Math.floor(rng() * Math.max(1, rightRoomRight - rightRoomLeft - 1));
-      if (bx >= 1 && bx < 31) tilemap[(sideRoomBotCarve + 1) * 32 + bx] = FLOOR;
+      carveBottomBump(tilemap, rng, { left: rightRoomLeft, right: rightRoomRight, row: sideRoomBotCarve + 1 });
     }
 
     // Branch alcoves off corridor — horizontal paths with fat stretches, chests at ends

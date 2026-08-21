@@ -25,7 +25,7 @@ const fails = [];
 
 // Which floors record EVERY chamber. Pinned so a coverage change is deliberate
 // and shows up here rather than silently turning a partial plan into a claim.
-const COMPLETE = new Map([[0, false], [1, true], [2, true], [3, false], [4, false]]);
+const COMPLETE = new Map([[0, false], [1, true], [2, true], [3, true], [4, false]]);
 
 function footprint(c) {
   if (c.kind === 'room') {
@@ -39,6 +39,9 @@ function footprint(c) {
   }
   if (c.kind === 'box') {
     return { x0: c.x, x1: c.x + c.w, y0: c.y + (c.dyMin ?? -4), y1: c.y + (c.dyMax ?? 0) };
+  }
+  if (c.kind === 'organic') {
+    return { x0: c.left, x1: c.right, y0: c.top, y1: c.bot };
   }
   return null;   // inline note — nothing to check
 }

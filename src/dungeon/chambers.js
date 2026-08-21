@@ -94,3 +94,52 @@ export function carveBoxChamber(tilemap, { x, y, w, dyMin = -4, dyMax = 0 }) {
     }
   }
 }
+
+/**
+ * The organic room — floor 3's centre room and its two side rooms.
+ *
+ * Rows narrow toward the top so the ceiling reads as cave rather than as a lid,
+ * and the bottom row jitters in by up to one tile per side.
+ *
+ * @param {object} spec
+ * @param {number} spec.left @param {number} spec.right   column span
+ * @param {number} spec.top  @param {number} spec.bot     row span
+ * @param {number} [spec.topInset=0]  extra tiles the TOP row pulls in per side.
+ *   The centre room uses 1 (its top row is always inset at least one); the side
+ *   rooms use 0. It is added to the jitter, not instead of it — the draw count
+ *   per row is the same either way, which is what keeps the three rooms sharing
+ *   one stream position.
+ * @param {Function} [spec.keepEdge]  `(y) => 'left' | 'right' | null` — hold that
+ *   side at its full extent for that row, so the corridor always meets the room.
+ *   Applied AFTER both draws, never instead of them.
+ */
+export function carveOrganicRoom(tilemap, rng, { left, right, top, bot, topInset = 0, keepEdge = null }) {
+  for (let y = top; y <= bot; y++) {
+    let rowL = left, rowR = right;
+    const fromTop = y - top;
+    const fromBot = bot - y;
+    if (fromTop === 0) { rowL += topInset + (rng() < 0.5 ? 1 : 0); rowR -= topInset + (rng() < 0.5 ? 1 : 0); }
+    else if (fromTop === 1) { rowL += (rng() < 0.5 ? 1 : 0); rowR -= (rng() < 0.5 ? 1 : 0); }
+    if (fromBot === 0) { if (rng() < 0.5) rowL++; if (rng() < 0.5) rowR--; }
+    const keep = keepEdge && keepEdge(y);
+    if (keep === 'right') rowR = right;
+    else if (keep === 'left') rowL = left;
+    for (let x = rowL; x <= rowR; x++) {
+      if (x >= 1 && x < 31 && y >= 1 && y < 31) tilemap[y * 32 + x] = FLOOR;
+    }
+  }
+}
+
+/**
+ * One column of a room's bottom edge pushed down a tile — the bumps that stop a
+ * room's floor reading as a straight line.
+ *
+ * Makes exactly ONE rng draw (the column). How MANY bumps, and whether to place
+ * one at all, stays at the call site: floor 3's centre room rolls a count, its
+ * side rooms roll a probability, and moving either in here would change the
+ * order those draws happen in.
+ */
+export function carveBottomBump(tilemap, rng, { left, right, row }) {
+  const bx = left + 1 + Math.floor(rng() * Math.max(1, right - left - 1));
+  if (bx >= 1 && bx < 31) tilemap[row * 32 + bx] = FLOOR;
+}

@@ -20,7 +20,7 @@
 // plans record only part of what is on the map. `complete: false` marks that;
 // do not read an incomplete plan as "this is the whole floor".
 
-import { carveChamber, carveWideChamber, carveBoxChamber } from './chambers.js';
+import { carveChamber, carveWideChamber, carveBoxChamber, carveOrganicRoom } from './chambers.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun } from './corridors.js';
 
 /** @param {boolean} complete — does this plan record EVERY chamber on the floor? */
@@ -47,6 +47,14 @@ export function planWideChamber(plan, tilemap, rng, role, spec) {
 export function planBoxChamber(plan, tilemap, role, spec) {
   carveBoxChamber(tilemap, spec);
   plan.chambers.push({ role, kind: 'box', ...spec });
+  return spec;
+}
+
+/** Carve an organic room (column-span form) and record it. */
+export function planOrganicRoom(plan, tilemap, rng, role, spec) {
+  carveOrganicRoom(tilemap, rng, spec);
+  const { keepEdge, ...rest } = spec;          // a predicate is not plan data
+  plan.chambers.push({ role, kind: 'organic', keepEdge: !!keepEdge, ...rest });
   return spec;
 }
 
@@ -89,6 +97,8 @@ export function describePlan(plan) {
   for (const c of plan.chambers) {
     out.push(c.kind === 'inline'
       ? `  chamber ${c.role.padEnd(10)} inline    ${c.note}`
+      : c.kind === 'organic'
+      ? `  chamber ${c.role.padEnd(10)} organic cols ${c.left}..${c.right} rows ${c.top}..${c.bot}${c.keepEdge ? ' (edge held)' : ''}`
       : `  chamber ${c.role.padEnd(10)} ${String(c.kind).padEnd(6)} at ${c.x},${c.y}` +
         (c.dir ? ` dir ${c.dir > 0 ? '+' : '-'}` : '') +
         (c.w != null ? ` w${c.w}` : '') + (c.dyMin != null ? ` rows ${c.dyMin}..${c.dyMax}` : ''));

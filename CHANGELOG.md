@@ -1,3 +1,40 @@
+## 1.10.28 — 2026-08-21
+
+### Phase 2 — floor 3 joins the plan, and the plan shows the cloning
+
+Floor 3's centre and side rooms were the last chambers carved inline. All three
+were the same idiom with two differences, both applied AFTER the draws so the rng
+count is identical: the centre room insets its top row by an extra tile, and each
+side room holds one edge at full extent where the corridor meets it.
+`carveOrganicRoom` takes both as parameters. `carveBottomBump` takes the bumps
+that stop a room's floor reading as a straight line — one draw, with *how many*
+left at the call site, because the centre room rolls a count and the side rooms
+roll a probability.
+
+Floors 1, 2 and 3 now record every chamber. Floor 0 stays `complete: false` on
+purpose: its shape is a traced ceiling snake — one boundary, not a set of rooms —
+and floor 4's chamber is authored. Neither is a chamber list, and pretending
+otherwise would make the record lie.
+
+**The plan makes the cloning legible.** Floor 3 across three different seeds:
+
+```
+  chamber centre     organic cols 13..19 rows 6..12
+  chamber side-left  organic cols 3..7 rows 6..12 (edge held)
+  chamber side-right organic cols 25..29 rows 6..12 (edge held)
+  link    spine      col 16 rows 26..12
+```
+
+Identical every time — only the branch count and its length move. That is the
+0.727 pairwise-Jaccard measurement from §1 of the plan, restated as four lines you
+can read. Floor 1 over the same seeds puts its entrance at 14,7 then 25,7 then
+26,7, with the junction and direction moving to match.
+
+That contrast is the phase-3 target stated as data rather than as a complaint,
+and it is now something a tool can print instead of something I have to measure.
+
+Byte-identical, as every phase-1 and phase-2 step has been.
+
 ## 1.10.27 — 2026-08-21
 
 ### Phase 2 started — a floor now knows what it is made of
