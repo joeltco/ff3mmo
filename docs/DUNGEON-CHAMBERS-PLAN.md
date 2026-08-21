@@ -154,7 +154,7 @@ door-plus-standalone-map path is the live one), `buildCaveShape`,
 `generateCaveOutline`, `carvePathwayRoom`, `findInteriorFloor`, and the whole
 generic branch at `floorIndex >= 5`.
 
-### 3b. ✅ Secret corridors on a rock-slab floor — SOLVED v1.10.33
+### 3b. ⛔ Secret corridors on a rock-slab floor — STILL OPEN (v1.10.33 reverted)
 
 This is the single biggest structural finding and it constrains the whole design.
 
@@ -170,16 +170,30 @@ map edge: **no void, no snake, nothing to detour into.** The
 `if (floorIndex !== 0) return falseWalls` guard is not a policy choice, it is a
 statement of fact about the tilemap.
 
-**Done (v1.10.33).** `findRockTunnelSpots` + `carveRockTunnel` dig straight into
-the slab: a `$44` mouth in the room's wall, the standard cross-section (ceiling at
+⛔ **REVERTED in v1.10.40 after seeing one in the game.** `findRockTunnelSpots` +
+`carveRockTunnel` dug straight into the slab: a `$44` mouth in the room's wall, the standard cross-section (ceiling at
 y-3, rock at y-2/y-1, floor at y, ceiling at y+1) driven into virgin rock, and a
 hidden alcove with a chest at the end. No trigger and no map transition — the
 alcove is part of the floor, so none of floor 0's `falseWalls` machinery is needed.
 
-The prediction that this would be the hard case was **wrong, and backwards**: a
-slab has no perimeter to maintain and no void to fit a detour into, so tunnelling
-is *easier* there than on floor 0. Secrets now appear on floors 1-3 in 46% / 55% /
-57% of seeds, gated.
+⛔ **It was not a secret.** Dungeon floors set `skipRoomClip`, so the whole tilemap
+is drawn: the passage and its chest were fully visible, and the single disguised
+tile in the doorway read as **a stray wall tile blocking an open corridor**. A bug
+with treasure behind it.
+
+Floor 0's secret corridors work because they are carved into the VOID fill —
+surrounded by black, a corridor reads as hidden. A rock-slab floor has no void, so
+the same trick hides nothing. The "easier case" conclusion was about the CARVE; I
+never looked at the result.
+
+**If secrets are wanted on these floors, the mechanism the game already has is the
+boulder switch** (floor 2's `rockSwitch`): a rock you push, which opens a wall.
+That reads as a puzzle element rather than a mistake. Do not re-add a
+walk-through-wall secret whose passage is drawn open.
+
+⛔ Also removed: the gate demanding a secret rate on floors 1-3. A rate demanded by
+a gate is a rate something has to satisfy, and that pressure is what produced the
+bad mechanism.
 
 ⛔ **A tunnel must start from a REACHABLE tile, not merely a FLOOR one**, and
 ⛔ **the reachability mask must traverse passages** — see the changelog for both;

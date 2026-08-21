@@ -40,9 +40,9 @@ const BASE = 1761000000000;
 //             min distinct entrance positions]. null = exempt (authored).
 const LIMITS = new Map([
   [0, { jaccard: 0.40, always: 20,  entrances: 6, secretRate: 0.45, lockedRate: 0.35, topologies: 2 }],  // v1.10.31/37: was 0.610 / 72 / 2 / 1 shape
-  [1, { jaccard: 0.40, always: 20,  entrances: 15, secretRate: 0.35, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
-  [2, { jaccard: 0.30, always: 10,  entrances: 40, secretRate: 0.40, lockedRate: 0.35, flatBand: 0.58, topologies: 2 }],  // v1.10.36: was 2 entrances
-  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4, secretRate: 0.40, lockedRate: 0, flatBand: 0.58 }],  // v1.10.29-32: was 0.749 / 85 / 1
+  [1, { jaccard: 0.40, always: 20,  entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],   // no secrets on this floor (v1.10.40)
+  [2, { jaccard: 0.30, always: 10,  entrances: 40, secretRate: 0, lockedRate: 0.35, flatBand: 0.58, topologies: 2 }],   // no secrets on this floor (v1.10.40)  // v1.10.36: was 2 entrances
+  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4, secretRate: 0, lockedRate: 0, flatBand: 0.58 }],   // no secrets on this floor (v1.10.40)  // v1.10.29-32: was 0.749 / 85 / 1
   [4, null],
 ]);
 
@@ -113,7 +113,12 @@ for (const [f, lim] of LIMITS) {
     // irregularity has to come from jagged FLOOR EDGES, and when that lands this
     // becomes a limit again.
   }
-  // ⛔ VARIETY MUST NOT DELETE CONTENT. Moving a floor's rooms around changes
+  // ⛔ VARIETY MUST NOT DELETE CONTENT — but a rate demanded here is a rate
+  // something has to satisfy, and in v1.10.33 that pressure produced a "secret"
+  // that was an open corridor with one stray wall tile in the doorway. Floors
+  // 1-3 are back to 0: they have no secret mechanism, and requiring one from a
+  // gate is how a bad one gets invented. Floor 0 keeps its rate because its
+  // secret corridors are real and carved into void. Moving a floor's rooms around changes
   // where its optional features can be placed: floor 0's secret corridor needs
   // void columns outside the room wall, so a geometry change can quietly stop it
   // being placeable. Rates are gated so "more varied" can never mean "emptier".

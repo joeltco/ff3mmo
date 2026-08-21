@@ -1,3 +1,37 @@
+## 1.10.40 — 2026-08-21
+
+### Reverted — the "secret" rock tunnels were an open corridor with a stray wall tile
+
+Reported from play with a screenshot, and the screenshot is unarguable: a visible
+olive corridor, a visible chest at the end, and ONE tile of wall texture in the
+doorway. It does not read as a secret. It reads as a bug, because that is what it
+looks like.
+
+v1.10.33 dug a tunnel into the rock, disguised the mouth with `$44`
+FALSE_CEILING, and put a chest in an alcove at the end. ⛔ **Dungeon floors set
+`skipRoomClip`, so the whole tilemap is drawn** — the passage and the chest were
+never hidden at all. Only the doorway tile was disguised, and a single odd tile in
+an otherwise open corridor is indistinguishable from a mistake.
+
+⛔ **Floor 0's secret corridors work for a reason that does not transfer.** They
+are carved into the VOID fill: surrounded by black, a corridor reads as hidden. A
+rock-slab floor has no void, so the same trick hides nothing. §3b's conclusion
+that tunnelling into rock was "the easier case" was about the CARVE — and I
+verified it by checking the mouth was passable (513/513 by the game's own
+`isPassable`) and by rendering one floor in ASCII. Neither of those can show you
+that a thing looks wrong. I never looked at it in the game.
+
+Removed from floors 1-3. §3b is open again and the plan says so.
+
+⛔ **The secret-rate gate is removed too.** v1.10.33 added a requirement that
+floors 1-3 place secrets in ≥35-40% of seeds. A rate demanded by a gate is a rate
+something has to satisfy — that pressure is what kept a bad mechanism alive. Floor
+0 keeps its rate, because its secrets are real.
+
+**If secrets are wanted on those floors, the game already has the mechanism: the
+boulder switch** (floor 2's `rockSwitch`) — a rock you push that opens a wall.
+That reads as a puzzle element instead of a mistake. Not building it unasked.
+
 ## 1.10.39 — 2026-08-21
 
 ### Fixed — ceilings with three wall tiles underneath

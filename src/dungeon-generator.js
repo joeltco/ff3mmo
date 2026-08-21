@@ -20,9 +20,9 @@ import {
 import { carveChamber, carveWideChamber, carveBoxChamber, carveBottomBump } from './dungeon/chambers.js';
 import {
   createPlan, planChamber, planWideChamber, planBoxChamber,
-  planHLink, planVLink, planSpine, planBranch, planOrganicRoom, planElbow, planRockTunnel,
+  planHLink, planVLink, planSpine, planBranch, planOrganicRoom, planElbow,
 } from './dungeon/plan.js';
-import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand, findRockTunnelSpots } from './dungeon/corridors.js';
+import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
@@ -738,9 +738,6 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 
 
 // Floor feature counts per floor index
-// How deep a secret rock tunnel runs before its alcove.
-const ROCK_TUNNEL_LEN = 6;
-
 const FLOOR_CONFIG = [
   { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
   { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
@@ -2686,26 +2683,25 @@ function _generateFloor(romData, floorIndex, seed) {
   // cheaper route to it, it is a different thing that happens to move the same
   // metric. `check-floor-shape.mjs` now gates the depth-2 rule.
 
-  // ── Secret rock tunnels (v1.10.33) ──────────────────────────────────────
-  // Floor 0's secret corridors need void outside the cave wall and so cannot
-  // exist on a rock-slab floor (§3b). These tunnel straight INTO the rock
-  // instead, ending in a hidden alcove with a chest. Runs after every shaping
-  // pass — the overhang would re-wall the passage otherwise — and before
-  // `sealTinyPockets`, which would happily fill a 4-tile alcove.
-  if (floorIndex >= 1 && floorIndex <= 3) {
-    // A secret every single floor is not a secret. Roughly half the floors get
-    // one, and a few of those get a second. One line to tune if that feels wrong.
-    const wanted = (rng() < 0.5 ? 1 : 0) + (rng() < 0.15 ? 1 : 0);
-    for (let n = 0; n < wanted; n++) {
-      const reachable = reachableFloorMask(tilemap, entranceX, entranceY);
-      const spots = findRockTunnelSpots(tilemap, { len: ROCK_TUNNEL_LEN, reachable });
-      if (!spots.length) break;
-      const spot = spots[Math.floor(rng() * spots.length)];
-      const { alcove } = planRockTunnel(plan, tilemap, { ...spot, len: ROCK_TUNNEL_LEN });
-      tilemap[alcove.y * 32 + alcove.x] = CHEST;
-      secretWalls.add(`${spot.x},${spot.y}`);
-    }
-  }
+  // ⛔ SECRET ROCK TUNNELS REMOVED (v1.10.40). Added in v1.10.33 to close §3b,
+  // reverted after seeing one in the game.
+  //
+  // The mouth was a FALSE_CEILING tile and the passage behind it was carved as
+  // ordinary FLOOR. Dungeon floors set `skipRoomClip`, so the whole tilemap is
+  // drawn — which meant the passage and its chest were fully visible, and the
+  // single disguised tile in the doorway read as A STRAY WALL TILE BLOCKING AN
+  // OPEN CORRIDOR. Not a secret; a bug, with treasure behind it.
+  //
+  // Floor 0's secret corridors work because they are carved into the VOID fill:
+  // surrounded by black, a corridor reads as hidden. A rock-slab floor has no
+  // void, so the same trick cannot hide anything — the §3b conclusion that
+  // tunnelling into rock was "the easier case" was about the CARVE, and I never
+  // checked what it looked like afterwards.
+  //
+  // If secrets are wanted on these floors, the mechanism the game already has is
+  // the boulder switch (floor 2's `rockSwitch`): a rock you push, which opens a
+  // wall. That reads as a puzzle element instead of a mistake. Do not re-add a
+  // walk-through-wall secret whose passage is drawn open.
 
   // Last pass on the tilemap — AFTER the trap swap, so the map it walks is the
   // one the player gets. `dungeon-sweep.mjs` gates the result at 0.
