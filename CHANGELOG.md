@@ -1,3 +1,32 @@
+## 1.10.17 — 2026-08-20
+
+### Planned — the roguelike gets its own dungeon and map range
+
+`docs/DUNGEON-CHAMBERS-PLAN.md` §4b. Altar Cave keeps its five authored floors;
+the endless dungeon is separate, `mapId = 2000 + depth * 10 + kind`, which
+collides with nothing and keeps the engine's one-generated-map-per-id model.
+Beating a depth's boss offers a warp out or a north-wall doorway deeper — both
+armed on `battleSt.enemyDefeated`, the flag the crystal room already gates on.
+
+Eight integration points key off the Altar Cave range and were measured rather
+than assumed. Two would fail **silently**: `inDungeon = dungeonFloor >= 0 &&
+dungeonFloor < 4` stops random encounters dead past depth 3, and
+`_resolvedChestPool` has no pool for a new range, so the server would reject
+every chest claim. The `consumedTiles` wipe already covers `>= 1000`.
+
+Also recorded, because the design depends on it: **the choice has no stake
+today.** Loot banks the moment you pick it up — only *position* writes are
+overworld-only — and death is a full HP/MP restore at `ps.lastTown` with no gil,
+item or progress loss. So you would keep everything either way. Three options are
+written up to pick from before the boss chamber gets built; none is chosen.
+
+The chamber pool is drafted with weights and depth bands, all from mechanics
+already in the repo. Two entries are finished code that nothing reaches:
+`placePond` (every `FLOOR_CONFIG` has `ponds: 0`) and `placeLockedRoom`
+(imported, never called). Cheapest content in the plan.
+
+No code changed.
+
 ## 1.10.16 — 2026-08-20
 
 ### Fixed — floor 4 of Altar Cave could be skipped entirely, onto the boss

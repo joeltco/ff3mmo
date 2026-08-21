@@ -244,6 +244,111 @@ it now has, so this cannot silently come back:
 Set each threshold from the measurement after phase 3, and prove it the usual way
 — pin a floor's layout to a constant and confirm the gate fails.
 
+## 4b. The endless dungeon (its own map range)
+
+Decided 2026-08-20: the roguelike lives in a **separate dungeon with its own map
+range**, not in Altar Cave. Altar Cave keeps its five authored floors and its
+place in the story. Beating a depth's boss offers a choice — **warp out**, or take
+a **doorway on the north wall of the boss chamber** and go deeper.
+
+### Map ids
+
+Altar Cave holds 1000–1004, locked rooms 1010/1011, secret rooms 1020/1021.
+Proposed for endless, decodable in one line each:
+
+```
+ENDLESS_BASE = 2000
+mapId  = 2000 + depth * 10 + kind      // kind 0 floor, 1 locked, 2 secret, 3 boss
+depth  = ((mapId - 2000) / 10) | 0
+kind   = (mapId - 2000) % 10           // 6 kinds spare
+```
+
+Depth 0–999 occupies 2000–11999 and collides with nothing. It keeps the engine's
+existing model — one generated map per id, `dungeonDestinations` carrying
+`{ mapId }`, `loadMapById` regenerating — rather than introducing a second one.
+
+### The boss chamber's two exits
+
+Both armed only once `battleSt.enemyDefeated` — the crystal room already gates its
+boss sprite on exactly that flag (`map-loading.js`), so the pattern exists.
+
+- **Warp tile** — leave the dungeon, land back on the overworld.
+- **North-wall door (`$70`)** — descend to `depth + 1`.
+
+The current boss room's warp already sits at (6,5), the north alcove of the
+chamber, so the door goes on the same wall beside it.
+
+### What must change — measured, not guessed
+
+Each of these keys off the Altar Cave range and will silently misbehave for a new
+one:
+
+| site | what breaks |
+|---|---|
+| `battle-encounter.js` `inDungeon = dungeonFloor >= 0 && dungeonFloor < 4` | **random encounters stop dead past depth 3** — the dungeon goes quiet, no error |
+| `battle-encounter.js` `['altar_cave_f1'..'f4'][dungeonFloor]` | every depth ≥ 4 falls back to the *floor-1* table |
+| `economy-arbiter.js` `_resolvedChestPool(mapId)` | no pool for the new range → the server **rejects every chest claim** |
+| `map-loading.js` `romMap = (mapId === 1004) ? 148 : 111` | asset donor picked by hardcoded id |
+| `map-triggers.js` music `>= 1000 && < 1004` | wrong track |
+| `map-triggers.js` `exitingCrystalRoom = currentMapId === 1004` | exit handling |
+| `roster.js` `cave-N` / `crystal` labels | other players see no location |
+| `map-triggers.js` consumedTiles wipe `>= 1000` | **already covers it** ✅ (per the save-model rule, as long as the seed regenerates per run) |
+
+### ⛔ The choice has no stake yet — this is a design decision, not mine
+
+"Warp out or go deeper" is only a decision if going deeper can cost something.
+Measured, today it cannot:
+
+- **Loot banks the moment you pick it up.** Only *position* writes are
+  overworld-only (`setPositionGetter` returns null off the overworld);
+  inventory, gil, HP and stats persist from anywhere, dungeon included.
+- **Death is free.** `ps.hp <= 0` → Game Over → `respawnFromGameOver()` →
+  `_respawnAtLastTown()`, full HP/MP restore. No gil loss, no item loss, no
+  progress loss — the cost is the walk back.
+
+So as it stands you would keep everything either way and the doorway is a
+convenience, not a gamble. Three ways to give it teeth, in ascending harshness —
+**pick one before building the boss chamber**, because it changes what the room
+has to do:
+
+1. **Depth loot escrows.** Chests below depth 1 go to a run bag that only merges
+   into `ps` on warp-out. Death loses the bag, keeps everything you owned before.
+2. **Death drops the run.** Loot banks normally, but dying inside endless returns
+   you empty-handed from that run.
+3. **No stake — it is a depth chase.** The reward is the record and the tables;
+   warp-out is pure convenience.
+
+(1) is the classic roguelike shape and needs the least new machinery — a bag that
+merges or is discarded. (3) is honest and cheapest, and can become (1) later.
+
+### Chamber pool — weights and depth bands
+
+Once phase 1 makes chambers modules and phase 2 makes a floor a declaration, an
+endless floor is a draw from this pool. Everything below is built from mechanics
+already in the repo; nothing here needs new art.
+
+| chamber | weight | first depth | max/floor | built from |
+|---|---|---|---|---|
+| junction | 40 | 0 | — | inline room carve (phase 1 `carveChamber`) |
+| treasure | 25 | 0 | 2 | `scatterRoomLoot` + `findCornerFloor` |
+| bone pit | 15 | 1 | 1 | `BONES` density + per-zone encounter rate |
+| pond / spring | 12 | 2 | 1 | **`placePond` — already written, `ponds: 0` everywhere so it never runs** |
+| rubble | 12 | 2 | 2 | `WALL_ROCKY` as in-room obstacles |
+| trap chamber | 10 | 3 | 1 | floor 1's hidden `$74` holes |
+| boulder-switch | 8 | 4 | 1 | `rockSwitch {rocks, wallTiles}` from floor 2 |
+| mimic chamber | 8 | 4 | 1 | `loot-pools.js` already ships `{ weight: 12, monster: true }` |
+| secret chamber | 6 | 5 | 1 | `placeSecretPath` + `$44`, currently floor-0-only |
+| locked chamber | 5 | 6 | 1 | **`placeLockedRoom` — already written, imported, never called** |
+| boss chamber | — | every Nth | 1 | `generateBossRoom` |
+
+Two of those are switched-on-by-deletion: `placePond` and `placeLockedRoom` are
+finished code that nothing reaches. They are the cheapest content in the plan.
+
+**Monster tables are content, not generator work.** `ENCOUNTERS` has four Altar
+Cave tables. Depth bands should reuse them (1–4), and beyond that the deepest
+band repeats until new tables are authored. Say so in the UI rather than
+pretending the difficulty curve continues.
+
 ## 5. Risks
 
 - ⛔ **Never identify an exit by its tile.** The v1.10.15 sweep looked for the
