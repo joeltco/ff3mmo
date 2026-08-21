@@ -480,6 +480,24 @@ The pedestal therefore moves **out of the layout and into the crystal skin**, as
 decoration the skin stamps onto the shared shape. This is the concrete work item
 that "one shape" creates, and it must happen before a second dungeon exists.
 
+### ✅ Done (v1.10.26) — ending kind is split out
+
+`src/data/dungeons.js` holds it: `endingKindFor(mapId)` returns `crystal` for
+Altar Cave's chamber (1004) and `boss` for everything else, **defaulting to
+`boss`** for maps it has never heard of. The default is the whole point — the old
+code defaulted the other way and handed a Wind Crystal to any boss that died.
+
+Gated on it: `startCrystalReveal()` and `ps.unlockedJobs |= WIND_CRYSTAL_JOBS` in
+`_updateBossDissolve`, and the standing crystal NPC in `map-loading.js`. In a
+regular dungeon the boss is simply gone once beaten — nothing stands in its place.
+
+⛔ **The dissolve stays generic.** Every boss dissolves; that is the death
+animation, not a crystal thing. The boss-NPC placement is likewise ungated —
+every boss chamber has a boss.
+
+`tools/check-dungeon-ending.mjs` is a deploy gate, proven on both a flipped
+default and a job mask granted from a literal outside the gate.
+
 ### Skin is not ending kind — keep them separate
 
 Two independent axes, and conflating them is how we got here:

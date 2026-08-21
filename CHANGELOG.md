@@ -1,3 +1,42 @@
+## 1.10.26 — 2026-08-21
+
+### The crystal belongs to the crystal dungeon
+
+Altar Cave is a crystal dungeon. The Cave of Seals is not. Until now the code did
+not know the difference: `_updateBossDissolve` is the GENERIC boss-death handler —
+`battle-update.js`, `battle-ally.js` and `spell-cast.js` all route any non-random,
+non-PVP kill into `'boss-dissolve'` — and it called `startCrystalReveal()` and
+granted the Wind Crystal jobs unconditionally. A second dungeon's boss would have
+dissolved into a Wind Crystal and re-unlocked Warrior / Monk / White / Black / Red.
+
+`src/data/dungeons.js` now owns the distinction. `endingKindFor(mapId)` returns
+`crystal` for Altar Cave's chamber (1004) and `boss` for everything else, and
+**defaults to `boss`** for maps it has never heard of. That default is the point:
+the old code defaulted the other way, so a new dungeon inherited the crystal by
+doing nothing.
+
+Gated on it:
+
+- `startCrystalReveal()` and `ps.unlockedJobs |= WIND_CRYSTAL_JOBS`;
+- the standing crystal NPC after the boss is beaten (`map-loading.js`) — in a
+  regular dungeon the boss is simply gone, nothing stands in its place.
+
+⛔ **The dissolve stays generic**, and so does the boss NPC. Every boss dissolves —
+that is the death animation, not a crystal thing — and every boss chamber has a
+boss. Only the reveal, the standing crystal and the job unlock are crystal-ending.
+
+Altar Cave is unchanged: it is the crystal dungeon, so it still gets all three.
+
+**New deploy gate, `tools/check-dungeon-ending.mjs`**, proven on two reverts:
+flipping the default so an unknown map inherits the crystal, and granting the job
+mask from a literal outside the gate. Its first version also failed on
+`npc.js`, matching `export function startCrystalReveal(` as though it were a call
+— the same false-positive class as a grep matching its own comment, and excluded
+the same way.
+
+This was the gating item for a second dungeon. Skin (v1.10.24) and ending kind
+are now separate axes, which is what §4c asked for.
+
 ## 1.10.25 — 2026-08-20
 
 ### Phase 1 complete — `shape.js`, and a comment that was lying

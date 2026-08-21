@@ -60,6 +60,7 @@ import { tryStartFenixRevive, updateFenixRevive, resetFenixRevive, isFenixRevivi
 import { saveSlotsToDB } from './save-state.js';
 import { addItem, buildItemSelectList } from './inventory.js';
 import { startCrystalReveal } from './npc.js';
+import { isCrystalChamber, WIND_CRYSTAL_JOBS } from './data/dungeons.js';
 import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -1041,8 +1042,18 @@ function _updateBossDissolve(dt) {
     // the blink→crystal reveal. It blinks once the battle HUD exits (updateNpcs
     // only ticks in the overworld), then morphs to the standing crystal. The
     // turtle still respawns on map reload (re-fightable), see map-loading.
-    startCrystalReveal();
-    ps.unlockedJobs |= 0x3E; // Wind Crystal: bits 1-5 (Warrior, Monk, White Mage, Black Mage, Red Mage)
+    // ⛔ THE CRYSTAL BELONGS TO THE DUNGEON, NOT TO "a boss died".
+    // `_updateBossDissolve` is the GENERIC boss-death handler — battle-update,
+    // battle-ally and spell-cast all route any non-random, non-PVP kill here.
+    // It used to call `startCrystalReveal()` and grant the Wind Crystal jobs
+    // unconditionally, so the Cave of Seals' boss would have dissolved into a
+    // Wind Crystal and re-unlocked five jobs. Altar Cave is the crystal dungeon;
+    // the Cave of Seals is not. The DISSOLVE above stays generic — every boss
+    // dissolves, that is just the death animation.
+    if (isCrystalChamber(mapSt.currentMapId)) {
+      startCrystalReveal();
+      ps.unlockedJobs |= WIND_CRYSTAL_JOBS;
+    }
     // KO'd player: skip rewards and victory, straight to box-close (→ respawn).
     if (ps.hp <= 0) {
       battleSt.encounterExpGained = 0; battleSt.encounterGilGained = 0; battleSt.encounterCpGained = 0;

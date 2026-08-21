@@ -4,6 +4,7 @@ import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
 import { generateFloor, generateSecretRoomMap } from './dungeon-generator.js';
 import { generateLockedRoomMap } from './dungeon-locked-room.js';
+import { isCrystalChamber } from './data/dungeons.js';
 import { playTrack, stopMusic, playFF2Track, stopFF2Music, ff2MusicReady, TRACKS, FF2_TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
@@ -193,11 +194,16 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   if (floorIndex === 4 && getLandTurtleFrames() && !battleSt.enemyDefeated) {
     mapSt.bossSprite = { px: 6 * TILE_SIZE, py: 8 * TILE_SIZE };
     addBossNpc(6, 8);
-  } else if (floorIndex === 4 && battleSt.enemyDefeated) {
+  } else if (floorIndex === 4 && battleSt.enemyDefeated && isCrystalChamber(mapId)) {
     // Turtle already beaten this dungeon run — the Wind Crystal stands in its
     // place (no blink; the live blink→crystal reveal only plays on the winning
     // turn). No bossSprite → walkable, no re-trigger. Turtle respawns once
     // enemyDefeated resets on world-map exit (map-loading gate above).
+    //
+    // ⛔ CRYSTAL CHAMBERS ONLY. In a regular dungeon (the Cave of Seals) the
+    // boss is simply gone once it is beaten — no crystal stands in its place.
+    // The boss NPC branch above is deliberately NOT gated: every boss chamber
+    // has a boss.
     mapSt.bossSprite = null;
     addCrystalNpc(6, 8);
   } else {
