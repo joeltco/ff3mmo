@@ -116,24 +116,122 @@ a lot of unused cave.
   `buildCaveShape`'s parameters as though it were live), `carvePathwayRoom`,
   `findInteriorFloor`.
 
-## 3. The chamber types are already in there, unnamed
+## 3. The chamber and corridor system
 
-They exist as code but not as a vocabulary, which is why they can't be composed:
+### 3a. Chambers that exist today
 
-| role | today | where |
-|---|---|---|
-| boss chamber | `generateBossRoom` | its own function ✅ |
-| pond chamber | `placePond` + inline water lines | helper + 60 inline lines in floor 3 |
-| locked chamber | `placeLockedRoom`, maps 1010/1011 | `dungeon-locked-room.js` ✅ |
-| secret chamber | `generateSecretRoomMap` | its own function ✅ |
-| rock-puzzle chamber | inline | floor 2 |
-| trap chamber | inline 7×7 | floor 1 |
-| branch alcove | inline | floor 3 |
-| entrance / junction / exit room | inline ×4 | floors 0–3 |
+Every one of these works. What they share is being **floor-locked** — hardcoded
+into one `if (floorIndex === N)` branch — which is the cloning problem restated.
+Rates measured over 200 seeds per floor.
 
-Three already are modules. The plan is to finish the set.
+| chamber | floors | how often | built from |
+|---|---|---|---|
+| entrance (framed arch, in black) | 0 | always | `placeEntrance` + `openEntranceLanding` |
+| entrance (3-wide notch) | 1, 2, 3 | always | `placeDeepEntrance` |
+| exit stairs | 0, 1, 2 | always | `placeExit` / `placeDeepExit` |
+| exit door `$70` | 3 | always | inline → crystal room |
+| **locked chamber** behind a door + Magic Key | 0 → map 1010 | **99/200 (~50%)** | `findChamberDoorPos('north')` + `placeChamberDoor` + `generateLockedRoomMap` |
+| | 2 → map 1011 | **103/200 (~52%)** | same |
+| **secret corridor** (disguised `$44`) | **0 only** | **118/200 (59%)** | `placeSecretPath` → `findCorridorCandidates` → `carveCorridor` |
+| **secret room** (6 tiles, 2 chests) | 0 → maps 1020/1021 | 139 rooms / 200 seeds | `generateSecretRoomMap` |
+| trap chamber (3–5 hidden `$74`) | **1 only** | always | inline 7×7 |
+| boulder-switch chamber | **2 only** | always | inline `rockSwitch {rocks, wallTiles}` |
+| branch alcove + dead-end chest | **3 only** | always | inline |
+| pond | **3 only** | always | inline water lines `$04`/`$23` |
+| boss / crystal chamber | 4 | always, identical | `generateBossRoom`, tileset 2, warp at (6,5) |
+| loot scatter | all | per `FLOOR_CONFIG` | `scatterRoomLoot` + `findCornerFloor` |
+| moogle | 0 | always | `placeMoogleAtCaveCenter` (map-loading) |
 
----
+Secret-corridor odds, from the source: the primary corridor always spawns, a
+second one 50% of the time on the opposite side, and each is **independently 50%
+"false"**. Only a false corridor leads to a secret room — a non-false one is a
+plain dead end. That gives 62.5% theoretical; 59% measured, the gap being seeds
+where `carveCorridor` finds no candidate.
+
+Built but unreachable: `placePond` (`ponds: 0` in every `FLOOR_CONFIG`),
+`placeLockedRoom` (the in-chamber replica variant — imported, never called; the
+door-plus-standalone-map path is the live one), `buildCaveShape`,
+`generateCaveOutline`, `carvePathwayRoom`, `findInteriorFloor`, and the whole
+generic branch at `floorIndex >= 5`.
+
+### 3b. ⛔ Secret corridors are physically impossible on a rock-slab floor
+
+This is the single biggest structural finding and it constrains the whole design.
+
+`findCorridorCandidates` requires **`FILL_VOID` on the outer side** — the wall
+tile must have void beyond it, and the carver needs *four tiles* of void across
+rows `wy-3 … wy+1` to put the corridor in. `carveCorridor`'s own comment says
+what it is: *"carve a corridor as a snake detour — the `$00` border IS the
+snake"*, tracing the ceiling outline outward and reconnecting.
+
+Floor 0 is the only floor with a void fill (§0), so it is the only floor with a
+1-tile ceiling snake and empty space outside it. Floors 1–4 are solid rock to the
+map edge: **no void, no snake, nothing to detour into.** The
+`if (floorIndex !== 0) return falseWalls` guard is not a policy choice, it is a
+statement of fact about the tilemap.
+
+So "turn on secret rooms for the endless dungeon" is **not a flag flip**. It needs
+a second corridor carver that tunnels *into rock* — carve a pocket out of
+`CEILING`, wrap it in `WALL_ROCKY` per the overhang rule, and disguise the mouth
+with `$44`. That is new code, and it is the prerequisite for secret rooms at any
+depth. Do not schedule secret rooms before it.
+
+### 3c. The corridor system
+
+**Seven implementations, three named, four inline:**
+
+| # | what | where | shape |
+|---|---|---|---|
+| 1 | horizontal pathway | `carvePathway` | 3-row carve → 1 walkable |
+| 2 | vertical pathway | `carveVerticalPathway` | **2 tiles wide**, straight |
+| 3 | secret snake-detour | `carveCorridor` | void-only, see 3b |
+| 4 | room-to-room neck | floor 0 inline | 5 rows tall, overhang eats to 1 |
+| 5 | short H + V corridor | floors 1/2 inline | 3-row / 1-wide |
+| 6 | long fattening spine | floor 3 inline | 1 wide + random 1-tile bulges, 2–4 rows |
+| 7 | narrow side-room paths | floor 3 inline | 3-row carve |
+
+(1) and (2) are only reachable from the dead `floorIndex >= 5` branch.
+
+**The asymmetry is real and must be preserved, not smoothed away.** A horizontal
+corridor is carved 3 rows tall and `addOverhang` eats the top 2 into rock,
+leaving one walkable row — because rock hangs *below* a ceiling lip, so a
+sideways passage needs headroom above it. A vertical corridor is simply 1–2
+columns wide; no headroom problem. Any corridor module encodes this per axis. A
+naive `carveLine(from, to)` that treats both axes the same produces either
+floating rock or pinched ceiling, and `addOverhang` will fight it.
+
+**Why our floors read as boxy** (§0) is mostly here: corridors are carved
+axis-by-axis against literal coordinates, so they meet at right angles and run
+dead straight. Floor 3's fattening spine is the only one that varies its width,
+and it is the only corridor in the game that looks cave-like.
+
+**Proposed:** one `carveLink(tilemap, from, to, spec)` with
+`spec = { axis, width, jitter, kind }`, `kind ∈ { straight, fattening, neck,
+secret }`, replacing all seven. Two things it must add that nothing does today:
+**elbows** (an L or S route between chambers that are not axis-aligned) and
+**width variation along the run**, which is what makes floor 3's spine the one
+that works.
+
+### 3d. Boss chambers
+
+Today: `generateBossRoom` is handcrafted, byte-identical every seed (Jaccard
+1.000 — correct for an authored room), tileset 2, with the crystal as a warp tile
+at (6,5) in the north alcove.
+
+For endless, per §4b, the boss chamber needs to be a **template picked by tier**
+rather than one room — authored layouts, not procedurally generated, because a
+boss arena is a fight space and should be designed. It carries two exits, both
+armed on `battleSt.enemyDefeated`:
+
+- the **warp tile** — leave the dungeon;
+- a **`$70` door on the north wall** — descend to `depth + 1`.
+
+The crystal room's warp already sits in the north alcove, so both exits share that
+wall. `placeChamberDoor` already does north-wall doors for locked rooms — reuse
+it rather than writing a second door placer.
+
+Open: how many templates, and whether the tier boss is a fixed roster or drawn
+from the depth band's encounter table. Monster tables are content work (§4b).
 
 ## 4. Plan
 
@@ -212,6 +310,8 @@ This is where floor 3 stops being one map:
   "at most one puzzle chamber". This is what lets a boss/pond/secret chamber
   appear on a floor it does not currently appear on, which is the actual ask.
 - **Use more of the grid.** Target ~200 walkable tiles rather than 84–126.
+- **Rock-tunnelling secret corridors** (§3b) — the prerequisite for secret rooms
+  anywhere but floor 0. Schedule it here, not with the chamber pool.
 - **Contour irregularity**, per §0 — the overhang band should follow the floor's
   edge rather than bound it as a rectangle, and corridors should change width and
   direction along their length. This is the visual half of the ask and it is

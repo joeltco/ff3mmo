@@ -1,3 +1,42 @@
+## 1.10.18 — 2026-08-20
+
+### Planned — the chamber and corridor system, written out in full
+
+`docs/DUNGEON-CHAMBERS-PLAN.md` §3 replaces the earlier one-table sketch with the
+whole design: every chamber that exists with its **measured** spawn rate, the
+corridor inventory, boss chambers, and one finding that reorders the work.
+
+**Secret corridors cannot exist on a rock-slab floor.**
+`findCorridorCandidates` requires `FILL_VOID` on the outer side and four tiles of
+void across `wy-3 … wy+1`; `carveCorridor` is explicitly a detour of the ceiling
+snake. Floor 0 is the only floor with a void fill, so it is the only one with a
+snake and empty space outside it. `if (floorIndex !== 0) return falseWalls` is not
+a policy choice — it is a fact about the tilemap. Secret rooms at any other depth
+need a second carver that tunnels into rock, and that is now scheduled in phase 3
+*before* the chamber pool rather than assumed away inside it.
+
+Measured spawn rates, 200 seeds per floor — the pool weights in §4b were guesses
+sitting next to these, and should be set from what the odds are meant to be:
+
+- locked chamber + Magic Key door: floor 0 **99/200**, floor 2 **103/200**;
+- secret corridor: floor 0 **118/200 (59%)**, 139 secret rooms total. The primary
+  corridor always spawns, a second 50% of the time, each independently 50%
+  "false" — a non-false corridor is just a dead end. 62.5% theoretical.
+
+**Corridors: seven implementations, three named, four inline** — and the
+horizontal/vertical asymmetry is load-bearing. A horizontal run is carved 3 rows
+tall so `addOverhang` can eat 2 into rock, because rock hangs below a ceiling lip;
+a vertical run is simply 1–2 columns. A `carveLine` that treats both axes alike
+produces floating rock or pinched ceiling. Right-angle, dead-straight corridors
+are most of why our floors read boxy; floor 3's fattening spine is the only one
+that varies width and the only one that looks cave-like.
+
+Boss chambers stay **authored templates picked by tier**, not generated — a boss
+arena is a fight space. Both endless exits sit on the north wall and reuse
+`placeChamberDoor`, which already places north-wall doors for locked rooms.
+
+No code changed.
+
 ## 1.10.17 — 2026-08-20
 
 ### Planned — the roguelike gets its own dungeon and map range
