@@ -1141,9 +1141,17 @@ function _generateFloor(romData, floorIndex, seed) {
     var roomBot = 18 + Math.floor(rng() * 3);       // 18-20
     var aOnRight = rng() < 0.5;
     const ROOM_W = 7 + Math.floor(rng() * 3);       // 7-9
-    const halfW = 9 + Math.floor(rng() * 3);        // 9-11 columns per half
     const leftL = 5 + Math.floor(rng() * 2);        // 5-6  (never 4 — see above)
     const rightR = 26 + Math.floor(rng() * 2);      // 26-27
+    // ⛔ THE TWO HALVES MUST NOT OVERLAP, and the gap must be derived rather
+    // than hoped for. v1.10.31 sampled a fixed half-width of 9-11 columns from
+    // each end independently: of the 12 resulting combinations **5 overlapped**
+    // and 6 pushed the left half past column 16. Both break the neck (below),
+    // and the symptom is not a malformed room — it is room B ending up a
+    // SEPARATE CAVE with its own arch and chests that nothing can reach. Caught
+    // on floor 0 seed 1811002716217, which took a third seed base to surface.
+    const gap = 3 + Math.floor(rng() * 3);          // 3-5 columns of rock between
+    const halfW = Math.floor((rightR - leftL - gap) / 2);
     const LEFT_HALF = [leftL, leftL + halfW];
     const RIGHT_HALF = [rightR - halfW, rightR];
     const aHalfSel = aOnRight ? RIGHT_HALF : LEFT_HALF;
@@ -1154,30 +1162,58 @@ function _generateFloor(romData, floorIndex, seed) {
     const aHalf = aHalfSel;
     var bHalf = aOnRight ? LEFT_HALF : RIGHT_HALF;
 
+    // ── Topology (v1.10.37) ────────────────────────────────────────────
+    // `level`  — both rooms on the same row band, joined by a horizontal neck.
+    //            The only shape this floor has ever built.
+    // `tilted` — room B sits LOWER, so the cave descends as you cross it.
+    //
+    // ⛔ B goes DOWN, never up. The entrance is placed on room A's top edge and
+    // the exit on room B's bottom, so `roomTop`/`roomBot` are those two edges.
+    // Tilting B downward keeps them the extremes of the whole shape and every
+    // downstream scan — the secret-corridor rows, the feature bounding box —
+    // keeps working unchanged. Tilting upward would make `roomBot` stop being
+    // the lowest row and quietly cut room A out of those scans.
+    const topology = rng() < 0.5 ? 'level' : 'tilted';
+    plan.topology = topology;
+    const tilt = topology === 'tilted' ? 3 + Math.floor(rng() * 3) : 0;   // 3-5
+    const aTop = roomTop, aBot = roomBot;
+    const bTop = roomTop + tilt;
+    const bBot = Math.min(24, roomBot + tilt);   // leave rows for B's overhang
+    roomBot = bBot;                              // the exit lives on room B
+
     // Inside-shape mask: organic outline for each room, clamped to its half so
     // they don't overlap, unioned together.
     const inside = new Uint8Array(1024);
-    const addRoom = (anchor, half) => {
-      const { left, right } = generateCaveOutlinePath(anchor, roomTop, roomBot, rng, ROOM_W);
-      for (let y = roomTop; y <= roomBot; y++) {
+    const addRoom = (anchor, half, top, bot) => {
+      const { left, right } = generateCaveOutlinePath(anchor, top, bot, rng, ROOM_W);
+      for (let y = top; y <= bot; y++) {
         const l = Math.max(half[0], Math.min(left[y], right[y]));
         const r = Math.min(half[1], Math.max(left[y], right[y]));
         for (let x = l; x <= r; x++) inside[y * 32 + x] = 1;
       }
     };
-    addRoom(aAnchor, aHalf);
-    addRoom(bAnchor, bHalf);
+    addRoom(aAnchor, aHalf, aTop, aBot);
+    addRoom(bAnchor, bHalf, bTop, bBot);
 
     // Connecting neck: fill ONLY the void gap between the two rooms (not the
     // full span), 5 mask rows tall at the mid row. Keeping each room's own
     // shape gives each a simple perimeter loop, so a secret carved into an
     // outer wall can't cut a room in half. After overhang eats 2 rows the neck
     // becomes a 1-tile corridor that's part of the single perimeter.
-    const cy = roomTop + Math.floor((roomBot - roomTop) / 2);
+    // ⛔ The neck must sit in the rows BOTH rooms occupy. With a tilt that is
+    // `bTop..aBot`, not the whole shape's span — a neck row outside the overlap
+    // has nothing to join on one side and the two rooms stay separate caves.
+    const overlapTop = Math.max(aTop, bTop), overlapBot = Math.min(aBot, bBot);
+    const cy = overlapTop + Math.floor((overlapBot - overlapTop) / 2);
+    // ⛔ SPLIT AT THE ACTUAL GAP, not at column 16. The hardcoded midline assumed
+    // each room stayed on its own side of it; once the left half can reach column
+    // 16 or beyond, the right-hand scan finds ROOM A's own tiles, `rightMin` lands
+    // inside room A, and the neck fills a span that connects nothing.
+    const neckSplit = Math.floor((LEFT_HALF[1] + RIGHT_HALF[0]) / 2);
     for (let ny = cy - 2; ny <= cy + 2; ny++) {
       let leftMax = -1, rightMin = 32;
-      for (let x = 0; x < 16; x++) if (inside[ny * 32 + x]) leftMax = x;
-      for (let x = 16; x < 32; x++) if (inside[ny * 32 + x]) { rightMin = x; break; }
+      for (let x = 0; x < neckSplit; x++) if (inside[ny * 32 + x]) leftMax = x;
+      for (let x = neckSplit; x < 32; x++) if (inside[ny * 32 + x]) { rightMin = x; break; }
       if (leftMax >= 0 && rightMin < 32) {
         for (let x = leftMax + 1; x < rightMin; x++) inside[ny * 32 + x] = 1;
       }
@@ -1442,9 +1478,13 @@ function _generateFloor(romData, floorIndex, seed) {
     // travel, not into it: this floor runs up from row 24 or down from row 8, so
     // a mid room nudged the wrong way crowds the 7x7 chamber it is about to drop
     // into. Offsetting against `vertDirEarly` keeps the run length intact.
-    const midFloorY = topology === 'zigzag'
-      ? startFloorY - vertDirEarly * (2 + Math.floor(rng() * 2))
-      : startFloorY;
+    // ⛔ EXACTLY TWO ROWS. Three strands this floor's exit room and part of its
+    // puzzle: the chain from here — corridor, 5x5 room, vertical drop, 7x7
+    // chamber, then the exit path doubling back — is long and every link is
+    // positioned off the last, so the offset compounds down it. Measured over
+    // 3,000 seeds per floor across five seed bases: offset 2 clean on all five,
+    // offset 3 failing on three of them. It took a FOURTH base to surface at all.
+    const midFloorY = topology === 'zigzag' ? startFloorY - vertDirEarly * 2 : startFloorY;
 
     // Entrance room: 3-4 wide, no jitter (too small — enforceMinCeilingGap eats thin runs)
     const entrBaseW = 2 + Math.floor(rng() * 2); // dx 0..2 or 0..3
@@ -2639,11 +2679,18 @@ function _generateFloor(romData, floorIndex, seed) {
   // is dug through the roughened rock rather than having its own neat band
   // roughened afterwards, and before `sealTinyPockets` — though it can strand
   // nothing, since it only ever converts CEILING to WALL_ROCKY.
-  // ⛔ NOT floor 4. The crystal chamber is AUTHORED — a boss arena is designed,
-  // not roughened — and it is exempt from the variety gate for the same reason.
-  // Caught by the snapshot: floor 4's hash moved on the first attempt, which is
-  // the one floor whose hash should never move for a procedural reason.
-  if (floorIndex !== 4) roughenOverhang(tilemap, rng);
+  // ⛔ SLAB FLOORS ONLY (1-3).
+  //   - NOT floor 4: the crystal chamber is AUTHORED, and is exempt from the
+  //     variety gate for the same reason. Caught by the snapshot, whose floor-4
+  //     hash should never move for a procedural reason.
+  //   - NOT floor 0: its ceiling is a single-tile lip tracing the cave
+  //     silhouette, and promoting one of its tiles to rock CUTS THE SNAKE.
+  //     v1.10.34 relied on a "three ceiling rows above" guard to confine this to
+  //     slab interiors; floor 0 has spots that satisfy it, and shipped with the
+  //     perimeter broken on 197 of 200 seeds. Floor 0 does not want this anyway:
+  //     its band IS the cave outline, not a slab lid, which is why it was never
+  //     part of the contour measurement.
+  if (floorIndex >= 1 && floorIndex <= 3) roughenOverhang(tilemap, rng);
 
   // ── Secret rock tunnels (v1.10.33) ──────────────────────────────────────
   // Floor 0's secret corridors need void outside the cave wall and so cannot

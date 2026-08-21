@@ -1,3 +1,69 @@
+## 1.10.37 — 2026-08-21
+
+### Floor 0 rolls a topology — and two shipped bugs surfaced doing it
+
+Floor 0 picks `level` (both rooms on one band, joined by a horizontal neck — the
+only shape it has ever built) or `tilted` (room B sits 3-5 rows lower, so the cave
+descends as you cross it), 95/105 over 200 seeds. Jaccard **0.408 → 0.329**, fixed
+tiles **24 → 7**.
+
+⛔ **B tilts DOWN, never up.** The entrance is placed on room A's top edge and the
+exit on room B's bottom, so `roomTop`/`roomBot` are those two edges. Tilting down
+keeps them the extremes of the whole shape and every downstream scan — the
+secret-corridor rows, the feature bounding box — keeps working. Tilting up would
+stop `roomBot` being the lowest row and quietly cut room A out of those scans.
+
+### ⛔ `roughenOverhang` had been cutting floor 0's ceiling snake since v1.10.34
+
+Floor 0's shape is a single traced perimeter, and v1.10.34's contour pass promotes
+ceiling tiles to rock. Its "three ceiling rows above" guard was supposed to confine
+that to slab interiors; floor 0 has spots satisfying it, and the pass shipped
+**splitting the perimeter on 197 of 200 seeds**.
+
+Nothing caught it because nothing could: a split snake breaks no correctness
+invariant. Floors stayed connected, exits reachable, chests openable. It is purely
+how the cave looks, and I only found it while trying to *gate* the claim — my
+first measurement said the snake was broken on every seed including the
+pre-existing `level` shape, which sent me to instrument the generator, which showed
+one perimeter inside `_generateFloor` and several in the returned tilemap.
+
+Floor 0 is excluded now, and `check-floor-plan` gates it: **150/150 seeds are one
+perimeter**, and 1/150 when the pass is let back in. ⛔ The gate counts `$44`
+FALSE_CEILING as a connector — a `$00`-only flood reports a healthy snake as
+broken, a phantom that has cost a long session before.
+
+### ⛔ Floor 0's halves could overlap — v1.10.31
+
+Room B could end up **a separate cave**, with its own entrance arch and chests,
+that nothing reaches. v1.10.31 sampled a 9-11 column half-width from each end
+independently: of the 12 resulting combinations **5 overlapped** and 6 pushed the
+left half past column 16 — which is where the neck's left/right scan splits, so
+the right-hand scan found room A's own tiles and the neck joined nothing.
+
+The half-width is derived from a rolled 3-5 column gap now, so the halves cannot
+overlap, and the neck splits at the actual gap rather than a hardcoded column 16.
+It took a third seed base to surface.
+
+### ⛔ Floor 2's zigzag offset must be exactly 2 — v1.10.35
+
+Three rows strands its exit room and part of its puzzle. The chain from the mid
+room — corridor, 5×5 room, vertical drop, 7×7 chamber, exit path doubling back —
+is long, and every link is positioned off the last, so the offset compounds.
+Measured over 3,000 seeds per floor across five bases: **offset 2 clean on all
+five, offset 3 failing on three**. It took a fourth base to surface.
+
+### Phase 3, final
+
+| floor | Jaccard | fixed | entrances | secrets | topologies |
+|---|---|---|---|---|---|
+| 0 | 0.329 | 7 | 9 | 49% | 2 |
+| 1 | 0.189 | 0 | 23 | 46% | 2 |
+| 2 | 0.139 | 0 | 80 | 53% | 2 |
+| 3 | 0.259 | 6 | 22 | 57% | 4 |
+| 4 | authored — exempt |
+
+Every floor rolls its shape. Verified across five seed bases.
+
 ## 1.10.36 — 2026-08-21
 
 ### Floor 2's entrance moves — phase 3 complete

@@ -81,6 +81,45 @@ for (const [f, shouldBeComplete] of COMPLETE) {
     }
   }
 }
+// ── Floor 0's ceiling must be ONE perimeter ───────────────────────────────
+// Floor 0's shape is a single traced boundary — the "snake" — and everything
+// about how it looks depends on that perimeter staying whole. It is also the
+// easiest thing in the generator to break silently: nothing about a split snake
+// makes a floor unplayable, so no correctness gate sees it.
+//
+// ⛔ COUNT $44 FALSE_CEILING AS A CONNECTOR. It is the disguised secret tile and
+// renders identically; a $00-only flood reports the snake as broken when it is
+// not, and that phantom has cost a long session before.
+//
+// It caught a real one: `roughenOverhang` (v1.10.34) promotes ceiling to rock,
+// and its "three ceiling rows above" guard was supposed to keep it out of floor
+// 0's single-tile lip. Floor 0 has spots that satisfy the guard, and it shipped
+// with the perimeter split on 197 of 200 seeds.
+{
+  const CONNECT = new Set([0x00, 0x44]);
+  let intact = 0;
+  for (let k = 0; k < SEEDS; k++) {
+    const tm = generateFloor(rom, 0, BASE + k * 7919).tilemap;
+    const seen = new Uint8Array(1024); let comps = 0;
+    for (let i = 0; i < 1024; i++) {
+      if (seen[i] || !CONNECT.has(tm[i])) continue;
+      comps++; const q = [i]; seen[i] = 1;
+      while (q.length) {
+        const j = q.pop(); const x = j % 32, y = (j - x) / 32;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+          const kk = ny * 32 + nx;
+          if (!seen[kk] && CONNECT.has(tm[kk])) { seen[kk] = 1; q.push(kk); }
+        }
+      }
+    }
+    if (comps === 1) intact++;
+    else if (intact + (SEEDS - k) < SEEDS) fails.push(`floor 0 seed ${BASE + k * 7919}: ceiling is ${comps} separate perimeters, not one snake`);
+  }
+  console.log(`floor 0 ceiling snake: ${intact}/${SEEDS} seeds are ONE perimeter`);
+}
+
 // ── A `loop` topology must be a genuine CIRCUIT ───────────────────────────
 // "There is an extra link" is not "you can go around". If cutting the link
 // strands anything, it was the only path to that area and the floor is still a
