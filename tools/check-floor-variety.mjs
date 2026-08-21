@@ -31,7 +31,7 @@ const BASE = 1761000000000;
 // Per floor: [max mean pairwise Jaccard, max tiles present in >=90% of seeds,
 //             min distinct entrance positions]. null = exempt (authored).
 const LIMITS = new Map([
-  [0, { jaccard: 0.70, always: 90,  entrances: 2 }],
+  [0, { jaccard: 0.50, always: 35,  entrances: 6, secretRate: 0.45, lockedRate: 0.35 }],  // v1.10.31: was 0.610 / 72 / 2
   [1, { jaccard: 0.40, always: 20,  entrances: 15 }],
   [2, { jaccard: 0.30, always: 10,  entrances: 2 }],
   [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 2 }],  // v1.10.29-30: was 0.749 / 85 / 1
@@ -43,12 +43,15 @@ console.log(`floor  walkTiles  jaccard  alwaysTiles  entrances   limits`);
 for (const [f, lim] of LIMITS) {
   const masks = []; const count = new Uint16Array(1024); const ents = new Set();
   const topos = new Map();
+  let secretSeeds = 0, lockedSeeds = 0;
   let tot = 0;
   for (let k = 0; k < SEEDS; k++) {
     const r = generateFloor(rom, f, BASE + k * 7919);
     const seen = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
     ents.add(`${r.entranceX},${r.entranceY}`);
     if (r.plan?.topology) topos.set(r.plan.topology, (topos.get(r.plan.topology) || 0) + 1);
+    if (r.falseWalls?.size) secretSeeds++;
+    if (r.lockedDoors?.size) lockedSeeds++;
     const m = new Set();
     for (let i = 0; i < 1024; i++) if (seen[i]) { count[i]++; m.add(i); tot++; }
     masks.push(m);
@@ -73,6 +76,16 @@ for (const [f, lim] of LIMITS) {
   if (jac > lim.jaccard)        fails.push(`floor ${f}: two seeds share ${(jac * 100).toFixed(0)}% of their walkable tiles (limit ${(lim.jaccard * 100).toFixed(0)}%) — it is the same map every run`);
   if (always > lim.always)      fails.push(`floor ${f}: ${always} tiles are walkable in >=90% of seeds (limit ${lim.always}) — that much of the floor is fixed`);
   if (ents.size < lim.entrances) fails.push(`floor ${f}: only ${ents.size} distinct entrance position(s) across ${SEEDS} seeds (need ${lim.entrances})`);
+  // ⛔ VARIETY MUST NOT DELETE CONTENT. Moving a floor's rooms around changes
+  // where its optional features can be placed: floor 0's secret corridor needs
+  // void columns outside the room wall, so a geometry change can quietly stop it
+  // being placeable. Rates are gated so "more varied" can never mean "emptier".
+  if (lim.secretRate != null) {
+    const sr = secretSeeds / SEEDS, lr = lockedSeeds / SEEDS;
+    console.log(`         features: secret path ${secretSeeds}/${SEEDS} (${Math.round(sr * 100)}%), locked door ${lockedSeeds}/${SEEDS} (${Math.round(lr * 100)}%)`);
+    if (sr < lim.secretRate) fails.push(`floor ${f}: secret path in only ${Math.round(sr * 100)}% of seeds (need ${Math.round(lim.secretRate * 100)}%) — a geometry change has made secrets harder to place`);
+    if (lr < lim.lockedRate) fails.push(`floor ${f}: locked door in only ${Math.round(lr * 100)}% of seeds (need ${Math.round(lim.lockedRate * 100)}%)`);
+  }
   if (lim.topologies) {
     const spread = [...topos.entries()].map(([k, v]) => `${k} ${v}`).join(', ');
     console.log(`         topologies: ${spread || '(none recorded)'}`);

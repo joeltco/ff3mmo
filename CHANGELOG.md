@@ -1,3 +1,54 @@
+## 1.10.31 — 2026-08-21
+
+### Phase 3 — floor 0, and a sealed corridor it uncovered
+
+Floor 0's skeleton was literals too: rows 5..19, halves `[4,14]` and `[17,27]`,
+an 8-wide room, anchors at 9 and 22. Sampled now.
+
+| | before | after | gate |
+|---|---|---|---|
+| mean pairwise Jaccard | 0.610 | **0.408** | 0.50 |
+| tiles walkable in ≥90% of seeds | 72 | **24** | 35 |
+| distinct entrance positions | 2 | **10** | 6 |
+
+### ⛔ A latent bug it landed on: a secret corridor opening into a one-tile nook
+
+A 600-seed run from a second base failed with **"5 sealed pocket tiles"** on floor
+0 — five tiles, one over `sealTinyPockets`' 4-tile cap, so it reached the sweep
+instead of being quietly filled.
+
+`findCorridorCandidates` checked only the single tile behind the wall. On seed
+1799000372193 that tile was FLOOR and the one beyond it was CEILING: the corridor
+connected to an isolated pocket rather than to the room, and its whole run was
+sealed off. The scan now requires the tile TWO in to be walkable as well. Latent
+for as long as the corridor has existed; the room sampling started landing on it.
+
+**Two wrong fixes went in and came back out before that.** First: require the
+inside tile to be walkable — irrelevant, since `carveCorridor` *forces* that tile
+to FLOOR itself. Second: re-assert the corridor mouths after floor 0's post-secret
+reclose — plausible, but removing it again left three seed bases clean, so it was
+never load-bearing and its plumbing is gone too. The instrumented run that printed
+the actual scan is what ended the guessing: `insideTileAtScan=0x30 roomTile=0x0`.
+
+### ⛔ Variety cost content, and that is now gated
+
+Moving floor 0's rooms changed where its secret corridor can be placed:
+**secret-path rate 59% → 53%**, secret rooms 139 → 120. Five parameter variants
+were measured and none beat 53% while keeping the variety gain — the old fixed
+geometry happened to sit at a sweet spot for the corridor scan. This is a real
+trade-off, not a bug that tuning removes.
+
+`check-floor-variety` now gates FEATURE RATES as well as variety: floor 0 must
+place a secret path in ≥45% of seeds and a locked door in ≥35%. Proven by pushing
+the halves out to the map edge — secrets collapse to 4% and the gate fires. "More
+varied" can no longer quietly mean "emptier".
+
+If 53% is too low, the fix is a design decision rather than a tuning one — the
+corridor rolls 50/50 twice for whether it is a real secret, and that roll could be
+raised. Not doing that unasked.
+
+Snapshot re-baselined; only floor 0's hash moved. Verified across three seed bases.
+
 ## 1.10.30 — 2026-08-21
 
 ### Phase 3 — floor 3 rolls its topology

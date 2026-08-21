@@ -411,8 +411,18 @@ function findCorridorCandidates(tilemap, startRow, endRow, goLeft) {
       // secret corridor from carving through the room-connecting neck.
       for (let x = 3; x < 8; x++) {
         if (tilemap[y * 32 + x] !== CEILING) continue;
+        // ⛔ CHECK TWO TILES IN, NOT ONE. A single walkable tile behind the wall
+        // can be an isolated nook rather than the room: measured on floor 0 seed
+        // 1799000372193, the tile at x+1 was FLOOR and the one at x+2 was
+        // CEILING, so the corridor opened into a one-tile pocket and the whole
+        // 5-tile run was sealed off. `sealTinyPockets` caps at 4, so it survived
+        // all the way to the sweep as "5 sealed pocket tiles". Latent for as
+        // long as the corridor existed; v1.10.31's room sampling started landing
+        // on it.
         const inside = tilemap[y * 32 + x + 1];
         if (inside !== FLOOR && inside !== BONES && inside !== WALL_ROCKY) continue;
+        const beyond = x + 2 <= 31 ? tilemap[y * 32 + x + 2] : CEILING;
+        if (beyond !== FLOOR && beyond !== BONES) continue;
         if (tilemap[y * 32 + x - 1] !== FILL_VOID) continue;
         if (tilemap[(y - 1) * 32 + x] !== CEILING) continue;
         if (tilemap[(y + 1) * 32 + x] !== CEILING) continue;
@@ -435,6 +445,8 @@ function findCorridorCandidates(tilemap, startRow, endRow, goLeft) {
         if (tilemap[y * 32 + x] !== CEILING) continue;
         const inside = tilemap[y * 32 + x - 1];
         if (inside !== FLOOR && inside !== BONES && inside !== WALL_ROCKY) continue;
+        const beyond = x - 2 >= 0 ? tilemap[y * 32 + x - 2] : CEILING;   // see the left scan
+        if (beyond !== FLOOR && beyond !== BONES) continue;
         if (tilemap[y * 32 + x + 1] !== FILL_VOID) continue;
         if (tilemap[(y - 1) * 32 + x] !== CEILING) continue;
         if (tilemap[(y + 1) * 32 + x] !== CEILING) continue;
@@ -1108,13 +1120,35 @@ function _generateFloor(romData, floorIndex, seed) {
     // `var` hoist for floor-0 layout constants so the late locked-room hook
     // (placed after the final enforceMinCeilingGap so its 0x44 door can't
     // get gap-filled back to ceiling) can see them. v1.7.650.
-    var roomTop = 5, roomBot = 19;
+    // ── Skeleton, SAMPLED (v1.10.31 — phase 3) ─────────────────────────
+    // These were literals: rows 5..19, halves [4,14] and [17,27], an 8-wide
+    // room and anchors at 9 and 22. The floor therefore lived in the same rows
+    // and the same columns on EVERY seed — 0.610 mean pairwise Jaccard, 72
+    // fixed tiles, and exactly TWO entrance positions (the `aOnRight` flip).
+    //
+    // ⛔ THE LEFT HALF MUST NOT START BEFORE COLUMN 5. `findCorridorCandidates`
+    // hunts the secret corridor in columns 3-7 and needs FOUR void columns
+    // outside the room's wall (`x-1 … x-4`, all >= 1). A room whose wall sits at
+    // column 4 leaves only three, and the left-hand secret corridor stops being
+    // placeable at all. Same in mirror on the right: the wall must be at 29 or
+    // less. Widening the rooms toward the map edge would quietly delete the
+    // floor's secrets, so the sampling ranges are bounded by that, not by what
+    // fits on the map — and `check-floor-variety` now gates the resulting rate.
+    var roomTop = 4 + Math.floor(rng() * 3);        // 4-6
+    var roomBot = 18 + Math.floor(rng() * 3);       // 18-20
     var aOnRight = rng() < 0.5;
-    const aAnchor = aOnRight ? 22 : 9;   // Room A (entry)
-    const bAnchor = aOnRight ? 9 : 22;   // Room B (exit) — opposite side
-    const ROOM_W = 8;
-    const RIGHT_HALF = [17, 27], LEFT_HALF = [4, 14];
-    const aHalf = aOnRight ? RIGHT_HALF : LEFT_HALF;
+    const ROOM_W = 7 + Math.floor(rng() * 3);       // 7-9
+    const halfW = 9 + Math.floor(rng() * 3);        // 9-11 columns per half
+    const leftL = 5 + Math.floor(rng() * 2);        // 5-6  (never 4 — see above)
+    const rightR = 26 + Math.floor(rng() * 2);      // 26-27
+    const LEFT_HALF = [leftL, leftL + halfW];
+    const RIGHT_HALF = [rightR - halfW, rightR];
+    const aHalfSel = aOnRight ? RIGHT_HALF : LEFT_HALF;
+    // Anchor near each half's middle, jittered by a tile either way.
+    const midOf = (h) => Math.round((h[0] + h[1]) / 2) + (Math.floor(rng() * 3) - 1);
+    const aAnchor = midOf(aHalfSel);
+    const bAnchor = midOf(aOnRight ? LEFT_HALF : RIGHT_HALF);
+    const aHalf = aHalfSel;
     var bHalf = aOnRight ? LEFT_HALF : RIGHT_HALF;
 
     // Inside-shape mask: organic outline for each room, clamped to its half so
