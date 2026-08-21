@@ -252,6 +252,9 @@ New `src/dungeon/` leaf modules, no `window`/DOM, so tools can import them:
   `alcove`, `treasureChamber`.
 - `corridors.js` — `carveCorridor(tilemap, from, to, spec)` covering the
   horizontal, vertical and fattening variants now written inline.
+- `bossChamber.js` — the ONE boss-chamber shape (§4c), lifted out of
+  `generateBossRoom` with the crystal pedestal removed from the layout and moved
+  into the crystal skin. Takes a skin `{ donorMap, tileset, musicIn, musicOut }`.
 - `shape.js` — the cleanup chain that every floor ends with
   (`fixDiagonalCeilingPinch` → `removeCeilingProtrusions` → `enforceMinCeilingGap`
   → `ensureCeilingConnectivity` → `addOverhang` → `sealTinyPockets`).
@@ -390,7 +393,7 @@ pass on a comment. It also re-asserts the reachability fact, so if the room is
 ever reshaped to make the boss a genuine chokepoint, the check says so instead of
 silently protecting nothing.
 
-## 4c. Two kinds of dungeon ending
+## 4c. Boss chambers — one shape, per-dungeon skins, two ending kinds
 
 Decided 2026-08-20. Altar Cave is a **crystal dungeon** — it ends in a crystal
 room with a crystal and job unlocks. The Cave of Seals is a **regular dungeon** —
@@ -419,25 +422,55 @@ the crystal reveal and unlocks the five Wind Crystal jobs. A Cave of Seals boss
 dropped in as-is would dissolve into a Wind Crystal and re-unlock Warrior / Monk
 / White / Black / Red.
 
-### The split
+### The split — ONE shape, many skins
 
-**Ending kind becomes a property of the dungeon, not of floor index 4.**
+Revised 2026-08-20 (this replaces an earlier "authored templates picked by ending
+kind", which had several shapes — wrong).
 
-- **`crystal`** — crystal chamber: tileset 2, map-148 assets, pedestal,
-  `CRYSTAL_ROOM` music, crystal NPC, job-unlock mask, warp out. Altar Cave.
-- **`boss`** — boss chamber: tileset 0, normal cave assets, **normal cave music,
-  no pedestal, no crystal NPC, no job unlock**. A boss, and the warp out.
-  Cave of Seals.
+**There is ONE boss chamber shape.** It is modularized and used by every dungeon.
+What varies per dungeon is a **skin**. The crystal room stops being a bespoke room
+of its own: it is the boss chamber wearing crystal dressing, which is what gets us
+away from ending every dungeon in the same crystal room.
 
-Both share the chamber *layout* — which is what phase 1's `carveChamber` is for.
-The crystal pedestal moves out of the layout and into the crystal dressing, since
-`$3a`–`$3f` only mean anything in tileset 2. `generateBossRoom` stops being one
-hardcoded room and becomes an authored template selected by ending kind.
+A skin is four fields, and three of them are already driven by a single thing the
+code calls the **donor ROM map** — the map we borrow CHR, palettes and the battle
+background from. It just is not a table yet:
 
-Rewards are the part with real work in them: `_updateBossDissolve` must take the
-ending kind as well as the boss id before a second boss ships. Half of that is
-done (v1.10.20, below); the crystal-reveal and job-unlock half is not, and is the
-gating item for the Cave of Seals.
+| skin field | today | spelled as |
+|---|---|---|
+| CHR + palettes | map 111 cave, map 148 crystal | `REF_MAP_ID = 111`, `CRYSTAL_MAP_ID = 148`, chosen by `floorIndex === 4 ? loadCrystalAssets(…) : loadRomAssets(…)` |
+| tileset id | 0 cave, 2 crystal | `tileset: floorIndex === 4 ? 2 : 0` |
+| battle background | from the donor map's ROM lookup | `romMap = (mapId === 1004) ? 148 : 111` then `BATTLE_BG_MAP_LOOKUP + romMap` |
+| music | `CRYSTAL_ROOM` in, `CRYSTAL_CAVE` out | `map-loading.js`, `map-triggers.js` ×2 |
+
+So: `{ donorMap, tileset, musicIn, musicOut }` per dungeon, replacing four
+hardcoded ternaries on `floorIndex === 4` / `mapId === 1004`.
+
+- **Altar Cave** → donor 148, tileset 2, crystal music.
+- **Cave of Seals** → its own donor map, tileset 0, cave music. **No crystal
+  palettes, no music change.**
+
+### ⛔ One shape means the crystal pedestal cannot be in the shape
+
+`generateBossRoom` bakes the pedestal into its tile list — tiles `$3a`–`$3f` at
+rows 8–10, cols 5–7. Those ids only depict a crystal altar **in tileset 2**. Leave
+them in the shared shape and the Cave of Seals gets a crystal pedestal rendered in
+cave tiles: whatever `$3a`–`$3f` happen to be in tileset 0.
+
+The pedestal therefore moves **out of the layout and into the crystal skin**, as
+decoration the skin stamps onto the shared shape. This is the concrete work item
+that "one shape" creates, and it must happen before a second dungeon exists.
+
+### Skin is not ending kind — keep them separate
+
+Two independent axes, and conflating them is how we got here:
+
+- **Skin** (tiles, palettes, music, battle background) — what the room looks and
+  sounds like. Every dungeon has one.
+- **Ending kind** (`crystal` | `boss`) — what beating the boss *does*. The crystal
+  NPC, `startCrystalReveal()` and `ps.unlockedJobs |= 0x3E` belong here, not to
+  the skin. A dungeon could in principle wear crystal tiles without granting a
+  crystal; nothing should assume otherwise.
 
 ### Done — the boss id has one home (v1.10.20)
 

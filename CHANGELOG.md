@@ -1,3 +1,38 @@
+## 1.10.21 — 2026-08-20
+
+### Planned — one boss-chamber shape, per-dungeon skins
+
+`docs/DUNGEON-CHAMBERS-PLAN.md` §4c, revised. The previous draft said "authored
+templates picked by ending kind" — several shapes. That was wrong. There is
+**ONE boss chamber shape**, used by every dungeon; what varies is a **skin**. The
+crystal room stops being a bespoke room and becomes the boss chamber wearing
+crystal dressing, which is what stops every dungeon ending in the same room.
+
+The skin concept already exists in the code as the **donor ROM map** — the map we
+borrow CHR, palettes and the battle background from. It is just spelled as four
+hardcoded ternaries rather than a table: `REF_MAP_ID = 111` / `CRYSTAL_MAP_ID =
+148`, `floorIndex === 4 ? loadCrystalAssets(…)`, `tileset: floorIndex === 4 ? 2 :
+0`, and `romMap = (mapId === 1004) ? 148 : 111` feeding `BATTLE_BG_MAP_LOOKUP`.
+A skin is `{ donorMap, tileset, musicIn, musicOut }`. Altar Cave takes donor 148 /
+tileset 2 / crystal music; the Cave of Seals takes its own donor, tileset 0, cave
+music, no music change.
+
+⛔ **One shape means the crystal pedestal cannot live in the shape.**
+`generateBossRoom` bakes tiles `$3a`–`$3f` into its layout at rows 8–10, and those
+ids only depict a crystal altar in tileset 2. Left in the shared shape, the Cave
+of Seals would get a crystal pedestal rendered in whatever `$3a`–`$3f` are in
+tileset 0. The pedestal moves into the crystal skin as decoration stamped onto the
+shared shape — the concrete work item "one shape" creates, and a prerequisite for
+any second dungeon.
+
+Also recorded: **skin and ending kind are independent axes.** Skin is tiles /
+palettes / music / battle background. Ending kind (`crystal` | `boss`) is what
+beating the boss does — the crystal NPC, `startCrystalReveal()` and
+`ps.unlockedJobs |= 0x3E`. Conflating them is how the two got welded together in
+the first place. Phase 1 now owns lifting the shape into `bossChamber.js`.
+
+No code changed.
+
 ## 1.10.20 — 2026-08-20
 
 ### The boss's bestiary id now has one home
