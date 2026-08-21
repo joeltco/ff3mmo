@@ -1,3 +1,39 @@
+## 1.10.19 — 2026-08-20
+
+### Fixed — you could leave the dungeon without fighting the boss
+
+The crystal room's warp out had **no `enemyDefeated` check of any kind**. The
+Land Turtle was assumed to block the way to it. It does not, and never did:
+flooding the generated room with the real `MapRenderer.isPassable` and the
+turtle's tile (6,8) treated as solid still reaches the warp at (6,5) — **71 tiles
+against 72**, losing only the turtle's own tile. Walk around it, step on the warp,
+leave.
+
+`_checkWarpTile` now returns false until `battleSt.enemyDefeated`. Before the boss
+is beaten the tile is inert and the player walks over it. No message — there is no
+written line for it, and inventing one is content. `mapSt.warpTile` is only ever
+set from `generateBossRoom`, so the gate is boss-chamber-only by construction.
+
+**New deploy gate, `tools/check-boss-warp.mjs`.** It drives a REAL step onto the
+warp tile through `startMove` / `updateMovement` and watches for
+`mapSt.starEffect` — not a grep for the guard, which would pass on a comment.
+Proven by removing the gate: "WARP FIRED WITH THE BOSS ALIVE". It also re-asserts
+the reachability fact, so if the room is ever reshaped to make the boss a real
+chokepoint the check says so rather than silently protecting nothing.
+
+The harness caught its own bug first: `startMove(dir, isNewPress)` takes a
+direction constant, not a `(dx, dy)` delta, so the first version never landed on
+the warp tile and reported "warp did not fire" for both cases — which would have
+read as a pass. The check asserts the step landed before trusting either result.
+
+### Endless dungeon — dropped
+
+Dropped the same day it was drafted; `docs/DUNGEON-CHAMBERS-PLAN.md` §4b now
+records what it would have cost rather than the design. The one line that
+survives is the warp gate above. The chamber pool retargets at Altar Cave's own
+five floors — a pond or a boulder switch becomes something a floor can roll
+instead of something one floor owns.
+
 ## 1.10.18 — 2026-08-20
 
 ### Planned — the chamber and corridor system, written out in full

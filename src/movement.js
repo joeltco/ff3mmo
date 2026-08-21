@@ -481,8 +481,25 @@ function _checkFalseWall() {
   return true;
 }
 
+/**
+ * The boss chamber's warp out.
+ *
+ * ⛔ GATED ON `battleSt.enemyDefeated`. The boss does NOT block the way to it:
+ * flooding the crystal room with the real `isPassable` and the Land Turtle's
+ * tile (6,8) treated as solid still reaches the warp at (6,5) — 71 tiles against
+ * 72, losing only the turtle's own tile. The player could walk around the boss
+ * and warp straight out of the dungeon without fighting it. Positional blocking
+ * was assumed and never held.
+ *
+ * `mapSt.warpTile` is set from `result.warpTile`, which only `generateBossRoom`
+ * returns, so this gate is boss-chamber-only by construction.
+ *
+ * Before the boss is beaten the tile is inert — the player walks over it. No
+ * message: there is no written line for it, and inventing one is content.
+ */
 function _checkWarpTile() {
   if (!mapSt.warpTile) return false;
+  if (!battleSt.enemyDefeated) return false;
   const tx = mapSt.worldX / TILE_SIZE;
   const ty = mapSt.worldY / TILE_SIZE;
   if (tx !== mapSt.warpTile.x || ty !== mapSt.warpTile.y) return false;
