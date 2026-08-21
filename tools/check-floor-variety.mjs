@@ -12,6 +12,14 @@
 // perfectly-connected floor with every chest reachable can still be the same
 // floor every time. Hence a separate gate, with thresholds pinned per floor.
 //
+// It also gates CONTOUR: how flat the top edge of the rocky overhang band is.
+// `addOverhang` lays exactly two rocky rows under every ceiling, which gives a
+// room a straight dark lid — measured at 70%/61%/79% of adjacent band tops being
+// level on floors 1/2/3, against **42-63% in the cartridge's own caves** (ROM
+// maps 22, 113, 115). `roughenOverhang` brought ours to 46%/44%/48%, inside the
+// ROM's range. This is the one number that separated our look from the ROM's;
+// two earlier attempts at measuring "boxiness" did not discriminate at all.
+//
 // ⛔ FLOOR 4 IS EXEMPT AND MUST STAY THAT WAY. The crystal chamber is AUTHORED;
 // a boss arena is designed, not rolled. Jaccard 1.000 is correct there.
 //
@@ -32,18 +40,34 @@ const BASE = 1761000000000;
 //             min distinct entrance positions]. null = exempt (authored).
 const LIMITS = new Map([
   [0, { jaccard: 0.50, always: 35,  entrances: 6, secretRate: 0.45, lockedRate: 0.35 }],  // v1.10.31: was 0.610 / 72 / 2
-  [1, { jaccard: 0.40, always: 20,  entrances: 15, secretRate: 0.35, lockedRate: 0 }],
-  [2, { jaccard: 0.30, always: 10,  entrances: 2, secretRate: 0.40, lockedRate: 0.35 }],
-  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4, secretRate: 0.40, lockedRate: 0 }],  // v1.10.29-32: was 0.749 / 85 / 1
+  [1, { jaccard: 0.40, always: 20,  entrances: 15, secretRate: 0.35, lockedRate: 0, flatBand: 0.58 }],
+  [2, { jaccard: 0.30, always: 10,  entrances: 2, secretRate: 0.40, lockedRate: 0.35, flatBand: 0.58 }],
+  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4, secretRate: 0.40, lockedRate: 0, flatBand: 0.58 }],  // v1.10.29-32: was 0.749 / 85 / 1
   [4, null],
 ]);
+
+// How flat is the top edge of the rocky band? For each column carrying a band,
+// find its topmost rocky row and ask how often a neighbouring column's is level.
+// A rectangular lid approaches 100%; a band that follows the floor is far lower.
+function bandFlatness(tm) {
+  const top = new Array(32).fill(null);
+  for (let x = 0; x < 32; x++) {
+    for (let y = 0; y < 32; y++) if (tm[y * 32 + x] === 0x01) { top[x] = y; break; }
+  }
+  let pairs = 0, same = 0;
+  for (let x = 0; x < 31; x++) {
+    if (top[x] == null || top[x + 1] == null) continue;
+    pairs++; if (top[x] === top[x + 1]) same++;
+  }
+  return pairs ? same / pairs : 0;
+}
 
 const fails = [];
 console.log(`floor  walkTiles  jaccard  alwaysTiles  entrances   limits`);
 for (const [f, lim] of LIMITS) {
   const masks = []; const count = new Uint16Array(1024); const ents = new Set();
   const topos = new Map();
-  let secretSeeds = 0, lockedSeeds = 0;
+  let secretSeeds = 0, lockedSeeds = 0, flatSum = 0;
   let tot = 0;
   for (let k = 0; k < SEEDS; k++) {
     const r = generateFloor(rom, f, BASE + k * 7919);
@@ -53,6 +77,7 @@ for (const [f, lim] of LIMITS) {
     // Floor 0 records secrets as `falseWalls`; the slab floors record rock
     // tunnels in the plan. Both count as "this floor has a secret".
     if (r.falseWalls?.size || r.plan?.links?.some(l => l.kind === 'secret')) secretSeeds++;
+    if (lim?.flatBand != null) flatSum += bandFlatness(r.tilemap);
     if (r.lockedDoors?.size) lockedSeeds++;
     const m = new Set();
     for (let i = 0; i < 1024; i++) if (seen[i]) { count[i]++; m.add(i); tot++; }
@@ -78,6 +103,11 @@ for (const [f, lim] of LIMITS) {
   if (jac > lim.jaccard)        fails.push(`floor ${f}: two seeds share ${(jac * 100).toFixed(0)}% of their walkable tiles (limit ${(lim.jaccard * 100).toFixed(0)}%) — it is the same map every run`);
   if (always > lim.always)      fails.push(`floor ${f}: ${always} tiles are walkable in >=90% of seeds (limit ${lim.always}) — that much of the floor is fixed`);
   if (ents.size < lim.entrances) fails.push(`floor ${f}: only ${ents.size} distinct entrance position(s) across ${SEEDS} seeds (need ${lim.entrances})`);
+  if (lim.flatBand != null) {
+    const flat = flatSum / SEEDS;
+    console.log(`         band contour: ${Math.round(flat * 100)}% of adjacent band tops level (ROM caves 42-63%, limit ${Math.round(lim.flatBand * 100)}%)`);
+    if (flat > lim.flatBand) fails.push(`floor ${f}: ${Math.round(flat * 100)}% of adjacent overhang-band tops are level (limit ${Math.round(lim.flatBand * 100)}%) — the band is a straight lid again, not a contour`);
+  }
   // ⛔ VARIETY MUST NOT DELETE CONTENT. Moving a floor's rooms around changes
   // where its optional features can be placed: floor 0's secret corridor needs
   // void columns outside the room wall, so a geometry change can quietly stop it

@@ -1,3 +1,46 @@
+## 1.10.34 — 2026-08-21
+
+### Contour irregularity — the caves stop having straight lids
+
+The last item from §0, and the one behind "the maps look boxy". `addOverhang`
+lays **exactly two** rocky rows under every ceiling tile, so each room gets a
+dark band with a perfectly straight top edge, while the cartridge's caves have a
+band that wanders 1–3 tiles deep.
+
+Measured as the share of adjacent band-tops sitting level:
+
+| | floors 1 / 2 / 3 | ROM caves (maps 22, 113, 115) |
+|---|---|---|
+| before | 70% / 61% / **79%** | 42–63% |
+| after | **46% / 44% / 48%** | 42–63% |
+
+Floors 1 and 3 were well outside the cartridge's range. All three now sit inside
+it. **This is the number that actually separated our look from the ROM's** — the
+two "boxiness" metrics I tried back in §0 did not discriminate at all, and one
+scored ROM map 115 *boxier* than our floor 3.
+
+⛔ **`roughenOverhang` grows the band UPWARD, into the rock — never downward.**
+Extending it down converts FLOOR to WALL_ROCKY, which shrinks every room by a row,
+and the rooms are carved at a height that assumes the overhang eats exactly two.
+Growing up costs no walkable area and satisfies both wall invariants: the promoted
+tile has rock below and ceiling above, and the ceiling above it gains a third
+rocky tile beneath instead of losing one.
+
+⛔ **Only where the ceiling is at least three rows thick.** Floor 0's ceiling is a
+single-tile lip tracing the cave silhouette — the snake — and promoting one of its
+tiles to rock would cut it. The thickness test confines this to slab interiors.
+
+⛔ **Not floor 4.** The crystal chamber is authored; a boss arena is designed, not
+roughened. The first attempt ran on it, and **the snapshot caught it** — floor 4's
+hash is the one that should never move for a procedural reason. Exempted, and its
+hash is back to what it was before phase 3 started.
+
+Gated in `check-floor-variety` at ≤58% level band-tops, with the ROM's measured
+range recorded next to it. Proven by removing the pass: all three floors fail with
+"the band is a straight lid again, not a contour".
+
+Verified across three seed bases; every other dungeon gate green.
+
 ## 1.10.33 — 2026-08-21
 
 ### Secrets exist below floor 0 for the first time

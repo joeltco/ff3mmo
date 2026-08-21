@@ -93,9 +93,9 @@ function fixDiagonalCeilingPinch(tilemap) {
   }
 }
 
-export // Add $01 rocky wall overhang below ALL $00 tiles.
+// Add $01 rocky wall overhang below ALL $00 tiles.
 // Every ceiling tile must have something under it: another $00, or 2 rows of $01.
-function addOverhang(tilemap) {
+export function addOverhang(tilemap) {
   const marks = [];
   for (let y = 0; y < 32; y++) {
     for (let x = 0; x < 32; x++) {
@@ -114,12 +114,12 @@ function addOverhang(tilemap) {
   }
 }
 
-export // Remove thin ceiling protrusions BEFORE overhang.
+// Remove thin ceiling protrusions BEFORE overhang.
 // A 1-wide ceiling column/row sticking into floor creates overhang walls
 // that protrude into the walkable area. Removing the ceiling tile at the
 // source prevents overhang from ever generating those walls.
 // Only removes ceiling tiles with FLOOR on opposing cardinal sides.
-function removeCeilingProtrusions(tilemap) {
+export function removeCeilingProtrusions(tilemap) {
   let changed = true;
   while (changed) {
     changed = false;
@@ -299,4 +299,45 @@ export function reachableFloorMask(tilemap, entranceX, entranceY) {
     push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
   }
   return seen;
+}
+
+
+/**
+ * Break up the overhang band so it follows the floor's contour instead of
+ * bounding it as a rectangle.
+ *
+ * `addOverhang` lays EXACTLY two rocky rows under every ceiling tile, which is
+ * why our rooms read as rectangles with a uniform dark lid while the cartridge's
+ * caves (ROM maps 22/113/115) have a dark band that wanders 1-3 tiles deep. See
+ * §0 of the chambers plan.
+ *
+ * ⛔ IT GROWS UPWARD, INTO THE ROCK — never downward. Extending the band down
+ * converts FLOOR to WALL_ROCKY, which shrinks every room by a row, and the rooms
+ * are carved at a height that assumes the overhang eats exactly two. Growing up
+ * costs no walkable area at all, and it keeps both wall invariants: the promoted
+ * tile has rock below it and ceiling above, and the ceiling above it now has
+ * THREE rocky tiles beneath rather than two.
+ *
+ * ⛔ ONLY WHERE THE CEILING IS THICK. Floor 0's ceiling is a single-tile lip
+ * tracing the cave silhouette — the "snake" — and turning one of its tiles to
+ * rock would cut it. The promoted tile must have at least two more ceiling rows
+ * above it, which confines this to slab interiors and leaves every snake lip
+ * alone.
+ */
+export function roughenOverhang(tilemap, rng, { chance = 0.38 } = {}) {
+  const promote = [];
+  for (let y = 3; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const i = y * 32 + x;
+      if (tilemap[i] !== WALL_ROCKY) continue;
+      const above = (y - 1) * 32 + x;
+      if (tilemap[above] !== CEILING) continue;          // only the band's top
+      // Thick ceiling above, so promoting one tile cannot cut a snake.
+      if (tilemap[(y - 2) * 32 + x] !== CEILING) continue;
+      if (tilemap[(y - 3) * 32 + x] !== CEILING) continue;
+      if (rng() < chance) promote.push(above);
+    }
+  }
+  for (const i of promote) tilemap[i] = WALL_ROCKY;
+  return promote.length;
 }

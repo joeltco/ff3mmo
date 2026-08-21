@@ -27,7 +27,7 @@ import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
-  finishCaveShape, reachableFloorMask,
+  finishCaveShape, reachableFloorMask, roughenOverhang,
 } from './dungeon/shape.js';
 
 // Reference map for tileset/palette/CHR loading
@@ -2589,6 +2589,18 @@ function _generateFloor(romData, floorIndex, seed) {
     const [x, y] = key.split(',').map(Number);
     tilemap[y * 32 + x] = FLOOR;
   }
+
+  // ── Contour irregularity (v1.10.34) ────────────────────────────────────
+  // Break the overhang band's straight lid so it follows the floor's edge, the
+  // way the cartridge's caves do (§0). Runs BEFORE the rock tunnels so a tunnel
+  // is dug through the roughened rock rather than having its own neat band
+  // roughened afterwards, and before `sealTinyPockets` — though it can strand
+  // nothing, since it only ever converts CEILING to WALL_ROCKY.
+  // ⛔ NOT floor 4. The crystal chamber is AUTHORED — a boss arena is designed,
+  // not roughened — and it is exempt from the variety gate for the same reason.
+  // Caught by the snapshot: floor 4's hash moved on the first attempt, which is
+  // the one floor whose hash should never move for a procedural reason.
+  if (floorIndex !== 4) roughenOverhang(tilemap, rng);
 
   // ── Secret rock tunnels (v1.10.33) ──────────────────────────────────────
   // Floor 0's secret corridors need void outside the cave wall and so cannot

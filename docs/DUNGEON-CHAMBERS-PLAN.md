@@ -376,8 +376,32 @@ circuits and the gate fires.
 
 Floor 3 walkable area rose 126 → 134; `hub` adds a room and `loop` adds a link.
 
-Still to do here: floors 1/2 topologies, rock-tunnelling secret corridors (§3b),
-and contour irregularity.
+**Contour irregularity (v1.10.34) — DONE, and measurable.** `addOverhang` lays
+exactly two rocky rows under every ceiling, giving each room a straight dark lid.
+Measured as the share of adjacent band-tops that sit level:
+
+| | floors 1 / 2 / 3 | ROM caves (22, 113, 115) |
+|---|---|---|
+| before | 70% / 61% / 79% | 42–63% |
+| after | **46% / 44% / 48%** | 42–63% |
+
+`roughenOverhang` grows the band **upward into the rock**, never downward:
+extending it down converts FLOOR to WALL_ROCKY and shrinks every room by a row,
+and the rooms are carved assuming the overhang eats exactly two. Growing up costs
+no walkable area and keeps both wall invariants. It only fires where the ceiling
+above is at least three rows thick, which confines it to slab interiors and leaves
+floor 0's single-tile snake lip untouched.
+
+⛔ **Not floor 4.** The crystal chamber is authored. The first attempt roughened
+it too, and the snapshot caught it — floor 4's hash is the one that should never
+move for a procedural reason.
+
+This is the number that actually separated our look from the cartridge's. Two
+earlier attempts at measuring "boxiness" (§0) did not discriminate at all — one
+scored ROM map 115 *boxier* than our floor 3.
+
+Still to do here: topologies for floors 1 and 2, and floor 2's two entrance
+positions.
 
 #### Original plan
 
