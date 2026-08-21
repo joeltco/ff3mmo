@@ -1665,17 +1665,36 @@ function _generateFloor(romData, floorIndex, seed) {
     // ── Floor 4: Long corridor up → 5×5 room → paths left/right to side rooms ──
     // Entrance at bottom (placeDeepExit — same staircase block as floor 1 exit).
 
-    entranceX = 16; // centered
-    const stairY = 27;
-    const corridorBottomY = stairY - 1; // row 26
+    // ── Skeleton, SAMPLED (v1.10.29 — phase 3) ─────────────────────────
+    // These were literals: `entranceX = 16`, `roomCenterY = 9`, a fixed 3-tile
+    // half-width, a fixed 6-tile gap and fixed 5-wide side rooms. Together they
+    // pinned the floor to columns 3..29 and rows 6..12 on EVERY seed — measured
+    // at 0.749 mean pairwise Jaccard, 85 of ~122 tiles fixed, and exactly ONE
+    // entrance position across 200 seeds.
+    //
+    // ⛔ SAMPLE THE GEOMETRY BEFORE THE POSITION. The three rooms plus their two
+    // gaps span `halfW + gap + sideW` either side of the spine; with the old
+    // values that is 13, so the layout filled columns 3..29 and `entranceX`
+    // could not move at all without falling off the map. Rolling the widths
+    // first is what creates room for the position to vary.
+    const halfW = 3 + Math.floor(rng() * 2);       // centre room half-width 3-4
+    const gap = 5 + Math.floor(rng() * 3);         // corridor to side room 5-7
+    const sideW = 3 + Math.floor(rng() * 2);       // side room half-span 3-4
+    const extent = halfW + gap + sideW;            // columns used either side
+    const exLo = 1 + extent, exHi = 30 - extent;
+    entranceX = exLo + Math.floor(rng() * Math.max(1, exHi - exLo + 1));
+
+    const stairY = 26 + Math.floor(rng() * 3);     // 26-28
+    const corridorBottomY = stairY - 1;
     const pondSide = rng() < 0.5 ? -1 : 1; // -1=left, 1=right
 
-    // 5×5 room at top (carved 7 tall × 7 wide → 5×5 walkable after overhang)
-    const roomCenterY = 9;
-    const roomTopCarve = roomCenterY - 3; // row 6
-    const roomBotCarve = roomCenterY + 3; // row 12
-    const roomLeft = entranceX - 3;
-    const roomRight = entranceX + 3;
+    // Room band, sampled. Kept clear of the spine's bottom by construction:
+    // `roomBotCarve` is at most 15 and `corridorBottomY` at least 25.
+    const roomCenterY = 7 + Math.floor(rng() * 5); // 7-11
+    const roomTopCarve = roomCenterY - 3;
+    const roomBotCarve = roomCenterY + 3;
+    const roomLeft = entranceX - halfW;
+    const roomRight = entranceX + halfW;
 
     // Long vertical corridor from row 26 up to roomBotCarve
     // Fattens 1 tile left or right in stretches, never both
@@ -1692,10 +1711,10 @@ function _generateFloor(romData, floorIndex, seed) {
 
     // Side rooms: 5 wide × 7 tall carved (5×5 walkable)
     // 5-tile gap for clear narrow tunnel between room and side rooms
-    const leftRoomRight = roomLeft - 6;
-    const leftRoomLeft = Math.max(1, leftRoomRight - 4);
-    const rightRoomLeft = roomRight + 6;
-    const rightRoomRight = Math.min(30, rightRoomLeft + 4);
+    const leftRoomRight = roomLeft - gap;
+    const leftRoomLeft = Math.max(1, leftRoomRight - sideW);
+    const rightRoomLeft = roomRight + gap;
+    const rightRoomRight = Math.min(30, rightRoomLeft + sideW);
 
     // Narrow path left (carve 3 rows, overhang eats 2 → 1 walkable)
     carveHRun(tilemap, {

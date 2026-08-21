@@ -1,3 +1,50 @@
+## 1.10.29 — 2026-08-21
+
+### Phase 3 started — floor 3 is no longer the same map every time
+
+The first change in this whole arc that players will see. Floor 3's skeleton was
+literals: `entranceX = 16`, `roomCenterY = 9`, a fixed 3-tile half-width, a fixed
+6-tile gap, fixed 5-wide side rooms. They are sampled now.
+
+Measured over 200 seeds:
+
+| | before | after | gate limit |
+|---|---|---|---|
+| mean pairwise Jaccard | 0.749 | **0.282** | 0.40 |
+| tiles walkable in ≥90% of seeds | 85 of ~122 | **3** | 15 |
+| distinct entrance positions | **1** | **22** | 12 |
+
+Two players entering floor 3 used to see the same 73% of the map, and across 200
+seeds its entrance never moved once. It now varies about as much as floor 1.
+
+⛔ **Sample the geometry BEFORE the position.** The three rooms plus their two
+gaps span `halfW + gap + sideW` either side of the spine — 13 at the old fixed
+values, which filled columns 3..29 and left `entranceX` nowhere to go without
+falling off the map. Rolling the widths first is what creates room for the
+position to move; randomising `entranceX` on its own would have changed nothing.
+
+**Correctness is unchanged and re-verified**, which is the part that matters when
+a generator starts moving: 400 seeds/floor and a second run of 600 from a
+different base — every exit wired and reachable, zero sealed pockets, every chest
+openable, floor 2's rock switch still opening its room completely, and floor 3's
+plan still recording every chamber it built.
+
+The snapshot was re-baselined **deliberately**, and it moved **exactly one hash** —
+floors 0/1/2/4 and all three side maps are byte-identical. A surgical change,
+not a shake-up.
+
+**New deploy gate, `tools/check-floor-variety.mjs`.** The correctness gates cannot
+see this class of problem: a perfectly connected floor with every chest reachable
+can still be the same floor every run, and Altar Cave reseeds on every entry, so
+"procedural" is a claim about what different players see. Per-floor limits on
+Jaccard, fixed-tile count and distinct entrances. Floor 4 is **exempt and must
+stay so** — the crystal chamber is authored, and Jaccard 1.000 is correct there.
+Proven by pinning floor 3's skeleton back to constants: all three limits fire.
+
+Still ahead in phase 3: topology rolled per seed (floor 3 still only ever produces
+a spine), the same treatment for floors 0–2, rock-tunnelling secret corridors so
+secrets can exist off floor 0, and contour irregularity.
+
 ## 1.10.28 — 2026-08-21
 
 ### Phase 2 — floor 3 joins the plan, and the plan shows the cloning

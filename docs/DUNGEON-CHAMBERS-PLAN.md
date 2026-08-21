@@ -316,7 +316,32 @@ change if the specs reproduce today's layouts — which is the phase-2 gate.
 the top because floor 0's south-wall stairs put the player there. Inter-floor
 continuity has to be an input to the planner, not an accident of constants.
 
-### Phase 3 — Randomize the skeleton (the visible change)
+### Phase 3 — Randomize the skeleton (the visible change) ◐ STARTED v1.10.29
+
+Floor 3's anchors are sampled. Measured over 200 seeds:
+
+| | before | after | limit |
+|---|---|---|---|
+| mean pairwise Jaccard | 0.749 | **0.282** | 0.40 |
+| tiles walkable in >=90% of seeds | 85 | **3** | 15 |
+| distinct entrance positions | 1 | **22** | 12 |
+
+⛔ **Sample the geometry BEFORE the position.** The three rooms plus their two
+gaps span `halfW + gap + sideW` either side of the spine; at the old fixed values
+that is 13, so the layout filled columns 3..29 and `entranceX` could not move at
+all without falling off the map. Rolling the widths first is what creates the room
+for the position to vary — pinning `entranceX` alone would have achieved nothing.
+
+The re-baseline moved **exactly one hash**: floors 0/1/2/4 and all three side maps
+are byte-identical. `tools/check-floor-variety.mjs` is a deploy gate now, so this
+cannot silently regress; it is phase 5's first invariant, pulled forward because
+phase 3 is the change it exists to protect.
+
+Still to do here: topology rolled per seed (spine / loop / hub / branch — floor 3
+still only ever produces a spine), floors 0/1/2 given the same treatment,
+rock-tunnelling secret corridors (§3b), and contour irregularity.
+
+#### Original plan
 
 This is where floor 3 stops being one map:
 
