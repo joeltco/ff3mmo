@@ -1,3 +1,45 @@
+## 1.10.39 — 2026-08-21
+
+### Fixed — ceilings with three wall tiles underneath
+
+Reported from play, and correct: it is a rule break, and it was mine.
+
+**The cartridge's rule is exactly two.** A ceiling capping a rock band has
+EXACTLY TWO rocky tiles below it — measured across ROM maps 111, 113, 22 and 115,
+where it holds without exception: **125 of 125 bands at depth 2, no 1s and no 3s.**
+
+v1.10.34's `roughenOverhang` deepened the band by promoting the ceiling tile above
+it, to stop rooms having a straight dark lid. I wrote in that commit that the
+ceiling above "now has THREE rocky tiles beneath rather than two" and called it
+harmless. It is not harmless, it is the rule. It shipped **652 / 831 / 1376
+three-deep bands** on floors 1 / 2 / 3, plus a handful four and five deep.
+
+The pass is removed. Three-deep bands drop to **11 / 6 / 15 per 200 floors**, from
+a different and rarer cause.
+
+⛔ **The premise was wrong, not just the tuning.** The ROM's band looks irregular
+because its FLOOR EDGES are jagged — the band itself is a constant two. Contour
+irregularity has to come from the room and corridor outlines. Deepening the band
+was never a cheaper route to it; it moved the flatness metric while breaking the
+rule that metric was only ever a proxy for.
+
+So **band flatness is now REPORTED, not gated.** A gate whose only known solution
+is a rule break argues for the bug. It goes back to being a limit when jagged
+floor edges land. Floors 1/2/3 read 73% / 63% / 80% level again, against the ROM's
+42-63% — the boxiness §0 identified is back, honestly, rather than papered over.
+
+**New deploy gate, `tools/check-floor-shape.mjs`.** It re-derives the depth-2 rule
+from the ROM on every run instead of trusting a number in a comment, and fails if
+the ROM itself ever disagrees. Proven by re-adding the pass: 1367 / 1665 / 2779
+violations.
+
+⛔ It does **not** assert zero, and says so. A residual of a few per hundred floors
+survives from bands stacking where a corridor's wall sits above a room's — I have
+not chased it. The limits sit just above the measured residual, so the systematic
+case cannot come back while the rare one stays visible in the printout. Also
+recorded: floors 0 and 2 produce ~100 depth-ONE bands per 200 floors, which the
+ROM never does either. Pre-existing, unaddressed, and now at least counted.
+
 ## 1.10.38 — 2026-08-21
 
 ### DUNGEON tab in the Konami panel

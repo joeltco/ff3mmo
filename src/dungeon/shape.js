@@ -302,42 +302,14 @@ export function reachableFloorMask(tilemap, entranceX, entranceY) {
 }
 
 
-/**
- * Break up the overhang band so it follows the floor's contour instead of
- * bounding it as a rectangle.
- *
- * `addOverhang` lays EXACTLY two rocky rows under every ceiling tile, which is
- * why our rooms read as rectangles with a uniform dark lid while the cartridge's
- * caves (ROM maps 22/113/115) have a dark band that wanders 1-3 tiles deep. See
- * §0 of the chambers plan.
- *
- * ⛔ IT GROWS UPWARD, INTO THE ROCK — never downward. Extending the band down
- * converts FLOOR to WALL_ROCKY, which shrinks every room by a row, and the rooms
- * are carved at a height that assumes the overhang eats exactly two. Growing up
- * costs no walkable area at all, and it keeps both wall invariants: the promoted
- * tile has rock below it and ceiling above, and the ceiling above it now has
- * THREE rocky tiles beneath rather than two.
- *
- * ⛔ ONLY WHERE THE CEILING IS THICK. Floor 0's ceiling is a single-tile lip
- * tracing the cave silhouette — the "snake" — and turning one of its tiles to
- * rock would cut it. The promoted tile must have at least two more ceiling rows
- * above it, which confines this to slab interiors and leaves every snake lip
- * alone.
- */
-export function roughenOverhang(tilemap, rng, { chance = 0.38 } = {}) {
-  const promote = [];
-  for (let y = 3; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      const i = y * 32 + x;
-      if (tilemap[i] !== WALL_ROCKY) continue;
-      const above = (y - 1) * 32 + x;
-      if (tilemap[above] !== CEILING) continue;          // only the band's top
-      // Thick ceiling above, so promoting one tile cannot cut a snake.
-      if (tilemap[(y - 2) * 32 + x] !== CEILING) continue;
-      if (tilemap[(y - 3) * 32 + x] !== CEILING) continue;
-      if (rng() < chance) promote.push(above);
-    }
-  }
-  for (const i of promote) tilemap[i] = WALL_ROCKY;
-  return promote.length;
-}
+// ⛔ `roughenOverhang` LIVED HERE AND WAS REMOVED IN v1.10.39.
+// It deepened the rock band by promoting the ceiling tile above it — which broke
+// the cartridge's actual rule. A ceiling capping a band has EXACTLY TWO rocky
+// tiles below it in every one of ROM maps 111, 113, 22 and 115: 125 of 125
+// sampled, no 1s and no 3s. The pass produced 652 / 831 / 1376 three-deep bands
+// on floors 1 / 2 / 3.
+//
+// The ROM's band looks irregular because its FLOOR EDGES are jagged; the band
+// itself is a constant two. Do not re-add depth variation to make the caves look
+// less boxy — it moves the flatness metric while breaking the rule that metric
+// was only ever a proxy for.

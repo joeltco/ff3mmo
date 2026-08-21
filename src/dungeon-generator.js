@@ -27,7 +27,7 @@ import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
-  finishCaveShape, reachableFloorMask, roughenOverhang,
+  finishCaveShape, reachableFloorMask,
 } from './dungeon/shape.js';
 
 // Reference map for tileset/palette/CHR loading
@@ -2673,24 +2673,18 @@ function _generateFloor(romData, floorIndex, seed) {
     tilemap[y * 32 + x] = FLOOR;
   }
 
-  // ── Contour irregularity (v1.10.34) ────────────────────────────────────
-  // Break the overhang band's straight lid so it follows the floor's edge, the
-  // way the cartridge's caves do (§0). Runs BEFORE the rock tunnels so a tunnel
-  // is dug through the roughened rock rather than having its own neat band
-  // roughened afterwards, and before `sealTinyPockets` — though it can strand
-  // nothing, since it only ever converts CEILING to WALL_ROCKY.
-  // ⛔ SLAB FLOORS ONLY (1-3).
-  //   - NOT floor 4: the crystal chamber is AUTHORED, and is exempt from the
-  //     variety gate for the same reason. Caught by the snapshot, whose floor-4
-  //     hash should never move for a procedural reason.
-  //   - NOT floor 0: its ceiling is a single-tile lip tracing the cave
-  //     silhouette, and promoting one of its tiles to rock CUTS THE SNAKE.
-  //     v1.10.34 relied on a "three ceiling rows above" guard to confine this to
-  //     slab interiors; floor 0 has spots that satisfy it, and shipped with the
-  //     perimeter broken on 197 of 200 seeds. Floor 0 does not want this anyway:
-  //     its band IS the cave outline, not a slab lid, which is why it was never
-  //     part of the contour measurement.
-  if (floorIndex >= 1 && floorIndex <= 3) roughenOverhang(tilemap, rng);
+  // ⛔ NO BAND ROUGHENING. v1.10.34 added `roughenOverhang`, which deepened the
+  // rock band by promoting a ceiling tile above it — and that is a RULE BREAK.
+  // Measured against the cartridge: every ceiling capping a band in ROM maps
+  // 111, 113, 22 and 115 has EXACTLY TWO rocky tiles below it. Not one, not
+  // three — 125 of 125 sampled. The pass put 652/831/1376 three-deep bands on
+  // floors 1/2/3 and a handful four and five deep.
+  //
+  // The cartridge's band still looks irregular because its FLOOR EDGES are
+  // jagged, not because the band varies in depth. Contour irregularity has to
+  // come from the room and corridor outlines; deepening the band is not a
+  // cheaper route to it, it is a different thing that happens to move the same
+  // metric. `check-floor-shape.mjs` now gates the depth-2 rule.
 
   // ── Secret rock tunnels (v1.10.33) ──────────────────────────────────────
   // Floor 0's secret corridors need void outside the cave wall and so cannot
