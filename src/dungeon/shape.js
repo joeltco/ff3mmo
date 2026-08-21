@@ -15,7 +15,8 @@
 // that reason. Same for `sealTinyPockets`, which runs at the very end of
 // `generateFloor` once the trap swap has happened.
 
-import { CEILING, WALL_ROCKY, FALSE_CEILING, FLOOR, BONES, CHEST, FILL_VOID, isFloorTile } from './tiles.js';
+import { CEILING, WALL_ROCKY, FALSE_CEILING, FLOOR, BONES, CHEST, FILL_VOID, isFloorTile,
+  PASSAGE, PASSAGE_BTM, PASSAGE_ENTRY, STAIRS_DOWN, STAIR_ARCH, EXIT_PREV, EVENT_TILE } from './tiles.js';
 
 export // Ensure every $00 tile connects to at least one other $00 (cardinal).
 // Isolated $00 tiles get demoted to $01 so they don't float alone.
@@ -255,4 +256,47 @@ export function finishCaveShape(tilemap) {
   enforceMinCeilingGap(tilemap);
   ensureCeilingConnectivity(tilemap);
   addOverhang(tilemap);
+}
+
+
+/**
+ * Tiles the player can actually stand on, flooded from the entrance.
+ *
+ * ⛔ Anything that digs INTO a floor must start from a reachable tile. Measured:
+ * a secret rock tunnel was dug out of `(21,20)` on floor 3 seed 1754901449177 —
+ * a leftover floor tile stranded above a branch chest, which `sealTinyPockets`
+ * would have quietly filled. Tunnelling from it turned a 1-tile pocket into a
+ * 9-tile one, complete with an unreachable chest at the far end. "It is FLOOR"
+ * is not "you can get there".
+ *
+ * ⛔ IT MUST TRAVERSE PASSAGES, not just floor. The first version walked FLOOR,
+ * BONES and FALSE_CEILING only — described as "deliberately conservative", which
+ * was wrong: a deep floor's entrance is a two-tile passage stack ($6a over $6b),
+ * so the flood could not get from the entrance to the room at all and returned an
+ * EMPTY mask. Floors 1 and 3 silently produced zero tunnels while floor 2, whose
+ * entrance sits on plain floor, produced one every seed. An empty mask reads
+ * exactly like "nowhere qualifies".
+ *
+ * Traverse everything the player can walk over; callers still choose what a spot
+ * must BE (the tunnel finder requires plain FLOOR to dig from).
+ */
+export function reachableFloorMask(tilemap, entranceX, entranceY) {
+  const seen = new Uint8Array(1024);
+  const WALK = new Set([FLOOR, BONES, FALSE_CEILING, PASSAGE, PASSAGE_BTM,
+    PASSAGE_ENTRY, STAIRS_DOWN, STAIR_ARCH, EXIT_PREV, EVENT_TILE]);
+  const walkable = (t) => WALK.has(t);
+  const q = [];
+  const push = (x, y) => {
+    if (x < 0 || x > 31 || y < 0 || y > 31) return;
+    const i = y * 32 + x;
+    if (!seen[i] && walkable(tilemap[i])) { seen[i] = 1; q.push(i); }
+  };
+  push(entranceX, entranceY);
+  push(entranceX + 1, entranceY); push(entranceX - 1, entranceY);
+  push(entranceX, entranceY + 1); push(entranceX, entranceY - 1);
+  while (q.length) {
+    const i = q.pop(); const x = i % 32, y = (i - x) / 32;
+    push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
+  }
+  return seen;
 }

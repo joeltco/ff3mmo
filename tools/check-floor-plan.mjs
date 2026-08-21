@@ -99,8 +99,19 @@ for (let k = 0; k < SEEDS; k++) {
     if (y >= 0 && y < 32) tm[y * 32 + v.x] = 0x00;
   }
   const after = reachableFrom(tm, r.entranceX, r.entranceY);
+  // ⛔ A SECRET TUNNEL IS A DEAD END BY DESIGN, so it does not count against the
+  // circuit. One dug off a tile that is only reachable THROUGH the loop will of
+  // course be stranded when the loop is cut — that says nothing about whether
+  // the floor's rooms form a ring, which is the claim being tested.
+  const secretTiles = new Set();
+  for (const l of r.plan.links.filter(x => x.kind === 'secret')) {
+    for (let d = 0; d <= l.len; d++) secretTiles.add(l.y * 32 + (l.x + l.dir * d));
+  }
   let lost = 0;
-  for (let i = 0; i < 1024; i++) if (before[i] && !after[i] && PASS.has(tm[i])) lost++;
+  for (let i = 0; i < 1024; i++) {
+    if (secretTiles.has(i)) continue;
+    if (before[i] && !after[i] && PASS.has(tm[i])) lost++;
+  }
   if (lost === 0) circuits++;
   else fails.push(`floor 3 seed ${BASE + k * 7919}: cutting the 'loop' link strands ${lost} tiles — it is the only path, not a circuit`);
 }

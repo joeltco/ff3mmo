@@ -20,14 +20,14 @@ import {
 import { carveChamber, carveWideChamber, carveBoxChamber, carveBottomBump } from './dungeon/chambers.js';
 import {
   createPlan, planChamber, planWideChamber, planBoxChamber,
-  planHLink, planVLink, planSpine, planBranch, planOrganicRoom, planElbow,
+  planHLink, planVLink, planSpine, planBranch, planOrganicRoom, planElbow, planRockTunnel,
 } from './dungeon/plan.js';
-import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
+import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand, findRockTunnelSpots } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
-  finishCaveShape,
+  finishCaveShape, reachableFloorMask,
 } from './dungeon/shape.js';
 
 // Reference map for tileset/palette/CHR loading
@@ -738,6 +738,9 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 
 
 // Floor feature counts per floor index
+// How deep a secret rock tunnel runs before its alcove.
+const ROCK_TUNNEL_LEN = 6;
+
 const FLOOR_CONFIG = [
   { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
   { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
@@ -2585,6 +2588,27 @@ function _generateFloor(romData, floorIndex, seed) {
   for (const key of hiddenTraps) {
     const [x, y] = key.split(',').map(Number);
     tilemap[y * 32 + x] = FLOOR;
+  }
+
+  // ── Secret rock tunnels (v1.10.33) ──────────────────────────────────────
+  // Floor 0's secret corridors need void outside the cave wall and so cannot
+  // exist on a rock-slab floor (§3b). These tunnel straight INTO the rock
+  // instead, ending in a hidden alcove with a chest. Runs after every shaping
+  // pass — the overhang would re-wall the passage otherwise — and before
+  // `sealTinyPockets`, which would happily fill a 4-tile alcove.
+  if (floorIndex >= 1 && floorIndex <= 3) {
+    // A secret every single floor is not a secret. Roughly half the floors get
+    // one, and a few of those get a second. One line to tune if that feels wrong.
+    const wanted = (rng() < 0.5 ? 1 : 0) + (rng() < 0.15 ? 1 : 0);
+    for (let n = 0; n < wanted; n++) {
+      const reachable = reachableFloorMask(tilemap, entranceX, entranceY);
+      const spots = findRockTunnelSpots(tilemap, { len: ROCK_TUNNEL_LEN, reachable });
+      if (!spots.length) break;
+      const spot = spots[Math.floor(rng() * spots.length)];
+      const { alcove } = planRockTunnel(plan, tilemap, { ...spot, len: ROCK_TUNNEL_LEN });
+      tilemap[alcove.y * 32 + alcove.x] = CHEST;
+      secretWalls.add(`${spot.x},${spot.y}`);
+    }
   }
 
   // Last pass on the tilemap — AFTER the trap swap, so the map it walks is the

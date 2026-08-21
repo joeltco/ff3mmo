@@ -17,7 +17,7 @@
 // gets carved at the map edge, which is a real output change, so both are
 // parameters and callers pass what they always passed.
 
-import { FLOOR } from './tiles.js';
+import { FLOOR, CEILING, WALL_ROCKY, FALSE_CEILING } from './tiles.js';
 
 /**
  * Carve one column of a horizontal corridor: `depth` rows ending at `y`.
@@ -184,4 +184,92 @@ export function carveElbow(tilemap, { x0, y, dir, steps, turnY, yMin = 1, yMax =
     x: endX, y0: y, dir: vDir, steps: Math.abs(turnY - y), yMin, yMax,
   });
   return { endX, endY };
+}
+
+/**
+ * Find places a secret tunnel could be dug straight into solid rock.
+ *
+ * ⛔ THIS IS NOT `findCorridorCandidates`. That one hunts along floor 0's cave
+ * OUTLINE and needs `FILL_VOID` beyond the wall — four columns of it — because
+ * it carves a detour around the ceiling snake. Floor 0 is the only floor with a
+ * void fill, which is why `placeSecretPath` returns empty for every other floor
+ * and why secrets have never existed below it (§3b of the chambers plan).
+ *
+ * A rock-slab floor has no snake and no void: the fill IS ceiling, all the way
+ * to the map edge. So there is nothing to detour around — a tunnel just needs a
+ * run of solid rock wide enough to lay the standard cross-section into, which
+ * makes this the easier case, not the harder one.
+ *
+ * Cross-section laid by `carveRockTunnel`, matching every other horizontal
+ * corridor: ceiling at y-3, rock at y-2 and y-1, floor at y, ceiling at y+1.
+ * The candidate therefore needs those rows already solid for the tunnel's whole
+ * length, which is what keeps it from breaking into a neighbouring room.
+ *
+ * @param {object} spec
+ * @param {Uint8Array} [spec.reachable] mask from `reachableFloorMask` — REQUIRED in
+ *   practice; without it a tunnel can be dug out of a stranded tile.
+ * @returns {Array<{x:number, y:number, dir:number}>} wall tile and direction in
+ */
+export function findRockTunnelSpots(tilemap, { len = 6, reachable = null }) {
+  const out = [];
+  for (let y = 4; y < 29; y++) {
+    for (let x = 2; x < 30; x++) {
+      if (tilemap[y * 32 + x] !== FLOOR) continue;          // stand inside the room
+      // ⛔ ...and the tile must be REACHABLE, not merely floor. Digging out of a
+      // stranded tile just makes the stranded region bigger — see
+      // `reachableFloorMask`.
+      if (reachable && !reachable[y * 32 + x]) continue;
+      for (const dir of [-1, 1]) {
+        const wallX = x + dir;
+        if (wallX < 1 || wallX > 30) continue;
+        if (tilemap[y * 32 + wallX] !== CEILING) continue;   // the wall we pierce
+        // Everything the tunnel will occupy must currently be solid ceiling, so
+        // it cannot burrow into another room or through a corridor.
+        // ⛔ The MOUTH column is checked on its own row only. The two tiles
+        // above it are the ROOM's overhang rock, not virgin ceiling, and the
+        // tunnel overwrites them anyway — demanding ceiling there rejected every
+        // spot on floors 1 and 3 (measured: 0/200 seeds each) while floor 2
+        // happened to have one. Beyond the mouth the full cross-section must be
+        // untouched ceiling, which is what stops a tunnel breaking into a
+        // neighbouring room or corridor.
+        let solid = true;
+        for (let d = 1; d <= len + 1 && solid; d++) {
+          const cx = wallX + dir * d;
+          if (cx < 1 || cx > 30) { solid = false; break; }
+          for (const dy of [-3, -2, -1, 0, 1]) {
+            if (tilemap[(y + dy) * 32 + cx] !== CEILING) { solid = false; break; }
+          }
+        }
+        if (solid) out.push({ x: wallX, y, dir });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Dig a secret tunnel into rock from `spot`, ending in a small alcove.
+ *
+ * The mouth is `FALSE_CEILING` — visually identical to the ceiling beside it but
+ * passable, so the wall reads solid until you walk into it. No trigger and no map
+ * transition: the alcove is part of this floor, which is why this needs none of
+ * floor 0's `falseWalls` / secret-room-map wiring.
+ *
+ * ⛔ Runs AFTER `addOverhang`, so it lays its own rock. The overhang pass would
+ * otherwise re-wall the passage, exactly as it does to `openEntranceLanding`.
+ *
+ * @returns {{alcove: {x:number, y:number}}} where the alcove's chest goes
+ */
+export function carveRockTunnel(tilemap, { x, y, dir, len = 6 }) {
+  tilemap[y * 32 + x] = FALSE_CEILING;                    // the disguised mouth
+  for (let d = 1; d <= len; d++) {
+    const cx = x + dir * d;
+    tilemap[y * 32 + cx] = FLOOR;
+    tilemap[(y - 1) * 32 + cx] = WALL_ROCKY;              // overhang above the passage
+    tilemap[(y - 2) * 32 + cx] = WALL_ROCKY;
+  }
+  // The mouth column needs the same overhang, or the ceiling above it floats.
+  tilemap[(y - 1) * 32 + x] = WALL_ROCKY;
+  tilemap[(y - 2) * 32 + x] = WALL_ROCKY;
+  return { alcove: { x: x + dir * len, y } };
 }

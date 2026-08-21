@@ -154,7 +154,7 @@ door-plus-standalone-map path is the live one), `buildCaveShape`,
 `generateCaveOutline`, `carvePathwayRoom`, `findInteriorFloor`, and the whole
 generic branch at `floorIndex >= 5`.
 
-### 3b. ⛔ Secret corridors are physically impossible on a rock-slab floor
+### 3b. ✅ Secret corridors on a rock-slab floor — SOLVED v1.10.33
 
 This is the single biggest structural finding and it constrains the whole design.
 
@@ -170,11 +170,20 @@ map edge: **no void, no snake, nothing to detour into.** The
 `if (floorIndex !== 0) return falseWalls` guard is not a policy choice, it is a
 statement of fact about the tilemap.
 
-So "turn on secret rooms for the endless dungeon" is **not a flag flip**. It needs
-a second corridor carver that tunnels *into rock* — carve a pocket out of
-`CEILING`, wrap it in `WALL_ROCKY` per the overhang rule, and disguise the mouth
-with `$44`. That is new code, and it is the prerequisite for secret rooms at any
-depth. Do not schedule secret rooms before it.
+**Done (v1.10.33).** `findRockTunnelSpots` + `carveRockTunnel` dig straight into
+the slab: a `$44` mouth in the room's wall, the standard cross-section (ceiling at
+y-3, rock at y-2/y-1, floor at y, ceiling at y+1) driven into virgin rock, and a
+hidden alcove with a chest at the end. No trigger and no map transition — the
+alcove is part of the floor, so none of floor 0's `falseWalls` machinery is needed.
+
+The prediction that this would be the hard case was **wrong, and backwards**: a
+slab has no perimeter to maintain and no void to fit a detour into, so tunnelling
+is *easier* there than on floor 0. Secrets now appear on floors 1-3 in 46% / 55% /
+57% of seeds, gated.
+
+⛔ **A tunnel must start from a REACHABLE tile, not merely a FLOOR one**, and
+⛔ **the reachability mask must traverse passages** — see the changelog for both;
+each produced a silent, opposite-looking failure.
 
 ### 3c. The corridor system
 

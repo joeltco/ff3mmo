@@ -21,7 +21,7 @@
 // do not read an incomplete plan as "this is the whole floor".
 
 import { carveChamber, carveWideChamber, carveBoxChamber, carveOrganicRoom } from './chambers.js';
-import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveElbow } from './corridors.js';
+import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveElbow, carveRockTunnel } from './corridors.js';
 
 /** @param {boolean} complete — does this plan record EVERY chamber on the floor? */
 export function createPlan(floorIndex, complete = false) {
@@ -79,6 +79,13 @@ export function planElbow(plan, tilemap, spec) {
   return r;
 }
 
+/** Dig a secret tunnel into rock and record it. */
+export function planRockTunnel(plan, tilemap, spec) {
+  const r = carveRockTunnel(tilemap, spec);
+  plan.links.push({ kind: 'secret', ...spec, alcove: r.alcove });
+  return r;
+}
+
 /** Carve the width-varying vertical spine and record it. */
 export function planSpine(plan, tilemap, rng, spec) {
   carveFatteningVRun(tilemap, rng, spec);
@@ -113,6 +120,8 @@ export function describePlan(plan) {
   for (const l of plan.links) {
     out.push(l.kind === 'h' || l.kind === 'branch'
       ? `  link    ${l.kind.padEnd(10)} from ${l.x0},${l.y} dir ${l.dir > 0 ? '+' : '-'} steps ${l.steps} -> x${l.endX}`
+      : l.kind === 'secret'
+        ? `  link    secret     mouth ${l.x},${l.y} dir ${l.dir > 0 ? '+' : '-'} len ${l.len} -> alcove ${l.alcove.x},${l.alcove.y}`
       : l.kind === 'elbow'
         ? `  link    elbow      from ${l.x0},${l.y} dir ${l.dir > 0 ? '+' : '-'} steps ${l.steps} -> ${l.endX},${l.endY}`
       : l.kind === 'v'

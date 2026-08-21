@@ -32,9 +32,9 @@ const BASE = 1761000000000;
 //             min distinct entrance positions]. null = exempt (authored).
 const LIMITS = new Map([
   [0, { jaccard: 0.50, always: 35,  entrances: 6, secretRate: 0.45, lockedRate: 0.35 }],  // v1.10.31: was 0.610 / 72 / 2
-  [1, { jaccard: 0.40, always: 20,  entrances: 15 }],
-  [2, { jaccard: 0.30, always: 10,  entrances: 2 }],
-  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4 }],  // v1.10.29-32: was 0.749 / 85 / 1
+  [1, { jaccard: 0.40, always: 20,  entrances: 15, secretRate: 0.35, lockedRate: 0 }],
+  [2, { jaccard: 0.30, always: 10,  entrances: 2, secretRate: 0.40, lockedRate: 0.35 }],
+  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4, secretRate: 0.40, lockedRate: 0 }],  // v1.10.29-32: was 0.749 / 85 / 1
   [4, null],
 ]);
 
@@ -50,7 +50,9 @@ for (const [f, lim] of LIMITS) {
     const seen = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
     ents.add(`${r.entranceX},${r.entranceY}`);
     if (r.plan?.topology) topos.set(r.plan.topology, (topos.get(r.plan.topology) || 0) + 1);
-    if (r.falseWalls?.size) secretSeeds++;
+    // Floor 0 records secrets as `falseWalls`; the slab floors record rock
+    // tunnels in the plan. Both count as "this floor has a secret".
+    if (r.falseWalls?.size || r.plan?.links?.some(l => l.kind === 'secret')) secretSeeds++;
     if (r.lockedDoors?.size) lockedSeeds++;
     const m = new Set();
     for (let i = 0; i < 1024; i++) if (seen[i]) { count[i]++; m.add(i); tot++; }

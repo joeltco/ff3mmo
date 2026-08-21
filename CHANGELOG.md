@@ -1,3 +1,61 @@
+## 1.10.33 — 2026-08-21
+
+### Secrets exist below floor 0 for the first time
+
+§3b of the chambers plan was the standing blocker: floor 0's secret corridors need
+`FILL_VOID` outside the cave wall, and floor 0 is the only floor with a void fill.
+`placeSecretPath` returned empty for every other floor — not as a policy choice
+but as a statement of fact about the tilemap.
+
+`findRockTunnelSpots` + `carveRockTunnel` dig straight into the slab instead: a
+`$44` FALSE_CEILING mouth in the room's wall, the standard corridor cross-section
+(ceiling at y-3, rock at y-2 and y-1, floor at y, ceiling at y+1) driven into
+virgin rock, and a hidden alcove with a chest at the end. No trigger, no map
+transition — the alcove is part of the floor, so none of floor 0's `falseWalls`
+and secret-room-map wiring is involved.
+
+**The plan's prediction that this was the hard case was backwards.** A slab has no
+ceiling snake to detour around and no void to fit a detour into, so the surrounding
+rock is already exactly what a tunnel wants. It is the *easier* case.
+
+Secrets now appear on floors 1 / 2 / 3 in **46% / 55% / 57%** of seeds, one or
+occasionally two per floor. A secret on every floor is not a secret, so the roll is
+deliberately a coin flip plus a rare second — one line to tune.
+
+⛔ **Only the MOUTH is disguised.** The passage and its chest are drawn like any
+other tiles; dungeon floors set `skipRoomClip`, so the whole map is rendered. You
+can see the treasure and have to find the way in. Same as floor 0's corridor, and
+the same as the cartridge, but worth stating rather than implying the tunnel is
+invisible.
+
+### Two silent failures on the way, in opposite directions
+
+⛔ **A tunnel must start from a REACHABLE tile, not merely a FLOOR one.** The first
+version dug out of `(21,20)` on floor 3 — a stranded leftover above a branch chest
+that `sealTinyPockets` would have quietly filled. Tunnelling from it turned a
+1-tile pocket into a 9-tile one with an unreachable chest at the end. "It is FLOOR"
+is not "you can get there".
+
+⛔ **...and the reachability mask must traverse passages.** The fix for that
+introduced `reachableFloorMask`, which I described as "deliberately conservative"
+while it walked FLOOR/BONES/FALSE_CEILING only. A deep floor's entrance is a
+two-tile passage stack, so the flood could not leave the entrance and returned an
+EMPTY mask — floors 1 and 3 produced **zero** tunnels while floor 2, whose entrance
+sits on plain floor, produced one every seed. An empty mask reads exactly like
+"nowhere qualifies", which is why it took a histogram to see.
+
+Both are now gated: removing the reachability requirement reproduces the sealed
+pockets, and the feature-rate gate catches secrets disappearing.
+
+### Also
+
+`check-floor-plan`'s circuit test excludes secret tunnels. A tunnel dug off a tile
+reachable only *through* a loop is naturally stranded when the loop is cut — that
+says nothing about whether the floor's rooms form a ring, which is the claim.
+
+Snapshot re-baselined for floors 1-3; floor 0 and floor 4 unmoved. Verified across
+three seed bases.
+
 ## 1.10.32 — 2026-08-21
 
 ### Phase 3 — loop and hub topologies
