@@ -1,3 +1,36 @@
+## 1.10.36 — 2026-08-21
+
+### Floor 2's entrance moves — phase 3 complete
+
+`entranceX` was the literal 15 and `startFloorY` one of two values, so floor 2 had
+exactly **two** entrance positions no matter how many seeds you ran. Both sampled
+now: **2 → 82 distinct positions**, with feature rates unmoved (secret path 53%,
+locked door 50%) — unlike floor 0, this one cost no content.
+
+⛔ **The corridor still has to be aimed at the middle.** Everything chains off the
+entrance in `horizDir` — corridor, 5×5 room, 7×7 chamber, then the exit path
+doubling back — roughly fifteen columns of it. Choosing a direction at random
+would run half the seeds off the map. Floor 1 already had that rule; floor 2 only
+needed it once its entrance could move.
+
+### Phase 3 is done
+
+| floor | Jaccard | fixed tiles | entrances | secrets | topologies | band contour |
+|---|---|---|---|---|---|---|
+| 0 | 0.408 | 24 | 10 | 53% | — | (snake) |
+| 1 | 0.189 | 0 | 23 | 46% | 2 | 46% |
+| 2 | 0.148 | 0 | 82 | 53% | 2 | 43% |
+| 3 | 0.259 | 6 | 22 | 57% | 4 | 47% |
+| 4 | authored — exempt |
+
+Where it started: floor 3 at **0.749 Jaccard, 85 fixed tiles, one entrance
+position and one shape**; floor 0 at 0.610 with two; floors 1 and 2 with no
+topology at all; secrets impossible below floor 0; overhang bands straight lids at
+70–79% level against the cartridge's 42–63%.
+
+Every one of those is now a gated number rather than an impression, and each gate
+was proven by breaking the thing it guards.
+
 ## 1.10.35 — 2026-08-21
 
 ### Floors 1 and 2 roll a topology

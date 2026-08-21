@@ -1418,9 +1418,20 @@ function _generateFloor(romData, floorIndex, seed) {
     // Step 1: just a small room for the trap landing
 
     // Position based on vertical direction so everything fits on map
-    entranceX = 15;
-    const vertDirEarly = rng() < 0.5 ? -1 : 1; // peek ahead so we can position entrance
-    const startFloorY = vertDirEarly === -1 ? 24 : 8; // bottom if going up, top if going down
+    // ── Entrance, SAMPLED (v1.10.36 — phase 3) ─────────────────────────
+    // `entranceX` was the literal 15 and `startFloorY` one of two values, so
+    // this floor had exactly TWO entrance positions across any number of seeds.
+    //
+    // ⛔ The corridor must still be AIMED AT THE MIDDLE. Everything downstream
+    // chains off the entrance in `horizDir` — corridor, 5x5 room, the 7x7
+    // chamber, then the exit path doubling back — and that chain is about
+    // fifteen columns long. Picking a direction at random would run half of them
+    // off the map. Same rule floor 1 already uses.
+    entranceX = 8 + Math.floor(rng() * 15);       // 8-22
+    const vertDirEarly = rng() < 0.5 ? -1 : 1;    // peek ahead so we can position the entrance
+    const startFloorY = vertDirEarly === -1
+      ? 23 + Math.floor(rng() * 3)                // 23-25, entering from the bottom
+      : 7 + Math.floor(rng() * 3);                // 7-9,   entering from the top
 
     // ── Topology (v1.10.35) ────────────────────────────────────────────
     // Same pair as floor 1, whose architecture this floor's was copied into.
@@ -1440,7 +1451,7 @@ function _generateFloor(romData, floorIndex, seed) {
     planBoxChamber(plan, tilemap, 'entrance', { x: entranceX, y: startFloorY, w: entrBaseW });
 
     // Short horizontal pathway (1 walkable row after overhang)
-    const horizDir = rng() < 0.5 ? -1 : 1;
+    const horizDir = entranceX > 15 ? -1 : entranceX < 15 ? 1 : (rng() < 0.5 ? -1 : 1);
     const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
     const horizStartX = horizDir === 1 ? entranceX + 2 : entranceX;
     planElbow(plan, tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });

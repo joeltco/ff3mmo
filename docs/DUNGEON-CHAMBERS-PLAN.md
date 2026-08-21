@@ -413,8 +413,30 @@ zigzagged, and the topology counts looked perfectly healthy throughout. Downward
 only now, which is also the only direction with room: floor 0's south stairs land
 the player at floor 1's top.
 
-Phase 3's remaining item is floor 2's two entrance positions, which are structural
-(it enters at row 8 or row 24 depending on which way its corridor runs).
+**Floor 2's entrance (v1.10.36) — DONE.** `entranceX` was the literal 15 and
+`startFloorY` one of two values, so the floor had exactly TWO entrance positions
+however many seeds you ran. Both sampled: **2 → 82 distinct positions**, feature
+rates unmoved (secret 53%, locked 50%).
+
+⛔ **The corridor still has to be aimed at the middle.** Everything chains off the
+entrance in `horizDir` — corridor, 5×5 room, 7×7 chamber, then the exit path
+doubling back — about fifteen columns. A randomly chosen direction runs half the
+seeds off the map. Floor 1 already had this rule; floor 2 needed it once its
+entrance could move.
+
+### Phase 3 is complete
+
+| floor | Jaccard | fixed tiles | entrances | secrets | topologies | band contour |
+|---|---|---|---|---|---|---|
+| 0 | 0.408 | 24 | 10 | 53% | — | (snake) |
+| 1 | 0.189 | 0 | 23 | 46% | 2 | 46% |
+| 2 | 0.148 | 0 | 82 | 53% | 2 | 43% |
+| 3 | 0.259 | 6 | 22 | 57% | 4 | 47% |
+| 4 | authored — exempt from every variety measure |
+
+Remaining across the whole plan: phase 4 (migrate floors onto the spec/renderer)
+and phase 5 (the rest of the anti-cloning gates, most of which landed early
+because phase 3 needed them).
 
 #### Original plan
 
