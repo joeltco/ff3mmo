@@ -20,7 +20,7 @@ import {
 import { carveChamber, carveWideChamber, carveBoxChamber, carveBottomBump } from './dungeon/chambers.js';
 import {
   createPlan, planChamber, planWideChamber, planBoxChamber,
-  planHLink, planVLink, planSpine, planBranch, planOrganicRoom,
+  planHLink, planVLink, planSpine, planBranch, planOrganicRoom, planElbow,
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
@@ -1693,6 +1693,26 @@ function _generateFloor(romData, floorIndex, seed) {
     const roomCenterY = 7 + Math.floor(rng() * 5); // 7-11
     const roomTopCarve = roomCenterY - 3;
     const roomBotCarve = roomCenterY + 3;
+
+    // ── Topology (v1.10.30) ────────────────────────────────────────────
+    // `row`     — all three rooms share one band, joined by straight runs.
+    //             This is what the floor ALWAYS did.
+    // `stagger` — each side room sits at its own height, reached by an ELBOW.
+    // Offsets are clamped so a side room stays on the map and above the branch
+    // slot (~row 20); a room hanging into the branches would have them carve
+    // straight through it.
+    const topology = rng() < 0.5 ? 'row' : 'stagger';
+    plan.topology = topology;
+    const rollOffset = () => {
+      if (topology === 'row') return 0;
+      const mag = 2 + Math.floor(rng() * 3);            // 2-4
+      const dir = rng() < 0.5 ? -1 : 1;
+      const want = dir * mag;
+      const lo = 1 - (roomCenterY - 3), hi = 17 - (roomCenterY + 3);
+      return Math.max(lo, Math.min(hi, want));
+    };
+    const leftOffset = rollOffset();
+    const rightOffset = rollOffset();
     const roomLeft = entranceX - halfW;
     const roomRight = entranceX + halfW;
 
@@ -1716,39 +1736,58 @@ function _generateFloor(romData, floorIndex, seed) {
     const rightRoomLeft = roomRight + gap;
     const rightRoomRight = Math.min(30, rightRoomLeft + sideW);
 
+    // Per-side bands, declared BEFORE the connecting paths — the elbows need to
+    // know what row each side room meets its corridor on.
+    const sideRoomTopCarve = roomCenterY - 3;
+    const sideRoomBotCarve = roomCenterY + 3;
+    const leftTop = sideRoomTopCarve + leftOffset,  leftBot = sideRoomBotCarve + leftOffset;
+    const rightTop = sideRoomTopCarve + rightOffset, rightBot = sideRoomBotCarve + rightOffset;
+    const leftPathY = roomCenterY + leftOffset;
+    const rightPathY = roomCenterY + rightOffset;
+    // The pond goes in whichever side room was picked, so it follows THAT
+    // room's band — not the centre's, which is what it used to assume.
+    const pondTop = pondSide === -1 ? leftTop : rightTop;
+    const pondBot = pondSide === -1 ? leftBot : rightBot;
+    // ...and the OTHER side room, which gets the bone scatter. It used to take
+    // that room's columns but the CENTRE room's rows — harmless while all three
+    // shared a band, wrong the moment they do not.
+    const otherTop = pondSide === 1 ? leftTop : rightTop;
+    const otherBot = pondSide === 1 ? leftBot : rightBot;
+
     // Narrow path left (carve 3 rows, overhang eats 2 → 1 walkable)
-    carveHRun(tilemap, {
-      x0: roomLeft - 1, y: roomCenterY, dir: -1, startStep: 0,
+    // Elbow: straight when `leftOffset` is 0 (the `row` topology), an L when the
+    // side room sits at its own height. The vertical leg lands on the room's
+    // held-open edge, which is why `keepEdge` uses `leftPathY`.
+    planElbow(plan, tilemap, {
+      x0: roomLeft - 1, y: roomCenterY, dir: -1,
       steps: (roomLeft - 1) - (leftRoomRight + 1) + 1,
-      yMin: 1, yMax: 30,
+      turnY: leftPathY,
     });
     // Narrow path right
-    carveHRun(tilemap, {
-      x0: roomRight + 1, y: roomCenterY, dir: 1, startStep: 0,
+    planElbow(plan, tilemap, {
+      x0: roomRight + 1, y: roomCenterY, dir: 1,
       steps: (rightRoomLeft - 1) - (roomRight + 1) + 1,
-      yMin: 1, yMax: 30,
+      turnY: rightPathY,
     });
 
     // Left side room — organic carving (keep right edge full at path row)
-    const sideRoomTopCarve = roomCenterY - 3;
-    const sideRoomBotCarve = roomCenterY + 3;
     planOrganicRoom(plan, tilemap, rng, 'side-left', {
-      left: leftRoomLeft, right: leftRoomRight, top: sideRoomTopCarve, bot: sideRoomBotCarve,
-      keepEdge: (y) => (y === roomCenterY ? 'right' : null),   // the path meets it here
+      left: leftRoomLeft, right: leftRoomRight, top: leftTop, bot: leftBot,
+      keepEdge: (y) => (y === leftPathY ? 'right' : null),   // the path meets it here
     });
     // Left room bottom bump
     if (rng() < 0.6) {
-      carveBottomBump(tilemap, rng, { left: leftRoomLeft, right: leftRoomRight, row: sideRoomBotCarve + 1 });
+      carveBottomBump(tilemap, rng, { left: leftRoomLeft, right: leftRoomRight, row: leftBot + 1 });
     }
 
     // Right side room — organic carving (keep left edge full at path row)
     planOrganicRoom(plan, tilemap, rng, 'side-right', {
-      left: rightRoomLeft, right: rightRoomRight, top: sideRoomTopCarve, bot: sideRoomBotCarve,
-      keepEdge: (y) => (y === roomCenterY ? 'left' : null),
+      left: rightRoomLeft, right: rightRoomRight, top: rightTop, bot: rightBot,
+      keepEdge: (y) => (y === rightPathY ? 'left' : null),
     });
     // Right room bottom bump
     if (rng() < 0.6) {
-      carveBottomBump(tilemap, rng, { left: rightRoomLeft, right: rightRoomRight, row: sideRoomBotCarve + 1 });
+      carveBottomBump(tilemap, rng, { left: rightRoomLeft, right: rightRoomRight, row: rightBot + 1 });
     }
 
     // Branch alcoves off corridor — horizontal paths with fat stretches, chests at ends
@@ -1779,8 +1818,8 @@ function _generateFloor(romData, floorIndex, seed) {
         // Top row = all WATER_EDGE_N ($23) — north wall water detail
         // Bottom row = all WATER ($04) — water body
         // Top row 1 tile longer, both extend into outer side wall
-        const topY = sideRoomTopCarve + 2;    // inside room, below overhang
-        const botY = sideRoomTopCarve + 3;    // 1 row below
+        const topY = pondTop + 2;    // inside the POND's room, below overhang
+        const botY = pondTop + 3;    // 1 row below
         if (pondSide === -1) {
           // Left room: extend left past leftRoomLeft into wall
           // Top row (edge detail): starts 1 tile inside room, 6 into wall = 7 tiles
@@ -1817,14 +1856,14 @@ function _generateFloor(romData, floorIndex, seed) {
         // Vertical: 2 columns extending into south wall
         const outerX = pondSide === -1 ? leftRoomLeft : rightRoomRight;
         const innerX = pondSide === -1 ? leftRoomLeft + 1 : rightRoomRight - 1;
-        // Outer: edge at sideRoomBotCarve-1, water from sideRoomBotCarve to +5 (6 into wall)
-        tilemap[(sideRoomBotCarve - 1) * 32 + outerX] = WATER_EDGE_N;
-        for (let y = sideRoomBotCarve; y <= sideRoomBotCarve + 5; y++) {
+        // Outer: edge at pondBot-1, water from pondBot to +5 (6 into wall)
+        tilemap[(pondBot - 1) * 32 + outerX] = WATER_EDGE_N;
+        for (let y = pondBot; y <= pondBot + 5; y++) {
           if (y < 32) tilemap[y * 32 + outerX] = WATER;
         }
-        // Inner: edge at sideRoomBotCarve, water from +1 to +5 (5 into wall)
-        tilemap[sideRoomBotCarve * 32 + innerX] = WATER_EDGE_N;
-        for (let y = sideRoomBotCarve + 1; y <= sideRoomBotCarve + 5; y++) {
+        // Inner: edge at pondBot, water from +1 to +5 (5 into wall)
+        tilemap[pondBot * 32 + innerX] = WATER_EDGE_N;
+        for (let y = pondBot + 1; y <= pondBot + 5; y++) {
           if (y < 32) tilemap[y * 32 + innerX] = WATER;
         }
       }
@@ -1853,7 +1892,7 @@ function _generateFloor(romData, floorIndex, seed) {
               pondUsed.add(`${x + dx},${y + dy}`);
         }
       }
-      const pondBounds = { left: pLeft, right: pRight, top: sideRoomTopCarve, bot: sideRoomBotCarve };
+      const pondBounds = { left: pLeft, right: pRight, top: pondTop, bot: pondBot };
       const pos = findCornerFloor(tilemap, rng, pondUsed, pondBounds);
       if (pos) tilemap[pos.y * 32 + pos.x] = CHEST;
     }
@@ -1901,7 +1940,7 @@ function _generateFloor(romData, floorIndex, seed) {
       const bLeft = pondSide === 1 ? leftRoomLeft : rightRoomLeft;
       const bRight = pondSide === 1 ? leftRoomRight : rightRoomRight;
       const doorX = Math.round((bLeft + bRight) / 2);
-      const doorY = sideRoomTopCarve - 1; // in the ceiling row above room
+      const doorY = otherTop - 1; // in the ceiling row above THAT room
       tilemap[doorY * 32 + doorX] = 0x70;             // door
       tilemap[(doorY + 1) * 32 + doorX] = 0x41;       // passage
       tilemap[(doorY + 2) * 32 + doorX] = PASSAGE_BTM; // passage bottom
@@ -1914,11 +1953,11 @@ function _generateFloor(romData, floorIndex, seed) {
       const boneExclude = new Set();
       // Exclude door column and adjacent
       const doorX = Math.round((bLeft + bRight) / 2);
-      for (let dy = -1; dy <= 3; dy++) boneExclude.add(`${doorX},${sideRoomTopCarve - 1 + dy}`);
+      for (let dy = -1; dy <= 3; dy++) boneExclude.add(`${doorX},${otherTop - 1 + dy}`);
       const boneCount = 2 + Math.floor(rng() * 2); // 2-3 bones
       for (let i = 0; i < boneCount; i++) {
         const pos = findRandomFloor(tilemap, rng, boneExclude,
-          { left: bLeft, right: bRight, top: sideRoomTopCarve, bot: sideRoomBotCarve });
+          { left: bLeft, right: bRight, top: otherTop, bot: otherBot });
         if (pos) {
           tilemap[pos.y * 32 + pos.x] = BONES;
           for (let dy = -2; dy <= 2; dy++)

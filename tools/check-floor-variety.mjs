@@ -34,7 +34,7 @@ const LIMITS = new Map([
   [0, { jaccard: 0.70, always: 90,  entrances: 2 }],
   [1, { jaccard: 0.40, always: 20,  entrances: 15 }],
   [2, { jaccard: 0.30, always: 10,  entrances: 2 }],
-  [3, { jaccard: 0.40, always: 15,  entrances: 12 }],   // v1.10.29: was 0.749 / 85 / 1
+  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 2 }],  // v1.10.29-30: was 0.749 / 85 / 1
   [4, null],
 ]);
 
@@ -42,11 +42,13 @@ const fails = [];
 console.log(`floor  walkTiles  jaccard  alwaysTiles  entrances   limits`);
 for (const [f, lim] of LIMITS) {
   const masks = []; const count = new Uint16Array(1024); const ents = new Set();
+  const topos = new Map();
   let tot = 0;
   for (let k = 0; k < SEEDS; k++) {
     const r = generateFloor(rom, f, BASE + k * 7919);
     const seen = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
     ents.add(`${r.entranceX},${r.entranceY}`);
+    if (r.plan?.topology) topos.set(r.plan.topology, (topos.get(r.plan.topology) || 0) + 1);
     const m = new Set();
     for (let i = 0; i < 1024; i++) if (seen[i]) { count[i]++; m.add(i); tot++; }
     masks.push(m);
@@ -71,6 +73,13 @@ for (const [f, lim] of LIMITS) {
   if (jac > lim.jaccard)        fails.push(`floor ${f}: two seeds share ${(jac * 100).toFixed(0)}% of their walkable tiles (limit ${(lim.jaccard * 100).toFixed(0)}%) — it is the same map every run`);
   if (always > lim.always)      fails.push(`floor ${f}: ${always} tiles are walkable in >=90% of seeds (limit ${lim.always}) — that much of the floor is fixed`);
   if (ents.size < lim.entrances) fails.push(`floor ${f}: only ${ents.size} distinct entrance position(s) across ${SEEDS} seeds (need ${lim.entrances})`);
+  if (lim.topologies) {
+    const spread = [...topos.entries()].map(([k, v]) => `${k} ${v}`).join(', ');
+    console.log(`         topologies: ${spread || '(none recorded)'}`);
+    if (topos.size < lim.topologies) fails.push(`floor ${f}: only ${topos.size} topology/topologies across ${SEEDS} seeds (need ${lim.topologies}) — the shape itself is not varying, only its measurements`);
+    // A topology that shows up once in a blue moon is not really in the game.
+    for (const [k, v] of topos) if (v / SEEDS < 0.15) fails.push(`floor ${f}: topology '${k}' appears in only ${v}/${SEEDS} seeds — too rare to count as variety`);
+  }
 }
 
 if (REPORT) { console.log('\n(--report: measured only, never fails)'); process.exit(0); }

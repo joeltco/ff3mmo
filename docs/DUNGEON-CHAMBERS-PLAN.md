@@ -337,9 +337,25 @@ are byte-identical. `tools/check-floor-variety.mjs` is a deploy gate now, so thi
 cannot silently regress; it is phase 5's first invariant, pulled forward because
 phase 3 is the change it exists to protect.
 
-Still to do here: topology rolled per seed (spine / loop / hub / branch — floor 3
-still only ever produces a spine), floors 0/1/2 given the same treatment,
-rock-tunnelling secret corridors (§3b), and contour irregularity.
+**Topology rolled per seed (v1.10.30).** Floor 3 now picks `row` (all three rooms
+on one band, joined by straight runs — what it always did) or `stagger` (each side
+room at its own height, reached by an **elbow**). Measured 103/97 across 200 seeds;
+Jaccard fell further to **0.253**.
+
+`carveElbow` is the corridor primitive nothing had: every link in the game ran
+dead straight along one axis, which is much of why the floors read as drawn rather
+than dug. Its two legs are deliberately asymmetric — a 3-row horizontal band and a
+1-column vertical — per §3c.
+
+⛔ **Staggering exposed four places that took a side room's COLUMNS but the CENTRE
+room's ROWS**: the pond (both orientations), the chest bounds inside the pond room,
+the bone scatter in the other side room, and the locked-room door row. Harmless
+while all three rooms shared a band; wrong the moment they do not, and they showed
+up as sealed pockets and an unreachable exit rather than as anything that looked
+like a row bug. The gates caught all of it.
+
+Still to do here: more topologies (loop and hub), floors 0/1/2 given the same
+treatment, rock-tunnelling secret corridors (§3b), and contour irregularity.
 
 #### Original plan
 

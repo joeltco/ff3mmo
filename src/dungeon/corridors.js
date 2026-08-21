@@ -157,3 +157,31 @@ export function carveFatteningHRun(tilemap, rng, { x0, y, dir, steps, stopAt, ch
   }
   return { endX };
 }
+
+/**
+ * An L-shaped link: a horizontal run, then a vertical drop or climb at its far
+ * end. The corridor primitive nothing had — every link in the game ran dead
+ * straight along one axis, which is a large part of why the floors read as drawn
+ * rather than dug (§0 of the chambers plan).
+ *
+ * ⛔ THE TWO LEGS ARE NOT SYMMETRIC, and cannot be. The horizontal leg is a
+ * 3-row band that `addOverhang` reduces to one walkable row; the vertical leg is
+ * a single column. See the asymmetry note at the top of this file. The corner
+ * column is carved by BOTH legs, which is what joins them.
+ *
+ * @param {object} spec
+ * @param {number} spec.x0 @param {number} spec.y   start of the horizontal leg
+ * @param {number} spec.dir      horizontal direction
+ * @param {number} spec.steps    horizontal length
+ * @param {number} spec.turnY    row the vertical leg ends on (== `y` for no turn)
+ * @returns {{endX:number, endY:number}}
+ */
+export function carveElbow(tilemap, { x0, y, dir, steps, turnY, yMin = 1, yMax = 30 }) {
+  const { endX } = carveHRun(tilemap, { x0, y, dir, steps, startStep: 0, yMin, yMax });
+  if (turnY === y) return { endX, endY: y };
+  const vDir = turnY > y ? 1 : -1;
+  const { endY } = carveVRun(tilemap, {
+    x: endX, y0: y, dir: vDir, steps: Math.abs(turnY - y), yMin, yMax,
+  });
+  return { endX, endY };
+}

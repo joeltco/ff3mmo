@@ -21,11 +21,11 @@
 // do not read an incomplete plan as "this is the whole floor".
 
 import { carveChamber, carveWideChamber, carveBoxChamber, carveOrganicRoom } from './chambers.js';
-import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun } from './corridors.js';
+import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveElbow } from './corridors.js';
 
 /** @param {boolean} complete — does this plan record EVERY chamber on the floor? */
 export function createPlan(floorIndex, complete = false) {
-  return { floorIndex, complete, chambers: [], links: [] };
+  return { floorIndex, complete, topology: null, chambers: [], links: [] };
 }
 
 /** Carve a jittered room and record it. */
@@ -72,6 +72,13 @@ export function planVLink(plan, tilemap, spec) {
   return r;
 }
 
+/** Carve an L-shaped link and record it. */
+export function planElbow(plan, tilemap, spec) {
+  const r = carveElbow(tilemap, spec);
+  plan.links.push({ kind: 'elbow', ...spec, endX: r.endX, endY: r.endY });
+  return r;
+}
+
 /** Carve the width-varying vertical spine and record it. */
 export function planSpine(plan, tilemap, rng, spec) {
   carveFatteningVRun(tilemap, rng, spec);
@@ -93,7 +100,7 @@ export function planNote(plan, role, note) {
 
 /** One-line-per-entry summary, for tools and debugging. */
 export function describePlan(plan) {
-  const out = [`floor ${plan.floorIndex} — ${plan.chambers.length} chamber(s), ${plan.links.length} link(s)${plan.complete ? '' : '  [PARTIAL — some carves are still inline]'}`];
+  const out = [`floor ${plan.floorIndex}${plan.topology ? ` [${plan.topology}]` : ''} — ${plan.chambers.length} chamber(s), ${plan.links.length} link(s)${plan.complete ? '' : '  [PARTIAL — some carves are still inline]'}`];
   for (const c of plan.chambers) {
     out.push(c.kind === 'inline'
       ? `  chamber ${c.role.padEnd(10)} inline    ${c.note}`
@@ -106,6 +113,8 @@ export function describePlan(plan) {
   for (const l of plan.links) {
     out.push(l.kind === 'h' || l.kind === 'branch'
       ? `  link    ${l.kind.padEnd(10)} from ${l.x0},${l.y} dir ${l.dir > 0 ? '+' : '-'} steps ${l.steps} -> x${l.endX}`
+      : l.kind === 'elbow'
+        ? `  link    elbow      from ${l.x0},${l.y} dir ${l.dir > 0 ? '+' : '-'} steps ${l.steps} -> ${l.endX},${l.endY}`
       : l.kind === 'v'
         ? `  link    v          from ${l.x},${l.y0} dir ${l.dir > 0 ? 'down' : 'up'} steps ${l.steps} -> y${l.endY}`
         : `  link    spine      col ${l.x} rows ${l.yFrom}..${l.yTo}`);

@@ -1,3 +1,42 @@
+## 1.10.30 — 2026-08-21
+
+### Phase 3 — floor 3 rolls its topology
+
+Floor 3 always built the same shape: three rooms in a row at one height, joined by
+straight corridors. It now picks between two, 103/97 across 200 seeds:
+
+- **`row`** — all three rooms on one band, straight runs between them. What it
+  always did.
+- **`stagger`** — each side room sits at its own height, reached by an **elbow**.
+
+Mean pairwise Jaccard fell further, **0.282 → 0.253**, and walkable area went up
+slightly (123 → 126). The plan prints which topology a seed rolled.
+
+**`carveElbow` is the corridor primitive nothing had.** Every link in the game ran
+dead straight along one axis — a large part of why the floors read as drawn rather
+than dug. Its two legs are deliberately asymmetric: a 3-row horizontal band that
+`addOverhang` reduces to one walkable row, and a single-column vertical. Making
+them symmetric produces floating rock or pinched ceiling.
+
+⛔ **Staggering the rooms exposed four places that took a side room's COLUMNS but
+the CENTRE room's ROWS**: the pond in both its orientations, the chest bounds
+inside the pond room, the bone scatter in the other side room, and the locked-room
+door row. Every one was harmless while all three rooms shared a band and wrong the
+instant they did not — and none of them *looked* like a row bug. They surfaced as
+**sealed pocket tiles and an unreachable exit**, which is exactly what the
+correctness gates are for. Fixed by giving each room its own band and having the
+pond, chests, bones and door follow the room they actually belong to.
+
+**The variety gate gained a topology invariant**: a floor with a declared topology
+must produce at least N of them, and any topology appearing in under 15% of seeds
+fails as too rare to count. Proven by forcing floor 3 to one shape — the Jaccard
+and fixed-tile limits still passed, and only the topology check caught it. That is
+the point of having it: measurements can improve while the shape itself stays
+frozen.
+
+Snapshot re-baselined deliberately; again **only floor 3's hash moved**. All other
+gates green, including 600 seeds from a second base.
+
 ## 1.10.29 — 2026-08-21
 
 ### Phase 3 started — floor 3 is no longer the same map every time
