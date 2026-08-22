@@ -1,5 +1,6 @@
 // Game Client — boot wiring, ROM loading, composition root
 
+import { STARTING_DUNGEON, bossFloorMapId } from './data/dungeons.js';
 import { parseROM } from './rom-parser.js';
 import { Sprite } from './sprite.js';
 import { loadWorldMap } from './world-map-loader.js';
@@ -272,8 +273,9 @@ function _startDebugMode() {
   titleSt.state = 'done';
   mapSt.dungeonSeed = 1;
   clearDungeonCache();
-  loadMapById(1004);
-  playTrack(TRACKS.CRYSTAL_ROOM);
+  // Debug entry drops you in the starting dungeon's boss chamber.
+  loadMapById(bossFloorMapId(STARTING_DUNGEON));
+  playTrack(TRACKS[STARTING_DUNGEON.music.boss]);
   setPlayerInventory({});
   addItem(0x54, 5);
   startGameLoop();

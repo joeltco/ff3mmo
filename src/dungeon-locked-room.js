@@ -19,6 +19,7 @@
 // Roadmap: door locking + magic-key consumption, teleport trigger wiring,
 //   secret-shop interior variant.
 
+import { STARTING_DUNGEON } from './data/dungeons.js';
 import { loadMap, processTriggerTiles } from './map-loader.js';
 import { loadRomAssets, mulberry32, scatterRoomLoot } from './dungeon-generator.js';
 import { CEILING, WALL_ROCKY, BONES, FLOOR, FILL_VOID, CHEST, DOOR } from './dungeon/tiles.js';
@@ -268,8 +269,10 @@ export function findChamberDoorPos(tilemap, side, opts = {}) {
  * @param {number}     seed   integer for mulberry32 (chest scatter)
  * @returns {object} map data structure compatible with loadMapById.
  */
-export function generateLockedRoomMap(rom, seed) {
-  const assets = loadRomAssets(rom);
+export function generateLockedRoomMap(rom, seed, dungeon = STARTING_DUNGEON) {
+  // Side rooms borrow their dungeon's art — `loadRomAssets(rom)` with no donor
+  // silently meant "Altar Cave's", which is only right for one dungeon.
+  const assets = loadRomAssets(rom, dungeon.donorMap, dungeon.tileset);
   const rng = mulberry32(seed | 0);
 
   // Fill with void; place replica centered.

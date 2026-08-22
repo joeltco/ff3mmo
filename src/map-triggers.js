@@ -4,6 +4,8 @@
 // _handleChest, _handleSecretWall, _handleRockPuzzle, _handlePondHeal,
 // applyPassage, openPassage, findWorldExitIndex
 
+import { sideRoomForMapId, normalFloorMapIds, dungeonForWorldEntrance, isDungeonMapId,
+         dungeonForMapId, floorIndexForMapId, isBossFloor, isCrystalChamber } from './data/dungeons.js';
 import { playSFX, SFX, playTrack, TRACKS } from './music.js';
 import { MapRenderer } from './map-renderer.js';
 import { clearDungeonCache } from './dungeon-generator.js';
@@ -93,9 +95,10 @@ function rollLootEntry(mapId) {
   // random altar floorId (1000-1003), then uses that pool. So locked-room
   // chests have a chance at deeper-floor loot the player hasn't reached
   // yet. v1.7.675.
-  if (mapId === 1010) {
-    const altarFloors = [1000, 1001, 1002, 1003];
-    mapId = altarFloors[Math.floor(Math.random() * altarFloors.length)];
+  const _lootSide = sideRoomForMapId(mapId);
+  if (_lootSide?.kind === 'locked') {
+    const floors = normalFloorMapIds(_lootSide.dungeon);
+    mapId = floors[Math.floor(Math.random() * floors.length)];
   }
   let tiers = LOOT_POOLS[mapId];
   if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
@@ -468,7 +471,8 @@ function _checkWorldMapTrigger(tileX, tileY) {
     return true;
   }
   const savedX = tileX, savedY = tileY;
-  if (destMap === 111) {
+  const _enteringDungeon = dungeonForWorldEntrance(destMap);
+  if (_enteringDungeon) {
     mapSt.dungeonSeed = Date.now();
     clearDungeonCache();
     // Procedural dungeon: each run gets a fresh seed → fresh layout. The
@@ -479,15 +483,15 @@ function _checkWorldMapTrigger(tileX, tileY) {
     // slate; town mapIds (<1000) keep their persisted state.
     if (ps.consumedTiles) {
       for (const key of Object.keys(ps.consumedTiles)) {
-        if (Number(key) >= 1000) delete ps.consumedTiles[key];
+        if (isDungeonMapId(Number(key))) delete ps.consumedTiles[key];
       }
     }
     if (ps.consumedTilesAt) {
       for (const key of Object.keys(ps.consumedTilesAt)) {
-        if (Number(key) >= 1000) delete ps.consumedTilesAt[key];
+        if (isDungeonMapId(Number(key))) delete ps.consumedTilesAt[key];
       }
     }
-    destMap = 1000;
+    destMap = _enteringDungeon.base;
     transSt.dungeon = true;
   }
   const finalDest = destMap;
@@ -592,7 +596,9 @@ function _checkDynType1(trigger, tileX, tileY) {
         if (mapSt.mapStack.length > 0) {
           const prev = mapSt.mapStack.pop();
           loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
-          if (prev.mapId >= 1000 && prev.mapId < 1004) playTrack(TRACKS.CRYSTAL_CAVE);
+          const _pd = dungeonForMapId(prev.mapId);
+          const _pf = floorIndexForMapId(prev.mapId);
+          if (_pd && _pf !== null && !isBossFloor(_pd, _pf)) playTrack(TRACKS[_pd.music.floors]);
         }
       }, prevMapId);
       return true;
@@ -640,7 +646,9 @@ function _checkDynType4(trigger, tileX, tileY) {
 }
 
 function _checkExitPrev() {
-  const exitingCrystalRoom = mapSt.currentMapId === 1004;
+  const _xd = dungeonForMapId(mapSt.currentMapId);
+  const _xf = floorIndexForMapId(mapSt.currentMapId);
+  const exitingCrystalRoom = !!_xd && _xf !== null && isBossFloor(_xd, _xf) && isCrystalChamber(mapSt.currentMapId);
   const goingToWorld = mapSt.mapStack.length === 0 || mapSt.mapStack[mapSt.mapStack.length - 1].mapId === 'world';
   if (goingToWorld && topBoxSt.isTown && topBoxSt.nameBytes) {
     topBoxSt.state = 'fade-out'; topBoxSt.timer = 0; topBoxSt.fadeStep = 0;

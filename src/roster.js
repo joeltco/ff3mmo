@@ -1,5 +1,6 @@
 // roster.js — MMO player roster: state, update (fade/slide/movement), draw (rows/menu/scroll)
 
+import { rosterLocFor } from './data/dungeons.js';
 import { LOCATIONS, PLAYER_POOL, ROSTER_FADE_STEPS } from './data/players.js';
 import { inputSt } from './input-handler.js';
 import { titleSt } from './title-screen.js';
@@ -73,8 +74,11 @@ export function setLocationGetter(fn) { _getLocState = fn; }
 // (map-triggers.js) can never drift apart.
 export function rosterLocForMapId(mapId) {
   if (mapId === 'world') return 'world';
-  if (mapId === 1004) return 'crystal';
-  if (mapId >= 1000 && mapId < 1004) return 'cave-' + (mapId - 1000);
+  // Dungeon floors come from the registry. Side rooms return null here and fall
+  // through to the town table — see the note on `rosterLocFor`; that is the
+  // shipped behaviour ('ur'), preserved deliberately, not an oversight here.
+  const dloc = rosterLocFor(mapId);
+  if (dloc) return dloc;
   return ROSTER_LOC.get(mapId) || 'ur';
 }
 

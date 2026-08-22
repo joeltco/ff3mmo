@@ -4,7 +4,9 @@ import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
 import { generateFloor, generateSecretRoomMap } from './dungeon-generator.js';
 import { generateLockedRoomMap } from './dungeon-locked-room.js';
-import { isCrystalChamber } from './data/dungeons.js';
+import { isCrystalChamber, isDungeonMapId, dungeonForMapId, floorIndexForMapId,
+         sideRoomForMapId, isBossFloor } from './data/dungeons.js';
+import { resolveDungeonDonor } from './dungeon/boss-chamber.js';
 import { playTrack, stopMusic, playFF2Track, stopFF2Music, ff2MusicReady, TRACKS, FF2_TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
@@ -141,7 +143,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   // `{mapId, goLeft}` in the chamber map's falseWalls; the data is correct,
   // we just have to read it before clearing.)
   let secretGoLeft = false;
-  if ((mapId === 1020 || mapId === 1021) && mapSt.falseWalls) {
+  if (sideRoomForMapId(mapId)?.kind === 'secret' && mapSt.falseWalls) {
     const prevDest = [...mapSt.falseWalls.values()].find(d => d && d.mapId === mapId);
     if (prevDest) secretGoLeft = !!prevDest.goLeft;
   }
@@ -151,22 +153,24 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   // the host chamber's floor was (don't reassign `mapSt.dungeonFloor` either)
   // so the boss / moogle / music checks below stay consistent. v1.7.665.
   let floorIndex;
-  if (mapId === 1010 || mapId === 1011) {
+  const _side = sideRoomForMapId(mapId);
+  const _dungeon = dungeonForMapId(mapId);
+  if (_side?.kind === 'locked') {
     // Standalone locked-room maps — 1010 from floor 0, 1011 from floor 2 (UI
     // 3). Seed XOR'd with mapId so each room has its own chest layout (but
     // deterministic per dungeonSeed so consumed-tile state lines up).
     floorIndex = mapSt.dungeonFloor;
-    result = generateLockedRoomMap(romRaw, ((mapSt.dungeonSeed | 0) ^ mapId) | 0);
-  } else if (mapId === 1020 || mapId === 1021) {
+    result = generateLockedRoomMap(romRaw, ((mapSt.dungeonSeed | 0) ^ mapId) | 0, _dungeon);
+  } else if (_side?.kind === 'secret') {
     // Secret rooms — `secretGoLeft` was captured above. Re-loading without
     // chamber context (shouldn't happen — overworld-only saves + chamber is
     // always the parent) falls back to right-side.
     floorIndex = mapSt.dungeonFloor;
-    result = generateSecretRoomMap(romRaw, secretGoLeft);
+    result = generateSecretRoomMap(romRaw, secretGoLeft, _dungeon);
   } else {
-    floorIndex = mapId - 1000;
+    floorIndex = floorIndexForMapId(mapId);
     mapSt.dungeonFloor = floorIndex;
-    result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed);
+    result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed, _dungeon);
   }
   mapSt.mapData = result;
   mapSt.secretWalls = result.secretWalls;
@@ -191,10 +195,11 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   // Boss is now an NPC rendered through `drawNpcs`. Keep `mapSt.bossSprite`
   // as a no-frames presence flag for the existing battle-trigger / collision
   // checks in movement.js + battle code.
-  if (floorIndex === 4 && getLandTurtleFrames() && !battleSt.enemyDefeated) {
+  const _isBoss = _dungeon ? isBossFloor(_dungeon, floorIndex) : false;
+  if (_isBoss && getLandTurtleFrames() && !battleSt.enemyDefeated) {
     mapSt.bossSprite = { px: 6 * TILE_SIZE, py: 8 * TILE_SIZE };
     addBossNpc(6, 8);
-  } else if (floorIndex === 4 && battleSt.enemyDefeated && isCrystalChamber(mapId)) {
+  } else if (_isBoss && battleSt.enemyDefeated && isCrystalChamber(mapId)) {
     // Turtle already beaten this dungeon run — the Wind Crystal stands in its
     // place (no blink; the live blink→crystal reveal only plays on the winning
     // turn). No bossSprite → walkable, no re-trigger. Turtle respawns once
@@ -213,7 +218,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.moving = false;
   sprite.setDirection(DIR_DOWN);
   sprite.resetFrame();
-  if (floorIndex === 4) playTrack(TRACKS.CRYSTAL_ROOM);
+  if (_isBoss && _dungeon) playTrack(TRACKS[_dungeon.music.boss]);
   // Always fire — `_openReturnDoor` internally no-ops unless the spawn tile
   // is a type-1 trigger with door collision. For side-room maps (locked
   // room mapId 1010) the player spawns on the door but the trigger
@@ -344,8 +349,8 @@ export function setupTopBox(mapId, isWorldMap) {
     topBoxSt.fadeStep = 4;
     return;
   }
-  if (mapId >= 1000) {
-    const romMap = (mapId === 1004) ? 148 : 111;
+  if (isDungeonMapId(mapId)) {
+    const romMap = resolveDungeonDonor(mapId);
     const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
     const result = renderBattleBg(romRaw, bgId);
     hudSt.topBoxBgCanvas = result.bgCanvas;
@@ -403,7 +408,7 @@ export function loadMapById(mapId, returnX, returnY) {
   }
   mapSt.onWorldMap = false;
   setupTopBox(mapId, false);
-  if (mapId >= 1000) { _loadDungeonFloor(mapId, returnX, returnY); }
+  if (isDungeonMapId(mapId)) { _loadDungeonFloor(mapId, returnX, returnY); }
   else {
     // Leaving dungeon → respawn the boss next time we re-enter.
     battleSt.enemyDefeated = false;

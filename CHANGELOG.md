@@ -1,3 +1,73 @@
+## 1.10.50 — 2026-08-22
+
+### The dungeon registry — a dungeon is a row, not fourteen edits
+
+⭐ `src/data/dungeons.js` is now THE registry: one row per dungeon, and the only
+place a dungeon's identity is written down. Still a leaf (imports nothing), so
+every module can read it; skins and music tracks are referenced by id and
+resolved at the call site.
+
+⛔ **Altar Cave was hardcoded across TEN files on fourteen independent axes** —
+`mapId - 1000`, `(mapId === 1004) ? 148 : 111`, `floorIndex === 4 ? 2 : 0`,
+`dungeonFloor < 4`, `Set([1004])`, the 1010/1011 locked rooms, the 1020/1021
+secret rooms, `LOOT_POOLS[1000]`, `'cave-' + (mapId - 1000)`, `destMap = 1000`,
+`destMap === 111`, `secretMapIdNext = 1020`, `loadRomAssets(rom)` with no donor,
+and `loadMapById(1004)`. Adding a second dungeon meant finding and editing all
+fourteen, and missing any one fails SILENTLY: wrong palette, wrong music, no
+encounters, or every chest rejected.
+
+All fourteen now read the registry. Migrated: `dungeon-generator.js`,
+`map-loading.js`, `map-triggers.js`, `roster.js`, `battle-encounter.js`,
+`data/loot-pools.js`, `dungeon-locked-room.js`, `dungeon/boss-chamber.js`,
+`main.js`.
+
+### The boss room was a crystal room for everyone
+
+⛔ `generateBossRoom(tilemap, floorIndex)` took a floor index and **ignored it**,
+returning `carveBossChamber(tilemap, CRYSTAL_SKIN)`. §4c extracted the SHAPE but
+never built the SELECTION, so `SEALS_SKIN` had zero live callers and every
+dungeon ended in the Wind Crystal's room. The DUNGEON tab said so out loud
+("ignored, floor 5 is authored") — the room was not authored, the skin just
+never reached it.
+
+Boss skin, boss-floor assets and boss-floor tileset now all come from the
+dungeon's `bossSkinId`. The tab generates UNDER the selected skin instead of
+repainting a room with someone else's altar already stamped in, so F5 + SEALS is
+a plain cave chamber and F5 + ALTAR still has its pedestal.
+
+⛔ **The asset cache was two singletons** (`cachedRomAssets` /
+`cachedCrystalAssets`), which assumed exactly one cave donor and one boss donor
+existed. Now keyed by donor map. `walkableWarp` (tile `$61`) moved onto the boss
+floor generally — every boss room has a warp out; it was never crystal-specific.
+
+### New gate: `check-dungeon-registry.mjs`
+
+Generating Altar Cave cannot prove this refactor, because every hardcoded
+literal agrees with Altar Cave. `buildRegistry(rows)` makes the registry a
+function of its data, and the gate builds a TWO-dungeon registry with different
+numbers on every axis:
+
+- **Literal guard** — nine engine modules may not mention a dungeon mapId again
+  (skips object keys and arithmetic). This is what stops axis #15.
+- **Behaviour** — a 4-floor dungeon at base 2000 with donor 103, a `boss`
+  ending and its own side rooms resolves on every helper, generates all four
+  floors, and its floor 1 shares Altar Cave's SHAPE but not its palettes.
+- ⛔ **Pedestal check** — the seals boss chamber must contain zero `$3a-$3f`
+  tiles. Revert-proving found the palette and tileset assertions could NOT see
+  `resolveBossSkin('crystal')` being hardcoded back in: both stay identical and
+  only the stamped decoration changes. Four reverts, all fail.
+
+Floor snapshot byte-identical throughout — the whole migration is
+behaviour-preserving for Altar Cave.
+
+### Known bug, preserved deliberately
+
+A player standing in a locked or secret room shows on the roster as being in
+**Ur** (`mapId >= 1000 && mapId < 1004` never matched 1010/1011/1020/1021).
+`rosterLocFor` returns null for side rooms to keep that exact behaviour — a
+refactor that silently changes live multiplayer state is not provably safe. The
+fix is one line in `buildRegistry` and wants its own change and its own gate.
+
 ## 1.10.49 — 2026-08-22
 
 Removed `tools/monscan/entrance-banner.cjs`. It was a half-written emulator

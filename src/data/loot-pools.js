@@ -5,6 +5,8 @@
 // `rollLootEntry(mapId, rng?)` is pure — pass any RNG fn (defaults to Math.random)
 // to get a deterministic roll. Server uses `createRng(seed).rand`.
 
+import { sideRoomForMapId, normalFloorMapIds, STARTING_DUNGEON } from './dungeons.js';
+
 const GIL = (min, max) => ({ gil: [min, max] });
 
 export const LOOT_POOLS = {
@@ -51,7 +53,7 @@ export const LOOT_POOLS = {
     { weight: 12, monster: true },
   ],
 };
-export const DEFAULT_LOOT = LOOT_POOLS[1000];
+export const DEFAULT_LOOT = LOOT_POOLS[STARTING_DUNGEON.base];
 export const UR_CHEST_MAPS = new Set([114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147]);
 
 // Pure roll. Pass rng() for deterministic / seeded callers. Returns:
@@ -69,10 +71,12 @@ function _resolveTier(tier, rng) {
 }
 
 export function rollLootEntry(mapId, rng = Math.random) {
-  if (mapId === 1010) {
-    // Locked-room chest: pick a random altar floor (1000-1003) and roll its pool.
-    const altarFloors = [1000, 1001, 1002, 1003];
-    mapId = altarFloors[Math.floor(rng() * altarFloors.length)];
+  const _side = sideRoomForMapId(mapId);
+  if (_side?.kind === 'locked') {
+    // Locked-room chest: roll ANY of its dungeon's normal floors, so the room
+    // can hand out deeper-floor loot the player has not reached yet (v1.7.675).
+    const floors = normalFloorMapIds(_side.dungeon);
+    mapId = floors[Math.floor(rng() * floors.length)];
   }
   let tiers = LOOT_POOLS[mapId];
   if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];

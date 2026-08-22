@@ -1,5 +1,6 @@
 // Random encounter spawning — extracted from game.js
 
+import { dungeonForMapId, isBossFloor } from './data/dungeons.js';
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
 import { MONSTERS } from './data/monsters.js';
@@ -74,7 +75,12 @@ export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
   const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
   const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
-  const inDungeon = mapSt.dungeonFloor >= 0 && mapSt.dungeonFloor < 4;
+  // ⛔ `dungeonFloor < 4` was "not the boss floor", hardcoded to Altar Cave's
+  // depth. A dungeon with a different floor count would either lose encounters
+  // on its deepest normal floor or gain them in its boss chamber — and this
+  // fails SILENTLY, which is why it is worth the lookup.
+  const _dungeon = dungeonForMapId(mapSt.currentMapId);
+  const inDungeon = !!_dungeon && mapSt.dungeonFloor >= 0 && !isBossFloor(_dungeon, mapSt.dungeonFloor);
   const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && !mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
   const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
   if (!inDungeon && !onGrass && !inPatch) return false;

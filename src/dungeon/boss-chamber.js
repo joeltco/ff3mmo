@@ -18,6 +18,8 @@
 
 // Diamond layout, originally transcribed from ROM map 148.
 // Rows 8-10 / cols 5-7 are plain FLOOR here; the crystal skin puts the altar on.
+import { dungeonForMapId, floorIndexForMapId, isBossFloor } from '../data/dungeons.js';
+
 const LAYOUT = [
   // y, x, tile — top narrowing approach (rows 2-4)
   [2,5,0x01],[2,6,0x01],[2,7,0x01],
@@ -100,6 +102,53 @@ export const SEALS_SKIN = {
  * Carve the boss chamber into `tilemap` and let `skin` dress it.
  * @returns {{entranceX:number, entranceY:number, warpTile:{x:number,y:number}}}
  */
+/**
+ * Skins by id, so `data/dungeons.js` can name one without importing this module
+ * (it is a leaf — see the header there). A dungeon row's `bossSkinId` is a key
+ * into this object; `resolveBossSkin` is the only place that lookup happens.
+ */
+export const BOSS_SKINS = {
+  crystal: CRYSTAL_SKIN,
+  seals:   SEALS_SKIN,
+};
+
+/**
+ * Resolve a dungeon row's `bossSkinId`.
+ *
+ * ⛔ THROWS on an unknown id rather than falling back. A typo'd skin id that
+ * silently returned the seals skin would look like a working dungeon with the
+ * wrong art, which is exactly the failure this registry was built to end — the
+ * old code hardcoded `CRYSTAL_SKIN` and every dungeon got a crystal room.
+ */
+export function resolveBossSkin(skinId) {
+  const skin = BOSS_SKINS[skinId];
+  if (!skin) throw new Error(`unknown boss skin id '${skinId}' — known: ${Object.keys(BOSS_SKINS).join(', ')}`);
+  return skin;
+}
+
+/**
+ * The ROM map a dungeon mapId borrows its art from — boss chambers use the boss
+ * skin's donor, every other floor uses the dungeon's.
+ *
+ * ⛔ THIS LIVES HERE, NOT IN THE REGISTRY. `data/dungeons.js` is a leaf and
+ * cannot import the skins, so putting a `bossDonorMap` field on each row would
+ * mean the donor is written down twice — once on the row and once on the skin —
+ * and the two would drift. The registry names a skin; this resolves it.
+ *
+ * Replaces `const romMap = (mapId === 1004) ? 148 : 111` in `map-loading.js`,
+ * which was the battle-background lookup and therefore ALSO a per-dungeon fact.
+ */
+export function resolveDungeonDonor(mapId) {
+  const dungeon = dungeonForMapId(mapId);
+  if (!dungeon) return null;
+  const floorIndex = floorIndexForMapId(mapId);
+  // Side rooms (locked / secret) are not floors and borrow the dungeon's art.
+  if (floorIndex !== null && isBossFloor(dungeon, floorIndex)) {
+    return resolveBossSkin(dungeon.bossSkinId).donorMap;
+  }
+  return dungeon.donorMap;
+}
+
 export function carveBossChamber(tilemap, skin = SEALS_SKIN) {
   for (const [y, x, t] of LAYOUT) tilemap[y * 32 + x] = t;
   skin.decorate?.(tilemap);

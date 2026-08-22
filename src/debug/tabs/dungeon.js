@@ -16,6 +16,7 @@
 // scales to the viewport width, and everything below it scrolls. Nothing here
 // depends on hover.
 
+import { STARTING_DUNGEON } from '../../data/dungeons.js';
 import { generateFloor } from '../../dungeon-generator.js';
 import { parseMapProperties, loadTileset, loadCHRGraphics, buildMapPalettes, loadNameTable } from '../../map-loader.js';
 import { describePlan } from '../../dungeon/plan.js';
@@ -46,10 +47,24 @@ const FLOOR_NAMES = ['F1 cave', 'F2 traps', 'F3 puzzle', 'F4 rooms', 'F5 crystal
 // Altar Cave's OWN donor, so the swap repainted nothing. Both were inferred from
 // palettes and area bytes. Anything added here needs the name table to back it.
 const SKINS = [
-  { id: 'altar',   label: 'ALTAR',   donor: 111 },   // "Altar Cave"   area $30, palette $78
-  { id: 'seals',   label: 'SEALS',   donor: 103 },   // "Sealed Cave"  area $18, palette $79
-  { id: 'crystal', label: 'CRYSTAL', donor: 148 },   // "Wind Crystal" the crystal chamber
+  { id: 'altar',   label: 'ALTAR',   donor: 111, bossSkinId: 'crystal' },  // "Altar Cave"   area $30, palette $78
+  { id: 'seals',   label: 'SEALS',   donor: 103, bossSkinId: 'seals'   },  // "Sealed Cave"  area $18, palette $79
+  { id: 'crystal', label: 'CRYSTAL', donor: 148, bossSkinId: 'crystal' },  // "Wind Crystal" the crystal chamber
 ];
+
+// ⛔ THE BOSS FLOOR USED TO IGNORE THE SKIN ENTIRELY — it was generated from the
+// live registry (Altar Cave), so picking SEALS and stepping to F5 showed the
+// CRYSTAL ROOM, pedestal and all, labelled "ignored, floor 5 is authored". The
+// room was not authored; the skin simply never reached it. Previewing a skin
+// means GENERATING under it, not repainting a room that already has someone
+// else's altar stamped into it.
+//
+// This is a preview row, not a registered dungeon: the Cave of Seals has no
+// encounters, loot pool or overworld mouth yet, so registering it would make a
+// broken dungeon reachable. It borrows Altar Cave's map range on purpose.
+function previewDungeon(skin) {
+  return { ...STARTING_DUNGEON, id: `preview-${skin.id}`, donorMap: skin.donor, bossSkinId: skin.bossSkinId };
+}
 const skinCache = new Map();
 function assetsFor(rom, donor) {
   if (skinCache.has(donor)) return skinCache.get(donor);
@@ -200,7 +215,7 @@ function report(md, seen) {
   lines.push(`seed ${state.seed}`);
   lines.push(`walkable ${walk}   unreachable ${unreach}   chests ${chests}   bones ${bones}`);
   const sk = SKINS[state.skin];
-  lines.push(`skin ${sk.label} (donor map ${sk.donor})${state.floor === 4 ? ' — ignored, floor 5 is authored' : ''}`);
+  lines.push(`skin ${sk.label} (donor map ${sk.donor}, boss skin ${sk.bossSkinId})`);
   lines.push(`entrance ${md.entranceX},${md.entranceY}   tileset ${md.tileset}   fill 0x${(md.fillTile ?? 0).toString(16)}`);
 
   const exits = [];
@@ -225,17 +240,18 @@ function redraw() {
   if (!dom || !rom) return;
   let md;
   try {
-    md = generateFloor(rom, state.floor, state.seed);
+    md = generateFloor(rom, state.floor, state.seed, previewDungeon(SKINS[state.skin]));
   } catch (e) {
     dom.out.textContent = `generateFloor threw:\n${e && e.stack ? e.stack : e}`;
     return;
   }
   const seen = reachableFrom(md.tilemap, md.entranceX, md.entranceY);
   const c2 = dom.canvas.getContext('2d');
-  // ⛔ Floor 4 keeps its own assets. The crystal room is authored in tileset 2,
-  // and repainting it with a cave donor is not a skin test, it is nonsense.
+  // The floor is already generated UNDER the skin, so it carries the right
+  // tileset and the right decorations. Repainting is only needed for the
+  // non-boss floors, whose art comes from the dungeon's donor.
   const skin = SKINS[state.skin];
-  const skinAssets = state.floor === 4 ? null : assetsFor(rom, skin.donor);
+  const skinAssets = md.tileset === 0 ? assetsFor(rom, skin.donor) : null;
   paint(c2, md, skinAssets);
   overlay(c2, md, seen);
   dom.out.textContent = report(md, seen);
