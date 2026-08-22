@@ -807,6 +807,44 @@ export function initAdamantoise(romData) {
   return { adamantoiseFrames: [normal, flipped] };
 }
 
+/**
+ * A two-frame map OBJECT sprite, decoded from the FF3 ROM.
+ *
+ * FF3's animated map objects are 8 consecutive tiles at `0x14010 + (id-193)*0x80`
+ * — two 16x16 frames, TL/TR/BL/BR each. Torches and candles already use this
+ * layout (`flame-sprites.js`); so does the Sealed Cave's Djinn (object 203 at
+ * `0x14510`, reached from npc id 62 through `NPC_GFX_TABLE`).
+ *
+ * ⛔ THE PALETTE IS THE MAP'S, NOT A CHOICE. `spritePalette` is one of the two
+ * entries from `buildSpritePalettes` for the map the object stands on, selected
+ * by the object's own record flags (`((flags >> 2) & 3) >= 2 ? 1 : 0`, the rule
+ * `flame-sprites.js` already applies). Passing a hand-mixed palette here would
+ * be inventing art.
+ *
+ * @returns {[HTMLCanvasElement, HTMLCanvasElement]} the two frames
+ */
+export function initMapObjectFrames(romData, offset, spritePalette) {
+  // ⛔ `_blitTile` INDEXES `NES_SYSTEM_PALETTE` ITSELF — pass raw NES colour
+  // indices, exactly as `initAdamantoise` does. Converting to RGB here makes the
+  // lookup `NES_SYSTEM_PALETTE[[r,g,b]]`, which is `undefined` and falls back to
+  // black: the sprite draws as a solid silhouette, still fully opaque, so a
+  // "does it have pixels" check passes and only LOOKING at it catches the bug.
+  // Slot 0 is never read (`ci === 0` is the transparent branch).
+  const pal = spritePalette;
+  const frames = [];
+  for (let f = 0; f < 2; f++) {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const cctx = c.getContext('2d');
+    for (let q = 0; q < 4; q++) {
+      const tile = decodeTile(romData, offset + (f * 4 + q) * 16);
+      _renderDecodedTile(cctx, tile, pal, _BATTLE_LAYOUT[q][0], _BATTLE_LAYOUT[q][1]);
+    }
+    frames.push(c);
+  }
+  return frames;
+}
+
 export function initGoblinSprite(romData) {
   const tiles = [];
   for (let i = 0; i < GOBLIN_TILES; i++) {

@@ -215,7 +215,13 @@ export function buildMapPalettes(romData, mapProps) {
 
 // Build sprite palettes 6 and 7 (PPU palettes 6-7) as NES color indices
 // Returns [[pal6: 4 NES colors], [pal7: 4 NES colors]]
-function buildSpritePalettes(romData, mapProps) {
+/**
+ * SP2 / SP3 for a map — the two sprite palettes every NPC and map object on it
+ * is painted from. Exported so the dungeon generator can give GENERATED floors
+ * the same pair as their donor map; without it a generated floor has no sprite
+ * palettes at all and anything drawn on it has to invent its colours.
+ */
+export function buildSpritePalettes(romData, mapProps) {
   return [mapProps.spritePalette6, mapProps.spritePalette7].map(idx => [
     0x0F, // color 0 transparent (rendered as black in NES)
     romData[PALETTE_TABLE_1 + idx],

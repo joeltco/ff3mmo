@@ -1,3 +1,44 @@
+## 1.10.53 — 2026-08-22
+
+### The Cave of Seals boss wears its own sprite
+
+The chain, every link from the cartridge:
+
+    npc id 62 -> NPC_GFX_TABLE[$144e] = gfx $4a -> map object $14510
+    8 tiles = two 16x16 frames (a real two-frame idle)
+    record flags $EE -> ((f>>2)&3)>=2 -> sprite palette index 1
+    index 1 -> the floor's spritePalettes[1], inherited from donor map 103
+
+⛔ **Every dungeon's boss was the Land Turtle.** `drawNpcs` read the single
+global `_landTurtleFrames`, which is an FF2 Adamantoise rip
+(`FF2_ADAMANTOISE_SPRITE = 0x0BF10`) — not FF3 art, and not per-dungeon.
+Replaced with `setBossFrames` / `getBossFrames`, resolved at map load from the
+dungeon's skin. Altar Cave keeps the Adamantoise: the crystal skin names no map
+object, and the gate asserts that so the fallback stays deliberate.
+
+⛔ **Generated floors had no `spritePalettes` at all.** That is why the boss used
+hand-mixed `LAND_TURTLE_PAL` constants — there was nothing to paint it from.
+`buildSpritePalettes` is now exported from `map-loader.js`, and every generated
+map (floors, locked rooms, secret rooms) carries its donor's SP2/SP3. So NPCs and
+objects on a generated floor are painted from the ROM instead of by hand.
+
+New: `initMapObjectFrames(rom, offset, spritePalette)` — the two-frame map-object
+layout torches and candles already use (`0x14010 + (id-193)*0x80`).
+
+### The bug the gate could not see
+
+⛔ **The first version drew the Djinn as a solid black silhouette.** `_blitTile`
+indexes `NES_SYSTEM_PALETTE` itself, so it wants raw colour INDICES; I converted
+to RGB first, making every lookup `undefined` -> black. It was fully opaque, both
+frames still differed, and it sailed through the ink and frames-differ checks.
+Rendering it and looking is what caught it.
+
+`check-boss-sprite.mjs` now counts DISTINCT colours and asserts every one belongs
+to the map palette. Revert-proven four ways: the RGB conversion, dropping
+`spritePalettes` from the result builders, putting the boss draw back on the
+global, and a wrong sprite offset all fail — and the `spritePalettes` case
+reports a finding instead of a TypeError.
+
 ## 1.10.52 — 2026-08-22
 
 ### The Cave of Seals boss room gets its dais — from the Sealed Cave's own map

@@ -90,6 +90,21 @@ let _crystalFrames = null;           // [frameA, frameB, frameC] — 16×32 Wind
 
 export function setLandTurtleFrames(f)        { _landTurtleFrames = f; }
 export function getLandTurtleFrames()         { return _landTurtleFrames; }
+
+// The frames the boss NPC actually DRAWS with, set per dungeon at map load.
+//
+// ⛔ THIS USED TO BE `_landTurtleFrames` DIRECTLY, which is the FF2 Adamantoise
+// rip (`FF2_ADAMANTOISE_SPRITE = 0x0BF10`) — one global, so every dungeon's boss
+// wore the Land Turtle. The Cave of Seals' boss is FF3 art the cartridge already
+// places: npc id 62 on map 106, gfx $4a, map object $14510.
+//
+// Both are [frameA, frameB] and the draw path alternates them on water-tick
+// parity, so they are interchangeable — but they are NOT the same KIND of pair.
+// The turtle's is [normal, hflipped] (it has only a south-facing pose in ROM);
+// the Djinn's is a genuine two-frame idle.
+let _bossFrames = null;
+export function setBossFrames(f)              { _bossFrames = f; }
+export function getBossFrames()               { return _bossFrames || _landTurtleFrames; }
 export function setCrystalFrames(f)           { _crystalFrames = f; }
 export function getCrystalFrames()            { return _crystalFrames; }
 
@@ -743,7 +758,7 @@ function _drawBossNpc(ctx, sx, sy, npc) {
     return;
   }
 
-  const frames = _landTurtleFrames;
+  const frames = getBossFrames();
   if (!frames) return;
 
   // Defeat reveal — blink phase: turtle flashes a few times before morphing.

@@ -316,6 +316,7 @@ export function generateLockedRoomMap(rom, seed, dungeon = STARTING_DUNGEON) {
     metatiles: assets.metatiles,
     palettes: assets.palettes,
     tileAttrs: assets.tileAttrs,
+    spritePalettes: assets.spritePalettes,
     collision: assets.collision,
     collisionByte2: assets.collisionByte2,
     entranceData: new Uint8Array(16),

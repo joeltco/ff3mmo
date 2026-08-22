@@ -6,13 +6,14 @@ import { generateFloor, generateSecretRoomMap } from './dungeon-generator.js';
 import { generateLockedRoomMap } from './dungeon-locked-room.js';
 import { isCrystalChamber, isDungeonMapId, dungeonForMapId, floorIndexForMapId,
          sideRoomForMapId, isBossFloor } from './data/dungeons.js';
-import { resolveDungeonDonor } from './dungeon/boss-chamber.js';
+import { resolveDungeonDonor, resolveBossSkin } from './dungeon/boss-chamber.js';
+import { initMapObjectFrames } from './sprite-init.js';
 import { playTrack, stopMusic, playFF2Track, stopFF2Music, ff2MusicReady, TRACKS, FF2_TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { DUNGEON_NAME } from './data/strings.js';
@@ -196,7 +197,20 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   // as a no-frames presence flag for the existing battle-trigger / collision
   // checks in movement.js + battle code.
   const _isBoss = _dungeon ? isBossFloor(_dungeon, floorIndex) : false;
-  if (_isBoss && getLandTurtleFrames() && !battleSt.enemyDefeated) {
+  // Per-dungeon boss art. A skin naming a `bossSpriteOffset` gets that FF3 map
+  // object, painted with the floor's OWN sprite palette (which comes from the
+  // donor map) and the palette index measured off the object's ROM record.
+  // A skin without one keeps the FF2 Adamantoise, which is Altar Cave's.
+  if (_isBoss && _dungeon) {
+    const _skin = resolveBossSkin(_dungeon.bossSkinId);
+    if (_skin.bossSpriteOffset && result.spritePalettes) {
+      setBossFrames(initMapObjectFrames(
+        romRaw, _skin.bossSpriteOffset, result.spritePalettes[_skin.bossSpritePalIdx ?? 0]));
+    } else {
+      setBossFrames(null);   // fall back to the Land Turtle
+    }
+  }
+  if (_isBoss && getBossFrames() && !battleSt.enemyDefeated) {
     mapSt.bossSprite = { px: 6 * TILE_SIZE, py: 8 * TILE_SIZE };
     addBossNpc(6, 8);
   } else if (_isBoss && battleSt.enemyDefeated && isCrystalChamber(mapId)) {

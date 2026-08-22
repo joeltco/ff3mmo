@@ -2,7 +2,7 @@
 
 import {
   parseMapProperties, loadTileset, loadCHRGraphics,
-  buildMapPalettes, loadTileCollision, loadTileCollisionByte2,
+  buildMapPalettes, buildSpritePalettes, loadTileCollision, loadTileCollisionByte2,
   loadNameTable, processTriggerTiles,
 } from './map-loader.js';
 import { placeLockedRoom, placeChamberDoor, findChamberDoorPos } from './dungeon-locked-room.js';
@@ -677,6 +677,7 @@ export function generateSecretRoomMap(rom, goLeft, dungeon = STARTING_DUNGEON) {
     metatiles: assets.metatiles,
     palettes: assets.palettes,
     tileAttrs: assets.tileAttrs,
+    spritePalettes: assets.spritePalettes,
     collision: assets.collision,
     collisionByte2: assets.collisionByte2,
     entranceData: new Uint8Array(16),
@@ -983,6 +984,9 @@ export function loadRomAssets(romData, donorMap = REF_MAP_ID, tileset = 0, { wal
     metatiles: loadTileset(romData, tileset),
     chrTiles: loadCHRGraphics(romData, donorMap),
     palettes: buildMapPalettes(romData, mapProps),
+    // The donor map's SP2/SP3, so NPCs and objects on a generated floor are
+    // painted from the ROM instead of from hand-picked constants.
+    spritePalettes: buildSpritePalettes(romData, mapProps),
     collision,
     collisionByte2: loadTileCollisionByte2(romData, tileset),
     tileAttrs: loadNameTable(romData, tileset),
@@ -2753,6 +2757,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     metatiles: assets.metatiles,
     palettes: assets.palettes,
     tileAttrs: assets.tileAttrs,
+    spritePalettes: assets.spritePalettes,
     collision: assets.collision,
     collisionByte2: assets.collisionByte2,
     entranceData,
