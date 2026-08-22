@@ -1,3 +1,14 @@
+## 1.10.49 — 2026-08-22
+
+Removed `tools/monscan/entrance-banner.cjs`. It was a half-written emulator
+harness meant to walk the party onto each overworld cave mouth and read the
+location banner off the nametable — the expensive way to answer a question that
+map property byte 2 answers directly (v1.10.48). It never worked: a `$0700` warp
+does not draw a banner, so it returned "(no text)". It reached the repo because
+the heredoc that created it ran before the run was called off.
+
+`tools/map-names.mjs` is the supported way to ask what a map is called.
+
 ## 1.10.48 — 2026-08-21
 
 ### The Cave of Seals is maps 103-106, and the ROM says so
