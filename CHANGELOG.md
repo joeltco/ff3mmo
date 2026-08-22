@@ -1,3 +1,64 @@
+## 1.10.55 — 2026-08-22
+
+### The Cave of Seals is a real dungeon
+
+Registered: maps **2000-2003**, three normal floors plus a boss chamber, matching
+the cartridge's own 103 / 104+105 / 106. Entered from the ROM's own overworld
+mouth at world **(84,36)** — `worldEntranceMap: 103` is all that took; the
+trigger was already there.
+
+**Encounters** — `seals_cave_f1..f3`. ⭐ The roster is the ROM's: monsters
+`$09-$0F` are the `cave_seal` group and every one is undead, which is what the
+cartridge's own script says about the place — *"The Sealed Cave is guarded by
+undead monsters. They may be defeated by casting Cure!"* (string `$23b`). That
+agreement between the bestiary grouping and the script line is the evidence, not
+the id range. Zombie/Mummy/Skeleton/CursdCopper/Larva/Shadow/Revenant, lv4-6
+against Altar Cave's lv1-2.
+
+⛔ **The floor SPLIT is our design choice, not a ROM fact.** FF3's per-map
+encounter set is not in the 16-byte property block: every byte was decoded as a
+set index and checked against the zones we already ship, and the only two that
+"matched" are the tileset/entranceX byte and the songId byte — coincidences.
+`tools/map-encounters.mjs` records the search and SELF-TESTS, printing
+"WRONG BYTE, do not use" rather than quietly returning a number.
+
+**Loot** — pools for 2000-2002, continuing Altar F4's curve (gil 150-320 ->
+300-650). Also a design choice; the ROM has fixed chests at fixed spots and this
+game rolls pools for every chest, towns included. What comes from the ROM is the
+TIER, set by the monster levels above.
+
+**Music** — new `TRACKS.DUNGEON_CAVE` (`$1d`). Map byte 10 gives `$1d` for every
+Sealed Cave floor and groups Mythril Mines, the Subterranean Lake and Bahamut's
+Lair under it; `$02` is the Altar/Molten theme. ⛔ `transitions.js` played
+`TRACKS.CRYSTAL_CAVE` on leaving the loading screen for ANY dungeon — fixed, and
+`startWipeTransition` now KEEPS the `destMapId` it was already being handed and
+dropping.
+
+**Loading screen** — the boss silhouette was always the Land Turtle. It now shows
+the destination dungeon's boss, resolved through the same
+`bossFramesForDungeon` the map load uses, so the silhouette and the boss standing
+in the room cannot be different sprites.
+
+**Battle backgrounds** — already correct, no change: `resolveDungeonDonor` routes
+map 2003 through donor 103, and the ROM gives 103 the same bg id (8) as 111.
+
+### Two bugs the new dungeon exposed
+
+⛔ **Doors onto nothing.** A dungeon declaring no locked room still got a locked
+DOOR: `lockedRoomMapIdForFloor` returns null and both placement sites wrote
+`{ mapId: null }` regardless. **43 of 120 generated Seals floors had one.** The
+floor still generates and still connects, and the snapshot only covers Altar
+Cave, so nothing else could have caught it. Gated across every shipped dungeon.
+
+⛔ **A test fixture shadowed a real dungeon.** `check-dungeon-registry.mjs` used
+id `'seals'` at base 2000 for its synthetic second dungeon — which became the
+REAL Cave of Seals' id and range. `buildRegistry` allowed it (the overlap check
+compares `claimed.get(id) !== d.id`, and a repeated id passes), so the only
+symptom was a line reading "3 dungeons: altar, seals, seals". Duplicate ids now
+throw, and the fixture is `probe` at 3000.
+
+Twelve gates green. Altar Cave's floor snapshot byte-identical throughout.
+
 ## 1.10.54 — 2026-08-22
 
 ### Axis 15: the encounter zone was still hardcoded to Altar Cave

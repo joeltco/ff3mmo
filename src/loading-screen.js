@@ -1,6 +1,12 @@
 // loading-screen.js — loading screen overlay + right-panel moogle.
 // Reads ui/transitions state directly (no shared-bag).
 
+import { dungeonForMapId } from './data/dungeons.js';
+import { bossFramesForDungeon } from './dungeon/boss-chamber.js';
+import { initMapObjectFrames } from './sprite-init.js';
+import { buildSpritePalettes, parseMapProperties } from './map-loader.js';
+import { romRaw } from './boot.js';
+import { mapSt } from './map-state.js';
 import { nesColorFade } from './palette.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { loadingSt, transSt } from './transitions.js';
@@ -64,11 +70,39 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   drawText(ui.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
-  const bossFade = getLandTurtleFadeFrames();
-  const landTurtle = getLandTurtleFrames();
-  if (bossFade) ui.ctx.drawImage(bossFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
-  else if (landTurtle) ui.ctx.drawImage(landTurtle[0], bossContentX, bossRowY);
+  // ⛔ THE SILHOUETTE WAS ALWAYS THE LAND TURTLE. It is the FF2 Adamantoise rip,
+  // drawn on the way into every dungeon. A dungeon whose skin names a map object
+  // (the Cave of Seals' Djinn) shows ITS boss instead.
+  //
+  // The floor does not exist yet at this point, so the frames come from the
+  // donor map's palettes via `bossFramesForDungeon` — the same resolver the map
+  // load uses, so the loading screen and the room agree.
+  const dungeon = dungeonForMapId(transSt.destMapId) || dungeonForMapId(mapSt.currentMapId);
+  const own = _dungeonBossFrames(dungeon);
+  if (own) {
+    ui.ctx.drawImage(own[Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
+  } else {
+    const bossFade = getLandTurtleFadeFrames();
+    const landTurtle = getLandTurtleFrames();
+    if (bossFade) ui.ctx.drawImage(bossFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
+    else if (landTurtle) ui.ctx.drawImage(landTurtle[0], bossContentX, bossRowY);
+  }
   drawText(ui.ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
+}
+
+
+// Boss frames per dungeon, built once. `null` means "this dungeon has no map
+// object boss" and is cached too, so Altar Cave does not re-resolve every frame.
+const _bossFrameCache = new Map();
+function _dungeonBossFrames(dungeon) {
+  if (!dungeon || !romRaw) return null;
+  if (_bossFrameCache.has(dungeon.id)) return _bossFrameCache.get(dungeon.id);
+  let frames = null;
+  try {
+    frames = bossFramesForDungeon(romRaw, dungeon, initMapObjectFrames, buildSpritePalettes, parseMapProperties);
+  } catch { frames = null; }
+  _bossFrameCache.set(dungeon.id, frames);
+  return frames;
 }
 
 function _drawLoadingRightPanel(fadeLevel) {

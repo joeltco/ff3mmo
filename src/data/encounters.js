@@ -37,6 +37,49 @@ export const ENCOUNTERS = new Map([
     ],
   }],
   // --- Altar Cave ---
+  // --- Cave of Seals ---
+  //
+  // ⭐ THE ROSTER IS THE ROM'S. Monsters $09-$0F are the `cave_seal` group, and
+  // every one of them is undead — which is what the cartridge's own script says
+  // about this place: "The Sealed Cave is guarded by undead monsters. They may
+  // be defeated by casting Cure!" (string $23b). That agreement between the
+  // bestiary grouping and the script line is the evidence, not the id range.
+  //
+  //   $09 Zombie      lv4 hp42     $0d Larva       lv5 hp38
+  //   $0a Mummy       lv4 hp48     $0e Shadow      lv5 hp65
+  //   $0b Skeleton    lv4 hp54     $0f Revenant    lv6 hp70
+  //   $0c CursdCopper lv5 hp35
+  //
+  // ⛔ THE FLOOR SPLIT IS OUR DESIGN CHOICE, not a ROM fact. FF3's per-map
+  // encounter set is NOT in the 16-byte property block — every byte tested
+  // decoded to species that appear in no shipped zone, and the two that "matched"
+  // (byte 0, byte 10) are the tileset/entranceX and songId bytes, i.e.
+  // coincidences. Finding the real table needs a CPU trace. So this tiers the
+  // ROM's own roster across the floors the way `altar_cave_f*` does, and claims
+  // nothing more.
+  ['seals_cave_f1', {
+    rate: 'normal',
+    formations: [
+      [{ id: 0x09, min: 1, max: 3 }],                              // Zombie x1-3
+      [{ id: 0x0a, min: 1, max: 2 }, { id: 0x09, min: 1, max: 2 }],// Mummy + Zombie
+    ],
+  }],
+  ['seals_cave_f2', {
+    rate: 'normal',
+    formations: [
+      [{ id: 0x0a, min: 1, max: 3 }],                              // Mummy x1-3
+      [{ id: 0x0b, min: 1, max: 2 }, { id: 0x0c, min: 1, max: 2 }],// Skeleton + CursdCopper
+      [{ id: 0x0d, min: 1, max: 3 }],                              // Larva x1-3
+    ],
+  }],
+  ['seals_cave_f3', {
+    rate: 'normal',
+    formations: [
+      [{ id: 0x0b, min: 2, max: 3 }],                              // Skeleton x2-3
+      [{ id: 0x0e, min: 1, max: 2 }, { id: 0x0d, min: 1, max: 2 }],// Shadow + Larva
+      [{ id: 0x0f, min: 1, max: 2 }],                              // Revenant x1-2
+    ],
+  }],
   ['altar_cave_f1', {
     rate: 'normal',
     formations: [

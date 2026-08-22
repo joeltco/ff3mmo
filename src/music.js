@@ -12,6 +12,12 @@ import { getSetting, volGain } from './settings.js';
 export const TRACKS = {
   CRYSTAL_CAVE: 0x02,  // Altar Cave
   CRYSTAL_ROOM: 0x36,  // Crystal Room (song 54)
+  // The OTHER cave theme. Map property byte 10 gives $1d for every Sealed Cave
+  // floor, and the same byte groups Mythril Mines, the Subterranean Lake and
+  // Bahamut's Lair under it — a coherent set, which is the evidence that byte 10
+  // is right here. (It is NOT always: see reference_ff3mmo_map_music for towns
+  // where it lies.) Song $02 above is the Altar Cave / Molten Cave theme.
+  DUNGEON_CAVE: 0x1D,  // Sealed Cave, Mythril Mines, Subterranean Lake, Bahamut's Lair
   WORLD_MAP:    0x1E,  // Eternal Wind
   TOWN_UR:      0x1F,  // My Home Town
   PIANO_3:      0x1A,  // 3rd piano song (loading screen)

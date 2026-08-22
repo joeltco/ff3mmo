@@ -52,6 +52,42 @@ export const LOOT_POOLS = {
     { weight:  3, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
+  // --- Cave of Seals (2000-2002) ---
+  //
+  // ⛔ A DESIGN CHOICE, LIKE ALTAR CAVE'S. There is no ROM provenance for a
+  // procedural dungeon's loot table: the cartridge has fixed chests at fixed
+  // spots, and this game rolls pools for every chest including towns
+  // (`UR_CHEST_MAPS` -> `LOOT_POOLS[114]`). What IS taken from the ROM is the
+  // TIER: this dungeon's monsters are lv4-6 against Altar Cave's lv1-2, so the
+  // curve continues from Altar F4 (gil 125-275) rather than restarting.
+  // Item ids and prices are read off `data/items.js`, which is ROM-generated.
+  2000: [ // Seals F1 — picks up where Altar F4 left off
+    { weight:  8, pool: [0xA6] },                       // Potion
+    { weight: 30, pool: [GIL(150, 320)] },
+    { weight: 22, pool: [0x24, 0x73] },                 // Longsword, Leathor
+    { weight: 15, pool: [0x8B, 0x1F] },                 // BrnzeBrac, Dagger
+    { weight:  4, pool: [0xE3, 0xE1] },                 // Cure / I scrolls
+    { weight:  3, pool: [0xA9] },                       // PhoexDown
+    { weight: 12, monster: true },                      // mimic
+  ],
+  2001: [ // Seals F2
+    { weight:  6, pool: [0xA6] },
+    { weight: 30, pool: [GIL(220, 450)] },
+    { weight: 24, pool: [0x09, 0x65] },                 // MythrilRod, Shell Helm
+    { weight: 16, pool: [0x20, 0x27] },                 // MythrKfe, MythrSwrd
+    { weight:  5, pool: [0xE3, 0xE1] },
+    { weight:  4, pool: [0xA9] },
+    { weight: 12, monster: true },
+  ],
+  2002: [ // Seals F3 — deepest normal floor
+    { weight:  4, pool: [0xA6] },
+    { weight: 30, pool: [GIL(300, 650)] },
+    { weight: 24, pool: [0x27, 0x07] },                 // MythrSwrd, Tonfa
+    { weight: 18, pool: [0x25, 0x76] },                 // Wislayer, She Armor
+    { weight:  5, pool: [0xE3, 0xE1] },
+    { weight:  5, pool: [0xA9] },
+    { weight: 12, monster: true },
+  ],
 };
 export const DEFAULT_LOOT = LOOT_POOLS[STARTING_DUNGEON.base];
 export const UR_CHEST_MAPS = new Set([114, 1, 2, 3, 4, 5, 6, 7, 8, 9, 147]);

@@ -66,6 +66,28 @@ export const DUNGEONS = [
       { mapId: 1021, floor: 0 },
     ],
   },
+  {
+    id: 'seals',
+    name: 'Cave of Seals',
+    base: 2000,
+    worldEntranceMap: 103,        // the ROM's own overworld mouth, world (84,36)
+    floors: 4,                    // 2000-2003; 3 normal floors + boss, matching
+                                  // the cartridge's 103 / 104+105 / 106
+    donorMap: 103,                // "Sealed Cave", area $18, palette $79
+    tileset: 0,
+    bossSkinId: 'seals',          // the dais from ROM map 106 — no crystal
+    ending: ENDING_BOSS,          // ⛔ NOT a crystal dungeon. Altar Cave is.
+    bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
+    music: { floors: 'DUNGEON_CAVE', boss: 'DUNGEON_CAVE' },
+    rosterPrefix: 'seals',
+    bossRosterLoc: 'seals-boss',
+    encounterZonePrefix: 'seals_cave',
+    // ⛔ NO SIDE ROOMS. The locked/secret rooms are Altar Cave content; giving
+    // this dungeon empty arrays is a statement, not an oversight — the generator
+    // hands out ids from `secretRoomMapIds` and would otherwise invent some.
+    lockedRooms: [],
+    secretRooms: [],
+  },
 ];
 
 // ── Lookups ────────────────────────────────────────────────────────────────
@@ -81,6 +103,18 @@ export function buildRegistry(rows) {
   const byFloor = new Map();   // mapId -> { dungeon, floorIndex }
   const bySide  = new Map();   // mapId -> { dungeon, kind, floor }
   const claimed = new Map();
+
+  // ⛔ DUPLICATE IDS ARE REJECTED. Without this a second row carrying an
+  // existing id silently SHADOWS it — the mapId-overlap check below compares
+  // `claimed.get(id) !== d.id` and a repeated id passes that test. A test
+  // fixture reusing 'seals' at base 2000 did exactly this the moment the real
+  // Cave of Seals shipped, and the only symptom was a count that said
+  // "3 dungeons: altar, seals, seals".
+  const seenIds = new Set();
+  for (const d of rows) {
+    if (seenIds.has(d.id)) throw new Error(`duplicate dungeon id '${d.id}'`);
+    seenIds.add(d.id);
+  }
 
   for (const d of rows) {
     const ids = [];

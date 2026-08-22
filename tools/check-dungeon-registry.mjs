@@ -73,39 +73,48 @@ for (const file of GUARDED) {
 }
 
 // ── 2. a second dungeon, different on every axis ───────────────────────────
+// ⛔ A SYNTHETIC PROBE, NOT THE REAL CAVE OF SEALS. It used to be id 'seals' at
+// base 2000 — which silently SHADOWED the real dungeon the moment that shipped
+// (`buildRegistry` allows a repeated id, so nothing threw and the gate cheerfully
+// reported "3 dungeons: altar, seals, seals"). A fixture must not be able to
+// collide with real data: distinct id, distinct range, distinct prefix.
 const SEALS = {
-  id: 'seals', name: 'Cave of Seals',
-  base: 2000, worldEntranceMap: 103,
+  id: 'probe', name: 'Probe Dungeon',
+  base: 3000, worldEntranceMap: 107,
   floors: 4,                      // <- NOT 5: boss floor is 3, not 4
   donorMap: 103, tileset: 0,
   bossSkinId: 'seals',
   ending: ENDING_BOSS,
   bossId: 0xCD,
   music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
-  rosterPrefix: 'seals', bossRosterLoc: 'seals-boss',
-  encounterZonePrefix: 'seals_cave',
-  lockedRooms: [{ mapId: 2010, floor: 1 }],
-  secretRooms: [{ mapId: 2020, floor: 0 }],
+  rosterPrefix: 'probe', bossRosterLoc: 'probe-boss',
+  encounterZonePrefix: 'probe_cave',
+  lockedRooms: [{ mapId: 3010, floor: 1 }],
+  secretRooms: [{ mapId: 3020, floor: 0 }],
 };
 const R = buildRegistry([...DUNGEONS, SEALS]);
 
-ok(R.dungeonForMapId(2000)?.id === 'seals', 'floor mapId 2000 does not resolve to seals');
-ok(R.floorIndexForMapId(2002) === 2, 'floor index for 2002 should be 2');
+ok(R.dungeonForMapId(3000)?.id === 'probe', 'floor mapId 2000 does not resolve to probe');
+ok(R.floorIndexForMapId(3002) === 2, 'floor index for 2002 should be 2');
 ok(R.dungeonForMapId(1004)?.id === 'altar', 'adding a dungeon broke altar lookup');
-ok(R.floorIndexForMapId(2004) === null, '2004 is past seals (4 floors) and must not resolve');
-ok(R.isDungeonMapId(2010) && R.sideRoomForMapId(2010)?.kind === 'locked', 'seals locked room 2010 not registered');
-ok(R.sideRoomForMapId(2020)?.kind === 'secret', 'seals secret room 2020 not registered');
-ok(R.dungeonForWorldEntrance(103)?.id === 'seals', 'overworld mouth 103 does not map to seals');
+ok(R.floorIndexForMapId(3004) === null, '2004 is past seals (4 floors) and must not resolve');
+ok(R.isDungeonMapId(3010) && R.sideRoomForMapId(3010)?.kind === 'locked', 'probe locked room 3010 not registered');
+ok(R.sideRoomForMapId(3020)?.kind === 'secret', 'probe secret room 3020 not registered');
+ok(R.dungeonForWorldEntrance(107)?.id === 'probe', 'overworld mouth 103 does not map to seals');
 ok(R.dungeonForWorldEntrance(111)?.id === 'altar', 'overworld mouth 111 no longer maps to altar');
 
 // ⛔ The ending axis is the one that must NOT follow the boss chamber. Seals has
 // a boss room and no crystal; altar has both.
-ok(R.endingKindFor(2003) === ENDING_BOSS,    'seals boss floor must have a plain boss ending');
+ok(R.endingKindFor(3003) === ENDING_BOSS,    'probe boss floor must have a plain boss ending');
 ok(R.endingKindFor(1004) === ENDING_CRYSTAL, 'altar boss floor must still be a crystal ending');
-ok(R.isCrystalChamber(2003) === false,       'seals boss chamber must not be a crystal chamber');
+ok(R.isCrystalChamber(3003) === false,       'probe boss chamber must not be a crystal chamber');
+// ⭐ and the REAL Cave of Seals, now that it ships, must also be crystal-free.
+ok(R.endingKindFor(2003) === ENDING_BOSS, 'the shipped Cave of Seals boss floor must not be a crystal ending');
+ok(R.isCrystalChamber(2003) === false,    'the shipped Cave of Seals must not be a crystal chamber');
+ok(R.rosterLocFor(2003) === 'seals-boss', `shipped seals boss roster loc was ${R.rosterLocFor(2003)}`);
 
-ok(R.rosterLocFor(2001) === 'seals-1',    `roster loc for 2001 was ${R.rosterLocFor(2001)}`);
-ok(R.rosterLocFor(2003) === 'seals-boss', `roster loc for seals boss was ${R.rosterLocFor(2003)}`);
+ok(R.rosterLocFor(3001) === 'probe-1',    `roster loc for 2001 was ${R.rosterLocFor(3001)}`);
+ok(R.rosterLocFor(3003) === 'probe-boss', `roster loc for seals boss was ${R.rosterLocFor(3003)}`);
 ok(R.rosterLocFor(1004) === 'crystal',    'altar boss roster loc changed');
 
 // ⛔ SIDE ROOMS REPORT THEIR HOST FLOOR. Before v1.10.51 these returned null and
@@ -116,40 +125,72 @@ ok(R.rosterLocFor(1010) === 'cave-0',  `altar locked room 1010 (floor 0) -> ${R.
 ok(R.rosterLocFor(1011) === 'cave-2',  `altar locked room 1011 (floor 2) -> ${R.rosterLocFor(1011)}`);
 ok(R.rosterLocFor(1020) === 'cave-0',  `altar secret room 1020 (floor 0) -> ${R.rosterLocFor(1020)}`);
 ok(R.rosterLocFor(1021) === 'cave-0',  `altar secret room 1021 (floor 0) -> ${R.rosterLocFor(1021)}`);
-ok(R.rosterLocFor(2010) === 'seals-1', `seals locked room 2010 (floor 1) -> ${R.rosterLocFor(2010)}`);
-ok(R.rosterLocFor(2020) === 'seals-0', `seals secret room 2020 (floor 0) -> ${R.rosterLocFor(2020)}`);
+ok(R.rosterLocFor(3010) === 'probe-1', `probe locked room 3010 (floor 1) -> ${R.rosterLocFor(3010)}`);
+ok(R.rosterLocFor(3020) === 'probe-0', `probe secret room 3020 (floor 0) -> ${R.rosterLocFor(3020)}`);
 // a room's location must equal its host floor's, not merely be non-null
 ok(R.rosterLocFor(1011) === R.rosterLocFor(1002),
    'locked room 1011 and its host floor 1002 must share a roster location');
-ok(R.rosterLocFor(2010) === R.rosterLocFor(2001),
-   'seals locked room 2010 and its host floor 2001 must share a roster location');
+ok(R.rosterLocFor(3010) === R.rosterLocFor(3001),
+   'probe locked room 3010 and its host floor 3001 must share a roster location');
 
 // ⭐ Encounter zone keys follow the dungeon, and the SHIPPED dungeon's keys must
 // all exist — a typo'd prefix silently falls back to `RATE_STEPS.normal` and the
 // floor rolls nothing rather than throwing.
 const { ENCOUNTERS } = await import('../src/data/encounters.js');
+const { LOOT_POOLS } = await import('../src/data/loot-pools.js');
+const { TRACKS } = await import('../src/music.js');
+const { BATTLE_BG_MAP_LOOKUP } = await import('../src/battle-bg.js');
+const romForBg = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || 'FF3-English.nes'));
+
+// ⛔ EVERY SHIPPED DUNGEON NEEDS ALL FOUR, AND EACH MISSING ONE FAILS SILENTLY:
+//   no zone  -> RATE_STEPS.normal fallback, floor rolls the wrong bestiary
+//   no pool  -> DEFAULT_LOOT, i.e. the STARTING dungeon's floor-1 loot
+//   bad track-> TRACKS[undefined] -> playTrack(undefined), silence
+//   bad donor-> battle background of whatever ROM map id happens to be there
 for (const d of DUNGEONS) {
   ok(!!d.encounterZonePrefix, `dungeon '${d.id}' has no encounterZonePrefix`);
   for (let f = 0; f < d.floors - 1; f++) {
     const key = `${d.encounterZonePrefix}_f${f + 1}`;
     ok(ENCOUNTERS.has(key), `ENCOUNTERS is missing '${key}' for dungeon '${d.id}'`);
+    const z = ENCOUNTERS.get(key);
+    ok(z && z.formations && z.formations.length > 0, `zone '${key}' has no formations`);
   }
+  for (const mapId of normalFloorMapIds(d)) {
+    ok(!!LOOT_POOLS[mapId], `LOOT_POOLS has no entry for ${d.id} floor map ${mapId} — chests fall back to DEFAULT_LOOT`);
+  }
+  ok(TRACKS[d.music.floors] !== undefined, `dungeon '${d.id}' names track '${d.music.floors}', which is not in TRACKS`);
+  ok(TRACKS[d.music.boss] !== undefined, `dungeon '${d.id}' names boss track '${d.music.boss}', which is not in TRACKS`);
+  const bg = romForBg[BATTLE_BG_MAP_LOOKUP + d.donorMap] & 0x1F;
+  ok(Number.isInteger(bg), `dungeon '${d.id}' donor ${d.donorMap} yields no battle background`);
 }
+
+// ⭐ Two dungeons must not silently share an encounter zone or a loot pool —
+// that is the failure the whole registry exists to prevent, and it is invisible
+// in play (you just fight the wrong monsters).
+const zoneKeys = DUNGEONS.map((d) => d.encounterZonePrefix);
+ok(new Set(zoneKeys).size === zoneKeys.length, `two dungeons share an encounter prefix: ${zoneKeys.join(', ')}`);
+const allFloors = DUNGEONS.flatMap((d) => normalFloorMapIds(d));
+ok(new Set(allFloors).size === allFloors.length, 'two dungeons share a floor mapId');
 
 // ⛔ The zone key must come from the DUNGEON. A hardcoded array gives every
 // dungeon Altar Cave's monsters, and nothing throws — the floor just rolls the
 // wrong bestiary.
 const zoneKey = (d, floor) => `${d.encounterZonePrefix}_f${floor + 1}`;
-ok(zoneKey(SEALS, 0) === 'seals_cave_f1', `seals floor 0 zone was ${zoneKey(SEALS, 0)}`);
+ok(zoneKey(SEALS, 0) === 'probe_cave_f1', `probe floor 0 zone was ${zoneKey(SEALS, 0)}`);
 ok(zoneKey(DUNGEONS[0], 0) === 'altar_cave_f1', 'altar floor 0 zone changed');
 ok(zoneKey(SEALS, 0) !== zoneKey(DUNGEONS[0], 0), 'two dungeons resolve to the same encounter zone');
 
 ok(isBossFloor(SEALS, 3) && !isBossFloor(SEALS, 4), 'boss floor for a 4-floor dungeon should be 3');
-ok(bossFloorMapId(SEALS) === 2003, 'seals boss mapId should be 2003');
-ok(JSON.stringify(normalFloorMapIds(SEALS)) === '[2000,2001,2002]', 'seals normal floors wrong');
-ok(lockedRoomMapIdForFloor(SEALS, 1) === 2010, 'seals locked room not found for floor 1');
-ok(lockedRoomMapIdForFloor(SEALS, 0) === null, 'seals floor 0 has no locked room');
-ok(JSON.stringify(secretRoomMapIds(SEALS)) === '[2020]', 'seals secret rooms wrong');
+ok(bossFloorMapId(SEALS) === 3003, 'probe boss mapId should be 3003');
+ok(JSON.stringify(normalFloorMapIds(SEALS)) === '[3000,3001,3002]', 'probe normal floors wrong');
+ok(lockedRoomMapIdForFloor(SEALS, 1) === 3010, 'probe locked room not found for floor 1');
+ok(lockedRoomMapIdForFloor(SEALS, 0) === null, 'probe floor 0 has no locked room');
+ok(JSON.stringify(secretRoomMapIds(SEALS)) === '[3020]', 'probe secret rooms wrong');
+
+// duplicate ids must be rejected — see the note in buildRegistry
+let dupThrew = false;
+try { buildRegistry([...DUNGEONS, { ...SEALS, id: DUNGEONS[0].id }]); } catch { dupThrew = true; }
+ok(dupThrew, 'a duplicate dungeon id was accepted — a second row can shadow a real dungeon');
 
 // overlapping ranges must be rejected, not silently merged
 let threw = false;
@@ -240,6 +281,29 @@ for (let i = 0; i < 256; i++) if (romBytes[NPC_GFX_TABLE + i] === 0x4a) usersOf4
 ok(usersOf4a === 1, `gfx $4a should be used by exactly 1 npc id, found ${usersOf4a}`);
 ok(resolveBossSkin('seals').bossSpriteOffset === 0x14510,
    'seals boss sprite offset should be $14510 (map object 203)');
+
+// ── no exit may lead nowhere, in ANY shipped dungeon ───────────────────────
+// ⛔ A dungeon that declares no locked room still got a locked DOOR, because
+// `lockedRoomMapIdForFloor` returns null and the placement wrote `{mapId: null}`
+// anyway. The player opens it onto nothing. Measured on the Cave of Seals before
+// the guard: 43 of 120 generated floors. Nothing else catches this — the floor
+// still generates, still connects, and the snapshot only covers Altar Cave.
+let nullDests = 0, floorsChecked = 0;
+for (const d of DUNGEONS) {
+  for (let k = 0; k < 25; k++) {
+    for (let f = 0; f < d.floors; f++) {
+      const r = generateFloor(rom, f, 1755100000000 + k * 7919, d);
+      floorsChecked++;
+      for (const [coord, dest] of (r.dungeonDestinations || new Map())) {
+        if (dest && 'mapId' in dest && (dest.mapId === null || dest.mapId === undefined)) {
+          if (nullDests < 3) fails.push(`${d.id} floor ${f} seed ${k}: destination ${coord} -> mapId ${dest.mapId}`);
+          nullDests++;
+        }
+      }
+    }
+  }
+}
+ok(nullDests === 0, `${nullDests} destinations lead nowhere across ${floorsChecked} generated floors`);
 
 clearDungeonCache();
 

@@ -1,12 +1,13 @@
 // map-loading.js — map/dungeon/world loading functions extracted from game.js
 
+import { buildSpritePalettes, parseMapProperties } from './map-loader.js';
 import { loadMap } from './map-loader.js';
 import { MapRenderer } from './map-renderer.js';
 import { generateFloor, generateSecretRoomMap } from './dungeon-generator.js';
 import { generateLockedRoomMap } from './dungeon-locked-room.js';
 import { isCrystalChamber, isDungeonMapId, dungeonForMapId, floorIndexForMapId,
          sideRoomForMapId, isBossFloor } from './data/dungeons.js';
-import { resolveDungeonDonor, resolveBossSkin } from './dungeon/boss-chamber.js';
+import { resolveDungeonDonor, bossFramesForDungeon } from './dungeon/boss-chamber.js';
 import { initMapObjectFrames } from './sprite-init.js';
 import { playTrack, stopMusic, playFF2Track, stopFF2Music, ff2MusicReady, TRACKS, FF2_TRACKS } from './music.js';
 import { DIR_DOWN } from './sprite.js';
@@ -202,13 +203,10 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   // donor map) and the palette index measured off the object's ROM record.
   // A skin without one keeps the FF2 Adamantoise, which is Altar Cave's.
   if (_isBoss && _dungeon) {
-    const _skin = resolveBossSkin(_dungeon.bossSkinId);
-    if (_skin.bossSpriteOffset && result.spritePalettes) {
-      setBossFrames(initMapObjectFrames(
-        romRaw, _skin.bossSpriteOffset, result.spritePalettes[_skin.bossSpritePalIdx ?? 0]));
-    } else {
-      setBossFrames(null);   // fall back to the Land Turtle
-    }
+    // Same resolver the loading screen uses, so its silhouette and the boss
+    // standing in the room can never be different sprites.
+    setBossFrames(bossFramesForDungeon(
+      romRaw, _dungeon, initMapObjectFrames, buildSpritePalettes, parseMapProperties));
   }
   if (_isBoss && getBossFrames() && !battleSt.enemyDefeated) {
     mapSt.bossSprite = { px: 6 * TILE_SIZE, py: 8 * TILE_SIZE };

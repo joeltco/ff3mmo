@@ -1,5 +1,6 @@
 // transitions.js — wipe transitions, loading screen state, top-box area name
 
+import { dungeonForMapId, STARTING_DUNGEON } from './data/dungeons.js';
 import { playSFX, playTrack, SFX, TRACKS } from './music.js';
 import { DIR_LEFT, DIR_UP, DIR_RIGHT, DIR_DOWN } from './sprite.js';
 import { drawLoadingOverlay } from './loading-screen.js';
@@ -37,6 +38,7 @@ export const transSt = {
   pendingAction:      null,
   pendingTrack:       null,   // track to play when 'hud-fade-in' transitions to 'opening'
   dungeon:            false,
+  destMapId:          null,   // which map is being entered — the loading screen needs it
   trapFallPending:    false,
   trapShakePending:   false,
   rosterLocChanged:   false,
@@ -65,6 +67,9 @@ export function startWipeTransition(action, destMapId, rosterLocChanged = false)
   transSt.state          = 'closing';
   transSt.timer          = 0;
   transSt.rosterLocChanged = rosterLocChanged;
+  // ⛔ `destMapId` was accepted and DROPPED. The loading screen and the
+  // track-resume below both need to know which dungeon is being entered.
+  transSt.destMapId      = destMapId ?? null;
   transSt.pendingAction  = action;
   playSFX(SFX.SCREEN_CLOSE);
 }
@@ -213,7 +218,11 @@ function _updateTransitionLoading(dt) {
   } else if (loadingSt.state === 'out') {
     if (loadingSt.timer >= (LOAD_FADE_MAX + 1) * LOAD_FADE_STEP_MS) {
       loadingSt.state = 'none'; transSt.state = 'opening'; transSt.timer = 0;
-      transSt.dungeon = false; playSFX(SFX.SCREEN_OPEN); playTrack(TRACKS.CRYSTAL_CAVE);
+      transSt.dungeon = false; playSFX(SFX.SCREEN_OPEN);
+      // ⛔ WAS `TRACKS.CRYSTAL_CAVE` — Altar Cave's theme, played on leaving the
+      // loading screen for ANY dungeon. The Cave of Seals has its own ($1d).
+      const _d = dungeonForMapId(mapSt.currentMapId) || dungeonForMapId(transSt.destMapId) || STARTING_DUNGEON;
+      playTrack(TRACKS[_d.music.floors]);
     }
   }
   if (loadingSt.state === 'visible' && (keys['z'] || keys['Z'])) {

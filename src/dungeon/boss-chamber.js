@@ -188,6 +188,23 @@ export function resolveDungeonDonor(mapId) {
   return dungeon.donorMap;
 }
 
+/**
+ * The boss NPC frames for a dungeon, or null if it has no map-object boss (Altar
+ * Cave, which keeps the FF2 Adamantoise).
+ *
+ * ⛔ ONE RESOLVER, TWO CALLERS. The map load needs these to draw the boss, and
+ * the LOADING SCREEN needs them for its silhouette — and the loading screen runs
+ * BEFORE the floor exists, so it cannot read `result.spritePalettes`. Both go
+ * through here, off the donor map's own palettes, or the two drift.
+ */
+export function bossFramesForDungeon(rom, dungeon, initMapObjectFrames, buildSpritePalettes, parseMapProperties) {
+  if (!dungeon) return null;
+  const skin = resolveBossSkin(dungeon.bossSkinId);
+  if (!skin.bossSpriteOffset) return null;
+  const sp = buildSpritePalettes(rom, parseMapProperties(rom, dungeon.donorMap));
+  return initMapObjectFrames(rom, skin.bossSpriteOffset, sp[skin.bossSpritePalIdx ?? 0]);
+}
+
 export function carveBossChamber(tilemap, skin = SEALS_SKIN) {
   for (const [y, x, t] of LAYOUT) tilemap[y * 32 + x] = t;
   skin.decorate?.(tilemap);
