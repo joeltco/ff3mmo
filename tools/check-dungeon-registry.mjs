@@ -36,6 +36,25 @@ const GUARDED = [
   'src/roster.js', 'src/battle-encounter.js', 'src/data/loot-pools.js',
   'src/dungeon-locked-room.js', 'src/dungeon/boss-chamber.js', 'src/main.js',
 ];
+// ⛔ NAMES COUNT TOO, NOT JUST NUMBERS. The number guard below let a hardcoded
+// `['altar_cave_f1', ...]` array sit in `battle-encounter.js` right through the
+// registry migration — a second dungeon would have rolled Altar Cave's monsters
+// on every floor, silently. Any engine module naming the shipped dungeon is
+// making the same class of mistake.
+// ⛔ NO TRAILING \b — `_` IS A WORD CHARACTER, so /\baltar_cave\b/ does not match
+// `altar_cave_f1`, which is the exact string this guard exists to catch. The
+// first version of this check passed its own revert test because of it.
+const BANNED_NAMES = [/\baltar_cave/, /\bland_turtle/, /\bcave_seal/];
+for (const file of GUARDED) {
+  const src = fs.readFileSync(file, 'utf8');
+  src.split('\n').forEach((line, i) => {
+    const code = line.split('//')[0];
+    if (/^\s*\*/.test(line)) return;
+    for (const re of BANNED_NAMES) {
+      if (re.test(code)) fails.push(`${file}:${i + 1} hardcodes a dungeon name — use the registry: ${line.trim()}`);
+    }
+  });
+}
 for (const file of GUARDED) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   lines.forEach((line, i) => {
@@ -64,6 +83,7 @@ const SEALS = {
   bossId: 0xCD,
   music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
   rosterPrefix: 'seals', bossRosterLoc: 'seals-boss',
+  encounterZonePrefix: 'seals_cave',
   lockedRooms: [{ mapId: 2010, floor: 1 }],
   secretRooms: [{ mapId: 2020, floor: 0 }],
 };
@@ -103,6 +123,26 @@ ok(R.rosterLocFor(1011) === R.rosterLocFor(1002),
    'locked room 1011 and its host floor 1002 must share a roster location');
 ok(R.rosterLocFor(2010) === R.rosterLocFor(2001),
    'seals locked room 2010 and its host floor 2001 must share a roster location');
+
+// ⭐ Encounter zone keys follow the dungeon, and the SHIPPED dungeon's keys must
+// all exist — a typo'd prefix silently falls back to `RATE_STEPS.normal` and the
+// floor rolls nothing rather than throwing.
+const { ENCOUNTERS } = await import('../src/data/encounters.js');
+for (const d of DUNGEONS) {
+  ok(!!d.encounterZonePrefix, `dungeon '${d.id}' has no encounterZonePrefix`);
+  for (let f = 0; f < d.floors - 1; f++) {
+    const key = `${d.encounterZonePrefix}_f${f + 1}`;
+    ok(ENCOUNTERS.has(key), `ENCOUNTERS is missing '${key}' for dungeon '${d.id}'`);
+  }
+}
+
+// ⛔ The zone key must come from the DUNGEON. A hardcoded array gives every
+// dungeon Altar Cave's monsters, and nothing throws — the floor just rolls the
+// wrong bestiary.
+const zoneKey = (d, floor) => `${d.encounterZonePrefix}_f${floor + 1}`;
+ok(zoneKey(SEALS, 0) === 'seals_cave_f1', `seals floor 0 zone was ${zoneKey(SEALS, 0)}`);
+ok(zoneKey(DUNGEONS[0], 0) === 'altar_cave_f1', 'altar floor 0 zone changed');
+ok(zoneKey(SEALS, 0) !== zoneKey(DUNGEONS[0], 0), 'two dungeons resolve to the same encounter zone');
 
 ok(isBossFloor(SEALS, 3) && !isBossFloor(SEALS, 4), 'boss floor for a 4-floor dungeon should be 3');
 ok(bossFloorMapId(SEALS) === 2003, 'seals boss mapId should be 2003');

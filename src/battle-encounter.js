@@ -1,6 +1,6 @@
 // Random encounter spawning — extracted from game.js
 
-import { dungeonForMapId, isBossFloor } from './data/dungeons.js';
+import { dungeonForMapId, isBossFloor, STARTING_DUNGEON } from './data/dungeons.js';
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
 import { MONSTERS } from './data/monsters.js';
@@ -67,7 +67,14 @@ export function currentEncounterZoneKey() {
     return d <= SAFE_RADIUS ? 'grasslands_valley' : 'grasslands_wild';
   }
   if (mapSt.encounterPatch && mapSt.encounterPatchZone) return mapSt.encounterPatchZone;
-  return ['altar_cave_f1', 'altar_cave_f2', 'altar_cave_f3', 'altar_cave_f4'][mapSt.dungeonFloor] || 'altar_cave_f1';
+  // ⛔ THIS WAS A HARDCODED ALTAR CAVE ARRAY — the 15th per-dungeon axis, and it
+  // survived the v1.10.50 migration because the registry's literal guard bans
+  // dungeon mapId NUMBERS and this is a zone-name STRING. A second dungeon would
+  // have rolled Altar Cave's monsters on every floor, silently.
+  const d = dungeonForMapId(mapSt.currentMapId);
+  const prefix = d?.encounterZonePrefix || STARTING_DUNGEON.encounterZonePrefix;
+  const floor = mapSt.dungeonFloor >= 0 ? mapSt.dungeonFloor : 0;
+  return `${prefix}_f${floor + 1}`;
 }
 
 // ── Random encounter step counter ──────────────────────────────────────────

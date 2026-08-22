@@ -55,6 +55,7 @@ export const DUNGEONS = [
     bossId: 0xCC,                 // Land Turtle / Adamantoise
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
     rosterPrefix: 'cave',         // roster loc 'cave-0'.. ; boss floor -> 'crystal'
+    encounterZonePrefix: 'altar_cave',   // -> ENCOUNTERS key `${prefix}_f${floor+1}`
     bossRosterLoc: 'crystal',
     lockedRooms: [
       { mapId: 1010, floor: 0 },

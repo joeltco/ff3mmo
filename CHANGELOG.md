@@ -1,3 +1,43 @@
+## 1.10.54 — 2026-08-22
+
+### Axis 15: the encounter zone was still hardcoded to Altar Cave
+
+    // src/battle-encounter.js
+    return ['altar_cave_f1','altar_cave_f2','altar_cave_f3','altar_cave_f4'][mapSt.dungeonFloor]
+        || 'altar_cave_f1';
+
+⛔ **This survived the v1.10.50 registry migration in a file that migration
+touched, and under a guard that was supposed to prevent exactly this.** The guard
+bans dungeon mapId NUMBERS; a zone name is a STRING, so it never looked. A second
+dungeon would have rolled Altar Cave's bestiary on every floor and nothing would
+have thrown.
+
+Zone keys now come from the row: `encounterZonePrefix` -> `${prefix}_f${n+1}`.
+
+⛔ **And the fix for that guard was itself broken.** `/\baltar_cave\b/` cannot
+match `altar_cave_f1` — `_` is a word character, so there is no boundary after
+"cave". The name guard passed its own revert test until the trailing `\b` came
+off. Both the guard and its revert proof are only worth what the regex is.
+
+The gate also now asserts every SHIPPED dungeon's zone keys exist in `ENCOUNTERS`
+— a typo'd prefix silently falls back to `RATE_STEPS.normal` rather than
+throwing, so the floor rolls the wrong table instead of failing loudly.
+
+### Corrections to what v1.10.53 claimed was left
+
+- ⛔ **"No overworld trigger" was wrong.** The ROM's entrance table already has
+  trigger 15 at world **(84,36) -> map 103**, exactly parallel to trigger 14 ->
+  map 111 for Altar Cave, and 103 is not in `STRANDING_MAPS`. The entrance is
+  live today; walking into it loads the cartridge's STATIC Sealed Cave. Giving
+  the registry row `worldEntranceMap: 103` is what swaps that for the procedural
+  dungeon — the trigger needs nothing.
+- ⛔ **"Every chest is rejected" was wrong** — that claim came from the old plan
+  and there is no `_resolvedChestPool` in the tree. `rollLootEntry` falls through
+  to `DEFAULT_LOOT`, which is the starting dungeon's floor-1 pool, so a new
+  dungeon's chests roll Altar Cave F1 loot. Wrong tier, not rejected.
+- ✅ **"No encounter tables" was right**, and understated: `ENCOUNTERS` has only
+  the five `altar_cave_*` zones, and the lookup was hardcoded on top of that.
+
 ## 1.10.53 — 2026-08-22
 
 ### The Cave of Seals boss wears its own sprite
