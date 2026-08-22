@@ -88,6 +88,22 @@ ok(R.rosterLocFor(2001) === 'seals-1',    `roster loc for 2001 was ${R.rosterLoc
 ok(R.rosterLocFor(2003) === 'seals-boss', `roster loc for seals boss was ${R.rosterLocFor(2003)}`);
 ok(R.rosterLocFor(1004) === 'crystal',    'altar boss roster loc changed');
 
+// ⛔ SIDE ROOMS REPORT THEIR HOST FLOOR. Before v1.10.51 these returned null and
+// the caller fell through to `ROSTER_LOC.get(mapId) || 'ur'` — a player in a
+// locked room showed as standing in Ur. `data/areas.js` lists none of these
+// mapIds, so the fallback was reached every time, not just in edge cases.
+ok(R.rosterLocFor(1010) === 'cave-0',  `altar locked room 1010 (floor 0) -> ${R.rosterLocFor(1010)}`);
+ok(R.rosterLocFor(1011) === 'cave-2',  `altar locked room 1011 (floor 2) -> ${R.rosterLocFor(1011)}`);
+ok(R.rosterLocFor(1020) === 'cave-0',  `altar secret room 1020 (floor 0) -> ${R.rosterLocFor(1020)}`);
+ok(R.rosterLocFor(1021) === 'cave-0',  `altar secret room 1021 (floor 0) -> ${R.rosterLocFor(1021)}`);
+ok(R.rosterLocFor(2010) === 'seals-1', `seals locked room 2010 (floor 1) -> ${R.rosterLocFor(2010)}`);
+ok(R.rosterLocFor(2020) === 'seals-0', `seals secret room 2020 (floor 0) -> ${R.rosterLocFor(2020)}`);
+// a room's location must equal its host floor's, not merely be non-null
+ok(R.rosterLocFor(1011) === R.rosterLocFor(1002),
+   'locked room 1011 and its host floor 1002 must share a roster location');
+ok(R.rosterLocFor(2010) === R.rosterLocFor(2001),
+   'seals locked room 2010 and its host floor 2001 must share a roster location');
+
 ok(isBossFloor(SEALS, 3) && !isBossFloor(SEALS, 4), 'boss floor for a 4-floor dungeon should be 3');
 ok(bossFloorMapId(SEALS) === 2003, 'seals boss mapId should be 2003');
 ok(JSON.stringify(normalFloorMapIds(SEALS)) === '[2000,2001,2002]', 'seals normal floors wrong');

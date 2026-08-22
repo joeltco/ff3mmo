@@ -1,3 +1,31 @@
+## 1.10.51 — 2026-08-22
+
+### Locked and secret rooms no longer put you in Ur on the roster
+
+⛔ `rosterLocForMapId` tested `mapId >= 1000 && mapId < 1004`, which never
+matched the 1010/1011 locked rooms or the 1020/1021 secret rooms. They fell
+through to `ROSTER_LOC.get(mapId) || 'ur'` — and `data/areas.js` lists none of
+those mapIds, so the fallback was reached EVERY time, not in some edge case. A
+player who opened a locked door showed on the roster as standing in Ur, grouped
+with strangers in a different town.
+
+A side room now reports its HOST FLOOR's location (1010 -> `cave-0`, 1011 ->
+`cave-2`), matching the rule the rest of the engine already follows: a side room
+is not a floor, and `mapSt.dungeonFloor` deliberately keeps the host chamber's
+value while you are inside one (v1.7.665).
+
+⭐ Knock-on, intended: `transSt.rosterLocChanged` drives the roster fade on every
+transition. It used to fire on the way into a side room (`cave-0` -> `ur`) and
+again on the way out. It no longer fires — your roster group does not change
+when you open a door inside the same floor.
+
+This was carried unchanged through v1.10.50 on purpose; a refactor that silently
+alters live multiplayer state is not provably safe, so the behaviour was
+preserved there and fixed here with its own gate. `check-dungeon-registry.mjs`
+now asserts every side room in BOTH registry dungeons resolves to its host
+floor's location, and that the two strings are equal rather than merely
+non-null. Revert-proven.
+
 ## 1.10.50 — 2026-08-22
 
 ### The dungeon registry — a dungeon is a row, not fourteen edits

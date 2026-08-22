@@ -109,7 +109,15 @@ export function buildRegistry(rows) {
 
   const rosterLocFor = (mapId) => {
     const e = byFloor.get(mapId);
-    if (!e) return null;
+    if (!e) {
+      // A locked or secret room reports its HOST FLOOR's location. It is not a
+      // floor of its own — `mapSt.dungeonFloor` deliberately keeps the host
+      // chamber's value while you are inside one (v1.7.665) — so the roster
+      // follows the same rule and you stay grouped with the players you were
+      // just standing next to.
+      const side = bySide.get(mapId);
+      return side ? `${side.dungeon.rosterPrefix}-${side.floor}` : null;
+    }
     const { dungeon, floorIndex } = e;
     return isBossFloor(dungeon, floorIndex) ? dungeon.bossRosterLoc
                                             : `${dungeon.rosterPrefix}-${floorIndex}`;
@@ -203,17 +211,19 @@ export function endingKindFor(mapId) { return _R.endingKindFor(mapId); }
 export function isCrystalChamber(mapId) { return _R.isCrystalChamber(mapId); }
 
 /**
- * Roster location string for a dungeon FLOOR mapId, or null.
+ * Roster location string for a dungeon mapId, or null for a non-dungeon map.
  *
- * ⛔ SIDE ROOMS RETURN NULL, WHICH IS A KNOWN BUG PRESERVED ON PURPOSE. The
- * caller then falls through to `ROSTER_LOC.get(mapId) || 'ur'`, so a player
- * standing in a locked or secret room shows on the roster as being in **Ur**.
- * That is what shipped before this registry existed (`mapId >= 1000 && mapId <
- * 1004` simply did not match 1010/1011/1020/1021) and this refactor is
- * deliberately behaviour-preserving.
+ * ⛔ FIXED IN v1.10.51 — SIDE ROOMS USED TO REPORT "UR". `rosterLocForMapId`
+ * tested `mapId >= 1000 && mapId < 1004`, which never matched the 1010/1011
+ * locked rooms or the 1020/1021 secret rooms, so they fell through to
+ * `ROSTER_LOC.get(mapId) || 'ur'` — and `data/areas.js` has no entry for any of
+ * them. A player who stepped into a locked room showed on the roster as
+ * standing in Ur, grouped with strangers in a different town.
  *
- * The fix is one line in `buildRegistry` and belongs in its own change, with
- * its own gate.
+ * ⭐ The knock-on is `transSt.rosterLocChanged`, which drives the roster fade on
+ * every transition. It used to fire on the way into a side room (cave-0 -> ur)
+ * and again on the way out. It no longer fires, which is correct: your roster
+ * group does not change when you open a door inside the same floor.
  */
 export function rosterLocFor(mapId) { return _R.rosterLocFor(mapId); }
 
