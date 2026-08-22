@@ -17,6 +17,14 @@ import { MONSTERS as OLD_MONSTERS } from '../src/data/monsters.js';
 import * as M3 from './lib/ff3-monsters.mjs';
 
 const rom = readFileSync('FF3-English.nes');
+// Where each bestiary id actually appears, derived from the map -> group ->
+// formation chain. Keys are numeric monster ids.
+const { placesFor: _placesFor, buildIndex: _buildIndex } = await import('./monster-locations.mjs');
+const romLocations = (() => {
+  const out = {};
+  for (const [id] of _buildIndex()) out[id] = _placesFor(id);
+  return out;
+})();
 initTextDecoder(rom);
 
 function nesText(bytes) {
@@ -80,7 +88,7 @@ const lines = [];
 lines.push(`// Monster Catalog — keyed by ROM bestiary ID`);
 lines.push(`// AUTO-GENERATED from FF3 NES ROM via tools/gen-monsters-js.js`);
 lines.push(`// Stats from Data Crystal ROM map ($60010 properties, $61010 stat table, $61210 attack scripts)`);
-lines.push(`// drops = the ROM's eight steal/drop slots IN ORDER; location is hand data`);
+lines.push(`// drops = the ROM's eight steal/drop slots IN ORDER\n// location = every place the ROM's map->encounter chain can spawn it (random\n//            encounters only; bosses are scripted and carry none) — see\n//            tools/monster-locations.mjs`);
 lines.push(`// Hand-maintained short names live in monster-names.js — this file is overwritten wholesale.`);
 lines.push(``);
 lines.push(`export const MONSTERS = new Map([`);
@@ -181,7 +189,16 @@ for (let id = 0; id < 232; id++) {
   }
   // ⛔ `steal:` is GONE. The ROM has no separate steal item — steal and drop roll
   // the same eight slots — and nothing in src/ ever read the field.
-  if (old && old.location) props.push(`location: [${old.location.map(l => `'${l}'`).join(',')}]`);
+  // ⭐ LOCATION IS THE ROM'S NOW. It used to be copied forward from the previous
+  // file — `location is hand data`, seventy invented tag names surviving every
+  // regeneration and shown to the player as "Found in". The map -> encounter
+  // chain is decoded, so the real answer is a reverse index over it; see
+  // `tools/monster-locations.mjs`.
+  // ⛔ A monster with NO entry never spawns from any map or region. It gets no
+  // `location` rather than a guess — several of the old hand tags named places
+  // for monsters the cartridge does not put anywhere.
+  const where = romLocations[id];
+  if (where && where.length) props.push(`location: [${where.map(l => `'${l.replace(/'/g, "\\'")}'`).join(',')}]`);
 
   const name = monStr(id);
   lines.push(`  [${hex}, { ${props.join(', ')} }], // ${name}`);

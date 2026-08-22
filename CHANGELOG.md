@@ -1,3 +1,67 @@
+## 1.10.60 — 2026-08-22
+
+### "Found in" is the ROM's answer now — and the formation id is 16-bit
+
+`src/data/monsters.js` said it in its own header: **"location is hand data"**.
+Seventy invented tag names (`cave_seal`, `dragon_tower`, `sky`), copied forward
+by the generator on every regeneration so nothing ever caught them, and shown to
+the player in the bestiary as "Found in". They are now a reverse index over the
+decoded map -> encounter chain: `tools/monster-locations.mjs`.
+
+⭐⭐ **THE FORMATION ID IS 16-BIT, and the group table only holds the low byte.**
+`$94F0[group*8 + slot]` is one byte, but ENCOUNTER_SET has 512 entries. The high
+byte comes from bank 46 `$9E8E`:
+
+```
+$9E8E  LDA $7ED8 / BEQ / LDA #$01
+$9E95  STA $7CEE        ; high byte = ($7ED8 != 0) ? 1 : 0
+```
+
+and `$7ED8` there is the third argument to the battle-start routine, which the
+encounter path loads as `LDY $78` — the same byte that picks `$92F0` vs `$93F0`.
+So **maps 256-511 and overworlds 2/3 run the same one-byte table against the
+UPPER half of ENCOUNTER_SET.**
+
+⭐ Measured, not read: patching `$9E8E` to force the high byte turns this map's
+formation 0 into formation 256, and the monster on screen changes from **Goblin
+to Mermaid**. Without it only **102 of 512** formations are reachable and 122
+monsters look like they never spawn — which is exactly how the first version of
+this index came out.
+
+Place names come from the cartridge too — property byte 2 is the banner string,
+byte 5 the area id. **188 of 231 monsters** now carry a real location; the rest
+are bosses (script-triggered, so no location is the honest answer) or unused.
+
+### What it corrected
+
+- **Zombie is not in the Sealed Cave.** The hand data had it on floor 1. The
+  cave's six undead are Mummy / Skeleton / CursdCopper / Larva / Shadow /
+  Revenant, and the gate asserts Zombie is absent.
+- **Berserker is not in `kazus_area`** — it is the Floating Continent and the
+  Saronia Catacombs.
+- Altar Cave lists exactly Goblin / Carbuncle / Eye Fang / Blue Wisp.
+
+### Traps hit on the way
+
+- ⛔ **The area byte is not a dungeon.** Area `$18` holds Round Table Hall,
+  Summit Road *and* the Sealed Cave, so "first named map in the area" filed every
+  Mummy in the game under Round Table Hall. Resolution is per-map now, and the
+  cases where the rule had to reach forward or fall back to adjacency are listed
+  by `--audit`.
+- ⛔ **Area ids repeat across the two map banks.** Searching all 512 filed
+  late-game maps 413-415 under "Sasune:East Tower".
+- ⛔ **A rate-0 map has no random encounters.** Every town shares group 0 with
+  the world's Goblins because 0 is the table's default; without the filter every
+  Goblin would be "found in" Ur's elder house.
+- ⛔ **An unguarded CLI in an imported module** wrote its own banner into the
+  generated `monsters.js` and made it unparseable.
+- ⛔ `$78 == 3` was labelled "Surface World" from nothing. The cartridge does not
+  name its overworlds; they are labelled by the selector.
+
+`tools/check-monster-locations.mjs` — the gate, in `deploy.sh`. Three reverts
+fail it: dropping the 16-bit base, putting a snake_case tag back, and counting
+rate-0 maps.
+
 ## 1.10.59 — 2026-08-22
 
 ### Balance measured on the CARTRIDGE — and the simulator was wrong

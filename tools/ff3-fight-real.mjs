@@ -21,9 +21,10 @@
 // roll itself — the random still runs, it just cannot matter. Species AND
 // counts stay the cartridge's own.
 //
-// ⛔ THE PARTY IS WHATEVER THE STATE HAS: four level-1 Onion Knights, 32 HP —
-// FF3's actual starting party. That is the ONE party this can speak for. It is
-// not a level ladder and must not be reported as one.
+// ⛔ THE PARTY IS WHATEVER THE STATE HAS. The default is FF3's actual starting
+// party — four level-1 Onion Knights, 32 HP. `--state=tools/states/ff3-lv8.state.gz`
+// fights the same formations with a level-8 party that the CARTRIDGE levelled
+// (see `ff3-level-party.mjs`); always report which one a number came from.
 
 import fs from 'node:fs';
 import zlib from 'node:zlib';
@@ -37,11 +38,13 @@ import * as EN from './lib/ff3-encounters.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || path.join(HERE, '..', 'FF3-English.nes')));
-const SNAP = zlib.gunzipSync(
-  fs.readFileSync(path.join(HERE, 'states', 'ff3-freeroam.state.gz'))).toString('utf8');
-
 const args = process.argv.slice(2);
 const flag = (n, d) => { const a = args.find((x) => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : d; };
+// ⭐ --state picks the party. `ff3-level-party.mjs` builds levelled ones by
+// patching the Goblin's EXP payout and letting FF3'S OWN growth code write the
+// stats, so a ladder here is still the cartridge's arithmetic end to end.
+const STATE = flag('state', path.join(HERE, 'states', 'ff3-freeroam.state.gz'));
+const SNAP = zlib.gunzipSync(fs.readFileSync(STATE)).toString('utf8');
 const BATTLES = Number(flag('battles', '12'));
 const MAX_ROUNDS = Number(flag('rounds', '120'));
 const TRACE = args.includes('--trace');
@@ -154,6 +157,23 @@ const liveMap = (() => {
 })();
 const GROUP = ME.groupForMap(rom, liveMap);
 
+// ⛔ ECHO THE PARTY THE RUN ACTUALLY USED, read out of the state — never a label
+// assumed from the filename. A harness that names a subject it did not use is
+// how the last three balance claims went wrong.
+const partyDesc = (() => {
+  const nes = new NES({ onFrame: () => {}, onAudioSample: () => {} });
+  nes.loadROM(Buffer.from(rom).toString('binary'));
+  nes.fromJSON(JSON.parse(SNAP));
+  for (let i = 0; i < 30; i++) nes.frame();
+  const m = nes.cpu.mem;
+  const lv = [0, 1, 2, 3].map((i) => m[0x6100 + i * 0x40 + 0x01] + 1);
+  const hp = [0, 1, 2, 3].map((i) => m[0x6100 + i * 0x40 + 0x0E] | (m[0x6100 + i * 0x40 + 0x0F] << 8));
+  // ⛔ CURRENT hp, not just max — a levelled state that was never healed walks in
+  // on a quarter bar and loses everything, and the max column hides it entirely.
+  const cur = [0, 1, 2, 3].map((i) => m[0x6100 + i * 0x40 + 0x0C] | (m[0x6100 + i * 0x40 + 0x0D] << 8));
+  return `4x Onion Knight lv ${lv.join('/')}, HP ${cur.join('/')} of ${hp.join('/')}`;
+})();
+
 if (forced !== null) {
   plan = [{ formation: Number(forced), weight: 64 }];
   label = `formation 0x${Number(forced).toString(16)}`;
@@ -171,7 +191,7 @@ if (forced !== null) {
 } else { console.error('usage: --zone=<key> | --formation=0xNN'); process.exit(2); }
 
 console.log(`FF3 REAL battles — ${label}`);
-console.log(`party: the state's own — four level-1 Onion Knights, 32 HP each`);
+console.log(`party: ${partyDesc}  [${path.basename(STATE)}]`);
 console.log(`(live map ${liveMap}, group 0x${GROUP.toString(16)} overwritten per battle)\n`);
 
 let wWin = 0, wTotal = 0;
@@ -193,4 +213,4 @@ for (const { formation, weight } of plan) {
               `${saw.padEnd(30)} won ${win}/${decided}${unres ? ` (${unres} unresolved)` : ''}  ${(rate * 100).toFixed(0)}%`);
 }
 if (plan.length > 1)
-  console.log(`\n  weighted: ${(wWin / wTotal * 100).toFixed(0)}% of encounters won by FF3's own starting party`);
+  console.log(`\n  weighted: ${(wWin / wTotal * 100).toFixed(0)}% of encounters won by ${partyDesc}`);

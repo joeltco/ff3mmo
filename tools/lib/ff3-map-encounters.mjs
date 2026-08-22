@@ -78,6 +78,33 @@ export const RATE_LO      = B57(0xBE00);   // 0x073E10, maps 0-255
 export const RATE_HI      = B57(0xBF00);   // 0x073F10, maps 256-511
 export const MAP_COUNT    = 256;
 
+// ── ⭐ THE FORMATION ID IS 16-BIT, AND THE GROUP TABLE ONLY HOLDS THE LOW BYTE
+//
+// `$94F0[group*8 + slot]` is ONE byte, so it can only name formations 0-255 —
+// yet ENCOUNTER_SET has 512 entries. The high byte comes from somewhere else
+// entirely, bank 46 $9E8E:
+//
+//   $9E8E  LDA $7ED8 / BEQ $9E95 / LDA #$01
+//   $9E95  STA $7CEE            ; high byte = ($7ED8 != 0) ? 1 : 0
+//
+// and `$7ED8` at that moment is the third argument the battle-start routine was
+// handed (`$FA26  STA $7CED / STX $7CEF / STY $7ED8`), which the encounter path
+// loads as `LDY $78`.
+//
+// ⭐ SO `$78` SELECTS THE HALF: 0 -> formations 0-255, anything else -> +256.
+// That is the same byte that picks $92F0 vs $93F0 for the group, so maps 0-255
+// use the low half and maps 256-511 use the high half — as do overworlds 2 and 3.
+//
+// ⭐ MEASURED, not read: patching $9E8E to force the high byte to 1 turns this
+// map's formation 0 into formation 256, and the monster on screen changes from
+// Goblin to Mermaid. Without it, only 102 of the 512 formations are reachable
+// and 122 monsters look like they never spawn.
+export const FORMATION_HI_PATCH_FILE = 0x05DE9E;   // bank 46 $9E8E
+export const FORMATION_HI_ZP = 0x7CEE;
+export const FORMATION_HALF = 256;
+/** `$78` -> the base added to every formation id from the group table. */
+export const formationBase = (world) => (world === 0 ? 0 : FORMATION_HALF);
+
 /** RAM: the live map id, and the world/high-map selector. */
 export const MAP_ID_ZP = 0x48;
 export const WORLD_ZP  = 0x78;
@@ -101,9 +128,17 @@ export const groupForMap = (rom, map) =>
 export const rateForMap = (rom, map) =>
   rom[(map < MAP_COUNT ? RATE_LO + map : RATE_HI + map - MAP_COUNT)];
 
-/** The eight formation ids a group can roll, slot order. */
-export const slotsForGroup = (rom, g) =>
-  [...rom.slice(GROUP_TABLE + g * GROUP_STRIDE, GROUP_TABLE + (g + 1) * GROUP_STRIDE)];
+/**
+ * The eight formation ids a group can roll, slot order.
+ *
+ * ⛔ `base` is NOT optional decoration — pass `formationBase($78)`. Maps 256-511
+ * and overworlds 2/3 run the same one-byte table against the UPPER half of
+ * ENCOUNTER_SET, so omitting it decodes the wrong 256 formations and quietly
+ * reports the wrong monsters.
+ */
+export const slotsForGroup = (rom, g, base = 0) =>
+  [...rom.slice(GROUP_TABLE + g * GROUP_STRIDE, GROUP_TABLE + (g + 1) * GROUP_STRIDE)]
+    .map((f) => f + base);
 
 /** World 0 is 128x128 in 32-tile regions: index = xreg | (yreg*4). */
 export const world0Region = (x, y) => (((x + 7) & 0x7F) >> 5) | ((((y + 7) & 0x60) >> 3));
@@ -116,8 +151,8 @@ export const world0FootRate = (rom) => rom[WORLD_CFG + WORLD0_FOOT_RATE_OFF];
  * A group as weighted formations: `[{ formation, weight }]`, weight out of 64,
  * duplicate slots merged.
  */
-export function weightedGroup(rom, g) {
-  const slots = slotsForGroup(rom, g), odds = slotOdds(rom);
+export function weightedGroup(rom, g, base = 0) {
+  const slots = slotsForGroup(rom, g, base), odds = slotOdds(rom);
   const by = new Map();
   slots.forEach((f, i) => by.set(f, (by.get(f) || 0) + odds[i]));
   return [...by].map(([formation, weight]) => ({ formation, weight }))
