@@ -69,9 +69,29 @@ export const CRYSTAL_SKIN = {
   },
 };
 
-/** The plain cave skin — no altar. What the Cave of Seals would use. */
-export const CAVE_SKIN = {
-  donorMap: 111,
+/**
+ * The Cave of Seals — no altar, olive rock, dark-green floor.
+ *
+ * ⭐ DONOR IS MEASURED, NOT GUESSED. Map property byte 2 is the location-name
+ * index: the banner string is `0x100 + byte2`. Map 111 -> $9e -> "Altar Cave",
+ * map 114 -> $7c -> "Ur", and decoding the byte for all 256 maps names 78 of
+ * them, every one a real place. Byte 5 (area) then groups a dungeon's floors:
+ *
+ *     area $18  maps 103,104,105,106   Sealed Cave / B2F / B3F   palette $79
+ *     area $30  maps 22,111,112,113,115  Altar Cave / B2F        palette $78
+ *     area $31  maps 116,117,118,119   Subterranean Lake         palette $8b
+ *
+ * ⛔ THIS SKIN USED TO POINT AT 111 — Altar Cave's own donor, so the "cave"
+ * skin repainted the boss room in the crystal dungeon's palette and the swap
+ * was invisible. A later guess at map 116 was worse: that is the Subterranean
+ * Lake, a different dungeon entirely. Both were inferences from palettes and
+ * area bytes. The name table is the ROM saying it outright, so use that.
+ *
+ * Both caves are tileset 0, so this is a PALETTE swap ($78 -> $79) over the
+ * same tile ids — no tile remapping needed.
+ */
+export const SEALS_SKIN = {
+  donorMap: 103,
   tileset: 0,
   decorate() {},
 };
@@ -80,7 +100,7 @@ export const CAVE_SKIN = {
  * Carve the boss chamber into `tilemap` and let `skin` dress it.
  * @returns {{entranceX:number, entranceY:number, warpTile:{x:number,y:number}}}
  */
-export function carveBossChamber(tilemap, skin = CAVE_SKIN) {
+export function carveBossChamber(tilemap, skin = SEALS_SKIN) {
   for (const [y, x, t] of LAYOUT) tilemap[y * 32 + x] = t;
   skin.decorate?.(tilemap);
   return { entranceX: 6, entranceY: 19, warpTile: { x: 6, y: 5 } };

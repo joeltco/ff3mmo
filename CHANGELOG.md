@@ -1,3 +1,48 @@
+## 1.10.48 — 2026-08-21
+
+### The Cave of Seals is maps 103-106, and the ROM says so
+
+⭐ **Map property byte 2 is the location-name index** — the entry banner is
+dialogue string `0x100 + byte2`. Decoding it for all 256 maps names 78 of them,
+every one a real place; **byte 5 (area)** then groups a dungeon's floors. New
+tool: `node tools/map-names.mjs [--areas]`.
+
+    area $18  maps 103,104,105,106      Sealed Cave        palette $79
+    area $30  maps 22,111,112,113,115   Altar Cave         palette $78
+    area $31  maps 116,117,118,119      Subterranean Lake  palette $8b
+
+⛔ **v1.10.47's SEALS button pointed at map 116, which is the Subterranean
+Lake.** The plan had flagged that identification as unproven and the button
+asserted it anyway, on circumstantial evidence — an adjacent area byte, a
+distinct palette, a plausible size. The name table settles it in one command.
+
+⛔ **`CAVE_SKIN` pointed at map 111 — Altar Cave's OWN donor.** The skin
+advertised as "what the Cave of Seals would use" was repainting the crystal
+dungeon's palette onto itself, a 100% palette overlap that changed nothing.
+Renamed `SEALS_SKIN`, donor 103. `check-debug-dungeon.mjs` now fails on a skin
+that renders identically to ALTAR, and was revert-proven against the old value
+(overlap 100% → FAIL; with 103, 71% → pass).
+
+### What that changes about the design
+
+The real Sealed Cave has **zero ladders, zero bridges, zero water** — all of
+those belong to the Subterranean Lake. Both caves are tileset 0 with the same
+tile ids. The one structural difference is void:
+
+| | Altar Cave | Sealed Cave |
+|---|---|---|
+| `$00` CEILING | 52.0% | 75.0% |
+| `$5f` VOID | 33.4% | 3.3% |
+| `$30` FLOOR | 6.8% | 13.3% |
+
+Altar Cave is islands floating in black; the Sealed Cave is a solid rock mass
+carved edge to edge. So `carveLadder`/`carveBridge` are **dropped** from
+`CAVE-OF-SEALS-PLAN.md` and replaced by a per-dungeon void budget — a parameter,
+not a primitive. §1 and §3-4 of that plan are rewritten; the retraction is kept
+in place rather than edited away.
+
+All ten dungeon gates green. No generator change.
+
 ## 1.10.47 — 2026-08-21
 
 ### DUNGEON tab: skin switcher

@@ -37,10 +37,18 @@ const FLOOR_NAMES = ['F1 cave', 'F2 traps', 'F3 puzzle', 'F4 rooms', 'F5 crystal
 // generator is untouched: this repaints the SAME tilemap with another cave's
 // art, which is step 2 of the Cave of Seals plan — see whether our floors read
 // as that cave before building anything for it.
+// Names come from the ROM, not from me. Map property byte 2 is the location-name
+// index — the banner string is `0x100 + byte2` — and byte 5 (area) groups a
+// dungeon's floors. `node tools/map-names.mjs` prints the whole table.
+//
+// ⛔ TWO WRONG LABELS SHIPPED BEFORE THIS. v1.10.47 put a "SEALS" button on map
+// 116, which is the Subterranean Lake; before that the cave skin pointed at 111,
+// Altar Cave's OWN donor, so the swap repainted nothing. Both were inferred from
+// palettes and area bytes. Anything added here needs the name table to back it.
 const SKINS = [
-  { id: 'altar', label: 'ALTAR', donor: 111 },
-  { id: 'seals', label: 'SEALS', donor: 116 },   // pale grey stone, stalactites
-  { id: 'crystal', label: 'CRYSTAL', donor: 148 },
+  { id: 'altar',   label: 'ALTAR',   donor: 111 },   // "Altar Cave"   area $30, palette $78
+  { id: 'seals',   label: 'SEALS',   donor: 103 },   // "Sealed Cave"  area $18, palette $79
+  { id: 'crystal', label: 'CRYSTAL', donor: 148 },   // "Wind Crystal" the crystal chamber
 ];
 const skinCache = new Map();
 function assetsFor(rom, donor) {

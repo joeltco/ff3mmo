@@ -36,9 +36,9 @@ const SCALE = Math.max(1, parseInt(flag('scale', '2'), 10));
 const BOSS = flag('boss', null);
 let md;
 if (BOSS) {
-  const { carveBossChamber, CRYSTAL_SKIN, CAVE_SKIN } = await import('../src/dungeon/boss-chamber.js');
+  const { carveBossChamber, CRYSTAL_SKIN, SEALS_SKIN } = await import('../src/dungeon/boss-chamber.js');
   const { loadRomAssets } = await import('../src/dungeon-generator.js');
-  const skin = BOSS === 'crystal' ? CRYSTAL_SKIN : CAVE_SKIN;
+  const skin = BOSS === 'crystal' ? CRYSTAL_SKIN : SEALS_SKIN;
   const tilemap = new Uint8Array(1024).fill(0x00);   // ceiling slab, as the deep floors are
   const info = carveBossChamber(tilemap, skin);
   // Deliberately the CAVE assets even for the crystal skin unless asked: the

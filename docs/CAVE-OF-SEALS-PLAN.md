@@ -1,6 +1,10 @@
 # Cave of Seals — plan
 
 Status: **plan only, nothing implemented.** Written 2026-08-21 against v1.10.46.
+**§1 and §3-4 rewritten the same day: the maps named below are not the ones the
+first draft used.** The original identification (116-119) was wrong, and the
+design that hung off it — ladders, bridges, island layouts — described a
+different dungeon. See §1.
 
 Altar Cave is a **crystal dungeon**. The Cave of Seals is a **regular dungeon** —
 a boss at the end, its own tiles and palettes, no crystal and no job unlock
@@ -10,38 +14,55 @@ a boss at the end, its own tiles and palettes, no crystal and no job unlock
 
 ## 1. What the cartridge actually has
 
-Read out of the ROM, not from memory.
+⭐ **Measured, via `tools/map-names.mjs`.** Map property **byte 2 is the
+location-name index**: the entry banner is dialogue string `0x100 + byte2`.
+Decoding it for all 256 maps names 78 of them, every one a real place. **Byte 5
+is the area id** and groups a dungeon's floors.
 
-**The maps: 116 / 117 (one shared tilemap, two entry points, like 111/112), 118,
-and 119.** Door chain: 116 → 118 → 119, and 116 → 117.
+⛔ **The first draft of this section named the wrong dungeon.** It picked maps
+116-119 by inference — the area byte sits right after Altar Cave's, the palette
+is distinct, it is a multi-map cave chain — and shipped a debug button on it. The
+name table says map 116 is the **Subterranean Lake**. Everything the draft
+described as this cave's identity, the ladders and bridges and islands in black,
+belongs to that other dungeon. The inference was reasonable and it was wrong; the
+byte was there to be read the whole time.
 
-| map | walkable | chests | stairs | fill | note |
+**The Sealed Cave is area `$18`: maps 103, 104, 105, 106.** Palette `$79`, song
+`$1d`, tileset 0. Overworld mouth at **(84, 36)** — Altar Cave's is (95, 34).
+
+| map | banner | walkable | chests | stairs | note |
 |---|---|---|---|---|---|
-| 116 | 87 | 1 | 1 | `$5f` VOID | islands in black, one long bridge |
-| 117 | 87 | 1 | 1 | `$5f` VOID | same tilemap as 116 |
-| 118 | 135 | 4 | 1 | `$5f` VOID | **seven ladders** |
-| 119 | 138 | 2 | 0 | **`$04` WATER** | a flooded cavern |
+| 103 | "Sealed Cave" | 139 | 2 | 1 | the entrance floor |
+| 104 | "B2F" | 125 | 1 | 1 | |
+| 105 | — | 125 | 1 | 1 | byte-identical tilemap to 104, two entry points |
+| 106 | "B3F" | 154 | 2 | 0 | bones, and the sealed door |
 
-**It looks nothing like Altar Cave.** Same tileset (0), different palette — map
-property byte 9 is `0x8b` against Altar Cave's `0x78` — and it renders as **pale
-grey stone with black stalactites hanging from every ceiling**, on an olive floor.
-Rendered with `map-png.mjs`; that is a skin, exactly as §4c defines one.
+(104/105 sharing one tilemap is the same trick as 111/112 in Altar Cave.)
 
-**Its area id is the one after Altar Cave's.** Map property byte 5 is `0x31`
-here and `0x30` for all five Altar Cave maps. Each cave cluster in the ROM has its
-own area byte, and these two are adjacent.
+### The real difference from Altar Cave: void, not connectors
 
-### Two connectors Altar Cave does not have
+Both caves are **tileset 0 with the same tile ids**. Neither uses a ladder, a
+bridge, or water anywhere. The difference is how much of the map is *black*:
 
-- **`$33` — a vertical LADDER.** A column of them dropping through void, with
-  floor above and `$02` rock at the lip. Map 118 has seven; vertical is this
-  cave's primary connector, where Altar Cave uses carved corridors.
-- **`$34` — a horizontal BRIDGE.** Nine in a row on map 116 at row 23, void above
-  AND below — a walkway across a chasm.
+| | Altar Cave (22,111,112,113,115) | Sealed Cave (103-106) |
+|---|---|---|
+| `$00` CEILING | 52.0% | **75.0%** |
+| `$5f` VOID | **33.4%** | **3.3%** |
+| `$30` FLOOR | 6.8% | **13.3%** |
+| `$01` ROCK | 6.4% | 7.1% |
+| `$33` LADDER / `$34` BRIDGE / `$04` WATER | 0 | 0 |
 
-Chambers are **islands in black joined by ladders and bridges**, rather than one
-continuous carved silhouette. That is the dungeon's identity and the reason it
-cannot just be Altar Cave with a recolour.
+Altar Cave is **islands of carved cave floating in black margins**. The Sealed
+Cave is a **solid rock mass filled edge to edge**, with corridors cut through it
+and almost no void at all — and twice the floor density, so it reads as more open
+despite being more enclosed.
+
+⭐ **That makes the skin nearly the whole job.** Same tileset, same tile
+vocabulary, same wall grammar — a palette swap plus a fill/void ratio. It does
+not need new primitives.
+
+Bones (`$09`) appear at a similar rate in both (9 tiles here, 12 there), so they
+are cave decoration, not a Sealed Cave signature.
 
 ### The boss and the story hooks
 
@@ -51,20 +72,8 @@ cannot just be Altar Cave with a recolour.
   defeated by casting Cure!"*
 - Script `0x23f`: *"There's a secret path in the Sealed Cave. Find the skeleton
   key."*
-- Script `0x19c` is the location banner **"Sealed Cave"**.
-
-### ⛔ What is NOT proven
-
-That maps 116-119 are the ones the game calls the Sealed Cave. The evidence is
-circumstantial-but-strong: the area byte sits directly after Altar Cave's, the
-palette is distinct, it is a multi-map cave chain, and its size and shape match a
-mid-early dungeon. I could not find a map -> name table to settle it, and the
-encounter-set index is not one of the property bytes I checked.
-
-**The decisive test, before any of this is built:** boot the world map with
-`tools/monscan/world-harness.cjs`, walk onto the Sealed Cave's overworld entrance,
-and read `$48`. That is one measurement and it either confirms 116 or names the
-real map. Do it first — every number below hangs off it.
+- Script `0x19c` is the location banner **"Sealed Cave"** — string `0x100 + $9c`,
+  and map 103's byte 2 is `$9c`. That is the identification, closed.
 
 ---
 
@@ -85,37 +94,38 @@ Most of the machinery landed during the Altar Cave work and needs no new design.
 ## 3. What is genuinely new
 
 1. **Its own map range.** `2000 + depth` or similar; see §4b's decodable scheme.
-2. **`carveLadder` / `carveBridge`** — the two connectors above. Both cross VOID,
-   which no existing primitive does: every corridor we have carves through rock or
-   along a ceiling snake.
-3. **Void fill on every floor.** Altar Cave uses void only on floor 0; this cave
-   uses it throughout, so its floors are island-and-bridge layouts rather than
-   rooms-in-a-slab.
+2. ~~`carveLadder` / `carveBridge`~~ — **dropped.** Those came from the
+   misidentified maps. The Sealed Cave has zero of both.
+3. **A void budget per dungeon.** The one structural knob that separates the two
+   caves: Altar Cave leaves 33% of the map black, the Sealed Cave 3%. Our
+   generator currently bakes Altar Cave's habit in. This is a parameter on the
+   floor spec, not a new primitive.
 4. **An overworld entrance**, and the world-map trigger to reach it.
 5. **The Djinn** — battle sprite, formation, and encounter tables for the floors.
 6. **Server-side loot pool for the new map range**, or every chest is rejected.
 
 ## 4. Order of work
 
-1. **Settle the map identity** with the world harness (§1).
-2. ✅ **Skin only — DONE, in the debug tab (v1.10.47).** The DUNGEON tab has an
-   ALTAR / SEALS / CRYSTAL row that repaints the SAME generated tilemap with
-   another donor map's CHR and palettes. No generator change.
+1. ✅ **Map identity — SETTLED.** Maps 103-106, by the name table (§1), not by
+   the emulator walk the first draft proposed. Cheaper and it answers every map
+   at once rather than one per boot.
+2. ✅ **Skin — DONE and corrected.** The DUNGEON tab has an ALTAR / SEALS /
+   CRYSTAL row repainting the SAME generated tilemap with another donor map's CHR
+   and palettes, and `SEALS_SKIN` in `dungeon/boss-chamber.js` now points at 103.
 
-   **Result: the material transfers, the architecture does not.** Our floor 1 in
-   the SEALS skin reads convincingly as that cave — pale stone, stalactites
-   hanging off every wall band, olive floor, black void. Side by side with ROM map
-   116 the difference is entirely structural: the cartridge's cave is ISLANDS
-   joined by ladders and a bridge; ours is one connected blob with far more wall.
+   ⛔ **It pointed at 111 before this — Altar Cave's own donor.** The "cave" skin
+   was repainting the crystal dungeon's palette onto itself, a 100% palette
+   overlap that no gate was checking. `check-debug-dungeon.mjs` now fails on
+   exactly that, revert-proven.
 
-   So the skin is nearly free and the layout is the whole job. That reorders what
-   follows: build the ladder/bridge connectors and island placement FIRST, and
-   treat the recolour as a finishing step rather than a starting one.
-3. **Ladder and bridge primitives**, gated by the tile-grammar check against maps
-   116-119 the way the current one checks 111-115.
-4. **Island layouts** — chambers placed in void and joined by ladders/bridges.
-5. **The Djinn and its chamber**, reusing the boss chamber with a `boss` ending.
-6. **Wire the range**: the eight integration points in §4b, of which two fail
+   **Result: the skin transfers well and the architecture nearly matches too.**
+   Our floors already carve corridors through a rock mass, which is what this cave
+   is — unlike the island-and-bridge layout the first draft chased.
+3. **The void budget** (§3.2), gated by extending `tile-grammar` to maps 103-106.
+   Their ratios differ sharply from 111-115, so the census must not average the
+   two caves into one blurred rule.
+4. **The Djinn and its chamber**, reusing the boss chamber with a `boss` ending.
+5. **Wire the range**: the eight integration points in §4b, of which two fail
    SILENTLY — `inDungeon = dungeonFloor >= 0 && dungeonFloor < 4` stops encounters
    dead, and `_resolvedChestPool` rejects every chest.
 
@@ -124,13 +134,19 @@ Most of the machinery landed during the Altar Cave work and needs no new design.
 - ⛔ **Render it before shipping it.** Three additions this session passed every
   gate and were rejected on sight. Gates say a thing is not broken; they say
   nothing about whether it belongs.
-- ⛔ **Extend the tile grammar to this cave's maps FIRST.** The census currently
-  derives its rules from 111/112/113/22/115 only. Ladders and bridges do not exist
-  there, so every arrangement using them would land in "insufficient evidence" and
-  be excused — which is exactly the hole that let the disguised doorway through.
+- ⛔ **Read the ROM's own tables before inferring from art.** An area byte next
+  to Altar Cave's, a distinct palette and a plausible size pointed confidently at
+  the wrong dungeon, and a "SEALS" button shipped on it. `map-names.mjs` settled
+  it in one command. When a table exists, circumstantial evidence is not a
+  shortcut, it is a wrong answer that takes longer.
+- ⛔ **Extend the tile grammar to maps 103-106 before tuning fill.** The census
+  derives its rules from 111/112/113/22/115 only, whose void ratio is ten times
+  this cave's. Averaging the two caves would erase the one difference that
+  matters.
 - ⛔ **Do not place structures against assumed rows.** Four separate couplings
   turned up chasing contour, all the same: exits, entrances and doors assume the
-  rows a room was carved at. Islands-and-bridges makes that worse, not better.
+  rows a room was carved at. Any fill/void change moves those rows, so it will
+  find them again.
 - ⛔ **Monster tables are content.** `ENCOUNTERS` has four Altar Cave zones and
   nothing else. Undead formations for this cave are authoring work, not generator
   work.
