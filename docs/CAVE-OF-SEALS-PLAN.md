@@ -208,31 +208,36 @@ deepest tier — never appears in a random encounter. That is a consequence of t
 `rate: 0` so it stays visible. Pointing `romFloorMaps[2]` at 106 instead of 105
 would put it in play at the cost of the 1:1.
 
-## 7. Balance — MEASURED (v1.10.57)
+## 7. Balance — MEASURED ON THE CARTRIDGE (v1.10.59)
 
-Full tables, and the same sweep over Altar Cave and the overworld, live in
-**`docs/BALANCE.md`**. `node tools/zone-balance.mjs --seals` reproduces them.
+Full tables in **`docs/BALANCE.md`**. The headline, from
+`tools/ff3-fight-real.mjs`, which forces a formation by overwriting the live
+map's encounter group and then lets **FF3 itself** fight the battle:
 
-| party | seals_f1 | seals_f2 / f3 | Djinn |
+⛔ **The Cave of Seals is 0% for FF3's own starting party — 0 wins in 30 decided
+battles, every one a total wipe (`0/0/0/0`).** Altar Cave floor 4 is 79% for the
+same party. That is not a difficulty step, it is a wall.
+
+⛔ **Our simulator said 17%.** `battle-sim.js` is optimistic on every hard fight
+measured — by up to 23 points — and accurate only where the fight is already won.
+The level ladder below is therefore an UPPER BOUND, not a measurement.
+
+| party (📐 model, upper bound) | seals_f1 | seals_f2 / f3 | Djinn |
 |---|---|---|---|
-| FI5 | **0%** | **0%** | — |
-| FI5 + WM4 | 12% | 9% | — |
+| FI5 | 0% | 0% | — |
 | FI8 + WM6 | 72% | 65% | 0% |
 | FI8 + WM6 + BM6 | 93% | 91% | 0% |
 | FI12 + WM10 + BM10 | 100% | 100% | 100% |
 
-⭐ The Land Turtle gates Altar Cave at roughly **level 5-8** (OK1/OK3 lose
-40/40; OK5 is 53%), so that is the level a player arrives here with — 0% solo,
-72% with an ally. A real step, not an unfair one, provided they are not alone.
-
-⭐⭐ **The Djinn is a MAGIC check, not a level check** — fire-resistant,
-ice-weak, casts Fire at 85%. FI8+WM6+BM6 all-attack loses 40/40; the same party
-casting **Bzzard wins 85%**. Do not nerf it on the all-attack row.
+⭐⭐ **The Djinn is a MAGIC check, not a level check** — fire-resistant, ice-weak,
+casts Fire at 85%. FI8+WM6+BM6 all-attack loses 40/40; the same party casting
+**Bzzard wins 85%**. Do not nerf it on the all-attack row.
 
 ⛔ **Not reachable in normal play** — the mouth at (84,36) is an isolated 8-tile
 pocket with no path to Ur's 267 tiles. `check-encounter-zones.mjs` tripwires if
-that changes.
+that changes, and given the 0% above that tripwire is the load-bearing one.
 
-⚠ The sim's party only ever attacks — no potions, no Cure, no Protect. A floor,
-not an absolute. ⛔ And an earlier pass of this sweep used **Knight**, a job that
-is not unlocked here; every number it produced was too kind.
+⛔ **A real level ladder is not possible yet.** The party record is at
+`0x6100 + slot*0x40`, cur/max HP at `+0x0C`/`+0x0E` (measured), but the LEVEL and
+stat bytes are unproven and FF3's growth table is undecoded. Until then the
+cartridge can only speak for the party the savestate holds.

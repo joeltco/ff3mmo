@@ -1,3 +1,73 @@
+## 1.10.59 — 2026-08-22
+
+### Balance measured on the CARTRIDGE — and the simulator was wrong
+
+⛔ **Every balance number in v1.10.57 and v1.10.58 came from `battle-sim.js`,
+this repo's re-implementation of FF3's combat math.** That is a model, not a
+measurement, and nothing in the loop was the cartridge — which is how a Knight (a
+job the player cannot hold) produced two releases of confident, false numbers.
+
+`tools/ff3-fight-real.mjs` — new. Overwrites all eight slots of the live map's
+encounter group with the formation under test (the weighted roll still runs, it
+just cannot matter), then lets **FF3 itself** fight the battle and reads the
+corpses out of the combatant array. Species and counts stay the ROM's.
+
+Party: FF3's own starting party, four level-1 Onion Knights at 32 HP. 6 battles
+per formation.
+
+| zone | 🎮 cartridge | 📐 sim | error |
+|---|---|---|---|
+| `altar_cave_f1` / `f2` | **100%** | 100% | — |
+| `altar_cave_f3` | **98%** | 100% | +2 |
+| `altar_cave_f4` | **79%** | 100% | **+21** |
+| `seals_cave_f1` | **0%** | 17% | +17 |
+| `seals_cave_f2` / `f3` | **0%** | 6% | +6 |
+| `grasslands_wild` | **81%** | 100% | +19 |
+| `world_r6` | **66%** | 84% | +18 |
+| `world_r11` | **42%** | 65% | **+23** |
+
+⭐ **The sim is optimistic everywhere and pessimistic nowhere**, by up to 23
+points, and accurate only where the fight is already won. Every number it gives
+about a hard fight is an upper bound. `docs/BALANCE.md` now leads with the
+cartridge and labels the model as such.
+
+⛔ **The Cave of Seals is 0% — 0 wins in 30 decided battles, every one a total
+wipe (`0/0/0/0`).** Not "hard for a level-5 party": impossible for the starting
+party. Altar Cave floor 4 is 79% for the same party, so the step is a wall.
+
+⭐ **Altar Cave has a real curve the sim missed entirely** — 100% on floor 1,
+79% on floor 4, driven by one formation (Eye Fang + Blue Wisp + Carbuncle, 54/64
+of floor 4) that the starting party wins 6 times in 8. The sim called it 100%.
+
+⛔ **Berserker x4 is unwinnable** for the starting party (0/6) and sits in
+reachable grass — the 12/64 slot of `world_r6` (48% of everywhere a starter can
+walk) and 15/64 of `world_r11`.
+
+### Fixed in the harness before it was believed
+
+- **It named the monsters wrong.** The species id was read from
+  `enemyAddr(i) + 0x20`, an offset nothing had measured; it printed "Carbuncle"
+  for a formation the ROM says is Goblins. Now read from `$7D6B`, where the
+  expander leaves the ids, cross-checked against the name the battle screen
+  draws.
+- **"All enemies at 0 HP" is not the end of a battle** — the victory banner and
+  the exp roll still run and the party can still die. A win is confirmed by
+  leaving the battle menu behind.
+
+`tools/check-real-battles.mjs` — the gate. Pins that forcing a formation really
+forces it (control and patch share no species, so an inert patch fails) and that
+the species read agrees with the screen. Both reverts fail it, including the
+Carbuncle bug. ⛔ It deliberately does NOT pin win rates — balance is meant to
+change; the harness is what must not rot.
+
+⛔ **A real level ladder is still not possible.** The party record is at
+`0x6100 + slot*0x40` with cur/max HP measured at `+0x0C`/`+0x0E`, but the level
+and stat bytes are unproven and FF3's growth table is undecoded. Poking unnamed
+bytes to fake a level-8 party would produce exactly the kind of number this work
+exists to stop.
+
+Nothing was rebalanced.
+
 ## 1.10.58 — 2026-08-22
 
 ### Balance measured across Altar Cave and the Floating Continent — `docs/BALANCE.md`
