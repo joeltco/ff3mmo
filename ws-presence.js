@@ -53,6 +53,8 @@ import {
 } from './api.js';
 import { sanitizeName, isCleanName, cleanChatText } from './moderation.js';
 import { ITEMS, isQuestItem } from './src/data/items.js';
+import { DUNGEONS, isBossFloor } from './src/data/dungeons.js';
+import { ENCOUNTERS } from './src/data/encounters.js';
 // v1.7.747 P-1 — server-arbitrated PvP battle FSM. Behind PVP_ARBITER flag.
 // Module is self-contained; ws-presence just plumbs the wire frames through.
 import {
@@ -172,22 +174,34 @@ let PVE_ARBITER = true;
 // is set from the client's `location` wire and broadcast in the roster,
 // so a cheater who fakes zoneKey must also fake loc to slip past this
 // gate — and that lie is visible to every peer. Default {} → reject.
-// Mirrors the client zone resolution in `currentEncounterZoneKey()`:
-//   - world  → grasslands_valley (Ur choke valley) OR grasslands_wild (south)
-//   - ur     → grasslands_wild (the dark-tile patch in the town overworld)
-//   - cave-N → the matching altar_cave_fN
-// `altar_cave_boss` is intentionally absent — the boss is server-triggered,
-// not client-requested. New zones / new encounter patches must update
-// this table alongside `currentEncounterZoneKey` and the loc table in
-// src/roster.js#rosterLocForMapId.
-const _LOC_ZONE_ALLOWLIST = new Map([
-  ['world',  new Set(['grasslands_valley', 'grasslands_wild'])],
-  ['ur',     new Set(['grasslands_wild'])],
-  ['cave-0', new Set(['altar_cave_f1'])],
-  ['cave-1', new Set(['altar_cave_f2'])],
-  ['cave-2', new Set(['altar_cave_f3'])],
-  ['cave-3', new Set(['altar_cave_f4'])],
-]);
+//
+// ⛔ v1.10.56 — DERIVED, not hand-listed. The literal table only ever knew
+// about Altar Cave's `cave-0`..`cave-3`, so the Cave of Seals shipped with
+// every one of its zones rejected by this gate; and the world half named a
+// single `grasslands_wild` that no longer exists as the client's answer for
+// "past the safe radius" — the ROM's 4x4 region grid does. Both failures are
+// silent (the request is refused and the client falls back), which is exactly
+// why this is now built from the same registry and the same ENCOUNTERS table
+// `currentEncounterZoneKey()` reads.
+//
+// Boss zones are deliberately absent: the boss is server-triggered, never
+// client-requested.
+const _LOC_ZONE_ALLOWLIST = (() => {
+  const m = new Map();
+  // World map: the Ur safe zone plus every ROM region key that exists.
+  const world = new Set(['grasslands_valley']);
+  for (const k of ENCOUNTERS.keys()) if (/^world_r\d+$/.test(k)) world.add(k);
+  m.set('world', world);
+  // The Ur town-overworld dark-tile patch (src/map-loading.js).
+  m.set('ur', new Set(['grasslands_wild']));
+  for (const d of DUNGEONS) {
+    for (let f = 0; f < d.floors; f++) {
+      if (isBossFloor(d, f)) continue;
+      m.set(`${d.rosterPrefix}-${f}`, new Set([`${d.encounterZonePrefix}_f${f + 1}`]));
+    }
+  }
+  return m;
+})();
 
 // v1.7.776 P-8 — server-side economy validation gate (shops + chests +
 // vases + inn). When true, client sends transaction requests + waits for

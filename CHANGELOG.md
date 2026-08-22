@@ -1,3 +1,86 @@
+## 1.10.56 — 2026-08-22
+
+### The encounter tables are the cartridge's now
+
+Every zone in `src/data/encounters.js` was hand-authored, because nothing
+connected a map to a formation. That link is decoded, measured against a running
+game, and the file is now generated from it.
+
+**The chain** (`tools/lib/ff3-map-encounters.mjs` carries the trace):
+
+```
+map id ($48)  -> $92F0[map]            = the map's encounter GROUP
+group         -> $94F0 + group*8       = EIGHT formation ids
+slot          -> $BD78[random & $3F]   = 12/12/12/12/6/6/3/1 out of 64
+formation     -> $5C010                = species record + count pattern
+rate          -> $BE00[map]            = chance out of 256, checked per step
+```
+
+⭐ **The odds are the headline.** Every formation in a zone used to be equally
+likely, because the zones were guesses and nothing said otherwise. The cartridge
+gives each group eight *weighted* slots: Altar Cave B1F is Goblins **63 times in
+64** and Eye Fang + Carbuncle once, not the coin-flip we were shipping. (It is
+the same rarity curve as the drop table — `DROP_SLOT_WEIGHTS` is this table ×4.)
+
+⭐ **The Cave of Seals' real roster.** Not `$09-$0F` split by hand: the ROM gives
+B1F Mummies (48/64), Skeletons (12), Shadows (3) and a 1-in-64 Larva +
+CursdCopper; B2F/B3F Skeleton/Shadow/Skeleton+Mummy/Larva+CursdCopper. **Zombie
+is not in this cave at all** — our authored version put it on floor 1.
+
+⭐ **The world map is a 4x4 region grid**, not one blanket "wild" table. `$9CF0`
+gives each 32-tile region its own group, so the north shore fights Knockers and
+Gorgons and the south fights Griffons and Lynxes. Sixteen `world_r*` zones,
+resolved by the cartridge's own arithmetic (`world0ZoneKey`).
+
+⛔ **Rate is a per-step probability, not a step count.** FF3 rolls
+`random(0..255) < $F8` on every step; dungeon floors are `6/256` (~1 fight per 43
+steps) and world grass is `5/256` (~1 per 51). The step-threshold model this
+replaces averaged 22 steps, so the game had been running about **twice as hot**
+as the cartridge.
+
+⭐ **The Ur dark-tile patch was right, and now it's sourced.** That patch sits on
+ROM map **114**, which has an encounter row of its own: Killer Bee 40/64,
+Werewolf 24/64, at **18/256** — three and a half times the open grass. The
+hand-authored version had guessed exactly those two monsters at "rate high (2x)".
+It takes map 114's row now, not the world region Ur happens to stand in (which
+is a different group and adds Berserkers).
+
+⛔ **One zone is still ours, on purpose.** `grasslands_valley` — the 8-tile safe
+radius around Ur — keeps its Goblins. The cartridge's answer for Ur's own region
+is `world_r7`: Killer Bees, Werewolves *and* Berserkers, which an L1 party
+leaving town does not survive. The gate asserts it is ours so a later
+"make it all ROM-true" pass has to delete that line rather than do it silently.
+
+### Fixed
+
+- **The server's PvE zone allowlist knew only Altar Cave.** `_LOC_ZONE_ALLOWLIST`
+  was a literal table with `cave-0`..`cave-3`, so every Cave of Seals encounter
+  request would have been refused, silently. It is now derived from the dungeon
+  registry and the ENCOUNTERS table.
+- **The PvE arbiter had its own copy of the formation pick.** A uniform
+  `formations[rng() * length]` that mirrored the client by hand; now both call
+  the shared `pickFormation`, so weights can't drift and replay-validate can't
+  start rejecting honest battles.
+
+### Tools
+
+- `tools/ff3-zone-trace.mjs` — breaks on the ENCOUNTER_SET fetch and reports the
+  instruction, its bank, and the reads that led there. This is what found it.
+- `tools/map-encounters.mjs` — rewritten. It used to *test the hypothesis* that
+  map property byte 12 was the encounter set, self-checking against our own
+  hand-authored zones; both halves were wrong. Now it decodes for real:
+  `--world`, `--area N`, `--all`.
+- `tools/gen-encounters.mjs` — replaces `gen-encounters-js.js`, which would have
+  overwritten the generated file with the old guesses.
+- `tools/check-map-encounters.mjs` — the gate. Pins the tables, re-derives every
+  shipped zone, and **patches a map's group byte in a running game**: the
+  monsters that walk onto the field change to the patched group's and back.
+  Control and patch share no species, so an inert patch fails. 119 checks; five
+  separate reverts (wrong bank, wrong table, dropped `+7`, uniform pick in the
+  data, uniform pick in the client) each fail it.
+- `romFloorMaps` joins the dungeon registry — one ROM map per floor, length
+  checked at construction, because a dungeon with no encounters reports nothing.
+
 ## 1.10.55 — 2026-08-22
 
 ### The Cave of Seals is a real dungeon

@@ -1,3 +1,9 @@
+<!-- STATUS 2026-08-22 (v1.10.55) — §4c "one shape, many skins" is SHIPPED and
+     the dungeon REGISTRY landed with it. A dungeon is now one row in
+     `src/data/dungeons.js`; two ship (Altar Cave 1000-1004, Cave of Seals
+     2000-2003). Adding a third is a row plus encounter zones and a loot pool.
+     See docs/CAVE-OF-SEALS-PLAN.md §6 for the one open ROM question. -->
+
 # Dungeon chambers / corridors — modularization plan
 
 Status: **plan only, nothing implemented.** Written 2026-08-20 against v1.10.15,
@@ -746,3 +752,56 @@ cp regardless of what died. Gated by `tools/check-boss-id.mjs`.
 - **Scope**: phases 1–2 are refactors with a byte-identical gate and are safe to
   do in one pass. Phase 3 onward changes what players see and should ship one
   floor at a time.
+
+---
+
+## Appendix — the dungeon registry (added v1.10.50, completed v1.10.55)
+
+`src/data/dungeons.js` is the single source. A dungeon is one row:
+
+```js
+{
+  id, name, base, floors,          // floor N = base+N; last floor is the boss
+  worldEntranceMap,                // ROM map the overworld trigger points at
+  donorMap, tileset,               // art for normal floors
+  bossSkinId,                      // -> BOSS_SKINS (crystal | seals)
+  ending,                          // ENDING_CRYSTAL | ENDING_BOSS
+  bossId,                          // bestiary id
+  music: { floors, boss },         // TRACKS keys
+  rosterPrefix, bossRosterLoc,
+  encounterZonePrefix,             // -> ENCOUNTERS `${prefix}_f${n+1}`
+  lockedRooms: [{mapId, floor}],   // [] is a statement, not an oversight
+  secretRooms: [{mapId, floor}],
+}
+```
+
+**Adding a dungeon is: the row, its encounter zones, and its loot pools.**
+`check-dungeon-registry.mjs` fails if any of the three is missing, because each
+one fails SILENTLY at runtime — a missing zone falls back to `RATE_STEPS.normal`
+with the wrong bestiary, a missing pool falls back to the STARTING dungeon's
+floor-1 loot, a bad track name plays silence.
+
+### ⛔ The fifteen axes this replaced
+
+`mapId - 1000`, `(mapId === 1004) ? 148 : 111`, `floorIndex === 4 ? 2 : 0`,
+`dungeonFloor < 4`, `Set([1004])`, the 1010/1011 locked rooms, the 1020/1021
+secret rooms, `LOOT_POOLS[1000]`, `'cave-' + (mapId - 1000)`, `destMap = 1000`,
+`destMap === 111`, `secretMapIdNext = 1020`, `loadRomAssets(rom)` with no donor,
+`loadMapById(1004)`, and `['altar_cave_f1', ...]`.
+
+That last one is the lesson: it survived the migration **in a file the migration
+touched**, because the guard banned dungeon mapId NUMBERS and a zone name is a
+STRING. The guard now covers both. Whenever a per-dungeon fact is added, ask what
+SHAPE it takes — a number, a name, a ROM offset — and whether the guard can see
+that shape.
+
+### Gates
+
+`check-dungeon-registry.mjs` builds a SECOND dungeon (`probe`, base 3000) with
+different numbers on every axis, because generating Altar Cave cannot prove any
+of this — every hardcoded literal agrees with Altar Cave.
+`check-boss-sprite.mjs` pins the Djinn's ROM chain and asserts the sprite is
+painted from the map palette rather than hand-mixed.
+
+⛔ Its fixture used to be `seals` at base 2000 and silently SHADOWED the real
+dungeon when that shipped. Fixtures are code; a duplicate id now throws.

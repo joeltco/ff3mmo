@@ -25,7 +25,7 @@ globalThis.document = {
 
 const { loadWorldMap } = await import('../src/world-map-loader.js');
 const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
-const { ENCOUNTERS } = await import('../src/data/encounters.js');
+const { ENCOUNTERS, world0ZoneKey } = await import('../src/data/encounters.js');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -34,11 +34,14 @@ const stub = { data: world };
 const pass = (x, y) => WorldMapRenderer.prototype.isPassable.call(stub, x, y);
 const W = world.mapWidth;
 
-// Mirrors src/battle-encounter.js#currentEncounterZoneKey.
+// Mirrors src/battle-encounter.js#currentEncounterZoneKey. Past the radius the
+// answer is the ROM's own region grid (v1.10.56), so this calls the shipped
+// `world0ZoneKey` rather than naming a zone — a hand-copied key here is exactly
+// how the box this gate exists to catch went stale in the first place.
 const UR_X = 95, UR_Y = 41, SAFE_RADIUS = 8;
 const zoneAt = (x, y) =>
   Math.max(Math.abs(x - UR_X), Math.abs(y - UR_Y)) <= SAFE_RADIUS
-    ? 'grasslands_valley' : 'grasslands_wild';
+    ? 'grasslands_valley' : world0ZoneKey(x, y);
 
 let failed = 0;
 const ok = (m) => console.log('  ✓ ' + m);
@@ -77,7 +80,7 @@ for (const [t, p] of world.triggerPositions) {
   const dest = world.entranceTable[t];
   if (!STARTER_DESTS.has(dest)) continue;
   if (zoneAt(p.x, p.y) === 'grasslands_valley') ok(`entrance to map ${dest} at (${p.x},${p.y}) is in the safe zone`);
-  else bad(`entrance to map ${dest} at (${p.x},${p.y}) is in the TIER-2 zone`);
+  else bad(`entrance to map ${dest} at (${p.x},${p.y}) rolls ${zoneAt(p.x, p.y)} — the cartridge's tier-2 region`);
 }
 
 // ── 4. The safe zone is a real region, not a vestige ──────────────────────

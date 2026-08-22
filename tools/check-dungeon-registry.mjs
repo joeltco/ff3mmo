@@ -18,7 +18,7 @@
 //   node tools/check-dungeon-registry.mjs
 
 import fs from 'node:fs';
-import { buildRegistry, isBossFloor, bossFloorMapId, normalFloorMapIds,
+import { buildRegistry, isBossFloor, bossFloorMapId, normalFloorMapIds, romMapForFloor,
          lockedRoomMapIdForFloor, secretRoomMapIds, DUNGEONS,
          ENDING_BOSS, ENDING_CRYSTAL } from '../src/data/dungeons.js';
 import { resolveBossSkin, resolveDungeonDonor } from '../src/dungeon/boss-chamber.js';
@@ -89,6 +89,7 @@ const SEALS = {
   music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
   rosterPrefix: 'probe', bossRosterLoc: 'probe-boss',
   encounterZonePrefix: 'probe_cave',
+  romFloorMaps: [103, 104, 105, 106],   // one ROM map per floor — see romMapForFloor
   lockedRooms: [{ mapId: 3010, floor: 1 }],
   secretRooms: [{ mapId: 3020, floor: 0 }],
 };
@@ -186,6 +187,21 @@ ok(JSON.stringify(normalFloorMapIds(SEALS)) === '[3000,3001,3002]', 'probe norma
 ok(lockedRoomMapIdForFloor(SEALS, 1) === 3010, 'probe locked room not found for floor 1');
 ok(lockedRoomMapIdForFloor(SEALS, 0) === null, 'probe floor 0 has no locked room');
 ok(JSON.stringify(secretRoomMapIds(SEALS)) === '[3020]', 'probe secret rooms wrong');
+
+// ⛔ A dungeon with no encounters is a dungeon you can walk through untouched,
+// and nothing else reports it. `romFloorMaps` is what `gen-encounters.mjs`
+// reads, so its length is checked at registry construction — a row one short
+// would just quietly lose its deepest floor's monsters.
+ok(romMapForFloor(SEALS, 0) === 103, `probe floor 0 ROM map was ${romMapForFloor(SEALS, 0)}`);
+ok(romMapForFloor(SEALS, 3) === 106, `probe boss floor ROM map was ${romMapForFloor(SEALS, 3)}`);
+ok(DUNGEONS.every((d) => d.romFloorMaps && d.romFloorMaps.length === d.floors),
+   'every shipped dungeon needs one ROM encounter map per floor');
+{
+  let threw = false;
+  try { buildRegistry([{ ...SEALS, id: 'short', base: 4000, romFloorMaps: [103, 104] }]); }
+  catch { threw = true; }
+  ok(threw, 'buildRegistry must reject a romFloorMaps shorter than floors');
+}
 
 // duplicate ids must be rejected — see the note in buildRegistry
 let dupThrew = false;

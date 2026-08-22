@@ -1,6 +1,12 @@
 # Cave of Seals — plan
 
-Status: **plan only, nothing implemented.** Written 2026-08-21 against v1.10.46.
+Status: **SHIPPED in v1.10.55; encounters made ROM-true in v1.10.56.** The Cave
+of Seals is a registered, reachable dungeon — maps 2000-2003, entered from world
+(84,36). §6 was the one open question, FF3's per-map encounter table; it is now
+decoded, gated against a running game, and the zones are generated from it. What
+is left is BALANCE, which nothing has measured.
+
+Written 2026-08-21 against v1.10.46.
 **§1 and §3-4 rewritten the same day: the maps named below are not the ones the
 first draft used.** The original identification (116-119) was wrong, and the
 design that hung off it — ladders, bridges, island layouts — described a
@@ -150,3 +156,61 @@ Most of the machinery landed during the Altar Cave work and needs no new design.
 - ⛔ **Monster tables are content.** `ENCOUNTERS` has four Altar Cave zones and
   nothing else. Undead formations for this cave are authoring work, not generator
   work.
+
+
+---
+
+## 6. ⭐ SOLVED: FF3's per-map encounter table (v1.10.56)
+
+Decoded, measured against a running game, and wired. `tools/ff3-zone-trace.mjs`
+found it; `tools/lib/ff3-map-encounters.mjs` carries the trace;
+`tools/check-map-encounters.mjs` is the gate.
+
+### The chain
+
+    map id ($48)  -> $92F0[map]            = the map's encounter GROUP
+                     $93F0[map-256]          ...for maps 256-511 ($78 != 0)
+    group         -> $94F0 + group*8       = EIGHT formation ids
+    slot          -> $BD78[random & $3F]   = 12/12/12/12/6/6/3/1 out of 64
+    formation     -> $5C010                = species record + count pattern
+    rate          -> $BE00[map]            = chance out of 256, per step check
+
+`$48` is the live map id — confirmed exactly for 103/104/106/111/114/7/12. The
+world map takes a different branch: `$78` selects the world, and world 0 splits
+into a **4x4 grid of 32-tile regions** at `$9CF0`, indexed by the cartridge's own
+`(x+7)&$7F >>5` / `(y+7)&$60 >>3`.
+
+⛔ **The rate table is in a DIFFERENT BANK from everything else in the chain.**
+The encounter roll runs with bank 61 at `$A000` and bank 46 at `$8000`; the rate
+is read during a map LOAD, with bank 57 at `$A000`. Bank 61's own `$BE00` is
+executable code that reads as a table of plausible small numbers. This is the
+trap the plan warned about, and it very nearly landed.
+
+### What this replaced
+
+⛔ It is **not** any of the 16 map property bytes. All sixteen were decoded as a
+set index and checked against species; the two that appeared to match were the
+tileset byte (`tileset<<5 | entranceX`) and the songId byte (`TRACKS.CRYSTAL_CAVE`
+happens to be `$02` too). That search is gone from `map-encounters.mjs`, which
+now decodes for real.
+
+### What it changed
+
+⭐ **Formations are WEIGHTED, not uniform.** Altar Cave B1F is Goblins 63 times
+in 64. The Cave of Seals' real roster is Mummy-led, not Zombie-led — **Zombie
+(`$09`) is not in this cave at all**, which the hand-authored version had on
+floor 1. Floors are `103 -> 104 -> 105 -> 106` = groups `7 -> 8 -> 8 -> 9`, stored
+as `romFloorMaps` on the registry row.
+
+⛔ Because floor 4 is our boss chamber, group 9 — Revenant + Shadow, the cave's
+deepest tier — never appears in a random encounter. That is a consequence of the
+1:1 floor mapping, not a decode gap; `seals_cave_f4` carries the group with
+`rate: 0` so it stays visible. Pointing `romFloorMaps[2]` at 106 instead of 105
+would put it in play at the cost of the 1:1.
+
+⛔ **Balance is still untested.** Seals monsters are lv4-6 / 42-70 HP and the
+Djinn is lv13 / 480 HP, against the Land Turtle's lv8 / 120, and the ROM's
+counts (Mummy x2-4, Skeleton x1 + Mummy x3-5) are higher than the hand-authored
+ones were. Nothing verifies a party arriving from Altar Cave survives that. The
+gates prove the dungeon generates, connects, paints, routes and now rolls the
+cartridge's monsters — not that it is fair.

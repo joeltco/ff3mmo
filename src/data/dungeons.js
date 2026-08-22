@@ -56,6 +56,11 @@ export const DUNGEONS = [
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
     rosterPrefix: 'cave',         // roster loc 'cave-0'.. ; boss floor -> 'crystal'
     encounterZonePrefix: 'altar_cave',   // -> ENCOUNTERS key `${prefix}_f${floor+1}`
+    // ⭐ The ROM map each floor's ENCOUNTERS come from — see `romFloorMaps`
+    // below. Altar Cave's four walkable floors climb the cartridge's own four
+    // encounter groups (0 -> 1 -> 2 -> 3): Goblins, then Eye Fang + Carbuncle,
+    // then Blue Wisp, then all three at once.
+    romFloorMaps: [111, 115, 112, 113, 22],
     bossRosterLoc: 'crystal',
     lockedRooms: [
       { mapId: 1010, floor: 0 },
@@ -82,6 +87,10 @@ export const DUNGEONS = [
     rosterPrefix: 'seals',
     bossRosterLoc: 'seals-boss',
     encounterZonePrefix: 'seals_cave',
+    // 1:1 with the cartridge's own four maps, in depth order: 103 "Sealed
+    // Cave", 104 "B2F", 105 (B2F's second map — same encounter group as 104),
+    // 106 "B3F". Groups 7 -> 8 -> 8 -> 9.
+    romFloorMaps: [103, 104, 105, 106],
     // ⛔ NO SIDE ROOMS. The locked/secret rooms are Altar Cave content; giving
     // this dungeon empty arrays is a statement, not an oversight — the generator
     // hands out ids from `secretRoomMapIds` and would otherwise invent some.
@@ -114,6 +123,13 @@ export function buildRegistry(rows) {
   for (const d of rows) {
     if (seenIds.has(d.id)) throw new Error(`duplicate dungeon id '${d.id}'`);
     seenIds.add(d.id);
+    // ⛔ A SHORT `romFloorMaps` FAILS SILENTLY. `gen-encounters.mjs` walks the
+    // floors and would simply emit no zone for the missing ones, and a floor
+    // with no zone falls back to a lone Goblin — the same "no encounters"
+    // symptom this registry exists to prevent.
+    if (d.romFloorMaps && d.romFloorMaps.length !== d.floors) {
+      throw new Error(`dungeon '${d.id}': romFloorMaps has ${d.romFloorMaps.length} entries, floors is ${d.floors}`);
+    }
   }
 
   for (const d of rows) {
@@ -192,6 +208,18 @@ export function normalFloorMapIds(dungeon) {
 export function lockedRoomMapIdForFloor(dungeon, floorIndex) {
   const r = (dungeon.lockedRooms || []).find((x) => x.floor === floorIndex);
   return r ? r.mapId : null;
+}
+
+/**
+ * The ROM map floor N's encounters are pulled from.
+ *
+ * The floor -> ROM map assignment is OURS (our floors are generated, not the
+ * cartridge's layouts); what comes back OUT of that map — group, formations,
+ * rate — is the ROM's. `tools/gen-encounters.mjs` is the only reader.
+ */
+export function romMapForFloor(dungeon, floorIndex) {
+  const m = dungeon.romFloorMaps;
+  return m ? (m[floorIndex] ?? null) : null;
 }
 
 /** Secret-room mapIds, in the order the generator hands them out. */

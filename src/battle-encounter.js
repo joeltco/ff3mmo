@@ -4,7 +4,7 @@ import { dungeonForMapId, isBossFloor, STARTING_DUNGEON } from './data/dungeons.
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
 import { MONSTERS } from './data/monsters.js';
-import { ENCOUNTERS, RATE_STEPS } from './data/encounters.js';
+import { ENCOUNTERS, pickFormation, rollEncounter, world0ZoneKey } from './data/encounters.js';
 import { GOBLIN_HIT_RATE } from './battle-math.js';
 import { SFX, playSFX } from './music.js';
 import { TRACKS } from './music.js';
@@ -31,11 +31,10 @@ export function initBattleEncounter({ resetBattleVars, tryJoinPlayerAlly }) {
 }
 
 // Resolve the encounter zone for the player's current position. Single source
-// for both the step-threshold (zone.rate) in tickRandomEncounter and the
-// formation pick when an encounter fires. Matches the gate in
-// tickRandomEncounter: world-map grass splits into valley/wild by bounding
-// box; an indoor flood-fill patch uses its own zone (e.g. the Ur dark-tile
-// patch); otherwise the current Altar Cave floor. Exported for
+// for both the per-step rate (zone.rate) in tickRandomEncounter and the
+// formation pick when an encounter fires: the world map resolves to the ROM's
+// own region grid (or the Ur safe zone), an indoor flood-fill patch uses its
+// own zone, and everything else is the current dungeon floor. Exported for
 // map-triggers.js so the chest-mimic claim can ship the same zoneKey
 // the server's `_LOC_ZONE_ALLOWLIST` gate expects (v1.7.804).
 // Ur's overworld entrance, and how far its safe encounter zone reaches.
@@ -53,10 +52,13 @@ export function currentEncounterZoneKey() {
     // v1.7.945 — was a hard-coded box (x 93-96, y 34-44) sized for the world as
     // it existed before v1.7.903 lifted the choke. Measured after: 236 of the
     // 267 tiles reachable from Ur fell OUTSIDE that box and therefore rolled
-    // `grasslands_wild` — Killer Bees and Werewolves at rate 'high' (2x). The
-    // encounters table itself records that an L1 party survives werewolf x4
-    // only 6.5% of the time, so a new player leaving town was being fed to
-    // tier-2 monsters on their first few steps.
+    // the wild table — Killer Bees and Werewolves. A 200-run sim put an L1
+    // three-party's odds against werewolf x4 at 6.5%, so a new player leaving
+    // town was being fed to tier-2 monsters on their first few steps.
+    //
+    // ⛔ THIS IS THE ONE ZONE THE CARTRIDGE DOES NOT DECIDE, and it is a kept
+    // decision, not an un-migrated leftover: the ROM's answer for Ur's own
+    // region is `world_r7` — Killer Bee, Werewolf AND Berserker.
     //
     // A radius around Ur rather than a box: it follows the town wherever the
     // reachable area grows, instead of silently going stale the next time the
@@ -64,7 +66,12 @@ export function currentEncounterZoneKey() {
     // entrance is 7 tiles away), which is the loop a new character actually
     // runs before they have the levels for anything else.
     const d = Math.max(Math.abs(tileX - UR_WORLD_X), Math.abs(tileY - UR_WORLD_Y));
-    return d <= SAFE_RADIUS ? 'grasslands_valley' : 'grasslands_wild';
+    if (d <= SAFE_RADIUS) return 'grasslands_valley';
+    // ⭐ v1.10.56 — everything past the radius is now the CARTRIDGE'S answer,
+    // not one blanket 'grasslands_wild'. World 0 is split into a 4x4 grid of
+    // 32-tile regions with a group each ($9CF0, bank 61 $BCE6), so the north
+    // shore fights Knockers and the south fights Griffons the way the ROM says.
+    return world0ZoneKey(tileX, tileY);
   }
   if (mapSt.encounterPatch && mapSt.encounterPatchZone) return mapSt.encounterPatchZone;
   // ⛔ THIS WAS A HARDCODED ALTAR CAVE ARRAY — the 15th per-dungeon axis, and it
@@ -92,13 +99,16 @@ export function tickRandomEncounter() {
   const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
   if (!inDungeon && !onGrass && !inPatch) return false;
   mapSt.encounterSteps++;
-  // Cadence is data-driven: each zone's `rate` maps to a step range via
-  // RATE_STEPS. Lower threshold = more frequent (e.g. the Ur patch's
-  // grasslands_wild is rate 'high' = 2x the open-grass rate).
+  // ⭐ v1.10.56 — the CARTRIDGE'S cadence. FF3 does not count steps to a
+  // threshold; it rolls `random(0..255) < $F8` on every step, where $F8 is the
+  // map's own rate byte (bank 63 $E8B6, table $BE00). `rollEncounter` is that
+  // test and the rate comes from the zone.
+  //
+  // ⛔ RATE IS A PROBABILITY, NOT A DURATION. Dungeon floors are 6/256, i.e.
+  // roughly one fight per 43 steps; the step-threshold model this replaced
+  // averaged 22, so the old game ran about twice as hot as the cartridge.
   const zone = ENCOUNTERS.get(currentEncounterZoneKey());
-  const r = (zone && RATE_STEPS[zone.rate]) || RATE_STEPS.normal;
-  const threshold = r.base + Math.floor(Math.random() * r.spread);
-  if (mapSt.encounterSteps >= threshold) {
+  if (rollEncounter(zone)) {
     mapSt.encounterSteps = 0;
     _triggerEncounterWithPVPCheck();
     return true;
@@ -265,9 +275,12 @@ export function startRandomEncounter() {
   // Zone selection (valley vs wild by bounding box, indoor patch, or cave
   // floor) is shared with the rate lookup — see currentEncounterZoneKey.
   const zoneKey = currentEncounterZoneKey();
+  // ⭐ WEIGHTED, not uniform. A group's eight slots are drawn from the ROM's
+  // 12/12/12/12/6/6/3/1-out-of-64 table, so Altar Cave B1F is Goblins 63 times
+  // in 64 and Eye Fang + Carbuncle once. `pickFormation` is shared with the PvE
+  // arbiter so the two cannot drift.
   const zone = ENCOUNTERS.get(zoneKey);
-  const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
-  const formation = formations[Math.floor(Math.random() * formations.length)];
+  const formation = pickFormation(zone);
 
   // INVARIANT: this array is built once per battle and NEVER shrinks — dead
   // monsters keep their slot with hp=0; it's only reset to `null` at battle

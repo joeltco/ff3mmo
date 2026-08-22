@@ -14,7 +14,7 @@
 
 import { createRng } from './src/rng.js';
 import { MONSTERS } from './src/data/monsters.js';
-import { ENCOUNTERS } from './src/data/encounters.js';
+import { ENCOUNTERS, pickFormation } from './src/data/encounters.js';
 import { readSaveSlot, mirrorReadFullState } from './api.js';
 import { validateBattleOutcome } from './pve-replay.js';
 
@@ -66,8 +66,12 @@ function _makeEncounterMonster(id) {
 // `encounterMonsters` array. Caller's RNG advances deterministically.
 function _pickFormation(zoneKey, rng) {
   const zone = ENCOUNTERS.get(zoneKey);
-  const formations = zone ? zone.formations : [[{ id: 0x00, min: 1, max: 3 }]];
-  const formation = formations[Math.floor(rng() * formations.length)];
+  // ⛔ THE WEIGHTED PICK IS SHARED, deliberately. This used to be a local
+  // uniform `formations[rng() * length]` that mirrored the client by hand; now
+  // that the ROM's 12/12/12/12/6/6/3/1 slot odds decide which formation comes
+  // out, a second copy would diverge the moment either side was edited and
+  // replay-validate would start rejecting honest battles.
+  const formation = pickFormation(zone, rng);
   const out = [];
   for (const group of formation) {
     const count = group.min + Math.floor(rng() * (group.max - group.min + 1));
