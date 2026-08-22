@@ -1,3 +1,44 @@
+## 1.10.57 — 2026-08-22
+
+### The Cave of Seals is measured, and walled off on purpose
+
+`tools/zone-balance.mjs` — new. Drives `battle-sim.js` (the shipped math) over
+every formation a zone can roll, spawning the way `startRandomEncounter` does
+(per-group count roll, **hard stop at four bodies** — without that cap
+"Skeleton x1 + Mummy x3-5" reads as six monsters and the answer comes out far
+too grim) and weighting by the ROM's slot odds.
+
+Per-encounter win rate, 60 runs each:
+
+| party | altar_cave_f4 | seals_f1 | seals_f2/f3 | Djinn |
+|---|---|---|---|---|
+| KN5             | 100% | **4%**  | **3%**  | — |
+| KN5 + WM4       | 100% | **28%** | **17%** | — |
+| KN8 + WM6       | 100% | 92%     | 95%     | 0% |
+| KN8 + WM6 + BM6 | 100% | 99%     | 100%    | 0% |
+| KN12+WM10+BM10  | 100% | 100%    | 100%    | 100% |
+
+⭐ **Altar Cave -> Cave of Seals is the sharpest step in the game** — 100% to 4%
+for the party that just cleared it. Altar Cave's deepest floor is a 100% win at
+*every* level tested, so nothing there prepares a player for Mummy x2-4, which
+is 48/64 of Seals floor 1.
+
+⭐ **The Land Turtle gates nothing.** A solo KN5 beats it 100/100.
+
+⭐⭐ **The Djinn is a MAGIC check, not a level check.** Fire-resistant,
+ice-weak, casts Fire at 85%. All-attack, KN8+WM6+BM6 loses 40/40 — the same
+party with the Black Mage casting **Bzzard wins 85%**.
+
+⛔ **None of it reaches a player yet, and now that is enforced.** The
+cartridge's own mouth at (84,36) sits in an isolated pocket of **8 tiles** with
+no path to Ur's 267-tile region: the dungeon is debug-only until a choke is
+lifted. `check-encounter-zones.mjs` asserts that. Joining those regions now
+FAILS THE GATE and forces the decision — level gate, quest flag, or an accepted
+spike — instead of silently dropping a level-5 character into a 4% fight.
+
+⚠ The sim's party only ever attacks: no potions, no Cure, no Protect. These are
+a floor, and a comparison between zones rather than an absolute.
+
 ## 1.10.56 — 2026-08-22
 
 ### The encounter tables are the cartridge's now

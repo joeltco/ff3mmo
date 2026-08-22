@@ -101,5 +101,30 @@ else bad(`safe zone covers only ${safe}/${seen.size} reachable tiles (${pct}%) �
   else bad(`safe zone spawns non-starter monsters: ${[...ids].map(i => '0x' + i.toString(16)).join(', ')}`);
 }
 
+// ── 6. The Cave of Seals is walled off, and must not open by accident ─────
+//
+// ⛔ THIS IS A TRIPWIRE, NOT A PREFERENCE. `tools/zone-balance.mjs` puts a
+// KN5 party's odds in the Cave of Seals at 4% (Mummy x2-4 is 48/64 of floor 1)
+// against 100% on Altar Cave's deepest floor — the sharpest difficulty step in
+// the game. Right now that does not reach a player: the cartridge's own mouth at
+// (84,36) sits in an isolated pocket of 8 tiles with no path to Ur, so the
+// dungeon is debug-only. The day someone lifts a choke and joins those regions,
+// a level-5 character can walk straight into it, and NOTHING else would say so.
+//
+// If this fails: that is the moment to decide the Seals gate — a level check, a
+// quest flag, or an intended difficulty spike. Then update this block.
+{
+  const SEALS_MOUTH = { x: 84, y: 36 };
+  const k = SEALS_MOUTH.y * W + SEALS_MOUTH.x;
+  let mouth = null;
+  for (const [t, p] of world.triggerPositions) if (world.entranceTable[t] === 103) { mouth = p; break; }
+  if (!mouth) bad('the Cave of Seals overworld mouth (map 103) is not on the world map at all');
+  else if (mouth.x !== SEALS_MOUTH.x || mouth.y !== SEALS_MOUTH.y)
+    bad(`the Cave of Seals mouth moved to (${mouth.x},${mouth.y}) — re-check this tripwire`);
+  else if (seen.has(k))
+    bad(`the Cave of Seals mouth (84,36) is now REACHABLE from Ur. A level-5 party wins ~4% of its floor-1 encounters — gate the dungeon or accept the spike, then update this check.`);
+  else ok('the Cave of Seals mouth is still walled off from Ur (debug-only)');
+}
+
 if (failed) { console.error(`\ncheck-encounter-zones: FAIL (${failed})`); process.exit(1); }
 console.log('\ncheck-encounter-zones: OK');
