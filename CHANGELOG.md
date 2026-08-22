@@ -1,3 +1,38 @@
+## 1.10.47 — 2026-08-21
+
+### DUNGEON tab: skin switcher
+
+An ALTAR / SEALS / CRYSTAL row that repaints the same generated tilemap with
+another donor map's CHR and palettes — the skin concept from
+`DUNGEON-CHAMBERS-PLAN.md` §4c, made visible. **No generator change**; the
+snapshot is unmoved and every dungeon gate is green.
+
+This is step 2 of `CAVE-OF-SEALS-PLAN.md`, and it answers the question it was
+meant to: **the material transfers, the architecture does not.** Our floor 1 in
+the SEALS skin (donor map 116) reads convincingly as that cave — pale grey stone,
+stalactites hanging off every wall band, olive floor, black void. Against the real
+map 116 the difference is entirely structural: the cartridge's cave is ISLANDS
+joined by ladders and a bridge, ours is one connected blob.
+
+So the recolour is nearly free and the layout is the whole job. The plan is
+reordered accordingly: ladder/bridge connectors and island placement first, skin
+last. Floor 5 keeps its own assets — repainting an authored crystal room with a
+cave donor is not a skin test.
+
+### The tab's gate now DRIVES the tab
+
+`check-debug-dungeon.mjs` only mounted the tab and checked the first paint. Every
+control after that — floors, seed, overlays, and now skins — was untested code
+that runs for the first time on a phone. The stub DOM records click handlers, so
+the check presses all fourteen controls and paints each skin.
+
+⛔ **A skin that does not CHANGE the picture is not a skin.** Counting colours per
+skin would pass a switcher wired to nothing, so the check compares ALTAR against
+SEALS and fails if their palettes overlap more than 90%. They sit at 67%.
+
+`--skin` / `--floor` render the tab in a chosen state and write the PNG, which is
+how to look at a skin without opening the panel.
+
 ## 1.10.46 — 2026-08-21
 
 ### Corridors change row along their length

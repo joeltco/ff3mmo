@@ -8,11 +8,19 @@
 // drives it, and checks what it produced.
 //
 //   node tools/check-debug-dungeon.mjs [out.png]
+//   node tools/check-debug-dungeon.mjs out.png --skin SEALS --floor "F1 cave"
+//
+// The --skin / --floor pair renders the tab in a chosen state and writes the PNG,
+// which is how you look at our floors wearing another cave's art without opening
+// the panel (docs/CAVE-OF-SEALS-PLAN.md step 2).
 
 import fs from 'node:fs';
 import { createCanvas } from '@napi-rs/canvas';
 
-const OUT = process.argv[2] || null;
+const OUT = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null;
+const argOf = (n) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : null; };
+const WANT_SKIN = argOf('--skin');
+const WANT_FLOOR = argOf('--floor');
 const romPath = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const romBuf = new Uint8Array(fs.readFileSync(romPath));
 
@@ -23,7 +31,12 @@ function el(tag) {
     tagName: tag.toUpperCase(), children: [], style: { cssText: '' },
     dataset: {}, _text: '', innerHTML: '',
     appendChild(c) { this.children.push(c); return c; },
-    addEventListener() {},
+    // ⛔ RECORD handlers so the harness can DRIVE the tab, not just mount it.
+    // A check that only mounts proves the first paint; every control after that
+    // — floors, seeds, skins — is still untested code that runs on a phone.
+    _on: {},
+    addEventListener(ev, fn) { (this._on[ev] = this._on[ev] || []).push(fn); },
+    click() { for (const fn of (this._on.click || [])) fn(); },
     get textContent() { return this._text; },
     set textContent(v) { this._text = String(v); },
   };
@@ -84,6 +97,43 @@ else {
 
 console.log('--- report ---');
 console.log(text.split('\n').slice(0, 12).join('\n'));
+
+// ── Drive every control ────────────────────────────────────────────────────
+const press = (label) => {
+  const b = buttons.find((n) => n.textContent === label);
+  if (!b) { fails.push(`no control labelled "${label}"`); return false; }
+  b.click(); return true;
+};
+const paintOf = () => {
+  const c2 = canvas.getContext('2d');
+  const px = c2.getImageData(0, 0, canvas.width, canvas.height).data;
+  const seen = new Set();
+  for (let i = 0; i < px.length; i += 4 * 97) seen.add(`${px[i]},${px[i + 1]},${px[i + 2]}`);
+  return seen;
+};
+const skinLooks = {};
+for (const skin of ['ALTAR', 'SEALS', 'CRYSTAL']) {
+  if (!press(skin)) continue;
+  skinLooks[skin] = paintOf();
+  console.log(`skin ${skin.padEnd(8)} ${skinLooks[skin].size} distinct colours`);
+  if (skinLooks[skin].size < 4) fails.push(`skin ${skin} painted almost nothing`);
+}
+// ⛔ A skin that does not CHANGE the picture is not a skin. If two donors render
+// identically the switcher is wired to nothing, which a colour count alone would
+// happily pass.
+if (skinLooks.ALTAR && skinLooks.SEALS) {
+  const same = [...skinLooks.ALTAR].filter((c) => skinLooks.SEALS.has(c)).length;
+  const ratio = same / Math.max(1, skinLooks.ALTAR.size);
+  console.log(`ALTAR vs SEALS palette overlap: ${Math.round(ratio * 100)}%`);
+  if (ratio > 0.9) fails.push('the SEALS skin renders the same as ALTAR — the donor swap is not reaching paint()');
+}
+for (const f of ['F1 cave', 'F2 traps', 'F3 puzzle', 'F4 rooms', 'F5 crystal']) press(f);
+press('REROLL'); press('UNREACHED'); press('MARKS'); press('GRID');
+console.log(`drove ${buttons.length} controls without throwing`);
+
+// Leave the tab in the requested state, so the PNG below is the one asked for.
+if (WANT_SKIN) press(WANT_SKIN);
+if (WANT_FLOOR) press(WANT_FLOOR);
 
 // The canvas must actually have paint on it, not be a blank square.
 if (canvas) {

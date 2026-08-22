@@ -17,6 +17,7 @@
 // depends on hover.
 
 import { generateFloor } from '../../dungeon-generator.js';
+import { parseMapProperties, loadTileset, loadCHRGraphics, buildMapPalettes, loadNameTable } from '../../map-loader.js';
 import { describePlan } from '../../dungeon/plan.js';
 import { applyIPS } from '../../ips-patcher.js';
 import { NES_SYSTEM_PALETTE } from '../../tile-decoder.js';
@@ -30,7 +31,33 @@ const CHEST = 0x7c, BONES = 0x09, FALSE_CEILING = 0x44;
 
 const FLOOR_NAMES = ['F1 cave', 'F2 traps', 'F3 puzzle', 'F4 rooms', 'F5 crystal'];
 
-let state = { floor: 3, seed: Date.now(), reach: true, marks: true, grid: false };
+// ── Skins ─────────────────────────────────────────────────────────────────
+// A skin is the DONOR MAP we borrow CHR, palettes and tileset from — the same
+// thing `dungeon/boss-chamber.js` means by one (DUNGEON-CHAMBERS-PLAN §4c). The
+// generator is untouched: this repaints the SAME tilemap with another cave's
+// art, which is step 2 of the Cave of Seals plan — see whether our floors read
+// as that cave before building anything for it.
+const SKINS = [
+  { id: 'altar', label: 'ALTAR', donor: 111 },
+  { id: 'seals', label: 'SEALS', donor: 116 },   // pale grey stone, stalactites
+  { id: 'crystal', label: 'CRYSTAL', donor: 148 },
+];
+const skinCache = new Map();
+function assetsFor(rom, donor) {
+  if (skinCache.has(donor)) return skinCache.get(donor);
+  const props = parseMapProperties(rom, donor);
+  const a = {
+    metatiles: loadTileset(rom, props.tileset),
+    chrTiles: loadCHRGraphics(rom, donor),
+    palettes: buildMapPalettes(rom, props),
+    tileAttrs: loadNameTable(rom, props.tileset),
+    tileset: props.tileset,
+  };
+  skinCache.set(donor, a);
+  return a;
+}
+
+let state = { floor: 3, seed: Date.now(), reach: true, marks: true, grid: false, skin: 0 };
 let dom = null;
 let rom = null;
 
@@ -76,10 +103,11 @@ function reachableFrom(tm, ex, ey) {
 }
 
 /** Paint the floor exactly as the game would: metatile -> 4 CHR tiles -> palette. */
-function paint(ctx2d, md) {
+function paint(ctx2d, md, skinAssets) {
   const img = ctx2d.createImageData(PX, PX);
   const d = img.data;
-  const { metatiles, chrTiles, palettes, tileAttrs, tilemap } = md;
+  const { tilemap } = md;
+  const { metatiles, chrTiles, palettes, tileAttrs } = skinAssets || md;
   const offs = [[0, 0], [8, 0], [0, 8], [8, 8]];
   for (let ty = 0; ty < W; ty++) {
     for (let tx = 0; tx < W; tx++) {
@@ -163,6 +191,8 @@ function report(md, seen) {
   const lines = [];
   lines.push(`seed ${state.seed}`);
   lines.push(`walkable ${walk}   unreachable ${unreach}   chests ${chests}   bones ${bones}`);
+  const sk = SKINS[state.skin];
+  lines.push(`skin ${sk.label} (donor map ${sk.donor})${state.floor === 4 ? ' — ignored, floor 5 is authored' : ''}`);
   lines.push(`entrance ${md.entranceX},${md.entranceY}   tileset ${md.tileset}   fill 0x${(md.fillTile ?? 0).toString(16)}`);
 
   const exits = [];
@@ -194,10 +224,15 @@ function redraw() {
   }
   const seen = reachableFrom(md.tilemap, md.entranceX, md.entranceY);
   const c2 = dom.canvas.getContext('2d');
-  paint(c2, md);
+  // ⛔ Floor 4 keeps its own assets. The crystal room is authored in tileset 2,
+  // and repainting it with a cave donor is not a skin test, it is nonsense.
+  const skin = SKINS[state.skin];
+  const skinAssets = state.floor === 4 ? null : assetsFor(rom, skin.donor);
+  paint(c2, md, skinAssets);
   overlay(c2, md, seen);
   dom.out.textContent = report(md, seen);
   for (const [i, b] of dom.floorBtns.entries()) b.style.cssText = btnCss(i === state.floor);
+  for (const [i, b] of dom.skinBtns.entries()) b.style.cssText = btnCss(i === state.skin);
   dom.tgl.reach.style.cssText = btnCss(state.reach);
   dom.tgl.marks.style.cssText = btnCss(state.marks);
   dom.tgl.grid.style.cssText = btnCss(state.grid);
@@ -224,6 +259,18 @@ export function mount(root, ctx) {
     return b;
   });
   wrap.appendChild(floorRow);
+
+  // Skin
+  const skinRow = row();
+  const skinBtns = SKINS.map((sk, i) => {
+    const b = document.createElement('button');
+    b.textContent = sk.label;
+    b.style.cssText = btnCss(i === state.skin);
+    tap(b, () => { state.skin = i; redraw(); });
+    skinRow.appendChild(b);
+    return b;
+  });
+  wrap.appendChild(skinRow);
 
   // Seed
   const seedRow = row();
@@ -276,7 +323,7 @@ export function mount(root, ctx) {
   wrap.appendChild(out);
 
   root.appendChild(wrap);
-  dom = { canvas, out, floorBtns, tgl };
+  dom = { canvas, out, floorBtns, skinBtns, tgl };
 
   romBytesFor(ctx).then((bytes) => {
     if (!bytes) { out.textContent = 'No FF3 ROM loaded — load it on the title screen first.'; return; }
