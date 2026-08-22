@@ -33,6 +33,12 @@ Band flatness stays REPORTED rather than gated, and floors 1/2/3 stay at
 71/58/80% against the ROM's 42-63%. The gates caught every failure; none of it
 reached a deploy.
 
+Also corrected: `DUNGEON-CHAMBERS-PLAN.md` still read "Contour irregularity
+(v1.10.34) — DONE, and measurable", five versions after that pass was reverted as
+a rule break. A plan claiming shipped state that is not shipped is the same class
+of problem as a comment asserting a rule the ROM does not have. Both attempts are
+now recorded there with why neither landed.
+
 ## 1.10.43 — 2026-08-21
 
 ### Reverted — boulder-switch secrets

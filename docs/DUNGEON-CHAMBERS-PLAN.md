@@ -394,21 +394,43 @@ circuits and the gate fires.
 
 Floor 3 walkable area rose 126 → 134; `hub` adds a room and `loop` adds a link.
 
-**Contour irregularity (v1.10.34) — DONE, and measurable.** `addOverhang` lays
-exactly two rocky rows under every ceiling, giving each room a straight dark lid.
-Measured as the share of adjacent band-tops that sit level:
+⛔ **Contour irregularity — STILL OPEN. Two attempts, neither shipped.**
 
-| | floors 1 / 2 / 3 | ROM caves (22, 113, 115) |
-|---|---|---|
-| before | 70% / 61% / 79% | 42–63% |
-| after | **46% / 44% / 48%** | 42–63% |
+The target, measured as the share of adjacent band-tops sitting level: the
+cartridge's caves (ROM maps 22, 113, 115) run **42-63%**; floors 1/2/3 sit at
+**71/58/80%**.
 
-`roughenOverhang` grows the band **upward into the rock**, never downward:
-extending it down converts FLOOR to WALL_ROCKY and shrinks every room by a row,
-and the rooms are carved assuming the overhang eats exactly two. Growing up costs
-no walkable area and keeps both wall invariants. It only fires where the ceiling
-above is at least three rows thick, which confines it to slab interiors and leaves
-floor 0's single-tile snake lip untouched.
+**Attempt 1 — deepening the band (v1.10.34, REVERTED v1.10.39).** `roughenOverhang`
+promoted the ceiling above a rock band to make the wall look irregular. It hit the
+number (46/44/48%) and it was a RULE BREAK: a ceiling capping a band has EXACTLY
+TWO rocky tiles below it in the cartridge, 125 of 125 sampled, and the pass shipped
+652/831/1376 three-deep bands. Reported from play. It also silently split floor 0's
+ceiling snake on 197 of 200 seeds. `check-floor-shape.mjs` now gates the depth rule.
+
+**Attempt 2 — jagging the floor edge (v1.10.44, not shipped).** The right lever:
+the cartridge's band is a constant two and what varies underneath is the FLOOR
+OUTLINE. It measured well — 73/63/80% down to **64/53/75%**, floor 2 inside the
+range — and it is still not safe as a single pass:
+1. eating a room's top row **severs the corridor that meets it there**;
+2. checking each cut against the carved floor's component count does not help —
+   the floor is already several components when the pass runs;
+3. structures placed AFTER the shaping chain (floor 2's exit block, the entrance
+   frames) assume the room shape the jag has already changed. That stranded floor
+   2's exit and its puzzle chest on roughly one seed in three.
+
+⛔ **Neither attempt can fix floor 3**, which sits at 72-76% across the whole
+parameter range. Its band-tops sit in long flat runs — nine columns at one row on a
+sampled seed — because its ELBOWS and BRANCHES run dead straight at the same height
+as the rooms beside them, and short runs must be protected or the corridor is
+deleted.
+
+**What it would actually take:** corridors that change ROW along their length,
+sequenced before the structures that depend on them. A change to the corridor
+primitives, not a shaping pass on the end. It costs area either way — 91/91/137
+walkable tiles down to 84/83/119 at the settings tested.
+
+Band flatness is REPORTED, not gated, for the reason above: the only thing that
+ever satisfied it as a limit was a rule break.
 
 ⛔ **Not floor 4.** The crystal chamber is authored. The first attempt roughened
 it too, and the snapshot caught it — floor 4's hash is the one that should never
