@@ -24,6 +24,7 @@ import {
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, CRYSTAL_SKIN } from './dungeon/boss-chamber.js';
+import { placeBoulderSecret } from './dungeon/secrets.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
@@ -2702,6 +2703,27 @@ function _generateFloor(romData, floorIndex, seed) {
   // the boulder switch (floor 2's `rockSwitch`): a rock you push, which opens a
   // wall. That reads as a puzzle element instead of a mistake. Do not re-add a
   // walk-through-wall secret whose passage is drawn open.
+
+  // ── Boulder-switch secrets (v1.10.42) ──────────────────────────────────
+  // Floors 1 and 3 get a sealed side chamber opened by pushing a rock — the
+  // SAME mechanism floor 2 already uses for its puzzle room, placed a second
+  // time rather than invented. Floor 2 is skipped: `rockSwitch` is one object
+  // per floor and its puzzle already owns it. Floor 0 is skipped too — it has
+  // real void-carved secret corridors of its own.
+  //
+  // ⛔ Runs after every shaping pass, so the seal and the chamber are final, and
+  // before `sealTinyPockets`, which would otherwise fill a sealed 4-tile chamber.
+  // The chamber IS visible and IS walled; that is the point (see secrets.js).
+  if (floorIndex === 1 || floorIndex === 3) {
+    if (rng() < 0.55) {
+      const reachable = reachableFloorMask(tilemap, entranceX, entranceY);
+      const made = placeBoulderSecret(tilemap, rng, { reachable, entranceX, entranceY, plan });
+      if (made) {
+        rockSwitch = made.rockSwitch;
+        secretWalls.add(`${made.chest.x},${made.chest.y}`);
+      }
+    }
+  }
 
   // ⛔ FLOOR MUST NEVER TOUCH VOID — the cartridge always walls it. Runs after
   // every shaping and placement pass, since the entrance frame is what mostly

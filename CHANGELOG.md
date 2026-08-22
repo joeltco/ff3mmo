@@ -1,3 +1,55 @@
+## 1.10.42 — 2026-08-21
+
+### Secrets below floor 0 — with the boulder switch this time
+
+Floors 1 and 3 get a sealed side chamber with a chest, opened by pushing a rock.
+~55% of seeds on each. It is **floor 2's existing `rockSwitch`** placed a second
+time — `movement.js` already fires on facing a rock and `handleRockPuzzle` already
+shakes the screen and swaps the wall. No new mechanic.
+
+⛔ **The chamber is visible and walled, and that is the point.** Floor 2's puzzle
+room has always been visible-and-sealed and it reads correctly: you see the
+chamber, you see it is walled, you go find the rock. The reverted v1.10.33 version
+disguised a doorway instead — and since the whole tilemap is drawn, that just
+looked like a stray wall tile blocking an open corridor.
+
+The boulder's placement is copied from the cartridge and from our own floor 2:
+both `$0B` tiles in ROM map 22 sit on the walkable row with ROCK directly above,
+against solid on one side, and floor 2 picks the floor nearest a room corner. Ours
+now requires rock above and two solid neighbours. Two ROM samples are not enough
+to call that a law on their own, which is why it follows our shipped convention
+as well.
+
+### Four bugs, each caught by a gate rather than by me
+
+⛔ **The rock must not be in the doorway.** The first version put it on the
+approach tile, so opening the wall left the rock blocking the way — the chamber
+was unreachable on every seed. Floor 2 keeps its rock and its wall in separate
+places; that is not decoration.
+
+⛔ **The rock is impassable and permanent** — only the wall it opens changes — so
+on a corridor tile it severs the floor. It cut 30 tiles and the exit to the
+crystal room on one floor-3 seed. Candidates are now verified by blocking them and
+re-flooding.
+
+⛔ **A chest is not walkable**, so counting reachable TILES cannot see one become
+unopenable. The rock landed directly beside a branch-alcove chest and took its
+only approach tile, about one seed in four hundred. Same blind spot that once
+reported 300/300 locked-room chests as broken.
+
+⛔ **On a `loop` floor the ring runs THROUGH a side room**, so excluding corridor
+tiles missed it and the circuit gate failed. Rather than approximate where the
+ring goes, the placement cuts the loop's closing link and re-runs the same
+reachability test on top — the same thing `check-floor-plan` does to verify the
+circuit.
+
+One process note worth recording: a `python3` edit applying the chest guard never
+ran — its Bash call errored — and I then measured the unchanged file and read the
+identical failure as "the fix did not work". Grepping for the symbol is what
+caught it. After several edits, verify the edit landed before believing a result.
+
+Verified across five seed bases; every dungeon gate green.
+
 ## 1.10.41 — 2026-08-21
 
 ### The tile grammar now comes from the ROM instead of from my comments

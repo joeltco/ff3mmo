@@ -154,7 +154,7 @@ door-plus-standalone-map path is the live one), `buildCaveShape`,
 `generateCaveOutline`, `carvePathwayRoom`, `findInteriorFloor`, and the whole
 generic branch at `floorIndex >= 5`.
 
-### 3b. ⛔ Secret corridors on a rock-slab floor — STILL OPEN (v1.10.33 reverted)
+### 3b. ✅ Secrets on a rock-slab floor — BOULDER SWITCH (v1.10.42)
 
 This is the single biggest structural finding and it constrains the whole design.
 
@@ -186,10 +186,28 @@ surrounded by black, a corridor reads as hidden. A rock-slab floor has no void, 
 the same trick hides nothing. The "easier case" conclusion was about the CARVE; I
 never looked at the result.
 
-**If secrets are wanted on these floors, the mechanism the game already has is the
-boulder switch** (floor 2's `rockSwitch`): a rock you push, which opens a wall.
-That reads as a puzzle element rather than a mistake. Do not re-add a
-walk-through-wall secret whose passage is drawn open.
+**Done with the boulder switch** (v1.10.42) — floor 2's existing `rockSwitch`,
+placed a second time on floors 1 and 3 rather than a new mechanic invented. A
+sealed side chamber with a chest, and a rock somewhere in the floor that opens it.
+~55% of seeds on each.
+
+⛔ **The chamber is VISIBLE and walled, and that is the point.** Floor 2's puzzle
+room has always been visible-and-sealed and reads correctly: you see the chamber,
+you see it is walled, you go find the rock. The reverted version disguised a
+doorway instead, and since the whole tilemap is drawn it just looked like a stray
+wall tile blocking an open corridor.
+
+Four things had to be verified rather than assumed, each found by a gate:
+- ⛔ **the rock must not sit in the doorway** — the first version put it on the
+  approach tile, so opening the wall left the rock itself blocking the way and the
+  chamber stayed unreachable on every seed;
+- ⛔ **the rock is impassable and permanent**, so on a corridor tile it severs the
+  floor — it cut 30 tiles and the exit to the crystal room on one floor-3 seed;
+- ⛔ **a chest is not walkable**, so a reachable-tile count cannot see one become
+  unopenable — the rock landed beside a branch chest and took its only approach;
+- ⛔ **on a `loop` floor the ring runs THROUGH a side room**, so excluding corridor
+  tiles is not enough. The placement now cuts the loop's closing link and re-runs
+  the same reachability test on top, which is exactly what the circuit gate does.
 
 ⛔ Also removed: the gate demanding a secret rate on floors 1-3. A rate demanded by
 a gate is a rate something has to satisfy, and that pressure is what produced the
