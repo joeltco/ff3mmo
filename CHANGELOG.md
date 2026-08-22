@@ -1,3 +1,38 @@
+## 1.10.44 — 2026-08-21
+
+### Contour irregularity, attempt 2 — researched, measured, not shipped
+
+No generator change. Recording what was tried so it is not tried again the same
+way.
+
+Jagging the FLOOR EDGE is the cartridge's own mechanism — its wall band is a
+constant two tiles deep and what varies underneath is the floor outline. That is
+the opposite of v1.10.34, which deepened the band and broke the depth rule. And
+it measured well: floors 1/2/3 went **73/63/80% level band-tops to 64/53/75%**,
+putting floor 2 inside the cartridge's 42-63% range.
+
+⛔ **It is not safe as a single pass**, and each attempt exposed the next reason:
+1. eating a room's top row **severs the corridor that meets it there**;
+2. verifying each cut against the carved floor's component count does not help —
+   the floor is already several components when the pass runs;
+3. structures placed AFTER the shaping chain — floor 2's exit block, the entrance
+   frames — assume the room shape the jag has already changed. That stranded
+   floor 2's exit and its puzzle chest on roughly one seed in three.
+
+⛔ **And it cannot fix floor 3 at all.** 72-76% across the entire parameter range,
+because that floor's band-tops sit in long flat runs where its elbows and branches
+run dead straight at the same height as the rooms beside them — and short runs are
+deliberately protected, since eating a corridor's top row deletes the corridor.
+
+**What it would actually take:** corridors that change ROW along their length,
+sequenced before the structures that depend on them. That is a change to the
+corridor primitives, not a shaping pass bolted on the end. It also costs area at
+any setting — 91/91/137 walkable tiles down to 84/83/119.
+
+Band flatness stays REPORTED rather than gated, and floors 1/2/3 stay at
+71/58/80% against the ROM's 42-63%. The gates caught every failure; none of it
+reached a deploy.
+
 ## 1.10.43 — 2026-08-21
 
 ### Reverted — boulder-switch secrets

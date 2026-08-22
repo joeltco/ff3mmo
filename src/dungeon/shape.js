@@ -360,3 +360,26 @@ export function sealFloorToVoid(tilemap) {
   for (const [i, t] of fixes) tilemap[i] = t;
   return fixes.length;
 }
+
+// ⛔ `jagFloorTop` WAS TRIED HERE AND REMOVED (v1.10.44 attempt).
+// Jagging the floor's top edge IS the cartridge's mechanism — its band is a
+// constant two deep and what varies underneath is the floor outline — and it
+// worked as a picture: floors 1/2/3 went 73/63/80% level band-tops to 64/53/75%,
+// putting floor 2 inside the ROM's 42-63% range.
+//
+// It is not safe as a single pass, for three reasons found in this order:
+//   1. eating a room's top row severs the corridor that meets it there;
+//   2. verifying each cut against the carved floor's component count does not
+//      help — the floor is already several components at that point;
+//   3. structures placed AFTER the shaping chain (floor 2's exit block, the
+//      entrance frames) assume the room shape the jag has already changed, and
+//      that is what stranded floor 2's exit and its puzzle chest.
+//
+// It also cannot fix floor 3 at any setting — 72-76% across the whole parameter
+// range — because that floor's band-tops sit in long flat runs where its ELBOWS
+// and BRANCHES run dead straight at the same height as the rooms beside them,
+// and short runs are deliberately protected from jagging. Contour there needs
+// corridors that change ROW along their length: a change to the corridor
+// primitives, sequenced before the structures that depend on them.
+//
+// And it costs area: 91/91/137 walkable tiles down to 84/83/119.
