@@ -738,6 +738,12 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 
 
 // Floor feature counts per floor index
+// How often a horizontal corridor steps a row as it runs. Floor 3's band-tops
+// sat in nine-column flat runs because its elbows ran dead straight at the same
+// height as the rooms beside them; a corridor that changes level breaks those up.
+const CORRIDOR_WOBBLE = 0.3;
+
+
 const FLOOR_CONFIG = [
   { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
   { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
@@ -1890,13 +1896,13 @@ function _generateFloor(romData, floorIndex, seed) {
     planElbow(plan, tilemap, {
       x0: roomLeft - 1, y: roomCenterY, dir: -1,
       steps: (roomLeft - 1) - (leftRoomRight + 1) + 1,
-      turnY: leftPathY,
+      turnY: leftPathY, rng, wobble: CORRIDOR_WOBBLE,
     });
     // Narrow path right
     planElbow(plan, tilemap, {
       x0: roomRight + 1, y: roomCenterY, dir: 1,
       steps: (rightRoomLeft - 1) - (roomRight + 1) + 1,
-      turnY: rightPathY,
+      turnY: rightPathY, rng, wobble: CORRIDOR_WOBBLE,
     });
 
     // Left side room — organic carving (keep right edge full at path row)
@@ -1937,8 +1943,8 @@ function _generateFloor(romData, floorIndex, seed) {
         ? Math.round((leftRoomLeft + leftRoomRight) / 2)
         : Math.round((rightRoomLeft + rightRoomRight) / 2);
       const sideBot = side === -1 ? leftBot : rightBot;
-      const { endX: lastValidX } = planBranch(plan, tilemap, rng, {
-        x0: entranceX + side, y: branchSlotY, dir: side,
+      const { endX: lastValidX, endY: branchEndY } = planBranch(plan, tilemap, rng, {
+        x0: entranceX + side, y: branchSlotY, dir: side, wobble: CORRIDOR_WOBBLE,
         // A looping branch needs to REACH the room's middle column, so it is
         // given the length to get there rather than a rolled one.
         steps: isLoop ? Math.abs(roomMidX - (entranceX + side)) + 1 : len,
@@ -1948,10 +1954,13 @@ function _generateFloor(romData, floorIndex, seed) {
       });
       if (isLoop) {
         // Climb from the branch up to the room's bottom edge, closing the ring.
-        const steps = branchSlotY - (sideBot + 1);
-        if (steps > 0) planVLink(plan, tilemap, { x: lastValidX, y0: branchSlotY, dir: -1, steps });
+        // ⛔ From the branch's ACTUAL end row — a wobbled branch does not finish
+        // on the row it started, and a climb measured from the wrong row lands
+        // short of the room and the circuit never closes.
+        const steps = branchEndY - (sideBot + 1);
+        if (steps > 0) planVLink(plan, tilemap, { x: lastValidX, y0: branchEndY, dir: -1, steps });
       } else {
-        branchChestPos.push({ x: lastValidX, y: branchSlotY });
+        branchChestPos.push({ x: lastValidX, y: branchEndY });
       }
     }
 

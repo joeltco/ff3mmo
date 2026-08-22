@@ -113,7 +113,24 @@ export function carveBoxChamber(tilemap, { x, y, w, dyMin = -4, dyMax = 0 }) {
  *   side at its full extent for that row, so the corridor always meets the room.
  *   Applied AFTER both draws, never instead of them.
  */
-export function carveOrganicRoom(tilemap, rng, { left, right, top, bot, topInset = 0, keepEdge = null }) {
+export function carveOrganicRoom(tilemap, rng, { left, right, top, bot, topInset = 0, keepEdge = null, topJag = 0 }) {
+  // ⛔ PER-COLUMN TOP, not just a per-row inset. The row jitter above narrows the
+  // room's top ROWS at their ends; every column inside still starts on the same
+  // row, so the rock band above is level right across the span — floor 3's
+  // band-tops sat in nine-column flat runs for exactly this reason, and no amount
+  // of corridor wobble moved it, because the flatness was never in the corridors.
+  // Giving each column its own starting row makes the silhouette ragged, and
+  // `addOverhang` then lays its constant two-deep band along that contour.
+  //
+  // ⛔ AND IT IS NOT ENOUGH ON ITS OWN — `topJag` is off at every call site.
+  // Corridors do meet this room in the middle, but the EXIT DOOR to the crystal
+  // room is placed at a side room's TOP, after the room is carved. Pushing that
+  // column down disconnects the door: measured as "unreachable exit -> 1004"
+  // plus a two-tile sealed pocket, on roughly one seed in three. Turning this on
+  // needs the door placed against the room's ACTUAL silhouette instead of an
+  // assumed row — an ordering change, not a parameter.
+  const colTop = new Map();
+  if (topJag) for (let x = left; x <= right; x++) colTop.set(x, rng() < topJag ? 1 : 0);
   for (let y = top; y <= bot; y++) {
     let rowL = left, rowR = right;
     const fromTop = y - top;
@@ -125,6 +142,7 @@ export function carveOrganicRoom(tilemap, rng, { left, right, top, bot, topInset
     if (keep === 'right') rowR = right;
     else if (keep === 'left') rowL = left;
     for (let x = rowL; x <= rowR; x++) {
+      if (y < top + (colTop.get(x) || 0)) continue;   // this column starts lower
       if (x >= 1 && x < 31 && y >= 1 && y < 31) tilemap[y * 32 + x] = FLOOR;
     }
   }

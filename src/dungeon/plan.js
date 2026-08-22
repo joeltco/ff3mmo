@@ -75,7 +75,8 @@ export function planVLink(plan, tilemap, spec) {
 /** Carve an L-shaped link and record it. */
 export function planElbow(plan, tilemap, spec) {
   const r = carveElbow(tilemap, spec);
-  plan.links.push({ kind: 'elbow', ...spec, endX: r.endX, endY: r.endY });
+  const { rng, ...rest } = spec;          // an rng is not plan data
+  plan.links.push({ kind: 'elbow', ...rest, endX: r.endX, endY: r.endY });
   return r;
 }
 
@@ -96,7 +97,7 @@ export function planSpine(plan, tilemap, rng, spec) {
 export function planBranch(plan, tilemap, rng, spec) {
   const r = carveFatteningHRun(tilemap, rng, spec);
   const { stopAt, ...rest } = spec;
-  plan.links.push({ kind: 'branch', ...rest, endX: r.endX });
+  plan.links.push({ kind: 'branch', ...rest, endX: r.endX, endY: r.endY });
   return r;
 }
 

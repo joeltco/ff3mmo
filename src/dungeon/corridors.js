@@ -51,14 +51,35 @@ export function carveBand(tilemap, x, y, depth = 3, yMin = 0, yMax = 31) {
  * @param {number} [spec.yMin=0] @param {number} [spec.yMax=31]
  * @returns {{endX:number}} last column the loop reached
  */
-export function carveHRun(tilemap, { x0, y, dir, steps, startStep = 1, depth = 3, xMin = 1, xMax = 30, yMin = 0, yMax = 31 }) {
+export function carveHRun(tilemap, { x0, y, dir, steps, startStep = 1, depth = 3, xMin = 1, xMax = 30, yMin = 0, yMax = 31, rng = null, wobble = 0, wobbleMin = 0, wobbleMax = 31 }) {
   let x = x0;
+  let row = y;
   for (let s = startStep; s < startStep + steps; s++) {
     x = x0 + s * dir;
     if (x < xMin || x > xMax) break;
-    carveBand(tilemap, x, y, depth, yMin, yMax);
+
+    // ⛔ A STEP NEEDS A TALLER CARVE AT THE STEP COLUMN, or the corridor breaks.
+    // The walkable row is the BOTTOM of the band; the two rows either side of a
+    // step are diagonal to each other, and the overhang turns the tile that would
+    // have joined them into rock. Carving one extra row at the step column leaves
+    // TWO walkable rows there — which is what a passage stepping down a level
+    // looks like — and keeps the band exactly two deep above it, as the cartridge
+    // requires (`check-floor-shape`).
+    let next = row;
+    if (rng && wobble && s > startStep && s < startStep + steps - 1 && rng() < wobble) {
+      const d = rng() < 0.5 ? -1 : 1;
+      const cand = row + d;
+      if (cand >= wobbleMin && cand <= wobbleMax && cand - (depth - 1) >= yMin && cand <= yMax) next = cand;
+    }
+    if (next === row) {
+      carveBand(tilemap, x, row, depth, yMin, yMax);
+    } else {
+      const lo = Math.min(row, next), hi = Math.max(row, next);
+      carveBand(tilemap, x, hi, depth + (hi - lo), yMin, yMax);
+      row = next;
+    }
   }
-  return { endX: x };
+  return { endX: x, endY: row };
 }
 
 /**
@@ -136,26 +157,42 @@ export function carveFatteningVRun(tilemap, rng, { x, yFrom, yTo, chance = 0.4, 
  * ⛔ RNG ORDER: per carved column, one draw to test whether a bulge starts and,
  * only then, one for the direction and one for the length.
  */
-export function carveFatteningHRun(tilemap, rng, { x0, y, dir, steps, stopAt, chance = 0.2, minLen = 2, lenSpread = 3, xMin = 1, xMax = 30, yMin = 1, yMax = 30, depth = 3 }) {
+export function carveFatteningHRun(tilemap, rng, { x0, y, dir, steps, stopAt, chance = 0.2, minLen = 2, lenSpread = 3, xMin = 1, xMax = 30, yMin = 1, yMax = 30, depth = 3, wobble = 0 }) {
   let fatDir = 0, fatLen = 0;
   let endX = x0;
+  let row = y;
   for (let i = 0; i < steps; i++) {
     const x = x0 + dir * i;
     if (x < xMin || x > xMax) break;
     if (stopAt && stopAt(x)) break;
     endX = x;
-    carveBand(tilemap, x, y, depth, yMin, yMax);
+    // Step a row, with the taller carve that keeps the two levels joined —
+    // see `carveHRun` for why the extra row is not optional.
+    let next = row;
+    if (wobble && i > 0 && i < steps - 1 && rng() < wobble) {
+      const cand = row + (rng() < 0.5 ? -1 : 1);
+      if (cand - (depth - 1) >= yMin && cand <= yMax) next = cand;
+    }
+    if (next !== row) {
+      const lo = Math.min(row, next), hi = Math.max(row, next);
+      carveBand(tilemap, x, hi, depth + (hi - lo), yMin, yMax);
+      row = next;
+    } else {
+      carveBand(tilemap, x, row, depth, yMin, yMax);
+    }
     if (fatLen <= 0 && rng() < chance) {
       fatDir = rng() < 0.5 ? -1 : 1;
       fatLen = minLen + Math.floor(rng() * lenSpread);
     }
     if (fatLen > 0) {
-      if (fatDir === 1 && y + 1 <= yMax) tilemap[(y + 1) * 32 + x] = FLOOR;
-      else if (fatDir === -1 && y - depth >= yMin) tilemap[(y - depth) * 32 + x] = FLOOR;
+      if (fatDir === 1 && row + 1 <= yMax) tilemap[(row + 1) * 32 + x] = FLOOR;
+      else if (fatDir === -1 && row - depth >= yMin) tilemap[(row - depth) * 32 + x] = FLOOR;
       fatLen--;
     }
   }
-  return { endX };
+  // ⛔ `endY` matters: the caller puts the alcove's chest at the branch's end, and
+  // with a wobble that is no longer the row it started on.
+  return { endX, endY: row };
 }
 
 /**
@@ -176,12 +213,17 @@ export function carveFatteningHRun(tilemap, rng, { x0, y, dir, steps, stopAt, ch
  * @param {number} spec.turnY    row the vertical leg ends on (== `y` for no turn)
  * @returns {{endX:number, endY:number}}
  */
-export function carveElbow(tilemap, { x0, y, dir, steps, turnY, yMin = 1, yMax = 30 }) {
-  const { endX } = carveHRun(tilemap, { x0, y, dir, steps, startStep: 0, yMin, yMax });
-  if (turnY === y) return { endX, endY: y };
-  const vDir = turnY > y ? 1 : -1;
+export function carveElbow(tilemap, { x0, y, dir, steps, turnY, yMin = 1, yMax = 30, rng = null, wobble = 0 }) {
+  // ⛔ The vertical leg starts from where the horizontal leg ACTUALLY ended, not
+  // from where it began. With `wobble` on, those differ — and the leg has to land
+  // on `turnY` because that is the row the destination room holds its edge open
+  // at. Starting from `y` would leave the corridor short of the room by however
+  // far it drifted.
+  const { endX, endY: runY } = carveHRun(tilemap, { x0, y, dir, steps, startStep: 0, yMin, yMax, rng, wobble });
+  if (turnY === runY) return { endX, endY: runY };
+  const vDir = turnY > runY ? 1 : -1;
   const { endY } = carveVRun(tilemap, {
-    x: endX, y0: y, dir: vDir, steps: Math.abs(turnY - y), yMin, yMax,
+    x: endX, y0: runY, dir: vDir, steps: Math.abs(turnY - runY), yMin, yMax,
   });
   return { endX, endY };
 }

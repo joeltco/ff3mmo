@@ -1,3 +1,46 @@
+## 1.10.46 — 2026-08-21
+
+### Corridors change row along their length
+
+`carveHRun`, `carveElbow` and `carveFatteningHRun` take a `wobble`: as a corridor
+runs, it steps a row up or down. Floor 3's elbows and branches use it. Every link
+in the game used to run dead straight along one axis, which is much of why the
+floors read as drawn rather than dug.
+
+⛔ **A step needs a taller carve at the step column.** The walkable row is the
+BOTTOM of a three-row band, so the rows either side of a step are diagonal to each
+other — and the overhang turns the tile that would have joined them into rock.
+Carving one extra row at the step column leaves TWO walkable rows there, which is
+what a passage stepping down a level looks like, and keeps the band exactly two
+deep as the cartridge requires.
+
+⛔ **Two things had to follow the wobbled row, not the starting one:** the elbow's
+vertical leg (it has to land on the row the destination room holds its edge open
+at) and the branch's chest and loop-climb (a wobbled branch does not finish where
+it began).
+
+Floor 3 gained walkable area, 134 → 140, and its layout variety is unchanged.
+
+### What this did NOT fix, measured
+
+Band contour barely moved: floor 3 **80% → 77%** level band-tops against the
+cartridge's 42-63%. **The flatness was never in the corridors.** Measured across
+80 seeds, floor 3's level band-top pairs sit at rows 4-9 — the ROOMS' top edges.
+`carveOrganicRoom` jitters the top rows' ENDS but every column still starts on the
+same row, so the band above is level right across the span.
+
+⛔ **The fix for that is blocked on ordering, not on a parameter.** Giving each
+room column its own top row was tried and reverted: the exit door to the crystal
+room is placed at a side room's TOP after the room is carved, so pushing that
+column down disconnects it — "unreachable exit -> 1004" plus a sealed pocket, on
+about one seed in three. `carveOrganicRoom` now carries a `topJag` option that is
+off at every call site, with that written next to it.
+
+That makes four distinct couplings found while chasing contour, all the same
+shape: later stages assume the rows the room was carved at. Placing structures
+against the room's ACTUAL silhouette is the real prerequisite — phase 2/4 work,
+not a shaping pass.
+
 ## 1.10.44 — 2026-08-21
 
 ### Contour irregularity, attempt 2 — researched, measured, not shipped
