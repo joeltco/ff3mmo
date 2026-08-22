@@ -210,40 +210,29 @@ would put it in play at the cost of the 1:1.
 
 ## 7. Balance — MEASURED (v1.10.57)
 
-`node tools/zone-balance.mjs --seals` drives `battle-sim.js` — the shipped
-math — over every formation a zone can roll, spawning the way
-`startRandomEncounter` does (per-group count roll, **hard stop at four bodies**)
-and weighting by the ROM's slot odds. Win rate per encounter, 60 runs each:
+Full tables, and the same sweep over Altar Cave and the overworld, live in
+**`docs/BALANCE.md`**. `node tools/zone-balance.mjs --seals` reproduces them.
 
-| party | altar_cave_f4 | seals_f1 | seals_f2/f3 | Djinn |
-|---|---|---|---|---|
-| KN5            | 100% | **4%**  | **3%**  | — |
-| KN5 + WM4      | 100% | **28%** | **17%** | — |
-| KN8 + WM6      | 100% | 92%     | 95%     | 0% |
-| KN8 + WM6 + BM6| 100% | 99%     | 100%    | 0% |
-| KN12+WM10+BM10 | 100% | 100%    | 100%    | 100% |
+| party | seals_f1 | seals_f2 / f3 | Djinn |
+|---|---|---|---|
+| FI5 | **0%** | **0%** | — |
+| FI5 + WM4 | 12% | 9% | — |
+| FI8 + WM6 | 72% | 65% | 0% |
+| FI8 + WM6 + BM6 | 93% | 91% | 0% |
+| FI12 + WM10 + BM10 | 100% | 100% | 100% |
 
-⭐ **The step from Altar Cave to the Cave of Seals is the sharpest in the game**
-— 100% to 4% for the party that just cleared it. Altar Cave's deepest floor is
-a 100% win at *every* level tested, so nothing there prepares a player for
-Mummy x2-4, which is 48/64 of Seals floor 1.
+⭐ The Land Turtle gates Altar Cave at roughly **level 5-8** (OK1/OK3 lose
+40/40; OK5 is 53%), so that is the level a player arrives here with — 0% solo,
+72% with an ally. A real step, not an unfair one, provided they are not alone.
 
-⭐ **The Land Turtle gates nothing.** A solo KN5 beats it 100/100. Whatever
-level a player leaves Altar Cave at is whatever they wandered in with.
+⭐⭐ **The Djinn is a MAGIC check, not a level check** — fire-resistant,
+ice-weak, casts Fire at 85%. FI8+WM6+BM6 all-attack loses 40/40; the same party
+casting **Bzzard wins 85%**. Do not nerf it on the all-attack row.
 
-⭐⭐ **The Djinn is a MAGIC check, not a level check.** It resists fire, is weak
-to ice, and casts Fire at an 85% rate. All-attack, a KN8+WM6+BM6 party loses
-40/40; the same party with the Black Mage casting **Bzzard wins 85%**. Level 9
-all-attack is 60%; level 9 with ice is 100%.
+⛔ **Not reachable in normal play** — the mouth at (84,36) is an isolated 8-tile
+pocket with no path to Ur's 267 tiles. `check-encounter-zones.mjs` tripwires if
+that changes.
 
-⛔ **None of this reaches a player yet.** The cartridge's own mouth at (84,36)
-sits in an isolated pocket of **8 tiles** with no path to Ur's 267-tile region —
-the dungeon is debug-only until a choke is lifted. `check-encounter-zones.mjs`
-now asserts that, so joining those regions FAILS THE GATE and forces the
-decision (level gate, quest flag, or an accepted spike) instead of dropping a
-level-5 character into a 4% fight.
-
-⚠ The sim's party only ever attacks — no potions, no Cure, no Protect. Real
-play is better than these numbers, and the Djinn row shows how much better one
-correct spell makes it. Treat them as a floor, and as a comparison between
-zones rather than an absolute.
+⚠ The sim's party only ever attacks — no potions, no Cure, no Protect. A floor,
+not an absolute. ⛔ And an earlier pass of this sweep used **Knight**, a job that
+is not unlocked here; every number it produced was too kind.

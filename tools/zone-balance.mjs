@@ -33,7 +33,13 @@ const RUNS = Number(flag('runs', '60'));
 const TURNS = Number(flag('turns', '30'));
 const SAMPLES = Number(flag('samples', '6'));   // count-rolls sampled per formation
 
-const PARTIES = flag('parties', 'KN5,KN5+WM4,KN8+WM6,KN8+WM6+BM6,KN12+WM10+BM10')
+// ⛔ THE DEFAULT LADDER USES JOBS THE PLAYER CAN ACTUALLY HAVE. Before the Wind
+// Crystal that is Onion Knight ALONE; after it, Fighter / Monk / White Mage /
+// Black Mage / Red Mage (`WIND_CRYSTAL_JOBS` = 0x3E, bits 1-5). Knight is job 7
+// and is not unlocked anywhere near these dungeons — the first run of this sweep
+// used KN and every number came out far too kind (Cave of Seals floor 1 read 4%
+// for a level-5 solo when the honest answer is 0%).
+const PARTIES = flag('parties', 'OK3,OK5,OK8,FI8+WM6,FI8+WM6+BM6')
   .split(',').map((s) => s.split('+').join(','));
 
 let ZONES = flag('zones', '').split(',').filter(Boolean);

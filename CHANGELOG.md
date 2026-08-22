@@ -1,3 +1,44 @@
+## 1.10.58 — 2026-08-22
+
+### Balance measured across Altar Cave and the Floating Continent — `docs/BALANCE.md`
+
+⛔ **CORRECTION to v1.10.57.** That sweep used **Knight** — job 7, unlocked
+nowhere near these dungeons. The player has Onion Knight alone before the Wind
+Crystal and Fighter / Monk / WM / BM / RM after (`WIND_CRYSTAL_JOBS` = 0x3E).
+Every number in the previous entry was too kind, and two conclusions flip:
+
+- Cave of Seals floor 1 at level 5 solo is **0%**, not 4%. FI8+WM6 is **72%**,
+  not 92%.
+- **The Land Turtle does gate after all.** OK1 and OK3 lose 40/40; OK5 is a coin
+  flip at 53%; OK8 is certain. The previous entry said it gated nothing, on the
+  strength of a Knight who cannot exist there. `tools/zone-balance.mjs` now
+  defaults to the jobs the player can actually hold.
+
+**Altar Cave is a clean curve** — f1 98% at OK1, f3 44%, f4 20%, all four 100%
+by OK5. Survivable on arrival, punishing by floor 3, comfortable by level 5.
+Combined with the Land Turtle gate, a player leaves at roughly **level 5-8** —
+which is the level the Cave of Seals should be, and is, built against (0% solo,
+72% with an ally).
+
+⭐⭐ **The Djinn is a MAGIC check, not a level check.** Fire-resistant, ice-weak,
+casts Fire at 85%. FI8+WM6+BM6 all-attack loses 40/40; the same party with the
+Black Mage casting **Bzzard wins 85%**. It is well designed — do not nerf it on
+the all-attack row.
+
+⛔ **69% of the reachable Floating Continent is tier-2.** Ur reaches 267 tiles
+across five zones: the safe radius is 83 of them (31%), and the rest is
+`world_r6`/`r7`/`r10`/`r11` at **10% for a level-1 character**. The safe radius
+is a cliff, not a ramp — 100% inside, 10% one tile out. Berserker x4 and
+Werewolf x3 are 0% below level 5.
+
+⚠ **Ur's own dark-tile patch is the hottest zone in the game.** 43 tiles inside
+the starting town, at the cartridge's own **18/256** — a fight every ~14 steps —
+where a level-1 Onion Knight wins 12%. That rate is map 114's real ROM value;
+the cartridge just did not put a level-1 character's town on it.
+
+Nothing was rebalanced. This is measurement plus `docs/BALANCE.md`; the calls
+are open.
+
 ## 1.10.57 — 2026-08-22
 
 ### The Cave of Seals is measured, and walled off on purpose
