@@ -92,10 +92,49 @@ export const CRYSTAL_SKIN = {
  * Both caves are tileset 0, so this is a PALETTE swap ($78 -> $79) over the
  * same tile ids — no tile remapping needed.
  */
+/**
+ * The Sealed Cave's dais — `$3a $3f $3e` / `$3b $3c $3d`, transcribed from ROM
+ * map 106 at (7,18).
+ *
+ * ⭐ THE SAME SIX IDS AS THE CRYSTAL ALTAR. I previously claimed stamping them
+ * into a cave tileset would draw garbage; that was read off a tile chart without
+ * checking whether the ROM ever uses them there. It does: maps 106 (Sealed Cave
+ * B3F) and 119 both build this 3x2 structure, and it renders as a raised dais in
+ * the cave palette. The crystal room is the SAME structure with its middle row
+ * repeated once — 3 rows instead of 2.
+ *
+ * ⛔ Placed at rows 8-9 so the boss stands on the top row at (6,8), mirroring the
+ * crystal room where the Wind Crystal NPC stands on the altar's top row. In
+ * tileset 0 these tiles collide as `$41` — the same as FLOOR — so the dais is
+ * walk-on, unlike the crystal altar's blocking `$40`.
+ */
+const SEALS_DAIS = [
+  [8,5,0x3a],[8,6,0x3f],[8,7,0x3e],
+  [9,5,0x3b],[9,6,0x3c],[9,7,0x3d],
+];
+
 export const SEALS_SKIN = {
   donorMap: 103,
   tileset: 0,
-  decorate() {},
+  /**
+   * ⭐ The boss NPC is in the ROM too: map 106 places NPC id 62 at (8,18),
+   * standing on this dais. `NPC_GFX_TABLE[0x144e]` = gfx `0x4a` = map-object
+   * offset `0x14510` — 8 tiles, two 16x16 frames, a two-frame idle of a
+   * bare-chested figure with a topknot. gfx `0x4a` is used by exactly ONE npc id
+   * in the whole ROM, so it is not shared art.
+   */
+  bossSpriteOffset: 0x14510,
+  bossSpriteFrames: 2,
+  // Sprite palette index, by the SAME rule `flame-sprites.js` uses for map
+  // objects: `((flags >> 2) & 3) >= 2 ? 1 : 0`. Map 106's NPC 62 record carries
+  // flags $EE -> index 1 -> the Sealed Cave's SP3 = [$0F,$0F,$16,$36].
+  // ⛔ NOT PICKED BY EYE. Generated floors do not carry `spritePalettes` yet, so
+  // nothing DRAWS this—see the changelog; the value is measured and pinned here
+  // rather than chosen when the drawing lands.
+  bossSpritePalIdx: 1,
+  decorate(tilemap) {
+    for (const [y, x, t] of SEALS_DAIS) tilemap[y * 32 + x] = t;
+  },
 };
 
 /**

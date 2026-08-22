@@ -1,3 +1,49 @@
+## 1.10.52 — 2026-08-22
+
+### The Cave of Seals boss room gets its dais — from the Sealed Cave's own map
+
+⭐ **The ROM already lays this room out.** Map 106 (Sealed Cave B3F) builds a 3x2
+structure at (7,18) from `$3a $3f $3e` / `$3b $3c $3d`, with rock above and
+floor below, and places **NPC id 62 standing on it at (8,18)**. That is a boss
+on a dais — the same presentation as the crystal room — and it was in the
+cartridge the whole time.
+
+`SEALS_SKIN.decorate` now stamps that exact arrangement at rows 8-9, so the boss
+stands on its top row at (6,8), mirroring where the Wind Crystal stands on the
+altar. In tileset 0 these tiles collide as `$41`, the same as FLOOR, so the cave
+dais is walk-on where the crystal altar blocks at `$40`.
+
+⛔ **I previously said stamping `$3a-$3f` into a cave tileset would draw
+garbage.** That was read off a tile chart without checking whether the ROM ever
+uses those ids there. It does — maps 106 and 119 both build this structure. The
+crystal altar is the SAME six ids with its middle row repeated once. Retracted.
+
+### The Djinn's field sprite is in the ROM too
+
+Resolved, and pinned by gate — **not drawn yet**:
+
+    npc id 62 -> NPC_GFX_TABLE[0x144e] = gfx $4a -> map object $14510
+    8 tiles = two 16x16 frames (a two-frame idle, not a flip pair)
+    gfx $4a is used by exactly ONE npc id in the entire ROM
+    palette: flags $EE -> ((f>>2)&3)>=2 -> SP index 1 -> [$0F,$0F,$16,$36]
+
+⛔ **Nothing renders it yet.** Generated floors carry `palettes` but no
+`spritePalettes`, which is why the Land Turtle NPC uses hand-picked constants and
+an FF2 Adamantoise rip (`FF2_ADAMANTOISE_SPRITE = 0x0BF10`) rather than FF3 art.
+Wiring per-dungeon boss frames needs `spritePalettes` on generated floors and a
+boss-frame source that is not the single `_landTurtleFrames` global. That is the
+next change. The offsets and the palette index are recorded here so the drawing
+step has measured values to use instead of chosen ones.
+
+### Gate
+
+`check-dungeon-registry.mjs` no longer asserts "seals has no `$3a-$3f`" — that
+was the wrong rule. It now asserts each dungeon gets ITS structure: altar 9 tiles
+over 3 rows, seals 6 over 2, seals' arrangement matching ROM map 106 cell by
+cell, both covering (6,8) so the boss stands on them, and the three sprite facts
+above. Revert-proven three ways: hardcoding the crystal skin back in, swapping
+two dais tiles, and a wrong sprite offset all fail.
+
 ## 1.10.51 — 2026-08-22
 
 ### Locked and secret rooms no longer put you in Ur on the roster

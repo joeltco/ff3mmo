@@ -149,17 +149,57 @@ ok(pal(altarBoss) !== pal(sealsBoss), 'seals boss chamber uses the crystal palet
 ok(altarBoss.tileset === 2 && sealsBoss.tileset === 0,
    `boss tilesets should be 2 (crystal) and 0 (cave), got ${altarBoss.tileset} / ${sealsBoss.tileset}`);
 
-// ⛔ THE CRYSTAL IS A SKIN DECORATION, AND A NON-CRYSTAL DUNGEON MUST NOT GET
-// ONE. Tiles $3a-$3f are the altar pedestal, stamped by `CRYSTAL_SKIN.decorate`
-// over the shared shape. Palette and tileset checks CANNOT see this — hardcoding
-// `resolveBossSkin('crystal')` back into `generateBossRoom` leaves both
-// identical and only changes what gets stamped, which is how it survived the
-// first revert pass of this gate.
+// ⛔ EACH SKIN GETS ITS OWN STRUCTURE, AND BOTH ARE ROM-TRANSCRIBED. Tiles
+// $3a-$3f build a crystal altar in tileset 2 (ROM map 148, 3x3 @(5,8)) and a
+// raised dais in tileset 0 (ROM map 106, the Sealed Cave's own B3F, 3x2 @(7,18)
+// with the boss NPC standing on it). Same ids, different tileset, different
+// thing — so "seals has no $3a-$3f" is the WRONG assertion; the right one is
+// that each dungeon gets ITS structure.
+//
+// This still catches `resolveBossSkin('crystal')` being hardcoded back into
+// `generateBossRoom`: that gives seals the 3-ROW crystal arrangement (9 tiles)
+// instead of its 2-row dais (6). Palette and tileset checks cannot see it.
 const PEDESTAL = new Set([0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f]);
-const pedestalCount = (r) => [...r.tilemap].filter((t) => PEDESTAL.has(t)).length;
-ok(pedestalCount(altarBoss) > 0, 'altar boss chamber lost its crystal pedestal');
-ok(pedestalCount(sealsBoss) === 0,
-   `seals boss chamber has ${pedestalCount(sealsBoss)} crystal-pedestal tiles — a non-crystal dungeon must not get an altar`);
+const pedCells = (r) => {
+  const out = [];
+  for (let i = 0; i < 1024; i++) if (PEDESTAL.has(r.tilemap[i])) out.push({ x: i % 32, y: (i / 32) | 0 });
+  return out;
+};
+const aPed = pedCells(altarBoss), sPed = pedCells(sealsBoss);
+const rowsOf = (c) => [...new Set(c.map((p) => p.y))].sort((a, b) => a - b);
+ok(aPed.length === 9, `altar boss chamber should have the 3x3 crystal altar, got ${aPed.length} tiles`);
+ok(sPed.length === 6, `seals boss chamber should have the 3x2 cave dais, got ${sPed.length} tiles`);
+ok(rowsOf(aPed).length === 3, `altar altar should span 3 rows, got ${rowsOf(aPed).length}`);
+ok(rowsOf(sPed).length === 2, `seals dais should span 2 rows, got ${rowsOf(sPed).length}`);
+
+// ⭐ The arrangement must match the ROM's, not merely be the right size.
+// map 106 @(7,18):  $3a $3f $3e / $3b $3c $3d
+const romDais = [[0x3a, 0x3f, 0x3e], [0x3b, 0x3c, 0x3d]];
+const sRows = rowsOf(sPed), sCols = [...new Set(sPed.map((p) => p.x))].sort((a, b) => a - b);
+for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+  const got = sealsBoss.tilemap[sRows[r] * 32 + sCols[c]];
+  ok(got === romDais[r][c],
+     `seals dais (${c},${r}) is $${got.toString(16)}, ROM map 106 has $${romDais[r][c].toString(16)}`);
+}
+
+// ⭐ The boss stands ON the structure's top row in both dungeons — the crystal
+// NPC and the Djinn are both placed at chamber (6,8).
+ok(sPed.some((p) => p.x === 6 && p.y === 8), 'seals dais must cover (6,8) so the boss stands on it');
+ok(aPed.some((p) => p.x === 6 && p.y === 8), 'altar altar must cover (6,8)');
+
+// ⛔ The Djinn's sprite is ROM art, not something drawn here: NPC id 62 ->
+// NPC_GFX_TABLE[0x144e] = gfx $4a -> map-object offset $14510, and that gfx id
+// is used by exactly ONE npc in the ROM. Pin all three so a wrong offset cannot
+// silently become "some other object".
+const romBytes = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || 'FF3-English.nes'));
+const NPC_GFX_TABLE = 0x1410;
+ok(romBytes[NPC_GFX_TABLE + 62] === 0x4a,
+   `NPC 62 gfx should be $4a, ROM says $${romBytes[NPC_GFX_TABLE + 62].toString(16)}`);
+let usersOf4a = 0;
+for (let i = 0; i < 256; i++) if (romBytes[NPC_GFX_TABLE + i] === 0x4a) usersOf4a++;
+ok(usersOf4a === 1, `gfx $4a should be used by exactly 1 npc id, found ${usersOf4a}`);
+ok(resolveBossSkin('seals').bossSpriteOffset === 0x14510,
+   'seals boss sprite offset should be $14510 (map object 203)');
 
 clearDungeonCache();
 
