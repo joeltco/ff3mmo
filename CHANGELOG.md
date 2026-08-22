@@ -1,3 +1,25 @@
+## 1.10.43 — 2026-08-21
+
+### Reverted — boulder-switch secrets
+
+Removed from floors 1 and 3. Floor 2 keeps its rock puzzle and floor 0 keeps its
+void-carved secret corridors; both are shipped and accepted.
+
+That is two attempts at secrets below floor 0, both reverted on sight. The second
+one matters more than the first: v1.10.33 had a real defect — a disguised doorway
+that read as a stray wall — but v1.10.42 did not. It reused the game's existing
+mechanism, matched the cartridge's boulder placement and our own floor-2
+convention, passed all eight dungeon gates and five seed bases, and I checked how
+it looked before shipping it.
+
+It was still wrong, and the gates could not have told me. **Passing every gate
+says a thing is not broken; it says nothing about whether it belongs.** I built
+this because §3b listed it as an open item and the mechanism existed — not because
+anyone asked for a secret on those floors.
+
+`docs/DUNGEON-CHAMBERS-PLAN.md` §3b is closed with both attempts recorded, so the
+next reading of "open item" does not produce a third.
+
 ## 1.10.42 — 2026-08-21
 
 ### Secrets below floor 0 — with the boulder switch this time

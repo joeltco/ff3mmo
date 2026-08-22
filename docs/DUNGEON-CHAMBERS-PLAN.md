@@ -154,7 +154,7 @@ door-plus-standalone-map path is the live one), `buildCaveShape`,
 `generateCaveOutline`, `carvePathwayRoom`, `findInteriorFloor`, and the whole
 generic branch at `floorIndex >= 5`.
 
-### 3b. ✅ Secrets on a rock-slab floor — BOULDER SWITCH (v1.10.42)
+### 3b. ⛔ Secrets on a rock-slab floor — CLOSED, do not reopen unasked
 
 This is the single biggest structural finding and it constrains the whole design.
 
@@ -186,36 +186,22 @@ surrounded by black, a corridor reads as hidden. A rock-slab floor has no void, 
 the same trick hides nothing. The "easier case" conclusion was about the CARVE; I
 never looked at the result.
 
-**Done with the boulder switch** (v1.10.42) — floor 2's existing `rockSwitch`,
-placed a second time on floors 1 and 3 rather than a new mechanic invented. A
-sealed side chamber with a chest, and a rock somewhere in the floor that opens it.
-~55% of seeds on each.
+⛔ **Two attempts, both reverted on sight. Stop proposing this.**
 
-⛔ **The chamber is VISIBLE and walled, and that is the point.** Floor 2's puzzle
-room has always been visible-and-sealed and reads correctly: you see the chamber,
-you see it is walled, you go find the rock. The reverted version disguised a
-doorway instead, and since the whole tilemap is drawn it just looked like a stray
-wall tile blocking an open corridor.
+- **v1.10.33** — a disguised doorway into a tunnel. The whole tilemap is drawn, so
+  the passage and its chest were visible anyway and the disguised tile read as a
+  stray wall blocking an open corridor.
+- **v1.10.42** — floor 2's boulder switch placed a second time, opening a sealed
+  side chamber. Mechanically correct, fully gated, five seed bases clean. Still
+  rejected on look.
 
-Four things had to be verified rather than assumed, each found by a gate:
-- ⛔ **the rock must not sit in the doorway** — the first version put it on the
-  approach tile, so opening the wall left the rock itself blocking the way and the
-  chamber stayed unreachable on every seed;
-- ⛔ **the rock is impassable and permanent**, so on a corridor tile it severs the
-  floor — it cut 30 tiles and the exit to the crystal room on one floor-3 seed;
-- ⛔ **a chest is not walkable**, so a reachable-tile count cannot see one become
-  unopenable — the rock landed beside a branch chest and took its only approach;
-- ⛔ **on a `loop` floor the ring runs THROUGH a side room**, so excluding corridor
-  tiles is not enough. The placement now cuts the loop's closing link and re-runs
-  the same reachability test on top, which is exactly what the circuit gate does.
+The second one is the important lesson: it was not rejected for a bug. Passing
+every gate says a thing is not broken; it says nothing about whether it belongs.
+Floor 2 keeps its rock puzzle and floor 0 keeps its void-carved corridors because
+those are shipped and accepted — that is the only evidence that a secret works
+here, and neither generalises on my say-so.
 
-⛔ Also removed: the gate demanding a secret rate on floors 1-3. A rate demanded by
-a gate is a rate something has to satisfy, and that pressure is what produced the
-bad mechanism.
-
-⛔ **A tunnel must start from a REACHABLE tile, not merely a FLOOR one**, and
-⛔ **the reachability mask must traverse passages** — see the changelog for both;
-each produced a silent, opposite-looking failure.
+Do not add a third variation without an explicit design call.
 
 ### 3c. The corridor system
 
