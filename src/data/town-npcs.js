@@ -682,15 +682,41 @@ export const KAZUS_HOUSE3_RESIDENT = interior(0x01E210, DIR_DOWN, [
 //
 // ⚠ DIALOGUE IS FILLER, like Ur's and Kazus's, pending the one dialogue+quest
 // pass once all three locations are structurally complete.
-export const SASUNE_GUARD_W = sasuneNpc(0, {
+// ⛔ THE BUNDLES WERE SWAPPED. Both stand on the ROM's own coordinates, but
+// each wore the OTHER record's sprite: (15,20) is id48, who wears gfx46
+// (0x01EE10), and (16,21) is id59 on gfx32 (0x01E010). Slot 0 is 0x01E010, so
+// `sasuneNpc(0)` at (15,20) dressed the id48 post in the id59 sprite and vice
+// versa. Nothing caught it because both bundles ARE loaded by map 18 — the
+// bundle rule only asks whether the map holds it, not whether the person on
+// that tile wears it.
+export const SASUNE_GUARD_W = sasuneNpc(1, {
   wander: false,
   dir: DIR_RIGHT,
   dialogue: ['The gate stays open.', 'His Majesty wills it.'],
 });
-export const SASUNE_GUARD_E = sasuneNpc(1, {
+export const SASUNE_GUARD_E = sasuneNpc(0, {
   wander: false,
   dir: DIR_LEFT,
   dialogue: ['Kazus lies south.', 'Go carefully.'],
+});
+
+// ⭐ THE FOUR POSTED GUARDS. The ROM lists FOUR id60 records on map 18 — one
+// bundle, four tiles, deliberately identical: (8,19) and (22,19) flanking the
+// inner gate, (7,17) and (23,18) on the walls behind them. Castle Sasune is
+// SUPPOSED to look garrisoned.
+//
+// They were unplaceable until v1.10.65 under a blanket "one person per sprite
+// bundle" rule, which was written for Ur's WANDERERS — two identical faces
+// strolling the same town reads as a bug, four still guards at four posts does
+// not. `check-npc-placement` now allows a shared bundle only where every sharer
+// stands still AND sits on a ROM record whose own id wears that bundle, which
+// is exactly this case and nothing else.
+//
+// All four share one spec: identical people, identical line. Facing is the only
+// thing that differs, and it comes from the placement below.
+export const SASUNE_POST_GUARD = sasuneNpc(1, {
+  wander: false,
+  dialogue: ['The keep is watched.', 'Move along, traveler.'],
 });
 
 // The inner hall (map 25). The castle's interior maps 25/26/27 SHARE one NPC
@@ -717,10 +743,21 @@ export const TOWN_NPCS = new Map([
     // right where you arrive; these are them.
     { key: 'sasune_guard_w', x: 15, y: 20, spec: SASUNE_GUARD_W },
     { key: 'sasune_guard_e', x: 16, y: 21, spec: SASUNE_GUARD_E },
+    // The ROM's four id60 posts, verbatim. Inner pair faces the gate they
+    // flank; the wall pair faces the courtyard.
+    { key: 'sasune_post_w',  x:  8, y: 19, spec: { ...SASUNE_POST_GUARD, dir: DIR_RIGHT } },
+    { key: 'sasune_post_e',  x: 22, y: 19, spec: { ...SASUNE_POST_GUARD, dir: DIR_LEFT } },
+    { key: 'sasune_post_nw', x:  7, y: 17, spec: { ...SASUNE_POST_GUARD, dir: DIR_DOWN } },
+    { key: 'sasune_post_ne', x: 23, y: 18, spec: { ...SASUNE_POST_GUARD, dir: DIR_DOWN } },
   ]],
   // Inner hall — the ROM's own id54 coordinate, the only record in this room on
   // a bundle map 25 loads and is allowed to use.
-  [25, [{ key: 'sasune_hall_servant', x: 9, y: 23, spec: SASUNE_HALL_SERVANT }]],
+  [25, [
+    { key: 'sasune_hall_servant', x: 9, y: 23, spec: { ...SASUNE_HALL_SERVANT, dir: DIR_RIGHT } },
+    // Its PAIR. Both id54 records, both on 0x01EE10 — a matched pair flanking
+    // the hall, same as the gate posts above.
+    { key: 'sasune_hall_servant_e', x: 11, y: 23, spec: { ...SASUNE_HALL_SERVANT, dir: DIR_LEFT } },
+  ]],
 
   // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)
   [10, [

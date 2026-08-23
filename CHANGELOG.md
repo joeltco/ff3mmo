@@ -1,3 +1,67 @@
+## 1.10.65 — 2026-08-23
+
+### Castle Sasune was garrisoned by two men because of a rule written for Ur
+
+The castle now holds **8** people, up from 3. Every one is a ROM record on the
+cartridge's own tile — nothing was invented.
+
+| map | was | now |
+|---|---|---|
+| 18 courtyard | 2 | **6** |
+| 25 inner hall | 1 | **2** |
+
+⛔ **The blocker was ours, not the cartridge's.** `check-npc-placement` refused
+two NPCs on one sprite bundle — "SEEING DOUBLE NPCS". That report was real, and
+it was about Ur's **wanderers**: two identical faces strolling the same town
+reads as a rendering bug. Four identical guards standing at four gate posts does
+not — it is what Castle Sasune looks like in FF3, where the ROM lists **four
+id60 records on one bundle** at (8,19) (22,19) (7,17) (23,18). A blanket rule
+was capping a castle at two people.
+
+The exception is narrow and provable, never a judgement call. A shared bundle is
+allowed only when every sharer:
+
+- **stands still** — a duplicate that walks is the original bug, and
+- **sits exactly on a ROM record's coordinate whose own id wears that bundle** —
+  i.e. the cartridge puts this person, in this sprite, on this tile
+
+Reverts, both fail: make one post guard wander (`WANDERS — a duplicate that
+walks is the "double NPC" bug`), move one one tile west (`is not on a ROM record
+for that bundle (21,19)`).
+
+### The two guards that were already there wore each other's sprite
+
+(15,20) is id48, who wears gfx46 (`0x01EE10`); (16,21) is id59 on gfx32
+(`0x01E010`). The specs were `sasuneNpc(0)` and `sasuneNpc(1)` the other way
+round. Nothing caught it because map 18 loads **both** bundles, so the bundle
+rule was satisfied — it asks whether the map holds a sprite, never whether the
+person on that tile is the one who wears it.
+
+⚠ **It is not a one-off.** `tools/npc-candidates.mjs` now reports the mismatch
+per map, and **twelve** placements across Ur and Kazus stand on a ROM coordinate
+wearing a different sprite than the record there:
+
+```
+map 114  ur_npc_05 on (10,28) wearing 0x1DF10; the record there wears 0x1E210   (+3 more)
+map   9  ur_tavern_keep on (23,3) wearing 0x1E010; the record wears 0x1DF10     (+3 more)
+map  10  kazus_town_c on (15,20) wearing 0x1E010; the record wears 0x1DF10      (+1 more)
+map  12  kazus_inn_guest_a on (5,27) wearing 0x1E010; the record wears 0x1ED10  (+1 more)
+```
+
+Nobody is mis-coloured or missing — every one is a valid townsperson on a bundle
+its map loads, with its map's palette. It is a fidelity gap, and at least the two
+map 12 cases are DELIBERATE (those records wear `0x1ED10`, which is banned). So
+it reports rather than gates; aligning the other ten is a content call.
+
+### Still not placed
+
+The inner hall's other four records wear `0x1ED10` — the cursed-ghost sprite,
+banned as a content decision. Unbanning it for Castle Sasune specifically would
+take the hall from 2 to 6 and the castle from 8 to 12, and would match the ROM's
+own cursed-castle state (id54's line: *"The Djinn has cursed everyone in this
+castle into a ghost! I only escaped because I was out running errands."*). Not
+done — that is a story call.
+
 ## 1.10.64 — 2026-08-23
 
 ### Three empty rooms filled, and the bundle gate finally covers Kazus and Sasune

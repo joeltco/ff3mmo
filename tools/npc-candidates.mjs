@@ -106,6 +106,24 @@ for (const mapId of argv.map(Number)) {
       `${ok ? '✓ USABLE' : '✗ ' + why.join('; ')}`);
   });
 
+  // ⚠ FIDELITY, not a failure: who we put on the cartridge's own tile, versus who
+  // the cartridge puts there. Twelve placements across Ur and Kazus wear a
+  // different sprite than the record they stand on — the specs were assigned by
+  // slot index, not by the record on the tile. Sometimes that is DELIBERATE (the
+  // Kazus inn records wear 0x1ED10, which is banned), so this reports rather than
+  // gates. It is how the two Castle Sasune guards were found wearing each
+  // other's bundle.
+  for (const e of placed) {
+    const here = md.npcs.filter((n) => n.x === e.x && n.y === e.y);
+    if (!here.length) continue;
+    const off = e.spec && e.spec.romOffset;
+    const wants = [...new Set(here.map((n) => bundleForNpcId(rom, n.id)).filter((b) => b != null))];
+    if (!wants.length || wants.includes(off)) continue;
+    console.log(`  ⚠ ${e.key} stands on the ROM's (${e.x},${e.y}) wearing ` +
+      `0x${off.toString(16).toUpperCase()}; the record there wears ` +
+      wants.map((b) => '0x' + b.toString(16).toUpperCase()).join(' / '));
+  }
+
   const byBundle = new Map();
   for (const u of usable) if (!byBundle.has(u.bundle)) byBundle.set(u.bundle, u);
   console.log(`  -> ${usable.length} usable record(s) across ${byBundle.size} distinct bundle(s):`);

@@ -20,6 +20,7 @@ const rom = new Uint8Array(fs.readFileSync(ROM));
 
 const { loadMap } = await import('../src/map-loader.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
+const { bundleForNpcId } = await import('../src/data/npc-gfx.js');
 
 // tileset -> metatile ids that draw as tree canopy.
 const CANOPY_TILES = new Map([
@@ -143,25 +144,51 @@ const LOADED_BUNDLES = new Map([
   if (bundleBad) failed += bundleBad;
   else console.log(`  ✓ every NPC uses a bundle its map actually loads`);
 
-  // No two NPCs on a map may share a sprite bundle. A map only ever holds a
-  // handful of walk bundles, so placing more people than bundles means the same
-  // face appears twice on screen — reported as "SEEING DOUBLE NPCS". Place at
-  // most one person per bundle.
+  // Two NPCs may share a sprite bundle ONLY where the CARTRIDGE posts identical
+  // people at fixed spots.
+  //
+  // The blanket "one person per bundle" rule this replaces came from a real
+  // report — "SEEING DOUBLE NPCS" — but that was Ur's WANDERERS: two identical
+  // faces strolling around the same town, which reads as a rendering bug. Four
+  // identical guards standing at four gate posts does not; it is what Castle
+  // Sasune looks like in FF3, where the ROM lists FOUR id60 records on one
+  // bundle. The blanket rule was capping the castle at two people.
+  //
+  // So the exception is narrow and provable, never a judgement call:
+  //   * every sharer stands still (`wander` off) — a duplicate that walks is
+  //     the original bug
+  //   * every sharer sits EXACTLY on a ROM record's coordinate, and that
+  //     record's own id resolves to the same bundle — i.e. the cartridge puts
+  //     this person, wearing this sprite, on this tile
+  // Anything else is still a twin.
   let twins = 0;
   for (const [mapId, list] of TOWN_NPCS) {
-    const seen = new Map();
+    const byBundle = new Map();
     for (const e of list) {
       const off = e.spec && e.spec.romOffset;
       if (off == null) continue;
-      if (seen.has(off)) {
-        console.error(`  ✗ map ${mapId}: ${e.key} and ${seen.get(off)} both use bundle ` +
-          `0x${off.toString(16).toUpperCase()} — they render as the same person`);
+      if (!byBundle.has(off)) byBundle.set(off, []);
+      byBundle.get(off).push(e);
+    }
+    let md = null;
+    for (const [off, sharers] of byBundle) {
+      if (sharers.length < 2) continue;
+      md = md || loadMap(rom, mapId);
+      for (const e of sharers) {
+        const romHere = md.npcs.some((n) => n.x === e.x && n.y === e.y && bundleForNpcId(rom, n.id) === off);
+        const still = !(e.spec && e.spec.wander);
+        if (romHere && still) continue;
+        console.error(`  ✗ map ${mapId}: ${e.key} shares bundle 0x${off.toString(16).toUpperCase()} with ` +
+          `${sharers.filter((o) => o !== e).map((o) => o.key).join(', ')} but ` +
+          (romHere ? 'WANDERS — a duplicate that walks is the "double NPC" bug'
+                   : `is not on a ROM record for that bundle (${e.x},${e.y})`));
         twins++;
-      } else seen.set(off, e.key);
+      }
     }
   }
   if (twins) failed += twins;
-  else console.log(`  ✓ no two NPCs on a map share a sprite bundle`);
+  else console.log(`  ✓ shared bundles only where the ROM posts identical people`);
+
 
   // Every NPC wears the palette of the MAP THEY STAND ON. This gate proved
   // rooms and bundles and said nothing about colour, which is how the elder's
