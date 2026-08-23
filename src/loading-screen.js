@@ -10,12 +10,11 @@ import { mapSt } from './map-state.js';
 import { nesColorFade } from './palette.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { loadingSt, transSt } from './transitions.js';
-import { MONSTERS } from './data/monsters.js';
+import { dungeonLabels } from './dungeon/labels.js';
 import { hudSt } from './hud-state.js';
 import { getLandTurtleFrames, getLandTurtleFadeFrames, getLoadingMoogleFadeFrames } from './npc.js';
 import { ui, isMobile, drawBoxOnCtx } from './ui-state.js';
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
-import { DEFAULT_BOSS_ID } from './data/bosses.js';
 
 // Constants
 const LOAD_FADE_STEP_MS = 133;
@@ -32,10 +31,11 @@ const HUD_RIGHT_W = 256 - HUD_VIEW_W;
 // NES-encoded text constants
 const _LOADING_BYTES = new Uint8Array([0x95,0xB2,0xA4,0xA7,0xAC,0xB1,0xAA,0xFF,0x8D,0xB8,0xB1,0xAA,0xA8,0xB2,0xB1]);
 const _LOADED_BYTES  = new Uint8Array([0x8D,0xB8,0xB1,0xAA,0xA8,0xB2,0xB1,0xFF,0x95,0xB2,0xA4,0xA7,0xA8,0xA7]);
-const _FLOORS_BYTES  = new Uint8Array([0x84,0xFF,0x95,0xA8,0xB9,0xA8,0xAF,0xB6]);
-// "HP " + boss HP digits (NES encoding: 0x80='0', 0x81='1', etc.)
-const _bossHP = String((MONSTERS.get(DEFAULT_BOSS_ID) || { hp: 120 }).hp);
-const _LODHP_BYTES = new Uint8Array([0x91, 0x99, 0xFF, ...Array.from(_bossHP, ch => 0x80 + parseInt(ch))]);
+// ⛔ THE FLOOR COUNT AND THE BOSS HP USED TO LIVE HERE AS CONSTANTS — a literal
+// "4 Levels" and "HP " + the DEFAULT boss's HP, computed once at module load.
+// Both are per-dungeon facts the registry already carries, so the Cave of Seals
+// (3 levels, a 480 HP Djinn) drew Altar Cave's numbers. They now come from
+// `dungeon/labels.js`, resolved per draw off the dungeon being entered.
 
 function _calcFadeLevel() {
   if (loadingSt.state === 'in') return LOAD_FADE_MAX - Math.min(Math.floor(loadingSt.timer / LOAD_FADE_STEP_MS), LOAD_FADE_MAX);
@@ -58,7 +58,11 @@ function _drawLoadingBG(vpTop, fadeLevel) {
 }
 
 function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
-  const hpW = measureText(_LODHP_BYTES);
+  // The floor does not exist yet, so the dungeon comes from the transition's
+  // destination — the same resolve the silhouette below uses.
+  const dungeon = dungeonForMapId(transSt.destMapId) || dungeonForMapId(mapSt.currentMapId);
+  const { levelsBytes, hpBytes } = dungeonLabels(dungeon);
+  const hpW = measureText(hpBytes);
   const bossRowW = 16 + 4 + hpW;
   const infoBoxW = Math.ceil(Math.max(bossRowW + 16, 80) / 8) * 8;
   const infoBoxH = 48;
@@ -66,8 +70,8 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   const infoBoxY = Math.round(vpTop + (vpBot - vpTop) / 2 - infoBoxH / 2);
   const borderSet = ui.borderFadeSets && ui.borderFadeSets[fadeLevel];
   if (borderSet) drawBoxOnCtx(ui.ctx, borderSet, infoBoxX, infoBoxY, infoBoxW, infoBoxH);
-  const floorsW = measureText(_FLOORS_BYTES);
-  drawText(ui.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, _FLOORS_BYTES, fadedTextPal);
+  const floorsW = measureText(levelsBytes);
+  drawText(ui.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, levelsBytes, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
   // ⛔ THE SILHOUETTE WAS ALWAYS THE LAND TURTLE. It is the FF2 Adamantoise rip,
@@ -77,7 +81,6 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   // The floor does not exist yet at this point, so the frames come from the
   // donor map's palettes via `bossFramesForDungeon` — the same resolver the map
   // load uses, so the loading screen and the room agree.
-  const dungeon = dungeonForMapId(transSt.destMapId) || dungeonForMapId(mapSt.currentMapId);
   const own = _dungeonBossFrames(dungeon);
   if (own) {
     ui.ctx.drawImage(own[Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
@@ -87,7 +90,7 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
     if (bossFade) ui.ctx.drawImage(bossFade[fadeLevel][Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
     else if (landTurtle) ui.ctx.drawImage(landTurtle[0], bossContentX, bossRowY);
   }
-  drawText(ui.ctx, bossContentX + 20, bossRowY + 4, _LODHP_BYTES, fadedTextPal);
+  drawText(ui.ctx, bossContentX + 20, bossRowY + 4, hpBytes, fadedTextPal);
 }
 
 

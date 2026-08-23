@@ -86,7 +86,10 @@ export const VERSION = (typeof document !== 'undefined' && typeof document.getEl
 // ⛔ AREA_NAMES used to live here as a one-entry Map holding only Ur. It moved to
 // `data/areas.js`, which derives it from the same declaration that feeds the
 // roster location keys — import it from there, and do not re-add a copy here.
-export const DUNGEON_NAME = new Uint8Array([0x8A,0xAF,0xB7,0xA4,0xB5,0xFF,0x8C,0xA4,0xB9,0xA8]); // "Altar Cave"
+// ⛔ `DUNGEON_NAME` LIVED HERE — a literal "Altar Cave" that `setupTopBox`
+// stamped on EVERY dungeon, so the Cave of Seals opened under it. The banner
+// now comes from the registry row via `dungeon/labels.js`. Do not re-add a
+// constant here for a per-dungeon fact.
 
 // Misc UI
 // "HP/MP Restored" — shown by both the pond heal and the inn bed rest.

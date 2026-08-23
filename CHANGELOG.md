@@ -1,3 +1,64 @@
+## 1.10.63 — 2026-08-23
+
+### The Cave of Seals had Altar Cave's loading screen
+
+The dungeon loading screen has four elements. Exactly **one** of them knew which
+dungeon it was drawing. Entering the Cave of Seals showed:
+
+```
++------------------------------------+
+|             Altar Cave             |   <- the wrong dungeon
++------------------------------------+
+   +--------------+
+   |  4 Levels    |   <- Altar Cave's floor count; Seals has 3
+   | (Djinn) HP 120 |  <- the Land Turtle's HP; the Djinn has 480
+   +--------------+
+   Dungeon Loaded / Press Z
+```
+
+The silhouette was right — `_dungeonBossFrames` resolves per dungeon off the
+row's `bossSkinId`, and Seals' Djinn is a real ROM rip (map 106, NPC 62, gfx
+`$4a`). The other three were module-level constants with no dungeon parameter:
+
+| where | was |
+|---|---|
+| `data/strings.js` `DUNGEON_NAME` | a literal `"Altar Cave"`, stamped on every dungeon by `setupTopBox` |
+| `loading-screen.js` `_FLOORS_BYTES` | a literal `"4 Levels"` |
+| `loading-screen.js` `_LODHP_BYTES` | `"HP " + MONSTERS.get(DEFAULT_BOSS_ID).hp`, computed once at module load |
+
+The registry row has carried `name`, `floors` and `bossId` for both dungeons the
+whole time, so all three were a field read away. New leaf `src/dungeon/labels.js`
+owns the text a dungeon shows about itself; `DUNGEON_NAME` is gone.
+
+⛔ **The last floor is the boss chamber, not a level.** `floors` counts map ids,
+so the number the player is told is `floors - 1` — which is what makes Altar
+Cave's shipped `"4 Levels"` reproduce exactly rather than shift.
+
+Seals now opens on **"Cave of Seals" / "3 Levels" / "HP 480"**; Altar Cave is
+pixel-unchanged.
+
+No player can reach this yet — the Seals mouth at world (84,36) is not in the
+267-tile set reachable from Ur, so the debug panel's SEALS button is still the
+only way in.
+
+### New: `tools/loading-shot.mjs` + `check-loading-screen.mjs`
+
+The screen had no picture of itself, which is why three wrong values sat there
+through several releases — "it renders" was true the entire time. The shot tool
+draws it through the real modules; the harness is shared with the gate so a gate
+can never pass against a frame the shot tool would not produce.
+
+⭐ **The gate mutates the registry row and re-renders.** Checking the text
+against the label helper alone would pass a revert that hardcodes inside the
+DRAW path, so the gate changes `name` / `floors` / `bossId` on the live row and
+requires the drawn frame to change with them — and in the right band of the
+frame: a rename must repaint the banner and leave the info box alone, a floor
+count must repaint the info box and leave the banner alone. No layout maths is
+copied into the gate.
+
+Reverts, all fail: hardcoded banner (2 checks), hardcoded `"4 Levels"` (1),
+hardcoded default-boss HP (1).
+
 ## 1.10.62 — 2026-08-22
 
 ### Multi-species encounters — the HUD audit was only testing one outcome per formation

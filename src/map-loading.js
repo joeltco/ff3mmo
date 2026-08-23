@@ -17,7 +17,7 @@ import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
 import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
-import { DUNGEON_NAME } from './data/strings.js';
+import { dungeonLabels } from './dungeon/labels.js';
 import { BANNER_FOR_MAP, TOWN_MAPS } from './data/areas.js';
 import { mapEntryMusic } from './map-music.js';
 import { hudSt } from './hud-state.js';
@@ -368,7 +368,10 @@ export function setupTopBox(mapId, isWorldMap) {
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.loadingBgFadeFrames = result.fadeFrames;
-    topBoxSt.nameBytes = DUNGEON_NAME;
+    // ⛔ WAS A LITERAL "Altar Cave" FOR EVERY DUNGEON. The Cave of Seals opened
+    // under Altar Cave's banner; the registry row has carried the right name
+    // the whole time. See `dungeon/labels.js`.
+    topBoxSt.nameBytes = dungeonLabels(dungeonForMapId(mapId)).nameBytes;
     hudSt.topBoxMode = 'battle';
     topBoxSt.isTown = false;
     topBoxSt.state = 'none';
