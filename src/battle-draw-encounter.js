@@ -246,7 +246,7 @@ export function drawEncounterBox() {
   if (!isExpand && !isClose && !isCombat && !isVictory) return;
 
   const count = battleSt.encounterMonsters.length;
-  const { fullW, fullH, sprH, row0H, row1H } = encounterBoxDims();
+  const { fullW, fullH, sprH, row0H, row1H, widths, colOff } = encounterBoxDims();
   const centerX = HUD_VIEW_X + Math.floor(HUD_VIEW_W / 2);
   const centerY = HUD_VIEW_Y + Math.floor(HUD_VIEW_H / 2);
 
@@ -261,7 +261,7 @@ export function drawEncounterBox() {
 
   if (isExpand || isClose) { ui.ctx.restore(); return; }
 
-  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH, row0H, row1H);
+  const gridPos = _encounterGridPos(boxX, boxY, fullW, fullH, count, sprH, row0H, row1H, widths, colOff);
   const rowH = (idx) => idx < 2 ? row0H : row1H;
   const slotCenterY = (idx) => {
     if (!gridPos[idx] || !battleSt.encounterMonsters[idx]) return 0;

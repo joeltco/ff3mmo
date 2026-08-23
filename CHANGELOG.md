@@ -1,3 +1,70 @@
+## 1.10.61 — 2026-08-22
+
+### Battle HUD real estate — the arena assumed every monster was 32px wide
+
+`battle-layout.js#_encounterGridPos` placed every sprite with
+`const hs = 16; // half sprite width (32px wide)` and columns a flat 40px apart.
+That held while the zones were hand-authored — their widest monster WAS 32. The
+moment v1.10.56 replaced them with the cartridge's own tables it stopped holding.
+
+⛔ **Berserker ×2-4 overlapped by 8px and spilled 4px past the box border.**
+Berserker is 48px and lives in `world_r6`, `r7`, `r10`, `r11` — the 69% of the
+reachable overworld outside Ur's safe radius. It was not spawnable before
+v1.10.56; the old `grasslands_wild` was Killer Bee + Werewolf, both ≤40px.
+
+⛔ **The Land Turtle was drawn 8px off centre**, and always had been. A lone
+monster used the same hardcoded 16, so any sprite that is not 32px wide sat off
+the centre line — including the Altar Cave boss.
+
+**The fix.** `hs` is now the slot's real half-width; the column offset is derived
+(`colOff = (wL + wR) / 4 + AIR / 2`, where AIR is the 8px the old layout left);
+and the box widens to contain the outermost sprite edge. ⭐ At 32/32 the formula
+returns exactly 20 — the old `gapX` — so **every encounter that already fitted
+renders on the same pixels**. That is pinned with the literal old output
+(`12,52,12,52` for four 32px sprites).
+
+Four Berserkers, before and after — `#` is two sprites on the same pixel:
+
+```
+BEFORE  box 96x120           AFTER  box 120x120
+|...1111111111##222222222|   |..111111111111..222222222222..|
+|...3333333333##444444444|   |..333333333333..444444444444..|
+   overlap 8px, spill 4px        overlap 0, spill 0
+```
+
+Five more 48px monsters (Lizardman, Barometz, Griffon, Parademon) sit in zones
+nothing can reach yet and would have hit the same bug the day the world opens.
+
+### What did NOT need changing
+
+| panel | limit | worst reachable |
+|---|---|---|
+| enemy-name box width | 120px / 15 glyphs | 96px — `"Berserker x4"` |
+| name rows | 6 | 3 |
+| arena height | 144px | 120px |
+| sprite art | — | all 28 zone monsters have it |
+
+### Tools
+
+`tools/check-battle-hud-fit.mjs` — 651 checks over every formation the shipped
+zones can roll, spawned the way `startRandomEncounter` spawns them (**four-body
+cap included** — using the table's max would invent overflows that cannot
+happen). `--draw <zone> <n>` ASCIIs the box and the sprite rectangles, which is
+how the overlap above was actually looked at rather than inferred.
+
+⛔ It measures the **IPS-patched** ROM. The game applies `ff3-awj.ips` at boot
+and AWJ re-encodes text — lowercase moves from `$CA-$E3` to `$A4-$BD` and
+ligature tiles pack two letters into one 8px cell — so measuring the raw file
+measures neither the right bytes nor the right widths. The first version of this
+tool did exactly that and printed `B????????` for Berserker.
+
+⛔ The box-width maths is exported from `battle-layout.js` and called by both the
+game and the gate. It was briefly duplicated in the gate, and a revert that
+flattened the real one still passed.
+
+Three reverts fail the gate: fixed 16px half-width (30), pinned column offset
+(28), flat 64/96 box (28).
+
 ## 1.10.60 — 2026-08-22
 
 ### "Found in" is the ROM's answer now — and the formation id is 16-bit
