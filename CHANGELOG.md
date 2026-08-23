@@ -1,3 +1,42 @@
+## 1.10.62 — 2026-08-22
+
+### Multi-species encounters — the HUD audit was only testing one outcome per formation
+
+v1.10.61 spawned every group at its **maximum** count. That looked like the worst
+case and is not: the four-body cap means the first groups fill the field, so
+"Eye Fang x2 + Blue Wisp x1-3 + Carbuncle x1-3" only ever produced **two**
+species. Carbuncle appears when Blue Wisp rolls low — which Altar Cave floors 3
+and 4 do in the shipped game.
+
+⛔ **A three-species battle was never checked at all.** The audit now enumerates
+every count combination a formation can roll: **238 distinct spawn outcomes,
+1755 checks**, up from 651.
+
+The layout holds for all of them — mixed rows included:
+
+```
+altar_cave_f4 — EyeFang x2 / BlueWisp / Carbuncle      world_r8 — Parademon x2 / Hornet x2
++------------------------+                             +------------------------------+
+|...11111111..22222222...|  EyeFang 32x48               |..111111111111..222222222222..|  Parademon 48x48
+|...33333333..44444444...|  BlueWisp + Carbuncle        |....33333333......44444444....|  Hornet 32x32
++------------------------+                             +------------------------------+
+```
+
+⭐ A narrow row keeps the **same column centres** as a wide one, so the small
+monsters sit centred under the big ones and the 2x2 stays a grid. Per-row
+centring would have staggered the columns.
+
+Ten distinct mixed-species body sets ship; the widest disparity is 16px
+(Parademon 48px over Hornet 32px, and Berserker 48px over Werewolf 32px). Most
+species in one battle: **3**.
+
+`--draw <zone> <formation> [outcome]` now defaults to the outcome with the most
+species — the one the old sampling could not reach — and prints the name rows
+beside the sprite rectangles.
+
+Reverts still fail: fixed 16px half-width (77), pinned column offset (51), flat
+64/96 box (51).
+
 ## 1.10.61 — 2026-08-22
 
 ### Battle HUD real estate — the arena assumed every monster was 32px wide

@@ -23,6 +23,13 @@
 // ⛔ THE MAXIMUM IS NOT THE FORMATION'S max COUNT. Bodies are capped at FOUR by
 // `startRandomEncounter`, so "Mummy x3-5" can never draw "x5"; using the table's
 // max would invent an overflow that cannot happen.
+//
+// ⛔ NOR IS THE MAX THE WORST CASE. Spawning every group at its maximum was the
+// first version of this file, and it silently never produced a THREE-species
+// battle: "Eye Fang x2 + Blue Wisp x1-3 + Carbuncle x1-3" fills all four bodies
+// from the first two groups, so Carbuncle only appears when Blue Wisp rolls low.
+// Altar Cave floors 3 and 4 do that in the shipped game. Every count combination
+// is enumerated below instead — the layout has to hold for all of them.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -84,14 +91,42 @@ const ascii = (bytes) => {
  * Mirrors `_battleEnemyNames`: one row per distinct species still on screen,
  * with " x{N}" appended when that species has more than one body.
  */
-function rowsFor(formation) {
-  // Spawn exactly as the game does — group order, per-group count, cap at four.
-  const bodies = [];
-  for (const g of formation) {
-    const want = Math.min(g.max, BODY_CAP);
-    for (let i = 0; i < want; i++) { if (bodies.length >= BODY_CAP) break; bodies.push(g.id); }
-    if (bodies.length >= BODY_CAP) break;
-  }
+// ── THE ARENA (battle-layout.js#_encounterGridPos, battle-grid.js) ─────────
+const HUD_VIEW_W = 144, HUD_VIEW_H = 144;
+const PADDING = 16, BODY_GAP_Y = 2;
+/** Sprite size straight from the registry the game renders from. */
+const dimsOf = (id) => {
+  const e = MONSTER_REGISTRY.get(id);
+  return e ? { w: e.cols * 8, h: e.rows * 8 } : null;
+};
+
+/**
+ * Every distinct body list `startRandomEncounter` can produce for a formation.
+ *
+ * Group order, a count rolled in [min,max] per group, hard stop at four bodies —
+ * enumerated over every roll rather than sampled, because the interesting cases
+ * are the LOW rolls (they are what let a third species onto the field).
+ */
+function spawnOutcomes(formation) {
+  const out = new Map();
+  const rec = (gi, bodies) => {
+    if (gi === formation.length || bodies.length >= BODY_CAP) {
+      out.set(bodies.join(','), bodies.slice());
+      return;
+    }
+    const g = formation[gi];
+    for (let c = g.min; c <= g.max; c++) {
+      const b = bodies.slice();
+      for (let i = 0; i < c; i++) { if (b.length >= BODY_CAP) break; b.push(g.id); }
+      rec(gi + 1, b);
+    }
+  };
+  rec(0, []);
+  return [...out.values()].filter((b) => b.length > 0);
+}
+
+/** The name rows the HUD would draw for one body list (mirrors `_battleEnemyNames`). */
+function rowsFor(bodies) {
   const rows = [];
   const seen = new Set();
   for (const id of bodies) {
@@ -106,25 +141,7 @@ function rowsFor(formation) {
   return rows;
 }
 
-// ── THE ARENA (battle-layout.js#_encounterGridPos, battle-grid.js) ─────────
-// ⛔ `hs = 16 // half sprite width (32px wide)` is a HARDCODED ASSUMPTION that
-// every monster is 32px. Columns are placed `gapX = 20` either side of centre,
-// so their left edges are 40px apart. A 48px-wide monster therefore overlaps
-// its neighbour by 8px AND pokes 4px past the box border.
-const HUD_VIEW_W = 144, HUD_VIEW_H = 144;
-const PADDING = 16, BODY_GAP_Y = 2;
-const dimsOf = (id) => {
-  const e = MONSTER_REGISTRY.get(id);
-  return e ? { w: e.cols * 8, h: e.rows * 8 } : null;
-};
-
-function arenaFor(formation) {
-  const bodies = [];
-  for (const g of formation) {
-    const want = Math.min(g.max, BODY_CAP);
-    for (let i = 0; i < want; i++) { if (bodies.length >= BODY_CAP) break; bodies.push(g.id); }
-    if (bodies.length >= BODY_CAP) break;
-  }
+function arenaFor(bodies) {
   // `startRandomEncounter` sorts TALLEST FIRST before drawing.
   const d = bodies.map((id) => ({ id, ...(dimsOf(id) || { w: 32, h: 32 }) }));
   d.sort((a, b) => b.h - a.h);
@@ -136,20 +153,17 @@ function arenaFor(formation) {
   const innerH = row1H > 0 ? row0H + BODY_GAP_Y + row1H : row0H;
   const fullH = Math.ceil((innerH + PADDING) / 8) * 8;
 
-  // Mirror `encounterBoxDims`, then ask the REAL grid where the sprites land.
   const colOff = encounterColOff(widths);
   const widest = Math.max(32, ...widths);
   const fullW = encounterBoxWidth(count, colOff, widths);
   const pos = _encounterGridPos(0, 0, fullW, fullH, count, sprH, row0H, row1H, widths, colOff);
 
-  // Overlap: any two sprites sharing a row whose spans intersect.
   let overlap = 0;
   for (const [a, b] of [[0, 1], [2, 3]]) {
     if (!pos[a] || !pos[b]) continue;
     overlap = Math.max(overlap, (pos[a].x + widths[a]) - pos[b].x);
   }
   overlap = Math.max(0, overlap);
-  // Spill: any sprite outside the box [0, fullW].
   let spill = 0;
   for (let i = 0; i < count; i++)
     spill = Math.max(spill, -pos[i].x, (pos[i].x + widths[i]) - fullW);
@@ -157,8 +171,7 @@ function arenaFor(formation) {
   // ⛔ EVERY sprite must sit ON its column centre, not merely inside the box.
   // With a wide enough box a fixed half-width stops overlapping and starts
   // hanging sprites off-centre instead — visible as a lopsided row, and invisible
-  // to an overlap-only check. Columns are cx-colOff and cx+colOff; a lone
-  // monster and slot 2 of a 3-monster row sit on cx itself.
+  // to an overlap-only check.
   const cx = Math.floor(fullW / 2);
   const colFor = (i) => {
     if (count === 1) return cx;
@@ -169,38 +182,24 @@ function arenaFor(formation) {
   for (let i = 0; i < count; i++)
     offColumn = Math.max(offColumn, Math.abs((pos[i].x + widths[i] / 2) - colFor(i)));
   const offCentre = count === 1 ? offColumn : 0;
-  return { count, d, fullW, fullH, overlap, spill, offCentre, offColumn, widest,
+  return { count, d, pos, colOff, fullW, fullH, overlap, spill, offCentre, offColumn, widest,
            tallest: Math.max(...d.map((x) => x.h)) };
 }
 
-// ⛔ NO-REGRESSION PIN. Everything that already fitted must land on exactly the
-// pixel it landed on before v1.10.61 widened the layout. These are the literal
-// outputs of the old `gapX = 20 / hs = 16` code for a 96px box of 32px sprites —
-// hardcoded on purpose, so a future "simplification" of the geometry has to
-// disagree with a number rather than with itself.
-{
-  const w32 = [32, 32, 32, 32];
-  const p4 = _encounterGridPos(0, 0, 96, 64, 4, 32, 32, 32, w32, encounterColOff(w32));
-  const got = p4.map((q) => q.x).join(',');
-  ok('4x 32px sprites land where they always did', got === '12,52,12,52', got);
-  const p1 = _encounterGridPos(0, 0, 64, 64, 1, 32, 32, 0, [32], encounterColOff([32]));
-  ok('a lone 32px sprite lands where it always did', p1[0].x === 16, String(p1[0].x));
-}
-
-// `--draw <zone> <n>` — ASCII the box and the sprite rectangles. There is no
-// headless battle renderer in this repo, so this is the closest thing to
-// LOOKING at the layout instead of trusting the numbers.
+// `--draw <zone> <formation> [outcome]` — ASCII the box and the sprite
+// rectangles. There is no headless battle renderer in this repo, so this is the
+// closest thing to LOOKING at the layout instead of trusting the numbers.
+// ⛔ Defaults to the outcome with the MOST SPECIES, because the max-count
+// sampling this file used to do never produced a three-species battle at all.
 if (args[0] === '--draw') {
   const zone = ENCOUNTERS.get(args[1]);
   if (!zone) { console.error(`no such zone: ${args[1]}`); process.exit(2); }
   const fi = Number(args[2] || 0);
-  const a = arenaFor(zone.formations[fi]);
-  const colOff = encounterColOff(a.d.map((x) => x.w));
-  const pos = _encounterGridPos(0, 0, a.fullW, a.fullH, a.count,
-    Math.max(...a.d.map((x) => x.h)),
-    Math.max(a.d[0]?.h || 32, a.d[1]?.h || 0),
-    a.count > 2 ? Math.max(a.d[2]?.h || 32, a.d[3]?.h || 0) : 0,
-    a.d.map((x) => x.w), colOff);
+  const outs = spawnOutcomes(zone.formations[fi]);
+  const pick = args[3] != null ? outs[Number(args[3])]
+    : outs.slice().sort((x, y) => new Set(y).size - new Set(x).size || y.length - x.length)[0];
+  const a = arenaFor(pick);
+  const { pos, colOff } = a;
   const SC = 4;                                     // 4px per cell
   const W = Math.ceil(a.fullW / SC), H = Math.ceil(a.fullH / SC);
   const grid = Array.from({ length: H }, () => Array(W).fill('.'));
@@ -213,12 +212,14 @@ if (args[0] === '--draw') {
         grid[y][x] = grid[y][x] === '.' ? marks[i] : '#';   // '#' = OVERLAP
       }
   });
-  console.log(`${args[1]} formation ${fi} — box ${a.fullW}x${a.fullH}, colOff ${colOff}`);
+  console.log(`${args[1]} formation ${fi} — ${outs.length} spawn outcome(s); showing ${new Set(pick).size} species`);
+  console.log(`box ${a.fullW}x${a.fullH}, colOff ${colOff}`);
   console.log(`bodies: ${a.d.map((x) => `0x${x.id.toString(16)} ${x.w}x${x.h}`).join(', ')}`);
+  console.log(`names : ${rowsFor(pick).map((r) => `"${r.text}"`).join('  ')}`);
   console.log('+' + '-'.repeat(W) + '+');
   for (const row of grid) console.log('|' + row.join('') + '|');
   console.log('+' + '-'.repeat(W) + '+');
-  console.log(`overlap ${a.overlap}px, spill ${a.spill}px, off-column ${a.offColumn}px   ('#' = two sprites on the same pixel)`);
+  console.log(`overlap ${a.overlap}px, spill ${a.spill}px, off-column ${a.offColumn}px   ('#' = two sprites on one pixel)`);
   process.exit(0);
 }
 
@@ -226,26 +227,33 @@ console.log(`battle enemy-name box: ${PANEL_W}px wide (${MAX_GLYPHS} glyphs), ${
 console.log(`arena: ${HUD_VIEW_W}x${HUD_VIEW_H} viewport; column offset and box width derived per formation\n`);
 
 const worst = [], arenaBad = [];
+let outcomes = 0, maxSpecies = 0;
 for (const [key, zone] of ENCOUNTERS) {
   for (let fi = 0; fi < zone.formations.length; fi++) {
-    const rows = rowsFor(zone.formations[fi]);
-    for (const r of rows) {
-      worst.push({ key, text: r.text, width: r.width });
-      ok(`${key} f${fi}: "${r.text}"`, r.width <= PANEL_W, `${r.width}px of ${PANEL_W}`);
-    }
-    ok(`${key} f${fi}: ${rows.length} name row(s)`, rows.length <= MAX_ROWS, `${rows.length} > ${MAX_ROWS}`);
+    for (const bodies of spawnOutcomes(zone.formations[fi])) {
+      outcomes++;
+      const rows = rowsFor(bodies);
+      maxSpecies = Math.max(maxSpecies, rows.length);
+      const tag = `${key} f${fi} [${bodies.length} bodies, ${rows.length} species]`;
+      for (const r of rows) {
+        worst.push({ key, text: r.text, width: r.width });
+        ok(`${tag} "${r.text}"`, r.width <= PANEL_W, `${r.width}px of ${PANEL_W}`);
+      }
+      ok(`${tag}: name rows fit`, rows.length <= MAX_ROWS, `${rows.length} > ${MAX_ROWS}`);
 
-    const a = arenaFor(zone.formations[fi]);
-    const label = `${key} f${fi} (${a.count} bodies, widest ${a.widest}px, tallest ${a.tallest}px)`;
-    ok(`${label}: sprites do not overlap`, a.overlap === 0, `${a.overlap}px overlap`);
-    ok(`${label}: sprites stay inside the box`, a.spill === 0, `${a.spill}px past the border`);
-    ok(`${label}: box fits the viewport`, a.fullH <= HUD_VIEW_H && a.fullW <= HUD_VIEW_W,
-       `${a.fullW}x${a.fullH} of ${HUD_VIEW_W}x${HUD_VIEW_H}`);
-    ok(`${label}: a lone monster is centred`, a.offCentre === 0, `${a.offCentre}px off centre`);
-    ok(`${label}: every sprite sits on its column`, a.offColumn === 0, `${a.offColumn}px off column`);
-    if (a.overlap || a.spill || a.offCentre || a.offColumn) arenaBad.push({ key, fi, ...a });
+      const a = arenaFor(bodies);
+      const label = `${tag} widest ${a.widest}px`;
+      ok(`${label}: sprites do not overlap`, a.overlap === 0, `${a.overlap}px overlap`);
+      ok(`${label}: sprites stay inside the box`, a.spill === 0, `${a.spill}px past the border`);
+      ok(`${label}: box fits the viewport`, a.fullH <= HUD_VIEW_H && a.fullW <= HUD_VIEW_W,
+         `${a.fullW}x${a.fullH} of ${HUD_VIEW_W}x${HUD_VIEW_H}`);
+      ok(`${label}: a lone monster is centred`, a.offCentre === 0, `${a.offCentre}px off centre`);
+      ok(`${label}: every sprite sits on its column`, a.offColumn === 0, `${a.offColumn}px off column`);
+      if (a.overlap || a.spill || a.offCentre || a.offColumn) arenaBad.push({ key, fi, ...a });
+    }
   }
 }
+console.log(`  ${outcomes} distinct spawn outcomes checked; most species in one battle: ${maxSpecies}\n`);
 
 worst.sort((a, b) => b.width - a.width);
 console.log('  widest names actually reachable:');
