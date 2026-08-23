@@ -19,7 +19,7 @@ import { sendNetInvEvent, SERVER_ECONOMY, sendNetQuestClaim, setNetQuestResultHa
          sendNetInvStateRequest, nextChestTxnId } from './net.js';
 import { openWordMenu } from './word-menu.js';
 import { talkQuest, revertQuestHandIn } from './quests.js';
-import { QUESTS } from './data/quests.js';
+import { QUESTS, QUEST_DONE } from './data/quests.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -333,6 +333,12 @@ function _shuffleInPlace(arr) {
   }
 }
 
+/** Has this quest been handed in? Used by TOWN_NPCS `when` predicates. */
+function _questDone(id) {
+  const e = ps.quests && ps.quests[id];
+  return !!e && e.s === QUEST_DONE;
+}
+
 export function placeTownNpcs(mapId) {
   const list = TOWN_NPCS.get(mapId);
   if (!list) return;
@@ -344,6 +350,12 @@ export function placeTownNpcs(mapId) {
   }
   let pi = 0;
   for (const n of list) {
+    // ⭐ `when` — a placement that depends on story state. Cid is a ghost in the
+    // Kazus inn until his quest is handed in and his own self afterwards, on a
+    // different tile, so the two are separate rows and exactly one is placed.
+    // The predicate is handed a quest-done test rather than `ps` so this stays
+    // the only place that knows how quest state is stored.
+    if (n.when && !n.when(_questDone)) continue;
     let x = n.x, y = n.y;
     // `fixedSpawn` keeps the declared (ROM) coordinates and still wanders from
     // there. The random pool is drawn from a map's "grass" tiles, and on Ur

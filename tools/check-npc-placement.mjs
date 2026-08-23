@@ -210,10 +210,15 @@ const LOADED_BUNDLES = new Map([
   // the sprite-catalog sheet — Cid has been placed as a shop keeper, as an inn
   // ghost, and as a wandering townsman across three versions.
   {
-    const { STORY_SPRITE_BUNDLES } = await import('../src/data/town-npcs.js');
+    const { STORY_SPRITE_BUNDLES, RESERVED_BUNDLES } = await import('../src/data/town-npcs.js');
     let story = 0;
     for (const [mapId, list] of TOWN_NPCS) {
       for (const e of list) {
+        // ⭐ RESERVED, not banned (v1.10.66). 0x01ED10 is the cursed-ghost sprite
+        // and it is CID'S — he wears it in the Kazus inn until his quest is
+        // handed in. Reserving it by npc key keeps every other villager off it
+        // while letting the one character it belongs to use it.
+        if (RESERVED_BUNDLES.get(e.spec && e.spec.romOffset) === e.key) continue;
         const who = e.spec && STORY_SPRITE_BUNDLES.get(e.spec.romOffset);
         if (!who) continue;
         console.error(`  ✗ map ${mapId}: ${e.key} uses 0x${e.spec.romOffset.toString(16).toUpperCase()}, ` +

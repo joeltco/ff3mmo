@@ -145,6 +145,66 @@ export const QUESTS = {
       'But the road is ours.',
     ],
   },
+
+  // ── CID'S AIRSHIP ────────────────────────────────────────────────────────
+  //
+  // ⚠ ROUGH ON PURPOSE. The whole NPC-dialogue + quest pass comes after the
+  // towns are shaped; this carries the BEATS of FF3's chain — a cursed Cid in
+  // the Kazus inn, and an airship waiting in the western desert — not the final
+  // voice, and not the Mythril Ring errand the cartridge actually runs (there
+  // is no fetch-an-item objective kind yet; `defeat` is the only one).
+  kazus_cid_airship: {
+    id: 'kazus_cid_airship',
+    giver: { mapId: 12, npcKey: 'cid_ghost' },
+
+    // Learned from kazus_town_d out in the town ("Left an airship in the
+    // sand."), carried into the inn. Teacher and giver in different rooms, as
+    // with RIDERS.
+    startWord: 'airship',
+
+    objective: { kind: 'defeat', zonePrefix: 'altar_cave', count: 4 },
+
+    reward: { gil: 400, exp: 120 },
+
+    // ⭐ THE REAL PAYOUT — the airship, parked where FF3 leaves it: the desert
+    // pocket west of Kazus. (89,59) is one tile west of the ROM's own map-180
+    // entrance at (90,59), which cannot be the parking tile because that map is
+    // in STRANDING_MAPS and refuses entry at the door.
+    //
+    // Parked rather than boarded: boarding is by POSITION, so the player walks
+    // out to the sand and climbs in, which is the sequence rather than a craft
+    // appearing under them.
+    grantsVehicle: { mode: 4, x: 89, y: 59 },
+
+    offer: [
+      'You know of her.',
+      'West, past the rock.',
+      'The cave road is thick.',
+      'Thin it and she is yours.',
+    ],
+    accepted: [
+      'Then go. Come back whole.',
+      'A ghost keeps his word.',
+    ],
+    denied: [
+      'No. Sand keeps her fine.',
+      'Ask again.',
+    ],
+    active: [
+      'The cave road, warrior?',
+      '{n} of {count} cleared.',
+      '{left} more and she flies.',
+    ],
+    complete: [
+      'The road is thin. Good.',
+      'She waits west, in the sand.',
+      'Walk to her. She knows you.',
+    ],
+    done: [
+      'The curse let go of me.',
+      'Fly her well.',
+    ],
+  },
 };
 
 // `questsForMap` lived here unused from the day it was written — removed

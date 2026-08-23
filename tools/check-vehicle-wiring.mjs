@@ -80,6 +80,7 @@ else ok('isFootWalkable == mode 0 on all 16384 tiles');
 
 // ── 3. movement.js source order: disembark BEFORE the passability gate ─────
 const mv = fs.readFileSync(new URL('../src/movement.js', import.meta.url).pathname, 'utf8');
+const ts = fs.readFileSync(new URL('../src/title-screen.js', import.meta.url).pathname, 'utf8');
 const iDisembark = mv.indexOf('isFootWalkable(tileX, tileY)');
 const iGate = mv.indexOf('if (renderer && !passable)');
 if (iDisembark < 0) fail('movement.js no longer calls isFootWalkable — auto-disembark is gone');
@@ -125,9 +126,18 @@ if (!bad) ok('captured vehicle sprites cover modes 0,2,3,5,6,7 with complete til
 if (!/ps\.vehicleParked\s*&&[\s\S]{0,160}tileX === \(ps\.vehicleParkedX/.test(mv))
   fail('movement.js no longer boards by comparing the target tile to the parked craft ($C633)');
 else ok('boarding matches the parked craft by position');
-if (!/ps\.vehicleParkedX = mapSt\.worldX/.test(mv))
-  fail('disembark must park the craft on the tile being LEFT (mapSt.worldX/Y), not the one entered');
-else ok('disembark parks the craft on the tile being left');
+// ⛔ THIS CHECK USED TO PIN THE BUG. It asserted the literal
+// `ps.vehicleParkedX = mapSt.worldX`, which is a PIXEL coordinate, while
+// boarding compares `tileX` — so the gate was enforcing a craft you could never
+// board again. A gate must not take its expectation from the expression under
+// test. Both sides are pinned in the same UNITS now, and the `& 127` clamp in
+// title-screen.js (a tile index, 0-127) is the third witness.
+if (!/ps\.vehicleParkedX = \(mapSt\.worldX \/ TILE_SIZE\)/.test(mv))
+  fail('disembark must park the craft on the tile being LEFT, in TILES — boarding compares tileX');
+else ok('disembark parks the craft on the tile being left, in tiles');
+if (!/vehicleParkedX != null \? \(slot\.vehicleParkedX & 127\)|vehicleParkedX & 127/.test(ts))
+  fail('title-screen must clamp the parked tile to 0-127; a pixel value would survive as a wrong tile');
+else ok('the loaded parked coordinate is clamped to a tile index');
 
 console.log(bad ? `\n⛔ ${bad} check(s) FAILED` : '\n✅ vehicle wiring OK');
 process.exit(bad ? 1 : 0);

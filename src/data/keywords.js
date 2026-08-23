@@ -18,6 +18,7 @@ export const KEYWORDS = {
   cave:    { text: 'CAVE' },      // ur_npc_0d: "The cave drains the light."
   riders:  { text: 'RIDERS' },    // ur_elder_kin_a: "for riders long gone."
   vein:    { text: 'VEIN' },      // ur_tavern_drinker_b: "the vein went black."
+  airship: { text: 'AIRSHIP' },   // kazus_town_d: "He left an airship west."
 };
 
 /** Display text for a term id, or null if the id is unknown. */

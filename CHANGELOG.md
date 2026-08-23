@@ -1,3 +1,82 @@
+## 1.10.66 — 2026-08-23
+
+### Cid is in the Kazus inn, cursed, and his airship is in the desert
+
+⚠ **ROUGH ON PURPOSE** — the NPC-dialogue and quest pass comes after the towns
+are shaped. This carries the beats, not the final voice.
+
+The chain, end to end:
+
+```
+kazus_town_d (Kazus)  "Left an airship in the sand."   -> LEARN airship
+cid_ghost    (inn)    ASK airship -> offer -> accept
+                      clear 4 encounters in the Altar Cave
+                      hand in -> 400g, 120 exp
+                             -> the AIRSHIP parks at world (89,59)
+                             -> the ghost is gone; Cid stands at (9,25)
+```
+
+⭐ **The ghost sprite is CID'S now, and only his.** `0x01ED10` was banned
+outright — the Kazus cast wearing it in the ROM are the Djinn's cursed
+townsfolk, and dressing ordinary villagers as ghosts is not the world we ship.
+It is **reserved by npc key** instead: Cid wears it before the quest, his own
+sprite after, and `check-npc-placement` keeps everyone else off it. Banning
+locked out the one character it belongs to.
+
+⛔ **The airship is PARKED, not boarded.** Boarding is by position, so the
+player walks into the sand and climbs in — that is the sequence. (89,59) is one
+tile west of the ROM's own map-180 entrance, which cannot be the parking tile:
+map 180 is in `STRANDING_MAPS` and refused at the door.
+
+New `when` predicate on a TOWN_NPCS row (`npc.js#placeTownNpcs`) — story-state
+placement, so exactly one Cid is ever in the room.
+
+### The parked-craft coordinate was written in PIXELS
+
+Found while wiring the grant. `movement.js` disembark wrote
+`ps.vehicleParkedX = mapSt.worldX`, a **pixel** coordinate; boarding compares
+`tileX`. **A craft you stepped ashore from could never be boarded again** — and
+`title-screen.js` clamps the field with `& 127` on load, so pixel 1424 came back
+as tile 16.
+
+⛔ **The gate was pinning the bug.** `check-vehicle-wiring` asserted the literal
+`ps.vehicleParkedX = mapSt.worldX` — it took its expectation from the expression
+under test. Both sides are now pinned in the same units, with the `& 127` clamp
+as the third witness. Revert to pixels: fails.
+
+### Sprite fidelity: 12 mismatches down to 3
+
+Every NPC standing on one of the cartridge's own coordinates should wear the
+sprite the record there wears. Twelve did not — the specs were assigned by slot
+index, not by the record on the tile.
+
+| map | fixed |
+|---|---|
+| 9 Ur tavern | 4 — a perfect 1:1 with the ROM, all five now aligned |
+| 10 Kazus | 2 |
+| 12 Kazus inn | 2 — the guests moved OFF the ghost records at (5,27)/(3,27), which are Cid's now |
+| 114 Ur | 3 of 4 |
+
+The three that remain are deliberate: `ur_npc_0c` wants `0x1DF10`, which
+`ur_npc_0d` holds — and Ur's wanderers **re-roll their spawn from a grass pool
+on every map entry**, so their declared tile is a fallback, not where they
+stand. Reported by `tools/npc-candidates.mjs`, not gated.
+
+⛔ `kazus_town_c` is now STATIC. He shares `0x1DF10` with the campfire man, and
+a shared bundle is only allowed for people who stand still — the cartridge
+places four identical gfx31 villagers in Kazus and these are two of them.
+
+### New gate: `check-cid-airship.mjs`
+
+The reward is a craft on the world map, and every part of that can fail
+quietly. It walks the real quest engine — accept, four victories, hand in — then
+checks the craft is parked, at a TILE index, on a tile that is passable,
+reachable on foot from Ur, and carrying no map entrance of its own; and that
+exactly one Cid is placed per quest state, in different sprites.
+
+Reverts, all fail: grant not fired (2 checks), parked on the map-180 door (1),
+park written back in pixels (vehicle-wiring, 1).
+
 ## 1.10.65 — 2026-08-23
 
 ### Castle Sasune was garrisoned by two men because of a rule written for Ur

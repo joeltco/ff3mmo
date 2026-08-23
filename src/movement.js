@@ -112,9 +112,14 @@ export function startMove(dir, isNewPress = false) {
     // Park the craft on the tile being LEFT, not the one being entered — you
     // step ashore and it stays in the water behind you, which is where the ROM
     // records it ($C59E writes the pre-step position).
+    // ⛔ TILES, NOT PIXELS. `mapSt.worldX` is a PIXEL coordinate and this wrote
+    // it raw, while BOARDING below compares `tileX` — so a craft you stepped
+    // ashore from could never be boarded again, and `title-screen.js` clamps the
+    // field with `& 127` (a tile index), turning e.g. pixel 1424 into tile 16.
+    // Found while wiring Cid's airship grant, which writes tiles.
     ps.vehicleParked = 1;
-    ps.vehicleParkedX = mapSt.worldX | 0;
-    ps.vehicleParkedY = mapSt.worldY | 0;
+    ps.vehicleParkedX = (mapSt.worldX / TILE_SIZE) | 0;
+    ps.vehicleParkedY = (mapSt.worldY / TILE_SIZE) | 0;
     ps.vehicleParkedMode = vehicle;
     ps.vehicle = 0;
     vehicle = 0;

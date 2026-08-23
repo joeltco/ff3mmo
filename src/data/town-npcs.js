@@ -163,6 +163,18 @@ const KAZUS_TOWN_BUNDLES = [
 // BOTH entries below are therefore bans on the wrong grounds. They are kept
 // because lifting them changes who stands in a live town, which is a content
 // call, not a cataloguing one. See docs/NPC-CATALOG.md.
+/**
+ * Bundles ONE named npc key may wear, and nobody else.
+ *
+ * ⭐ 0x01ED10 is the Djinn's cursed-ghost sprite. It was banned outright, which
+ * also locked out the one character it actually belongs to: Cid, who spends the
+ * whole pre-quest game as a ghost in the Kazus inn. Reserving beats banning —
+ * every other villager is still kept off it, by key rather than by hope.
+ */
+export const RESERVED_BUNDLES = new Map([
+  [0x01ED10, 'cid_ghost'],
+]);
+
 export const STORY_SPRITE_BUNDLES = new Map([
   [0x01D910, 'shared townsfolk sprite (was labelled "Cid" — wrong, see NPC-CATALOG.md)'],
   [0x01ED10, 'generic ghost (was labelled "Cid (ghost form)" — wrong, see NPC-CATALOG.md)'],
@@ -242,7 +254,7 @@ const sasuneNpc = (slot, extra = {}) => townNpc(SASUNE_BUNDLES, slot, extra);
 // to go hunting for. Idle-march keeps him alive on the spot. The idle lines
 // below only show if the quest is removed; while it exists quests.js supplies
 // his pages for every stage.
-export const UR_NPC_05 = urNpc(0, {
+export const UR_NPC_05 = urNpc(2, {
   wander: false, animate: true, dir: DIR_DOWN,
   dialogue: [
     'You have the look',
@@ -281,7 +293,7 @@ export const UR_NPC_08 = urNpc(3, {
     "Sleep at the inn — it's free.",
   ],
 });
-export const UR_NPC_09 = urNpc(4, {
+export const UR_NPC_09 = urNpc(3, {
   dialogue: [
     'Mind the cave north.',
     'It took my brother.',
@@ -299,7 +311,7 @@ export const UR_NPC_09 = urNpc(4, {
     ],
   },
 });
-export const UR_NPC_0A = urNpc(3, {
+export const UR_NPC_0A = urNpc(4, {
   dialogue: [
     'I keep the north field.',
     'Nothing grows in the dark.',
@@ -333,7 +345,7 @@ export const UR_NPC_0C = urNpc(6, {
     ],
   },
 });
-export const UR_NPC_0D = urNpc(7, {
+export const UR_NPC_0D = urNpc(0, {
   dialogue: [
     'Ur is quiet most days.',
     'The cave drains the light.',
@@ -406,7 +418,7 @@ const interior = (romOffset, dir, dialogue, words) => ({
 });
 
 // Tavern — a keep behind the counter and four drinkers at the tables.
-export const UR_TAVERN_KEEP = interior(0x01E010, DIR_DOWN, [
+export const UR_TAVERN_KEEP = interior(0x01DF10, DIR_DOWN, [
   'Ale? Sit anywhere.',
   'No one hurries out.',
 ], {
@@ -421,11 +433,11 @@ export const UR_TAVERN_KEEP = interior(0x01E010, DIR_DOWN, [
     ],
   },
 });
-export const UR_TAVERN_DRINKER_A = interior(0x01DF10, DIR_RIGHT, [
+export const UR_TAVERN_DRINKER_A = interior(0x01E710, DIR_RIGHT, [
   'Drink up, friend.',
   'The dark keeps anyway.',
 ]);
-export const UR_TAVERN_DRINKER_B = interior(0x01E110, DIR_LEFT, [
+export const UR_TAVERN_DRINKER_B = interior(0x01E010, DIR_LEFT, [
   'I hauled ore here.',
   'Then the vein went black.',
 ], {
@@ -456,7 +468,7 @@ export const UR_TAVERN_DRINKER_C = interior(0x01E610, DIR_UP, [
   'The crystal picks four.',
   'Four! Look at us.',
 ]);
-export const UR_TAVERN_DRINKER_D = interior(0x01E710, DIR_DOWN, [
+export const UR_TAVERN_DRINKER_D = interior(0x01E110, DIR_DOWN, [
   'Sit a while, warrior.',
   "North road's cold.",
 ], {
@@ -595,8 +607,20 @@ export const KAZUS_TOWN_B = kazusNpc(0, {
   dir: DIR_RIGHT,
   dialogue: ['The mines gave out.', 'The fire still catches.'],
 });
-export const KAZUS_TOWN_C = kazusNpc(1, { dialogue: ['Mythril still comes up.', 'Little else does.'] });
-export const KAZUS_TOWN_D = kazusNpc(2, { dialogue: ['Travelers are rare here.', 'Rest before you go on.'] });
+// ⛔ STATIC, and that is the ROM's doing. He now wears 0x01DF10 to match the
+// record he stands on at (15,20) — the same bundle the campfire man wears at
+// (3,28), which the shared-bundle rule allows only for people who stand still.
+// The cartridge places FOUR gfx31 villagers in Kazus; these are two of them.
+export const KAZUS_TOWN_C = kazusNpc(0, {
+  wander: false,
+  dialogue: ['Mythril still comes up.', 'Little else does.'],
+});
+// Teaches AIRSHIP. The term must be a word he SAYS — that is what makes LEARN
+// honest — and the carry is town -> inn, so the word has a walk in it.
+export const KAZUS_TOWN_D = kazusNpc(1, {
+  dialogue: ['A Canaan man came through.', 'Left an airship in the sand.'],
+  teaches: ['airship'],
+});
 
 // Inn (map 12) — indoors, so `interior()`: no wandering, idle-march in place.
 export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
@@ -624,6 +648,52 @@ export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
 // Kept here as a NOTE rather than a spec so the next pass does not rediscover
 // the bundle on the catalog sheet and reuse it. The Kazus quest that needs him
 // comes with a scene, not with a wander spec.
+
+// ── CID ──────────────────────────────────────────────────────────────────
+//
+// ⭐ THE GHOST BUNDLE IS CID'S, AND ONLY CID'S (v1.10.66). 0x01ED10 was banned
+// outright — the Kazus cast that wears it in the ROM are the Djinn's cursed
+// townsfolk, and dressing ordinary villagers as ghosts was not the world we
+// ship. It is now RESERVED: Cid wears it before his quest is done, his own
+// sprite after, and nobody else may take it. `check-npc-placement` enforces the
+// reservation by npc key.
+//
+// He stands in the Kazus inn, which is where FF3 puts him — the ROM's own line
+// for that record: "I'm Cid from Canaan. Been stuck here since Nelv Valley got
+// blocked by that giant rock. I stayed in this hotel and then THIS happened."
+//
+// ⚠ DIALOGUE IS ROUGH on purpose. The whole NPC-dialogue + quest pass comes
+// after the towns are shaped; these lines carry the beats, not the final voice.
+export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
+  'Cid, of Canaan.',
+  'The curse caught me here.',
+], {
+  answers: {
+    airship: [
+      'She is west, in the sand.',
+      'Clear the cave road first.',
+      'I will not send you dead.',
+    ],
+  },
+});
+
+// ⛔ AFTER the quest, and on a DIFFERENT tile. Cid has no unique sprite in FF3 —
+// the ROM dresses him in gfx31 (0x01DF10), the generic villager, at Kazus
+// (22,12). Map 12's own 0x01DF10 record is at (9,25), so that is where the man
+// stands once the ghost is gone: the same bundle the inn keeper wears, which
+// the shared-bundle rule allows because both are still and both are on ROM
+// records that wear it.
+export const CID_MAN = interior(0x01DF10, DIR_DOWN, [
+  'Flesh again. Yours to thank.',
+  'She is yours to fly.',
+], {
+  answers: {
+    airship: [
+      'Due west, in the sand.',
+      'Walk up and she is yours.',
+    ],
+  },
+});
 
 // Shop keepers — one tile above their counter facing DOWN, as Ur's keepers
 // stand. Bundles are the only non-ghost ones their maps load.
@@ -780,8 +850,16 @@ export const TOWN_NPCS = new Map([
       // for map 12 — id40 @(14,25) beside the inn marker id250 @(14,26),
       // id39 @(5,27), id41 @(3,27).
     { key: 'kazus_inn_keep',    x: 14, y: 25, spec: KAZUS_INN_KEEP },
-    { key: 'kazus_inn_guest_a', x: 5,  y: 27, spec: KAZUS_INN_GUEST_A },
-    { key: 'kazus_inn_guest_b', x: 3,  y: 27, spec: KAZUS_INN_GUEST_B },
+    // MOVED off the ghost records at (5,27)/(3,27) — those two tiles carry
+    // 0x01ED10 records, which is Cid's sprite now. (9,23) is the ROM's 0x01E010
+    // record and (9,26) its 0x01E410 one, so each guest wears what the
+    // cartridge puts on the tile they stand on.
+    { key: 'kazus_inn_guest_a', x: 9,  y: 23, spec: KAZUS_INN_GUEST_A },
+    { key: 'kazus_inn_guest_b', x: 9,  y: 26, spec: KAZUS_INN_GUEST_B },
+    // ⭐ CID, in two states on two tiles. `when` is evaluated at placement time
+    // (npc.js#placeTownNpcs) so exactly one of them is ever in the room.
+    { key: 'cid_ghost', x: 5, y: 27, spec: CID_GHOST, when: (q) => !q('kazus_cid_airship') },
+    { key: 'cid_man',   x: 9, y: 25, spec: CID_MAN,   when: (q) =>  q('kazus_cid_airship') },
   ]],
   // ROM position: id40 @(3,22), behind the Kazus weapon marker id232 @(3,23)
   // which is where the counter goes. Was (3,14) — a room the broken tilemap

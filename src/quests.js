@@ -72,6 +72,31 @@ const _RANK_DONE   = 3;   // finished — only if nothing above matched
  * or null when this NPC has nothing quest-related to say (caller then falls
  * back to the NPC's ordinary idle dialogue).
  */
+/**
+ * Park a quest's craft on the world map.
+ *
+ * ⛔ PARKED, NOT BOARDED. Boarding is by POSITION (`movement.js`), so leaving
+ * the airship in the sand makes the player walk out and climb in — that is the
+ * sequence. Dropping them aboard on the spot skips it and, worse, puts a flying
+ * craft under a player standing in a town interior.
+ *
+ * Idempotent by quest state: `talkQuest` only reaches the hand-in branch once,
+ * and a REFUSED server claim calls `revertQuestHandIn`, which puts the quest
+ * back to waiting — so the craft can be re-granted on the retry rather than
+ * being lost. Re-parking an already-parked craft is harmless.
+ */
+function _grantVehicle(quest) {
+  const g = quest.grantsVehicle;
+  if (!g) return;
+  // Already flying it — do not yank it out from under the player.
+  if ((ps.vehicle | 0) === (g.mode | 0)) return;
+  ps.vehicleParked = 1;
+  ps.vehicleParkedMode = g.mode | 0;
+  ps.vehicleParkedX = g.x | 0;
+  ps.vehicleParkedY = g.y | 0;
+  _persist();
+}
+
 export function talkQuest(mapId, npcKey, grantReward) {
   let best = null, bestRank = Infinity;
   for (const quest of Object.values(QUESTS)) {
@@ -103,6 +128,7 @@ export function talkQuest(mapId, npcKey, grantReward) {
     e.s = QUEST_DONE;
     _persist();                                   // BEFORE the payout, not after
     if (typeof grantReward === 'function') grantReward(best.reward, best.id);
+    _grantVehicle(best);
     return _fill(best.complete, best, e);
   }
   return _fill(best.active, best, e);
