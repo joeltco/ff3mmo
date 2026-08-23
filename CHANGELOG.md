@@ -1,3 +1,41 @@
+## 1.10.67 — 2026-08-23
+
+### Ur's secret house was ruled empty on a measurement that stopped being true
+
+One person now stands at the ROM's (6,26). The note that kept the room empty
+said the entrance walks the player to (8,21), into a room of rows 17-23 that
+contains none of map 2's five records — so "putting someone there means
+inventing a coordinate."
+
+Both halves stopped being true. The tilemap decompressor fix (v1.10.9, *"run
+length 0 means 256"*) moved the entrance to **(8,29)** and the room to rows
+25-28, which **contains (6,26)**. And of the five records, three are objects
+(gfx 65) and one is an invisible marker — only ever **one** was a person.
+
+⛔ **A room ruled out by a measurement gets re-measured when the measurement
+changes.** Nothing re-opened the question for eight releases because the answer
+was written down as a conclusion, not as the measurement it came from.
+`tools/npc-candidates.mjs` is what re-opened it.
+
+### Where the three towns stand
+
+```
+ROM records 117 | placed 41
+```
+
+Everything reachable, drawable and allowed is now placed. What is left is left
+for a reason, per map:
+
+| map | left | why |
+|---|---|---|
+| 29 throne room | 3 | the King and Sara are scene-path story characters |
+| 26, 27 | 6 each | share map 25's tilemap AND roster; every record is in 25's room |
+| 11 | 2 | the PPU holds no townsfolk bundle — anyone there is tilemap noise |
+| 19-24, 28, 30, 174, 1, 147 | — | the ROM lists nobody |
+
+The rest of the 117 are invisible markers, objects (shop counters, chests,
+signs), or people whose sprite bundle a map does not load.
+
 ## 1.10.66 — 2026-08-23
 
 ### Cid is in the Kazus inn, cursed, and his airship is in the desert

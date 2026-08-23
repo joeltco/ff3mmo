@@ -706,6 +706,23 @@ export const KAZUS_ARMOR_KEEPER = interior(0x01DF10, DIR_DOWN, [
   'Dear, but it turns a blade.',
 ]);
 
+// Ur's secret house (map 2). ONE person, and the ROM's own tile.
+//
+// ⛔ THIS ROOM WAS DECLARED PERMANENTLY EMPTY ON A STALE MEASUREMENT. The note
+// that stood here said the entrance walks the player to (8,21) into a room of
+// rows 17-23, so none of map 2's five records could be reached. Both halves are
+// wrong now: the tilemap decompressor fix (v1.10.9, "run length 0 means 256")
+// moved the entrance to (8,29) and the room to rows 25-28, which CONTAINS the
+// record at (6,26) — and of the five records, three are objects (gfx 65) and one
+// is an invisible marker, so only ever ONE was a person.
+//
+// A room ruled out by a measurement gets re-measured when the measurement
+// changes. `tools/npc-candidates.mjs` is what re-opened it.
+export const UR_SECRET_RESIDENT = interior(0x01E210, DIR_DOWN, [
+  'The back way is open.',
+  'It was not always.',
+]);
+
 // Kazus houses (maps 13 and 14) — EMPTY until v1.10.64 while every other Kazus
 // interior had somebody in it. Both were chosen with `tools/npc-candidates.mjs`,
 // which answers all four placement constraints per ROM record at once: in the
@@ -905,15 +922,8 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_elder_kin_b', x: 6, y: 4, spec: UR_ELDER_KIN_B },
     { key: 'ur_elder_kin_c', x: 4, y: 3, spec: UR_ELDER_KIN_C },
   ]],
-  // Ur northern house (map 2) — NOBODY. The ROM lists five NPCs for map 2, at
-  // (4,24) (6,24) (8,24) (11,25) (6,26), and not one of them is in the room
-  // this door opens into: the entrance walks the player to (8,21), whose room
-  // is rows 17-23. Those five belong to another interior packed into the same
-  // shared tilemap. `ur_householder` was placed on the ROM's (6,26) without
-  // checking which room that is, so it stood outside the house the player was
-  // standing in. Gated now by tools/check-npc-room.mjs.
-  // Putting someone in the northern house means inventing a coordinate the ROM
-  // does not have — ask first.
+  // Ur's secret house — the ROM's (6,26), the room's only person. See the spec.
+  [2, [{ key: 'ur_secret_resident', x: 6, y: 26, spec: UR_SECRET_RESIDENT }]],
   // Armor keeper reuses the weapon keeper's sprite (same bundle 0x1E610),
   // behind the ur_armor counter at (3,5).
   [4, [{ key: 'armor_keeper',    x: 3, y:  4, spec: WEAPON_KEEPER }]],
