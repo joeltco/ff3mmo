@@ -103,6 +103,29 @@ const LOADED_BUNDLES = new Map([
   [5,   new Set([0x01E610])],                                          // weapon shop
   [4,   new Set([0x01E610])],                                          // armor shop
   [2,   new Set([0x01E210])],                                          // house
+
+  // ⛔ KAZUS AND SASUNE WERE NEVER IN THIS TABLE. The bundle rule only ever
+  // covered Ur, so every Kazus and Castle Sasune placement has been ungated
+  // since it shipped — a wrong bundle there would have drawn a face the map
+  // never loads and nothing would have said so. MEASURED 2026-08-23 with
+  // `MAPS=10,11,12,13,14,16,17,18,25,26,27,29 node tools/monscan/map-bundles.cjs`
+  // (that tool prints HEADER-LESS offsets; these carry the +0x10 the specs use,
+  // which map 2 cross-checks — it was in this table already and the measurement
+  // reproduced it).
+  [10,  new Set([0x01DF10, 0x01E010, 0x01D910, 0x01E210])],            // Kazus town
+  [12,  new Set([0x01DF10, 0x01E010, 0x01ED10, 0x01E410])],            // Kazus inn
+  [13,  new Set([0x01E010])],                                          // Kazus house
+  [14,  new Set([0x01E210])],                                          // Kazus house
+  [16,  new Set([0x01DF10, 0x01ED10])],                                // Kazus weapon
+  [17,  new Set([0x01DF10, 0x01ED10])],                                // Kazus armor
+  [18,  new Set([0x01E010, 0x01EE10])],                                // Sasune courtyard
+  [25,  new Set([0x01ED10, 0x01EE10])],                                // Sasune inner hall
+  [26,  new Set([0x01ED10, 0x01EE10])],                                // Sasune (shares 25's roster)
+  [27,  new Set([0x01ED10, 0x01EE10])],                                // Sasune (shares 25's roster)
+  [29,  new Set([0x01ED10, 0x01EE10, 0x01EF10])],                      // Sasune throne room
+  // ⛔ Map 11 loads NO townsfolk bundle at all — an empty set is the measurement,
+  // not a gap. Anyone placed there renders as tilemap noise.
+  [11,  new Set()],
 ]);
 
 {

@@ -1,3 +1,72 @@
+## 1.10.64 — 2026-08-23
+
+### Three empty rooms filled, and the bundle gate finally covers Kazus and Sasune
+
+Coverage across the three towns we ship, measured rather than remembered:
+
+| town | maps | NPCs placed |
+|---|---|---|
+| Ur | 11 | 18 (+ the magic-shop keeper, placed by `map-loading.js`) |
+| Kazus | 8 | 8 → **10** (+ its magic keeper) |
+| Castle Sasune | 12 | 2 → **3** |
+
+Kazus houses (maps **13** and **14**) and the castle's inner hall (map **25**)
+had nobody in them while every neighbouring room did. All three now hold one
+person, on the cartridge's own coordinate for that room.
+
+⛔ **One bundle each — that is the ceiling, not a choice.** FF3 is CHR-RAM, so a
+walk sprite only exists on screen if the map decompressed it. Map 13 loads only
+`0x1E010`, map 14 only `0x1E210`, and map 25's only usable one is `0x1EE10`. The
+ROM lists 3, 5 and 6 people in those rooms; the rest cannot be drawn distinctly.
+
+**Still empty, and each for a measured reason:**
+
+- **map 11** — the PPU holds **no townsfolk bundle at all**. Anyone placed there
+  renders as tilemap noise. Pinned to an empty bundle set so a later pass cannot
+  quietly add somebody.
+- **maps 26, 27** — they share map 25's tilemap AND its NPC roster (npcIdx `$11`),
+  and all six records sit in map 25's room. Populating them means inventing a
+  coordinate the cartridge does not have.
+- **map 29, the throne room** — unchanged: the King and Sara are story
+  characters for the scene path, not TOWN_NPCS.
+- **Ur map 2** — unchanged, same reason as 26/27.
+
+### The bundle rule was only ever gating Ur
+
+`check-npc-placement.mjs` refuses an NPC on a bundle its map does not load —
+against a table that contained **Ur's eight maps and nothing else**. Every Kazus
+and Castle Sasune placement has been ungated since it shipped; a wrong bundle
+there would have drawn a face the map never loads, silently.
+
+Twelve maps measured with `MAPS=10,11,12,13,14,16,17,18,25,26,27,29 node
+tools/monscan/map-bundles.cjs` and added. ⭐ Map 2 was already in the table and
+the measurement reproduced it exactly — that is the cross-check on the `+0x10`
+header offset, since the tracer prints header-less offsets. Every existing
+placement passes, so nothing was wrong; it simply was not being checked.
+
+Revert (map 13's resident moved to `0x1E510`): fails, `bundle ... which map 13
+never loads into sprite memory`.
+
+### New: `tools/npc-candidates.mjs`
+
+Placing a town NPC has four independent constraints and each has shipped broken
+on its own: in the entrance room, talkable from it, standing where a wanderer
+can actually move, and on a bundle the map holds. They lived in three different
+tools plus a hardware measurement, so choosing a coordinate meant running all of
+them by hand — which is how rooms stayed empty.
+
+```
+node tools/npc-candidates.mjs 25 --bundles 0x1ED00,0x1EE00
+  # 4 id $36 gfx 46 (person) at (9,23) nb=3 bundle 0x1EE10 ✓ USABLE
+  -> 2 usable record(s) across 1 distinct bundle(s)
+```
+
+⛔ It reported every record on maps 25/26/27 as unreachable on the first run —
+`isTalkable(md, stand, x, y)` takes the standable set, and it was being handed
+`(md, reach, stand, x, y)`. `tools/map-ascii.mjs` disagreed, which is what caught
+it. A searcher that returns "nothing found" gets self-tested before the negative
+is believed.
+
 ## 1.10.63 — 2026-08-23
 
 ### The Cave of Seals had Altar Cave's loading screen

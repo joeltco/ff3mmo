@@ -635,6 +635,25 @@ export const KAZUS_ARMOR_KEEPER = interior(0x01DF10, DIR_DOWN, [
   'Mythril plate.',
   'Dear, but it turns a blade.',
 ]);
+
+// Kazus houses (maps 13 and 14) — EMPTY until v1.10.64 while every other Kazus
+// interior had somebody in it. Both were chosen with `tools/npc-candidates.mjs`,
+// which answers all four placement constraints per ROM record at once: in the
+// entrance room, talkable, wanderable, and on a bundle the map's PPU actually
+// holds.
+//
+// ⛔ ONE BUNDLE EACH. `MAPS=13,14 node tools/monscan/map-bundles.cjs` — map 13
+// loads only 0x1E010 and map 14 only 0x1E210 in the townsfolk range, so these
+// rooms hold exactly one person. The ROM lists 3 and 5; the rest cannot be
+// drawn distinctly.
+export const KAZUS_HOUSE2_RESIDENT = interior(0x01E010, DIR_DOWN, [
+  'The mines run under us.',
+  'You hear them at night.',
+]);
+export const KAZUS_HOUSE3_RESIDENT = interior(0x01E210, DIR_DOWN, [
+  'Rings were made here.',
+  'Mythril takes the binding.',
+]);
 // ⛔ NO KAZUS_MAGIC_KEEPER SPEC. A magic shop's keeper is placed by
 // `map-loading.js` via `addBlackMageShopkeeper(x, y, shopId)` — ON the counter
 // tile, carrying the shopId that `talkToNpc` uses to open the menu. Ur's does
@@ -674,6 +693,20 @@ export const SASUNE_GUARD_E = sasuneNpc(1, {
   dialogue: ['Kazus lies south.', 'Go carefully.'],
 });
 
+// The inner hall (map 25). The castle's interior maps 25/26/27 SHARE one NPC
+// roster (npcIdx $11, six records) because they share a tilemap — and all six
+// records sit in map 25's room, rows 23-28. That is why 26 and 27 stay empty:
+// their own entrances open somewhere else on the same grid, so putting anybody
+// there means inventing a coordinate the cartridge does not have.
+//
+// ⛔ FOUR OF THE SIX WEAR 0x01ED10 and are therefore not placeable — see the
+// note above the shop keepers. The two that remain are id54 at (9,23) and
+// (11,23) on 0x01EE10, one bundle, so this hall holds one person.
+export const SASUNE_HALL_SERVANT = interior(0x01EE10, DIR_DOWN, [
+  'The halls run long.',
+  'Keep to the lit ones.',
+]);
+
 export const TOWN_NPCS = new Map([
   // --- Castle Sasune --- (two bundles; see the block above SASUNE_GUARD_W)
   [18, [
@@ -685,6 +718,9 @@ export const TOWN_NPCS = new Map([
     { key: 'sasune_guard_w', x: 15, y: 20, spec: SASUNE_GUARD_W },
     { key: 'sasune_guard_e', x: 16, y: 21, spec: SASUNE_GUARD_E },
   ]],
+  // Inner hall — the ROM's own id54 coordinate, the only record in this room on
+  // a bundle map 25 loads and is allowed to use.
+  [25, [{ key: 'sasune_hall_servant', x: 9, y: 23, spec: SASUNE_HALL_SERVANT }]],
 
   // --- Kazus --- (bundle constraints in the block above KAZUS_TOWN_A)
   [10, [
@@ -715,6 +751,16 @@ export const TOWN_NPCS = new Map([
   // decode invented. Same story as map 5 below.
   [16, [{ key: 'kazus_weapon_keeper', x: 3, y: 22, spec: KAZUS_WEAPON_KEEPER }]],
   [17, [{ key: 'kazus_armor_keeper',  x: 3, y: 4,  spec: KAZUS_ARMOR_KEEPER }]],
+  // ⛔ MAP 11 STAYS EMPTY, and that is a MEASUREMENT. `MAPS=11 node
+  // tools/monscan/map-bundles.cjs` finds NO townsfolk walk bundle in sprite
+  // memory at all — the map loads none. Anyone placed there draws as tilemap
+  // noise, whichever bundle the spec names. Its two ROM records are in another
+  // interior on the same shared tilemap. `check-npc-placement` pins map 11 to
+  // an empty bundle set so a future pass cannot quietly add somebody.
+  // ROM positions: map 13 id46 @(7,5), map 14 id47 @(7,7). Both are in the room
+  // the door opens into and both are talkable from it.
+  [13, [{ key: 'kazus_house2_resident', x: 7, y: 5, spec: KAZUS_HOUSE2_RESIDENT }]],
+  [14, [{ key: 'kazus_house3_resident', x: 7, y: 7, spec: KAZUS_HOUSE3_RESIDENT }]],
 
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },
