@@ -1,3 +1,53 @@
+## 1.10.68 — 2026-08-24
+
+### All three towns, audited in one table
+
+```
+41 townspeople — 6 walk, 35 march in place, 0 frozen
+✅ everyone is in their room, reachable, and moving
+```
+
+New `tools/town-npc-audit.mjs` walks Ur, Kazus and Castle Sasune together and
+fails on the four ways a placement is wrong. The individual gates each answer
+one question — room, bundle, palette, words — and none of them answered *"is
+this town right"*.
+
+| flag | means |
+|---|---|
+| **FROZEN** | mode `static` — a statue of a person. Standing still is fine; standing still without the walk animation is not. |
+| **STUCK** | a wanderer on a tile it can never legally step off |
+| **OUT-OF-ROOM** / **ON-A-DOOR** | not talkable from where the player walks in |
+| ⚠ wrong sprite | on a ROM record while wearing a different bundle than the record — reported, not failed |
+
+It also covers the two magic-shop keepers, which live outside `TOWN_NPCS`
+(placed by `map-loading.js`) and so were in no gate at all. A frozen shop keeper
+is the same bug.
+
+Reverts, all fail: `animate: false` on a stand-still (4 frozen), a wanderer moved
+onto the Kazus inn doorway (stuck + on-a-door), a servant moved to another room
+(out-of-room).
+
+### The Kazus walker that was frozen to satisfy a sprite rule
+
+v1.10.65 gave `kazus_town_c` bundle `0x01DF10` to match the ROM record at
+(15,20) — which is the campfire man's bundle — and duplicates have to stand
+still, so he was frozen to make the constraint hold. **That is fixing the wrong
+end.** Map 10 also loads `0x01E210`, whose ROM record is (18,27), so he moves
+there and gets both: the cartridge's own tile and sprite, *and* his walk. Kazus
+is back to two people walking around.
+
+### ⛔ The audit's first run reported two stuck NPCs that were fine
+
+It counted a tile's neighbours with `isOpenAreaTile` — but that predicate is
+already *"walkable AND ≥3 walkable neighbours"*, so counting neighbours with it
+is a stricter rule than the game's, and it called two Ur wanderers stuck. The
+shipped `npc.js` says they can walk.
+
+Restating a rule instead of calling it is the same failure that put four
+divergent copies of `calcSpawnY` in `tools/`. The audit now calls
+`isOpenAreaTile` for the stuck test and `isWalkableForNpc` for the count — the
+game's own functions, both of them.
+
 ## 1.10.67 — 2026-08-23
 
 ### Ur's secret house was ruled empty on a measurement that stopped being true

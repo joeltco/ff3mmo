@@ -607,12 +607,13 @@ export const KAZUS_TOWN_B = kazusNpc(0, {
   dir: DIR_RIGHT,
   dialogue: ['The mines gave out.', 'The fire still catches.'],
 });
-// ⛔ STATIC, and that is the ROM's doing. He now wears 0x01DF10 to match the
-// record he stands on at (15,20) — the same bundle the campfire man wears at
-// (3,28), which the shared-bundle rule allows only for people who stand still.
-// The cartridge places FOUR gfx31 villagers in Kazus; these are two of them.
-export const KAZUS_TOWN_C = kazusNpc(0, {
-  wander: false,
+// ⛔ HE WALKS AGAIN. v1.10.65 froze him to satisfy the shared-bundle rule: he had
+// been given 0x01DF10 to match the record at (15,20), which is the campfire
+// man's bundle, and duplicates have to stand still. Freezing a walker to satisfy
+// a sprite constraint is fixing the wrong end — map 10 also loads 0x01E210, whose
+// ROM record is (18,27), so he moves there instead and gets both: the cartridge's
+// own tile and sprite, AND his walk.
+export const KAZUS_TOWN_C = kazusNpc(2, {
   dialogue: ['Mythril still comes up.', 'Little else does.'],
 });
 // Teaches AIRSHIP. The term must be a word he SAYS — that is what makes LEARN
@@ -853,7 +854,7 @@ export const TOWN_NPCS = new Map([
     // neighbours), so it stood in the inn's door permanently. Gated now by
     // check-npc-placement.
     { key: 'kazus_town_b', x: 3, y: 28, spec: KAZUS_TOWN_B },   // beside the campfire
-    { key: 'kazus_town_c', x: 15, y: 20, spec: KAZUS_TOWN_C },
+    { key: 'kazus_town_c', x: 18, y: 27, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
   ]],
   // Coordinates MEASURED from the map's largest connected room (63 tiles,
