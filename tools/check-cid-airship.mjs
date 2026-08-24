@@ -24,7 +24,7 @@ globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false
 const { QUESTS, QUEST_DONE } = await import('../src/data/quests.js');
 const { ps } = await import('../src/player-stats.js');
 const quests = await import('../src/quests.js');
-const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
+const { TOWN_NPCS, RESERVED_BUNDLES } = await import('../src/data/town-npcs.js');
 const { loadWorldMap } = await import('../src/world-map-loader.js');
 const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
 
@@ -96,23 +96,31 @@ const onTrigger = trig.get(g.y * W + g.x);
 if (onTrigger === undefined) ok('the parking tile carries no map entrance of its own');
 else bad(`(${g.x},${g.y}) is the entrance to map ${onTrigger} — stepping on it enters a map instead of boarding`);
 
-// ── 3. Cid swaps sprite with the quest, and is never in the room twice ─────
-const inn = TOWN_NPCS.get(Q.giver.mapId) || [];
-const ghost = inn.find((e) => e.key === 'cid_ghost');
-const man = inn.find((e) => e.key === 'cid_man');
-if (ghost && man) ok('both of Cid states are declared');
-else bad('the Kazus inn is missing one of cid_ghost / cid_man');
-if (ghost && man) {
-  const done = (id) => id === Q.id;
-  const none = () => false;
-  const before = [ghost, man].filter((e) => !e.when || e.when(none));
-  const after = [ghost, man].filter((e) => !e.when || e.when(done));
-  if (before.length === 1 && before[0].key === 'cid_ghost') ok('before the quest, only the ghost stands there');
-  else bad(`before the quest ${before.length} Cid(s) are placed: ${before.map((e) => e.key).join(', ')}`);
-  if (after.length === 1 && after[0].key === 'cid_man') ok('after the quest, only the man stands there');
-  else bad(`after the quest ${after.length} Cid(s) are placed: ${after.map((e) => e.key).join(', ')}`);
-  if (ghost.spec.romOffset !== man.spec.romOffset) ok('the two states wear different sprites');
-  else bad('ghost and man wear the same bundle — the curse lifting is invisible');
+// ── 3. Cid is THE REAL CID, and he does not seal the pub ──────────────────
+//
+// He used to be two entries in the Kazus INN — `cid_ghost` / `cid_man` — that
+// were not him: they stood on records $27 ("This cave is the Mythril Mines.")
+// and $26, identified through `npcId + 0x202`, wearing borrowed sprites.
+// Cid is npc $1f and his sprite is 0x01D910, matched by PICTURE at 90.2%.
+const room = TOWN_NPCS.get(Q.giver.mapId) || [];
+const cids = room.filter((e) => e.key === Q.giver.npcKey);
+if (cids.length === 1) ok(`exactly one Cid stands on map ${Q.giver.mapId}`);
+else bad(`map ${Q.giver.mapId} holds ${cids.length} entries keyed ${Q.giver.npcKey}`);
+if (cids.length === 1) {
+  const cid = cids[0];
+  if (cid.spec.romOffset === 0x01D910) ok('Cid wears his OWN sprite (0x01D910)');
+  else bad(`Cid wears 0x${(cid.spec.romOffset || 0).toString(16).toUpperCase()} — not his own sprite`);
+  if (RESERVED_BUNDLES.get(0x01D910) === Q.giver.npcKey) ok('0x01D910 is reserved to Cid alone');
+  else bad('0x01D910 is not reserved to Cid — anyone may wear his sprite');
+  // ⛔ A STILL NPC NEVER YIELDS. `npc.js#tryYieldToPlayer` returns false for
+  // 'static' and 'idle-march', so Cid cannot stand anywhere the player must
+  // walk THROUGH to enter the pub. (17,21) is the door; (17,22) is its only
+  // open neighbour. Either one seals Kazus's pub permanently.
+  const SEALS = [[17, 21], [17, 22]];
+  const onSeal = SEALS.some(([x, y]) => cid.x === x && cid.y === y);
+  if (cid.spec.wander) bad('Cid WANDERS — he is a special character waiting at a door, not a stroller');
+  else if (onSeal) bad(`Cid stands on (${cid.x},${cid.y}) — a still NPC never yields, so he seals the Kazus pub`);
+  else ok(`Cid stands at (${cid.x},${cid.y}), beside the pub door and blocking nothing`);
 }
 
 console.log(failed ? `\ncheck-cid-airship: ${failed} FAILED` : '\ncheck-cid-airship: OK');

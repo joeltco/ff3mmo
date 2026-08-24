@@ -186,11 +186,23 @@ const KAZUS_TOWN_BUNDLES = [
  * every other villager is still kept off it, by key rather than by hope.
  */
 export const RESERVED_BUNDLES = new Map([
-  [0x01ED10, 'cid_ghost'],
+  // ⭐ CID'S OWN SPRITE, and nobody else's. The red cap and robe — matched
+  // against all 88 bundles at 90.2%, nine points clear of the next.
+  [0x01D910, 'cid'],
 ]);
 
 export const STORY_SPRITE_BUNDLES = new Map([
-  [0x01D910, 'shared townsfolk sprite (was labelled "Cid" — wrong, see NPC-CATALOG.md)'],
+  // ⭐ CID. Restored 2026-08-24: Joel supplied the sprite (red pointed cap,
+  // red robe) and it shape-matches this bundle's DOWN frame at 90.2%, nine
+  // points clear of the next candidate across all 88 bundles.
+  //
+  // It was de-labelled on the strength of `npcId + 0x202` naming its wearers
+  // Sara and Desch. That rule is a DESCRIPTION of the string table with a
+  // measured counterexample, not a derivation — the same rule puts Cid's
+  // "I'm Cid from Canaan" line on the Castle Sasune gate guard. A picture beats
+  // it. docs/NPC-CATALOG.md had it right the first time: "Kazus's real bundle
+  // set includes 0x1D910 (Cid) ... The NPC wearing Cid is id 31 at (17,21)."
+  [0x01D910, 'CID — his own sprite, id $1f at Kazus (17,21)'],
   [0x01ED10, 'generic ghost (was labelled "Cid (ghost form)" — wrong, see NPC-CATALOG.md)'],
 ]);
 
@@ -701,6 +713,55 @@ export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
   },
 });
 
+// ── CID — a SPECIAL CHARACTER, not a townsperson ─────────────────────────
+//
+// He stands in the KAZUS PUB DOORWAY: map 10, (17,21), tile $70 — a door. That
+// is the cartridge's own record for him and it is where you find him.
+//
+// ⭐ MAP 10 IS THE ONLY MAP HE CAN RENDER ON. Measured on hardware with
+// `MAPS=10,12 node tools/monscan/map-bundles.cjs`: map 10 holds 0x1D900 in
+// sprite memory, map 12 (the pub interior) does NOT — its set is 0x1DF00,
+// 0x1E000, 0x1ED00, 0x1E400. Putting him inside the pub draws tilemap noise.
+//
+// ⛔ HE DOES NOT WANDER, and he is ONE TILE OFF the ROM's own coordinate, on
+// purpose. The cartridge puts him ON the door, (17,21). We cannot: FF3 lets you
+// bump a townsperson aside, but `npc.js#tryYieldToPlayer` returns false for
+// `static` and `idle-march` — a still NPC NEVER yields. A still Cid on (17,21)
+// would seal the Kazus pub permanently, and (17,22) is the door's ONLY open
+// neighbour, so standing there plugs the approach just as hard.
+//
+// Row 22 is a wide corridor, so he stands BESIDE the approach at (18,22):
+// right at the pub door, talkable face-to-face from (17,22), blocking nothing.
+// Restore him to (17,21) the day a special-character yield exists.
+//
+// ⛔ THE PARTY JOIN IS NOT BUILT. Cid joins after you talk to him once the
+// Sealed Cave is beaten. That is a special-character system ff3mmo does not
+// have yet; this places him and gives him his lines. Do not invent the join.
+export const CID = {
+  romOffset: 0x01D910,
+  palTop: UR_SP3,
+  palBtm: UR_SP2,
+  dir: DIR_LEFT,
+  wander: false,
+  animate: true,
+  fixedSpawn: true,
+  dialogue: [
+    'Cid, of Canaan.',
+    'That rock in Nelv',
+    'keeps me here.',
+  ],
+  answers: {
+    airship: [
+      'She is mine, and west.',
+      'Clear the road first.',
+    ],
+    cave: [
+      'The seal broke.',
+      'That is the whole of it.',
+    ],
+  },
+};
+
 // ⛔ AFTER the quest, and on a DIFFERENT tile. Cid has no unique sprite in FF3 —
 // the ROM dresses him in gfx31 (0x01DF10), the generic villager, at Kazus
 // (22,12). Map 12's own 0x01DF10 record is at (9,25), so that is where the man
@@ -879,6 +940,9 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_town_b', x: 3, y: 28, spec: KAZUS_TOWN_B },   // beside the campfire
     { key: 'kazus_town_c', x: 18, y: 27, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
+    // ⭐ CID, at the pub door. (18,22), not the ROM's (17,21) — see the CID
+    // block: a still NPC never yields, so on the door itself he seals the pub.
+    { key: 'cid', x: 18, y: 22, spec: CID },
   ]],
   // Coordinates MEASURED from the map's largest connected room (63 tiles,
   // x2-6 / y16-20). Map 12's own ROM roster coords are sealed pockets —
@@ -899,8 +963,12 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_inn_guest_b', x: 9,  y: 26, spec: KAZUS_INN_GUEST_B },
     // ⭐ CID, in two states on two tiles. `when` is evaluated at placement time
     // (npc.js#placeTownNpcs) so exactly one of them is ever in the room.
-    { key: 'cid_ghost', x: 5, y: 27, spec: CID_GHOST, when: (q) => !q('kazus_cid_airship') },
-    { key: 'cid_man',   x: 9, y: 25, spec: CID_MAN,   when: (q) =>  q('kazus_cid_airship') },
+    // ⛔ CID IS NOT IN HERE, and was never on these tiles. `cid_ghost` sat on
+    // record $27 @(5,27) — "This cave is the Mythril Mines." — and `cid_man` on
+    // $26 @(9,25) — "Kazus developed around the Mythril Mines." Neither is him.
+    // Both were identified through `npcId + 0x202`, which is a description of
+    // the string table, not a derivation. He is on map 10 (17,21) wearing his
+    // own sprite; see the CID block above.
   ]],
   // ROM position: id40 @(3,22), behind the Kazus weapon marker id232 @(3,23)
   // which is where the counter goes. Was (3,14) — a room the broken tilemap

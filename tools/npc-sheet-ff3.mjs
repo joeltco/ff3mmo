@@ -39,6 +39,10 @@ globalThis.document = { createElement: () => createCanvas(8, 8), getElementById:
 
 const { decodeTile, NES_SYSTEM_PALETTE } = await import('../src/tile-decoder.js');
 const { loadRom, decodeString, selfName } = await import('./lib/ff3-text.mjs');
+// ⛔ selfName() reads `npcId + 0x202`, which is NOT an identity. It put « Cid »
+// on four different sprites and « Sara » + « Desch » on Cid's own bundle. Only
+// CONFIRMED_SPRITE_NAMES is trustworthy; everything else renders as unverified.
+const { confirmedName, depictsName } = await import('../src/data/sprite-names.js');
 const { loadMap } = await import('../src/map-loader.js');
 const G = await import('../src/data/npc-gfx.js');
 
@@ -70,13 +74,14 @@ for (const [id, spots] of [...placed].sort((a, b) => a[0] - b[0])) {
   if (kind === 'undrawn' || kind === 'object') continue;   // not people
   const text = decodeString(rom, id + NPC_DIALOGUE_BASE);
   cellsAll.push({
-    id, gfx, off: G.offsetForGfx(gfx), text, name: selfName(text), spots,
+    id, gfx, off: G.offsetForGfx(gfx), text,
+    name: selfName(text), confirmed: confirmedName(id), depicts: depictsName(G.offsetForGfx(gfx)), spots,
     palMap: spots[0].mapId,
     where: [...new Set(spots.map(s => s.mapId))]
       .map(m => MAP_NAMES.get(m) || `map ${m}`),
   });
 }
-const cells = NAMED_ONLY ? cellsAll.filter(c => c.name) : cellsAll;
+const cells = NAMED_ONLY ? cellsAll.filter(c => c.confirmed) : cellsAll;
 
 // MEASURED: top half = the map's spritePalette7, bottom half = spritePalette6.
 // Cached per map so 179 cells do not reload 179 maps.
@@ -138,15 +143,25 @@ cells.forEach((c, i) => {
   const pal = palettesForMap(c.palMap);
   for (let f = 0; f < FRAMES; f++) drawPose(g, cx + f * CELL, cy, c.off + f * 64, pal);
 
+  // GOLD = confirmed by evidence. GREY-ITALIC = the +0x202 guess, which has
+  // been wrong about Cid, Sara and Desch. Never let the two look alike.
   g.font = 'bold 11px sans-serif';
-  g.fillStyle = c.name ? '#fff2c4' : '#20242e';
+  g.fillStyle = c.confirmed ? '#fff2c4' : '#20242e';
   g.fillText(`id ${c.id}  gfx ${c.gfx}`, cx, cy + CELL + 3);
 
-  g.font = c.name ? 'bold 12px sans-serif' : '10px sans-serif';
-  g.fillStyle = c.name ? '#ffd35c' : '#1b1e26';
-  g.fillText(c.name ? `« ${c.name} »`
-    : (c.text ? `"${c.text.replace(/\s+/g, ' ').slice(0, 30)}"` : '(silent)'),
-    cx, cy + CELL + 17);
+  if (c.confirmed) {
+    g.font = 'bold 13px sans-serif';
+    g.fillStyle = '#ffd35c';
+    g.fillText(`\u2b50 ${c.confirmed}`, cx, cy + CELL + 17);
+  } else {
+    g.font = 'italic 10px sans-serif';
+    g.fillStyle = '#6b7280';
+    // Reusing a named character's art does NOT make you that character.
+    g.fillText(c.depicts ? `(${c.depicts}'s sprite, reused)`
+      : c.name ? `?« ${c.name} » unverified`
+      : (c.text ? `"${c.text.replace(/\s+/g, ' ').slice(0, 28)}"` : '(silent)'),
+      cx, cy + CELL + 17);
+  }
 
   g.font = '9px sans-serif';
   g.fillStyle = '#2b3040';

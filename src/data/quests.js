@@ -155,7 +155,9 @@ export const QUESTS = {
   // is no fetch-an-item objective kind yet; `defeat` is the only one).
   kazus_cid_airship: {
     id: 'kazus_cid_airship',
-    giver: { mapId: 12, npcKey: 'cid_ghost' },
+    // ⭐ THE REAL CID (v1.10.70): map 10, at the Kazus pub door. `cid_ghost`
+    // was never him — it stood on record $27, "This cave is the Mythril Mines."
+    giver: { mapId: 10, npcKey: 'cid' },
 
     // Learned from kazus_town_d out in the town ("Left an airship in the
     // sand."), carried into the inn. Teacher and giver in different rooms, as

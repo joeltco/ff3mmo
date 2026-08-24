@@ -1,3 +1,52 @@
+## 1.10.70 — 2026-08-24
+
+### Cid is in the Kazus pub
+
+He has never been in this game. Two NPCs were *called* Cid and neither was him:
+`cid_ghost` stood on record `$27` — *"This cave is the Mythril Mines."* — and
+`cid_man` on `$26` — *"Kazus developed around the Mythril Mines."* Both were
+identified through `npcId + 0x202`, and both wore borrowed sprites.
+
+**Cid is `$1f`, and his sprite is `0x01D910`** — the red pointed cap. Joel
+supplied the sprite; shape-matching its DOWN frame against all 88 bundles in
+`0x1C010..0x1F010` scores **90.2%**, nine points clear of the next candidate.
+
+`0x01D910` was on the BANNED list, with this note:
+
+> *"AND 0x01D910 IS NOT CID EITHER ... the four NPC ids wearing that sprite are
+> SARA, DESCH, and two unnamed. One sprite cannot be both Sara and Desch."*
+
+That argument is `npcId + 0x202` again — a **description** of the string table
+with a measured counterexample, not a derivation. The same rule puts Cid's
+*"I'm Cid from Canaan"* line on the Castle Sasune **gate guard**. `NPC-CATALOG.md`
+had it right before we talked ourselves out of it: *"The NPC wearing Cid is id 31
+at (17,21)."* The bundle is now RESERVED to `cid` instead of banned.
+
+⛔ **Never identify a character from `npcId + 0x202`.** Render the sprite and
+match it.
+
+### Where he stands, and why it is not the ROM's tile
+
+Map 10 (17,21) is the pub door, tile `$70`, and it is Cid's own record — but he
+ships at **(18,22)**, beside it.
+
+`npc.js#tryYieldToPlayer` returns false for `static` and `idle-march`: **a still
+NPC never yields.** FF3 lets you bump a townsperson aside; we do not. On (17,21)
+Cid would seal the Kazus pub permanently, and (17,22) is the door's only open
+neighbour, so it plugs the approach just as hard. Row 22 is a wide corridor, so
+he stands beside it — at the door, talkable face-to-face from (17,22), blocking
+nothing. Restore him to (17,21) the day a special-character yield exists.
+
+Measured, not assumed: `MAPS=10,12 tools/monscan/map-bundles.cjs` — **map 10
+holds `0x1D900` in sprite memory; map 12 does not** (`0x1DF00 0x1E000 0x1ED00
+0x1E400`). Cid cannot render inside the pub interior at all.
+
+### ⛔ The party join is NOT built
+
+Cid joins the party after you talk to him once the Sealed Cave is beaten. That is
+a special-character system ff3mmo does not have. This places him and gives him
+his lines; the join is not invented.
+
 ## 1.10.69 — 2026-08-24
 
 ### Ur's other five townspeople, and the inn's third guest

@@ -86,8 +86,15 @@ for (const mapId of MAPS) {
     const id = peek(b), x = peek(b + 2), y = peek(b + 3), orig = peek(b + 0x0A);
     if (orig === 0 && id === 0) continue;
     if (id) drawn++; else hidden++;
+    // ⭐ THE TRUE DIALOGUE ID. The talk routine (bank $3B $B6BF) does
+    // LDX $71 / LDA $0740,X — a PER-NPC byte the engine loaded into RAM, not
+    // an arithmetic offset. `npcId + 0x202` is a DESCRIPTION of that table with
+    // a known counterexample, so read the byte the game will actually use.
+    const dlg = peek(0x0740 + i);
     console.log(`  slot${String(i).padStart(2)}  rom=${hex(orig)} @(${x},${y})  ` +
-      (id ? `DRAWN as ${hex(id)}` : 'hidden'));
+      (id ? `DRAWN as ${hex(id)}` : 'hidden') +
+      `   dialogue=$${dlg.toString(16).padStart(2, '0')}` +
+      (id ? `  (id+0x202 would say $${((orig + 2) & 0xFF).toString(16).padStart(2, '0')})` : ''));
   }
   console.log(`  ${drawn} drawn, ${hidden} hidden`);
   if (process.env.SHOT) nes.screenshot(`${process.env.SHOT}/cast-${mapId}.png`);
