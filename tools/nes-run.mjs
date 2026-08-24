@@ -405,6 +405,25 @@ if (pokeSpec) {
   run(parseInt(flag('pokesettle', '60'), 10));
 }
 
+// `--dumpram <hexaddr>:<len>` prints a RAM range after the warp/poke settle.
+// SRAM ($6000-$7FFF) holds FF3's save state — the story flags at $6020 and the
+// per-NPC visibility bitmap at $6080 — and reading it on hardware is the only
+// way to check a table decoded statically out of the ROM against what the
+// running game actually has.
+const dumpSpec = flag('dumpram', null);
+if (dumpSpec) {
+  for (const part of dumpSpec.split(',')) {
+    const [a, l] = part.split(':');
+    const start = parseInt(a, 16);
+    const len = parseInt(l || '16', 16);
+    const bytes = [];
+    for (let i = 0; i < len; i++) bytes.push(peek(start + i));
+    console.log(`RAM $${start.toString(16)}..$${(start + len - 1).toString(16)}: ` +
+      bytes.map((b) => b.toString(16).padStart(2, '0')).join(' '));
+    console.log('RAM_JSON ' + JSON.stringify({ start, bytes }));
+  }
+}
+
 // `--findpos` locates the player's tile-coordinate RAM addresses by MEASURING
 // them: snapshot RAM, walk a known number of steps in one axis, and report the
 // bytes that moved by exactly that amount. Guessing FF3's RAM map is how you
