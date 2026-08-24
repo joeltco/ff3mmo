@@ -27,6 +27,20 @@ export const INN_ITEM_KEEPER = {
   animate: true,
 };
 
+// Ur inn — the guest upstairs. ROM record id $15 @(4,3), the same id the item
+// keeper wears, so the same bundle. Faces down, stands still.
+export const INN_GUEST = {
+  romOffset: 0x01E210,
+  palTop: TOWN_KEEPER_PAL_TOP,
+  palBtm: TOWN_KEEPER_PAL_BTM,
+  dir: DIR_DOWN,
+  animate: true,
+  dialogue: [
+    'A bed and no coin asked.',
+    'I have stayed three nights.',
+  ],
+};
+
 // Ur weapon shop — keeper. Stands at map 5 (3,14), behind the ur_weapon
 // counter at (3,15). Bundle 0x1E610. Idle-march facing down — counter-bound.
 export const WEAPON_KEEPER = {
@@ -255,7 +269,7 @@ const sasuneNpc = (slot, extra = {}) => townNpc(SASUNE_BUNDLES, slot, extra);
 // below only show if the quest is removed; while it exists quests.js supplies
 // his pages for every stage.
 export const UR_NPC_05 = urNpc(2, {
-  wander: false, animate: true, dir: DIR_DOWN,
+  romOffset: 0x01E210, wander: false, animate: true, dir: DIR_DOWN,
   dialogue: [
     'You have the look',
     'of someone who asks.',
@@ -275,18 +289,21 @@ export const UR_NPC_05 = urNpc(2, {
   },
 });
 export const UR_NPC_06 = urNpc(1, {
+  romOffset: 0x01E310, wander: false, animate: true,
   dialogue: [
     'The old well ran dry.',
     'Use the pond now.',
   ],
 });
 export const UR_NPC_07 = urNpc(2, {
+  romOffset: 0x01DF10, wander: false, animate: true,
   dialogue: [
     'Knights rode past.',
     'None of them came back.',
   ],
 });
 export const UR_NPC_08 = urNpc(3, {
+  romOffset: 0x01E310, wander: false, animate: true,
   dialogue: [
     'The shops are open by day.',
     'No Light Warrior in years.',
@@ -294,6 +311,7 @@ export const UR_NPC_08 = urNpc(3, {
   ],
 });
 export const UR_NPC_09 = urNpc(3, {
+  romOffset: 0x01E210, wander: false, animate: true,
   dialogue: [
     'Mind the cave north.',
     'It took my brother.',
@@ -312,6 +330,7 @@ export const UR_NPC_09 = urNpc(3, {
   },
 });
 export const UR_NPC_0A = urNpc(4, {
+  romOffset: 0x01E510,
   dialogue: [
     'I keep the north field.',
     'Nothing grows in the dark.',
@@ -328,6 +347,7 @@ export const UR_NPC_0A = urNpc(4, {
   },
 });
 export const UR_NPC_0C = urNpc(6, {
+  romOffset: 0x01DF10, wander: false, animate: true,
   dialogue: [
     'Welcome to Ur, traveler.',
     'Folks here keep to',
@@ -346,6 +366,7 @@ export const UR_NPC_0C = urNpc(6, {
   },
 });
 export const UR_NPC_0D = urNpc(0, {
+  romOffset: 0x01DF10, wander: false, animate: true,
   dialogue: [
     'Ur is quiet most days.',
     'The cave drains the light.',
@@ -360,12 +381,14 @@ export const UR_NPC_0D = urNpc(0, {
   },
 });
 export const UR_NPC_0E = urNpc(8, {
+  romOffset: 0x01E010,
   dialogue: [
     'You carry a blade.',
     'Then you go where we cannot.',
   ],
 });
 export const UR_NPC_0F = urNpc(9, {
+  romOffset: 0x01DF10, wander: false, animate: true,
   dialogue: [
     'I study the crystal.',
     'The light wanes by the day.',
@@ -898,11 +921,14 @@ export const TOWN_NPCS = new Map([
   [8, [
     { key: 'inn_item_keeper', x: 8, y: 14, spec: INN_ITEM_KEEPER },
     { key: 'inn_keeper',      x: 3, y: 14, spec: INN_KEEPER },
-    // The ROM lists three more people here, but map 8 only ever holds TWO NPC
-    // walk bundles in sprite memory and both are taken by the keepers — so any
-    // guest would render as a copy of one of them. Left out rather than shipped
-    // as twins. If FF3's gfx-id -> bundle mapping is ever decoded, or the inn is
-    // seen loading more bundles, they can come back.
+    // ⭐ THE CONDITION THIS NOTE NAMED IS MET. It read: "if FF3's gfx-id ->
+    // bundle mapping is ever decoded ... they can come back." npc-gfx.js
+    // decoded it. Map 8's third person is id $15 at (4,3) — the SAME id, and
+    // therefore the same bundle (0x1E210), as the item keeper at (8,14). The
+    // ROM itself posts two identical people in this room, which is precisely
+    // what the shared-bundle rule permits: both stand still, both on a ROM
+    // record for that bundle.
+    { key: 'inn_guest', x: 4, y: 3, spec: INN_GUEST },
   ]],
   // ROM position: id25 @(3,22), behind the Ur weapon marker id231 @(3,23).
   // Every shop that already worked follows this exact rule — our keeper sits
@@ -941,15 +967,36 @@ export const TOWN_NPCS = new Map([
   // step onto (9,27), the tile you exit onto — that is the one that felt like it
   // was blocking the path. Also dropped: (17,28), (28,28), (15,22), (21,17).
   [114, [
+    // ⭐ ALL TEN, on the cartridge's own tiles, wearing the cartridge's own
+    // sprites. Five of these were dropped in v1.7.973 for a reason the file
+    // recorded honestly: FF3's gfx-id -> bundle table was not decoded, so a
+    // sixth villager could only be given a bundle by eye, and Ur loads just
+    // FIVE — every extra face came out a twin of somebody. `npc-gfx.js`
+    // decoded that table (0x1410, 18/18 PPU-verified), so each person now
+    // wears what the ROM puts on their tile and the guesswork is gone.
+    //
+    // Ur genuinely has 10 people on 5 bundles — the cartridge reuses them. The
+    // shared-bundle rule in check-npc-placement allows that exactly when every
+    // sharer STANDS STILL on a ROM record for that bundle, because the "double
+    // NPC" report was about two identical faces WALKING. So the two sole
+    // wearers of their bundle wander (id0A, id0E) and the other eight
+    // idle-march in place. Nobody is frozen: `animate: true` throughout.
+    //
+    //   node tools/npc-dump.mjs 114     — the roster below, straight from the ROM
     { key: 'ur_npc_05', x: 10, y: 28, spec: UR_NPC_05 },   // quest giver, static
-    { key: 'ur_npc_0a', x: 29, y: 10, spec: UR_NPC_0A },   // far north
-    // ⛔ Was (21,15) — a DOORWAY, one open neighbour. He WANDERS, and npc.js only
-    // steps onto tiles with >= 3, so he has been standing in that doorway since
-    // he was placed, unable to move. Found by check-npc-placement's wander rule
-    // (added v1.8.14 after the same bug shipped in Kazus). (21,16) is the
-    // nearest open ground — one tile south, same spot for the player.
-    { key: 'ur_npc_09', x: 21, y: 16, spec: UR_NPC_09 },   // north centre
-    { key: 'ur_npc_0d', x:  9, y: 21, spec: UR_NPC_0D },   // west
-    { key: 'ur_npc_0c', x: 16, y: 25, spec: UR_NPC_0C },   // south centre
+    { key: 'ur_npc_06', x: 17, y: 28, spec: UR_NPC_06 },
+    { key: 'ur_npc_07', x:  8, y: 27, spec: UR_NPC_07 },
+    { key: 'ur_npc_08', x: 28, y: 28, spec: UR_NPC_08 },
+    // ⭐ BACK ON THE ROM'S TILE. He was moved to (21,16) in v1.8.14 because
+    // (21,15) is a doorway and he WANDERED — npc.js only steps onto tiles with
+    // >= 3 open neighbours, so he stood in that door unable to move. He no
+    // longer wanders (he shares 0x1E210 with the quest giver), so the doorway
+    // costs him nothing and he goes back where the cartridge puts him.
+    { key: 'ur_npc_09', x: 21, y: 15, spec: UR_NPC_09 },
+    { key: 'ur_npc_0a', x: 29, y: 10, spec: UR_NPC_0A },   // far north, wanders
+    { key: 'ur_npc_0c', x: 16, y: 25, spec: UR_NPC_0C },
+    { key: 'ur_npc_0d', x:  9, y: 21, spec: UR_NPC_0D },
+    { key: 'ur_npc_0e', x: 15, y: 22, spec: UR_NPC_0E },   // wanders
+    { key: 'ur_npc_0f', x: 21, y: 17, spec: UR_NPC_0F },
   ]],
 ]);

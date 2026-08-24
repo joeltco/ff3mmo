@@ -1,3 +1,68 @@
+## 1.10.69 — 2026-08-24
+
+### Ur's other five townspeople, and the inn's third guest
+
+```
+47 townspeople — 4 walk, 43 march in place, 0 frozen
+✅ everyone is in their room, reachable, and moving
+```
+
+Ur shipped FIVE of the ROM's TEN people, and map 8 two of its three. That was
+not an oversight — the file said exactly why, and named its own release
+condition:
+
+> *"If FF3's gfx-id -> bundle mapping is ever decoded ... they can come back."*
+
+**It was decoded** — `npc-gfx.js`, the table at ROM `0x1410`, 18/18 PPU-verified.
+Ur loads five NPC walk bundles and has ten people to dress; until that lookup
+existed a sixth villager could only be given a bundle *by eye*, and every extra
+face came out a twin of somebody. Now each person wears what the cartridge puts
+on the tile they stand on, and the guesswork is gone.
+
+| bundle | who the ROM puts on it |
+|---|---|
+| `0x1E210` | id05 (10,28) · id09 (21,15) |
+| `0x1E310` | id06 (17,28) · id08 (28,28) |
+| `0x1DF10` | id07 (8,27) · id0C (16,25) · id0D (9,21) · id0F (21,17) |
+| `0x1E510` | id0A (29,10) — sole wearer |
+| `0x1E010` | id0E (15,22) — sole wearer |
+
+**Twins are allowed to stand, not to walk.** The "double NPC" report was two
+identical faces *strolling* around one town, which is why
+`check-npc-placement`'s shared-bundle rule permits a sharer only when it stands
+still on a ROM record for that bundle. So the two sole wearers wander and the
+other eight idle-march in place — nobody is frozen. Revert either `0x1E310`
+sharer to `wander: true` and the gate fails both by name.
+
+`ur_npc_09` goes back to the cartridge's (21,15). It was moved one tile south in
+v1.8.14 because that tile is a doorway and he *wandered* — npc.js only steps onto
+tiles with ≥3 open neighbours, so he stood in it unable to move. He no longer
+wanders, so the doorway costs him nothing.
+
+### The Ur well
+
+id08 at (28,28) is the ROM's own coordinate, and rendering the map with
+`tools/map-png.mjs` puts him **beside the well** drawn in Ur's south-east
+corner — whose cartridge line is *"There's Potions in the well."* The
+coordinates land where the cartridge means them.
+
+### Ur inn (map 8)
+
+The third record is id `$15` at (4,3) — the **same id**, and so the same bundle,
+as the item keeper at (8,14). The room's note assumed a guest could only be a
+copy; the ROM posts two identical people here on purpose, which is precisely the
+case the shared-bundle rule already allowed.
+
+### ⛔ Still unplaced: 21 NPCs, all of them ghosts
+
+Kazus's inn and shops and every Castle Sasune interior are missing people whose
+cartridge sprite is `0x01ED10` — the generic ghost. That bundle is RESERVED to
+`cid_ghost` by v1.10.66, a content decision ("dressing ordinary villagers as
+ghosts was not the world we ship"), not a technical block. Every one of the 21
+sits on a ROM record wearing it, and their lines are the Djinn's curse. Lifting
+the reservation is a call about what Kazus and Sasune look like, so it stays
+until it is made deliberately.
+
 ## 1.10.68 — 2026-08-24
 
 ### All three towns, audited in one table
