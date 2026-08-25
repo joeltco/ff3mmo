@@ -1,3 +1,48 @@
+## 1.10.77 — 2026-08-24
+
+### ⛔ Facing was the PALETTE selector. Ripped out.
+
+v1.10.76 derived NPC facing from `(flags >> 2) & 3` and standing NPCs faced the
+wrong way. **That field is the palette selector.** `flame-sprites.js:92` reads
+exactly `((flags >> 2) & 3) >= 2 ? 1 : 0` to pick a torch palette, and
+`town-npcs.js` says so in a comment that was read straight past.
+
+**How a wrong answer scored 26/26.** The byte at `$7100 + slot*16 + 5` was
+verified to equal `(flags >> 2) & 3 << 6` across Ur, Castle Sasune and the Kazus
+inn — a perfect score. It proves the number ARRIVES. It says nothing about what
+the number MEANS, and the meaning was then taken from a comment instead of
+measured.
+
+**What killed it** (`facedir.cjs`): match each NPC's on-screen OAM tiles back to
+a 4-tile group of its own walk bundle and read the H-flip bit.
+
+```
+$05  (map 114, field value 2)  ->  group 3 + HFLIP  ->  drawn RIGHT
+$1e  (map 10,  field value 1)  ->  group 3 + HFLIP  ->  drawn RIGHT
+```
+
+**Different field values, identical facing.** One number cannot be both.
+
+⛔ Also: a walk bundle holds DOWN, UP, LEFT-f0, LEFT-f1 — only THREE directions.
+RIGHT is a mirrored LEFT, so a group index is not a facing index either.
+
+Facing is now UNDECODED and comes from the spec, hand-set per NPC.
+`specWithRomFlags` leaves `dir` alone, `flagsFacing` is renamed
+`flagsPaletteSel` so it cannot be wired as a direction again, and the file
+carries the whole autopsy.
+
+### What survives — movement, and it is measured
+
+The high nibble is real and stands: `$00` roams, `$C0` holds. Ur 10/10, from
+walking the party 90 steps and counting distinct tiles per NPC. Six wander, four
+stand, exactly as the cartridge says.
+
+### ⚠ Two data points, not a rule
+
+Both still NPCs measured draw RIGHT. That is n=2 across two maps, and
+generalising from it is the same mistake one level down — so town specs keep
+their declared facing rather than being flipped on a hunch.
+
 ## 1.10.76 — 2026-08-24
 
 ### The NPC record's 4th byte, finally used

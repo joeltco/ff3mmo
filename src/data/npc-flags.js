@@ -35,23 +35,39 @@
 // NPCs while the field loop runs with the party walking. The first attempt sat
 // still for 1440 frames, saw nobody move, and would have "proved" the opposite.
 //
-// FACING — `(flags >> 2) & 3`, read back at `$7100 + slot*16 + 5` as
-// `value << 6`. Predicted vs measured:
-//     Ur (map 114)      80 80 80 40 80 80 40 80 80 40   10/10
-//     Sasune (map 18)   40 40 c0 c0 c0 c0                6/6
-//     Kazus inn (12)    00 00 00 00 00 80 40 40 40 00   10/10
-// ⛔ Ur alone only exercises facings 1 and 2 — two of four. Maps 18 and 12 were
-// added precisely because they carry 3 and 0, so the domain is fully covered
-// rather than confirmed by the cases that could not disagree.
+// ⛔⛔ FACING IS NOT DECODED. DO NOT GUESS IT AGAIN.
 //
-// The order is DOWN, UP, LEFT, RIGHT, which is exactly DIR_DOWN..DIR_RIGHT in
-// `sprite.js`, so the field maps straight through with no translation table.
+// v1.10.76 shipped `(flags >> 2) & 3` as facing and standing NPCs faced the
+// wrong way. That field is the PALETTE SELECTOR — `flame-sprites.js:92` reads
+// exactly `((flags >> 2) & 3) >= 2 ? 1 : 0` to pick a torch palette, and
+// `town-npcs.js` says so in a comment that was read straight past.
+//
+// How the wrong answer survived: the byte at `$7100 + slot*16 + 5` was verified
+// to EQUAL `(flags >> 2) & 3 << 6` on 26 records across three maps — a perfect
+// score that proves only that the number arrives, NOT what it means. Then the
+// DIRECTION was assumed from a comment instead of measured.
+//
+// What killed it (`facedir.cjs`): match each NPC's on-screen OAM tiles back to
+// a 4-tile group of its own walk bundle, and read the H-flip bit.
+//     $05 (map 114, field value 2) -> group 3 + HFLIP -> drawn RIGHT
+//     $1e (map 10,  field value 1) -> group 3 + HFLIP -> drawn RIGHT
+// DIFFERENT field values, IDENTICAL facing. One number cannot be both.
+//
+// ⛔ Also note the bundle holds DOWN, UP, LEFT-f0, LEFT-f1 — only THREE
+// directions. RIGHT is a mirrored LEFT, so a group index is not a facing index
+// either. Whoever decodes this must measure the DRAWN direction, not a byte.
+//
+// Until then facing comes from the spec, hand-set per NPC, and `specWithRomFlags`
+// leaves `dir` alone.
 
 /** Movement: the cartridge lets this NPC roam. */
 export const flagsWander = (flags) => (flags & 0xF0) === 0;
 
-/** Facing: 0 DOWN, 1 UP, 2 LEFT, 3 RIGHT — same order as `DIR_*`. */
-export const flagsFacing = (flags) => (flags >> 2) & 3;
+/**
+ * ⛔ NOT FACING — the PALETTE selector. Kept named for what it IS so nobody
+ * wires it as a direction again. See `flame-sprites.js#npcPalIdx`.
+ */
+export const flagsPaletteSel = (flags) => (flags >> 2) & 3;
 
 /**
  * The ROM record standing on a tile, decoded — or `null` when there is none
@@ -61,7 +77,8 @@ export function romFlagsAt(mapData, tileX, tileY) {
   if (!mapData || !mapData.npcs) return null;
   const rec = mapData.npcs.find((n) => n.x === tileX && n.y === tileY);
   if (!rec) return null;
-  return { dir: flagsFacing(rec.flags), wander: flagsWander(rec.flags), flags: rec.flags };
+  // ⛔ NO `dir` HERE. Facing is undecoded — see the banner above.
+  return { wander: flagsWander(rec.flags), flags: rec.flags };
 }
 
 /**
@@ -81,9 +98,11 @@ export function specWithRomFlags(spec, mapData, tileX, tileY, canRoamFrom) {
   const rf = romFlagsAt(mapData, tileX, tileY);
   if (!rf) return spec;
   const penned = rf.wander && typeof canRoamFrom === 'function' && !canRoamFrom(mapData, tileX, tileY);
+  // ⛔ `dir` IS DELIBERATELY UNTOUCHED. Only MOVEMENT is decoded (measured
+  // 10/10 on hardware); facing is not, and guessing it is what made standing
+  // NPCs face the wrong way.
   return {
     ...spec,
-    dir: rf.dir,
     wander: rf.wander && !penned,
     animate: true,
     romWanted: rf.wander,          // what the cartridge asked for
