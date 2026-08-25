@@ -238,3 +238,30 @@ Beyond sprite capture, the same EMU tab exposes the running ROM's FF3J SRAM for 
 - **Presets** — `full-HP`, `clear-inv`. Note: SRAM-only writes; values cached at battle start won't update mid-battle.
 
 When in doubt about FF3J SRAM offsets, `src/debug/tabs/emu.js` constants (`SRAM_BASE`, `CHARS_A_OFF`, `CHARS_B_OFF`, `INV_IDS_OFF`, `INV_QTY_OFF`) are the canonical reference.
+
+## ⛔⛔ DO NOT HALF-ASS THE DATA PULL — READ EVERY FIELD
+
+**A ROM record has N fields. If you use fewer than N, you have not read it —
+you guessed while holding the answer.**
+
+This rule exists because all of the following shipped in a single day, and every
+one of them was data already in hand:
+
+| what shipped | what was skipped |
+|---|---|
+| Ten Ur townsfolk frozen in "random spots", facing wrong | FF3's NPC record is `{id, x, y, FLAGS}`. The flags byte was **disassembled that same session** — bits 2-3 = **FACING**, bits 4-7 = **MOVEMENT** — and then never wired. |
+| Cid took **three releases** + Joel pointing at the tile | `node tools/npc-dump.mjs 12` printed `id $2c @(6,23) ... DRAWN` from the first dump. It was read past twice. |
+| Kazus's "black magic sign" with green corners | `$67` is the same star glyph on **pal1, the TREE/WOOD palette** (`0f 19 17 27`). Its attribute palette was never checked. |
+| Cid's line assigned to the Castle Sasune gate guard | Characters were identified from `npcId + 0x202` instead of by **rendering the sprite**. |
+| `check-shops` passing with a counter on open floor | The gate asked `findShopAtCounter` for the shop's **own** coords, so it agreed with itself. |
+| "0 of 28 bundles match" | A `+0x10` applied twice. **Self-test the instrument before believing a negative.** |
+
+**Before saying "done", answer out loud:**
+> List every field / byte / column of the record just read. Point at the line of
+> code that CONSUMES each one. If any field is unconsumed, you are NOT done —
+> wire it, or say plainly which one you dropped and why.
+
+**Then render it and look.** `map-png --grid --box --live`, `tileset-sheet.mjs`,
+`npc-sheet-ff3.mjs`, `monscan/npc-cast.cjs`, `ff3-npc-palette.mjs`. "The code
+looks right" is not a check. A source banner repeating this is at the top of
+every file that reads or places ROM data — do not delete it.
