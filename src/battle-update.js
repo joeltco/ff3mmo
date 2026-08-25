@@ -2,7 +2,8 @@
 // run, boss dissolve, victory, defeat, and main updateBattle() loop.
 
 import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP,
-         BATTLE_SHAKE_MS, MONSTER_DEATH_MS, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS } from './battle-state.js';
+         BATTLE_SHAKE_MS, MONSTER_DEATH_MS, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS,
+         RUN_SLIDE_MS } from './battle-state.js';
 import { inputSt } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { battleSpeedMult } from './settings.js';
@@ -40,7 +41,8 @@ import { updateSpellCast, resetSpellCastVars, prerollSpellAmount, isHealSpell } 
 import { canCastSpell } from './data/spells.js';
 import { clearAllBuffs } from './buffs.js';
 import { queueBattleMsg, replaceBattleMsg, updateBattleMsg as _updateBattleMsg, clearBattleMsgQueue,
-         queueVictoryRewards as _queueVictoryRewards, clearVictoryPersist } from './battle-msg.js';
+         queueVictoryRewards as _queueVictoryRewards, clearVictoryPersist,
+         computeMsgTimings } from './battle-msg.js';
 import { resetAllDmgNums, tickDmgNums, tickHealNums, clearHealNums,
          setEnemyDmgNum, DMG_SHOW_MS } from './damage-numbers.js';
 import { playSFX, stopMusic, pauseMusic, resumeMusic, playTrack, TRACKS, SFX } from './music.js';
@@ -118,6 +120,11 @@ export function resetBattleVars() {
   battleSt.encounterJobLevelUp = false;
   battleSt.lastKilledMonsterId = null;   // v1.7.803 — fresh battle, no prior kill
   battleSt.projectileSubtype = null;     // fresh battle: no attack in flight
+  // Cleared by `encounter-box-close` only, so a PvP flee (which closes through
+  // `enemy-box-close`) left it set and the NEXT encounter's close played a
+  // spurious slide-back. Per-battle flags belong here — same class as the
+  // reward fields above. v1.10.83.
+  battleSt.runSlideBack = false;
   battleSt.isDefending = false; battleSt.battleAllies = []; battleSt.allyJoinRound = 0;
   battleSt.currentAllyAttacker = -1; battleSt.allyTargetIndex = -1; battleSt.allyHitResult = null; battleSt.allyHitIsLeft = false;
   battleSt.allyShakeTimer = {}; battleSt.enemyTargetAllyIdx = -1; battleSt.forcedEnemyTarget = null;
@@ -1011,12 +1018,36 @@ function _updateItemMenuFades() {
 
 // ── Run ────────────────────────────────────────────────────────────────────
 
-function _updateBattleRun() {
+// Both run states exist to show ONE thing and nothing else, so each holds for
+// exactly that thing's own lifetime — the rule PLAYER_DMG_SHOW_MS spells out
+// above. `run-success` shows the flee animation (RUN_SLIDE_MS); `run-fail`
+// shows the "Cant escape!" strip.
+//
+// ⛔ NEITHER may go back to gating on `isBattleMsgBusy()`. v1.7.287 removed that
+// gate on purpose — the strip drains on its own clock and must never hold the
+// state machine — but run was the one action with NO timeline of its own, so
+// stripping the gate left both states one frame long. Measured on the shipped
+// machine: run-success 17 ms against a 300 ms animation nobody ever saw, and
+// run-fail 17 ms, with the enemy's name already overwriting "Cant escape!" by
+// the end of that single frame. Fixed v1.10.83; tools/check-battle-run.mjs
+// pins both durations.
+//
+// The fail hold is the message's OWN computed lifetime rather than a literal,
+// so it tracks the string (and stretches if the text ever has to scroll). It is
+// also what the boss no-flee path in `executeBattleCommand` has always given
+// the same message — that one keeps the menu open, so nothing overwrote it and
+// the beat stayed intact there while random encounters lost it.
+function _runFailHoldMs() {
+  return computeMsgTimings({ bytes: BATTLE_CANT_ESCAPE }).total;
+}
+
+export function updateBattleRun() {
   if (battleSt.battleState === 'run-fail') {
-    processNextTurn();
+    if (battleSt.battleTimer >= _runFailHoldMs()) processNextTurn();
     return true;
   }
   if (battleSt.battleState === 'run-success') {
+    if (battleSt.battleTimer < RUN_SLIDE_MS) return true;
     battleSt.runSlideBack = true;
     // PvP uses `enemy-box-close` (cleans up via `resetPVPState`); random
     // encounters use `encounter-box-close`. Same visual close, different
@@ -1027,6 +1058,7 @@ function _updateBattleRun() {
   }
   return false;
 }
+const _updateBattleRun = updateBattleRun;
 
 // ── Boss dissolve ──────────────────────────────────────────────────────────
 

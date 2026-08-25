@@ -1,3 +1,67 @@
+## 1.10.83 — 2026-08-25
+
+### Run is visible again
+
+Reported from play: "messages getting cut off, animations are gone." Both, plus
+a third nobody had hit yet, are the same defect. Measured on the shipped state
+machine, not inferred:
+
+```
+run-success    1 frame (17 ms)   against a 300 ms turn-and-flee animation
+run-fail       1 frame (17 ms)   "Cant escape!" already overwritten by the
+                                 enemy's name by the end of that frame
+```
+
+**Where it came from.** v1.7.287 made the message strip non-blocking — the strip
+drains on its own clock and must never hold the state machine — and pulled the
+`isBattleMsgBusy()` gates out of every handler. That was right everywhere except
+Run, which is the one action with **no animation timeline of its own**. The gate
+had been the only thing keeping its two states open. Nothing else filled in, so
+both collapsed to a single frame and stayed that way for months.
+
+**The fix is not to put the gate back.** Each state now holds for the length of
+the thing it exists to show — the rule `PLAYER_DMG_SHOW_MS` already spells out
+one screen above it. `run-success` holds `RUN_SLIDE_MS`, the flee animation's own
+length. `run-fail` holds the "Cant escape!" strip's own computed lifetime, so it
+tracks the string and stretches if the text ever has to scroll. That is also
+exactly what the boss no-flee path has always given the same message — it keeps
+the menu open, so nothing overwrote it and the beat survived there while random
+encounters lost it.
+
+### A PvP flee no longer strands the player who fled
+
+`updatePVPBattle` runs its own handler chain and `updateBattleRun` was not in it.
+So on the fleeing client `run-success` was **terminal** — measured still there
+after 30 seconds — while the opponent's copy took the wire message straight to
+`enemy-box-close` and left the battle. The PvP branch written for this in
+v1.7.377 sat inside a function PvP never called: dead code for its whole life.
+
+Two things fell out of fixing it. The slide-back drop keyed on
+`encounter-box-close` alone, so a PvP flee ran the character off to the right and
+never brought them back; it now covers both close states. And `runSlideBack` was
+cleared only by the encounter close, so a PvP flee left it set and the **next**
+encounter's close played a spurious slide-back — it is cleared in
+`resetBattleVars` with the other per-battle flags now.
+
+### Gate + tool
+
+`tools/check-battle-run.mjs` (in `deploy.sh`) drives the shipped state machine
+and pins both durations, then **renders the flee through the shipped portrait
+draw and requires the pixels to move** — across the duration section 1 measured,
+not across the constant. A state that is 300 ms long and draws the same frame 18
+times passes a timing check and is still the bug; rendering the constant instead
+of the measurement asks "would this animate if it were given 300 ms", which
+stayed true the entire time the player was seeing one frame. All 29 checks were
+proven by reverting each fix in turn.
+
+`tools/run-shot.mjs` renders the animation frame by frame (`out/run-anim.png`)
+and the whole screen at the key beats (`out/run-screen.png`). Seeing this bug
+previously meant losing a real fight on a phone and watching a 16px HUD slot.
+
+The 300 ms ramp had been a bare literal in four places in
+`battle-draw-player.js`; it is `RUN_SLIDE_MS`/`RUN_SLIDE_PX` in `battle-state.js`
+now, which is where `PLAYER_DMG_SHOW_MS` drifted 50 ms out of step by not being.
+
 ## 1.10.82 — 2026-08-25
 
 ### The overworld strip crossfades when the biome changes

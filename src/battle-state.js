@@ -211,6 +211,23 @@ export const DEATH_TOTAL_MS    = DEATH_SLIDE_MS + DEATH_TXTFADE_MS + DEATH_POSEF
 // Convenience: the info-panel hide point (after slide + text-fade).
 export const DEATH_INFO_HIDE_MS = DEATH_SLIDE_MS + DEATH_TXTFADE_MS;
 
+// ── Run / flee ─────────────────────────────────────────────────────────────
+// The flee animation's own length. On `run-success` the portrait flips and
+// slides RUN_SLIDE_PX to the right over RUN_SLIDE_MS (battle-draw-player.js);
+// the drop back into place during the box close reuses the same ramp.
+//
+// ⛔ `run-success` MUST hold for exactly RUN_SLIDE_MS. The state exists to show
+// this animation and nothing else, so its duration is the animation's own
+// lifetime — the same rule PLAYER_DMG_SHOW_MS spells out for the damage number.
+// From v1.7.287 to v1.10.83 it held for ONE FRAME (17 ms, measured on the
+// shipped state machine by tools/check-battle-run.mjs) because the only thing
+// keeping it open had been a message gate, and that gate was removed as part of
+// making the strip non-blocking. Nobody ever saw the animation.
+// The 300 lived as a bare literal in four places in battle-draw-player.js; a
+// fifth copy in the state machine is exactly how PLAYER_DMG_SHOW_MS drifted.
+export const RUN_SLIDE_MS = 300;
+export const RUN_SLIDE_PX = 20;
+
 // PVP-aware enemy HP accessors.
 // NOTE: `setEnemyHP` writes battleSt.enemyHP unconditionally (even in PVP) — preserve this
 // behavior; some non-PVP code paths rely on the fallback being always-updated.

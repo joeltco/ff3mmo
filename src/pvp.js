@@ -7,7 +7,7 @@ import { ui } from './ui-state.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
 import { updateBattleAlly } from './battle-ally.js';
 import { resetBattleVars, isTeamWiped, updateBattleTimers, updatePoisonTick,
-         updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence,
+         updateBattlePlayerAttack, updateBattleDefendItem, updateBattleEndSequence, updateBattleRun,
          tryJoinPlayerAlly, advancePVPTargetOrVictory, emitWirePVPAction } from './battle-update.js';
 import { playSFX, stopSFX, SFX, pauseMusic, playTrack, TRACKS } from './music.js';
 import { rollHits, calcPotentialHits, BOSS_HIT_RATE, GOBLIN_HIT_RATE, summarizeHits, isLeftHandHit } from './battle-math.js';
@@ -555,6 +555,14 @@ export function updatePVPBattle(dt) {
   _updatePVPDissolve()        ||
   updateBattlePlayerAttack()     ||
   updateBattleDefendItem(dt)     ||
+  // ⛔ The run states are NOT encounter-only. Same slot as in `updateBattle`.
+  // Without this row a PvP flee was terminal on the fleeing client: the
+  // opponent's copy short-circuited to `enemy-box-close` on the wire message
+  // and left the battle, while the player who pressed Run sat in
+  // `run-success` forever (measured: still there after 30 s). The PvP branch
+  // inside `updateBattleRun` was written in v1.7.377 for exactly this case
+  // and had been unreachable dead code ever since. v1.10.83.
+  updateBattleRun()              ||
   updateBattleAlly(dt)           ||
   updateBattleEnemyTurn(dt) ||
   updateBattleEndSequence(dt);

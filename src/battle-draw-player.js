@@ -9,7 +9,8 @@
 // `drawBattleCritFlash`, `drawBattleStrobeFlash` invoked from `drawBattle`
 // in `battle-drawing.js`.
 
-import { battleSt, DEATH_SLIDE_MS, DEATH_TXTFADE_MS, DEATH_POSEFADE_MS, DEATH_TOTAL_MS } from './battle-state.js';
+import { battleSt, DEATH_SLIDE_MS, DEATH_TXTFADE_MS, DEATH_POSEFADE_MS, DEATH_TOTAL_MS,
+         RUN_SLIDE_MS, RUN_SLIDE_PX } from './battle-state.js';
 import { _dmgBounceY } from './data/animation-tables.js';
 import { weaponSubtype } from './data/items.js';
 import { pickAttackPoseKey, pickAttackWeaponSpec, attackWeaponLayer } from './combatant-pose.js';
@@ -86,10 +87,20 @@ function _getPortraitSrc(isNearFatal, isAttackPose, isHitPose, isDefendPose, isI
   return src;
 }
 
+// The party dropping back into place after a flee, during the box close.
+// ⛔ BOTH close states, not just the encounter one: a PvP flee closes through
+// `enemy-box-close`, so keying on `encounter-box-close` alone meant the
+// character ran off to the right and never came back. `runSlideBack` is only
+// ever set by a successful flee, so the state pair is the whole condition.
+function _isRunSlideBack() {
+  return battleSt.runSlideBack &&
+    (battleSt.battleState === 'encounter-box-close' || battleSt.battleState === 'enemy-box-close');
+}
+
 function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
   if (isRunPose) {
     let slideX = 0;
-    slideX = Math.min(battleSt.battleTimer / 300, 1) * 20;
+    slideX = Math.min(battleSt.battleTimer / RUN_SLIDE_MS, 1) * RUN_SLIDE_PX;
     ui.ctx.save();
     ui.ctx.beginPath();
     ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
@@ -98,13 +109,13 @@ function _drawPortraitFrame(px, py, portraitSrc, isRunPose) {
     ui.ctx.scale(-1, 1);
     ui.ctx.drawImage(portraitSrc, 0, 0);
     ui.ctx.restore();
-  } else if (battleSt.battleState === 'encounter-box-close' && battleSt.runSlideBack) {
-    const t = Math.min(battleSt.battleTimer / 300, 1);
+  } else if (_isRunSlideBack()) {
+    const t = Math.min(battleSt.battleTimer / RUN_SLIDE_MS, 1);
     ui.ctx.save();
     ui.ctx.beginPath();
     ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8, 16, 16);
     ui.ctx.clip();
-    ui.ctx.drawImage(portraitSrc, px, py + (1 - t) * 20);
+    ui.ctx.drawImage(portraitSrc, px, py + (1 - t) * RUN_SLIDE_PX);
     ui.ctx.restore();
   } else {
     ui.ctx.drawImage(portraitSrc, px, py);
@@ -201,20 +212,20 @@ function _drawPortraitOverlays(px, py, isDefendPose, isItemUsePose, isNearFatal,
     const sweatIdx = Math.floor(Date.now() / 133) & 1;
     if (isRunPose) {
       let slideX = 0;
-      slideX = Math.min(battleSt.battleTimer / 300, 1) * 20;
+      slideX = Math.min(battleSt.battleTimer / RUN_SLIDE_MS, 1) * RUN_SLIDE_PX;
       ui.ctx.save();
       ui.ctx.beginPath();
       ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
       ui.ctx.clip();
       ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px + slideX, py - 3);
       ui.ctx.restore();
-    } else if (battleSt.battleState === 'encounter-box-close' && battleSt.runSlideBack) {
-      const t = Math.min(battleSt.battleTimer / 300, 1);
+    } else if (_isRunSlideBack()) {
+      const t = Math.min(battleSt.battleTimer / RUN_SLIDE_MS, 1);
       ui.ctx.save();
       ui.ctx.beginPath();
       ui.ctx.rect(HUD_RIGHT_X + 8, HUD_VIEW_Y + 8 - 3, 16, 19);
       ui.ctx.clip();
-      ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3 + (1 - t) * 20);
+      ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3 + (1 - t) * RUN_SLIDE_PX);
       ui.ctx.restore();
     } else {
       ui.ctx.drawImage(bsc.sweatFrames[sweatIdx], px, py - 3);

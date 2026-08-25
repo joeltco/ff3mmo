@@ -559,6 +559,11 @@ Four server-side tables mirror player state, and they do NOT all work the same w
 - **Queue collapsed to one slot.** `queueBattleMsg` and `replaceBattleMsg` are the same function: if a message is already displaying, the new text swaps in place without re-fading and the hold timer resets. The queue array is gone; new turns / status / crit / hits / slain all cut in immediately.
 - **Display names are Shrines short-names.** Battle-strip + PVP-strip + item-use messages route through `getSpellNameShrinesClean` / `getItemNameShrinesClean` (v1.7.288) so the strip shows `Ice` / `Ice2` / `Ice3` instead of raw ROM `Bzzard` / `Bzzra` / `Bzzaga`. Without these helpers the strip diverges from the spell menu / shop / inspect panels.
 - **Don't add new `isBattleMsgBusy` gates.** That predicate is gone. If you need to delay something post-attack, gate it on the actual animation completing, not on the strip.
+- **⛔ The cost of that rule, and who paid it: Run.** v1.7.287 pulled the gates out of every handler at once. Everywhere else a state has an animation timeline holding it open — but Run has none of its own, and the gate *was* its duration. Both its states collapsed to **one frame (17 ms, measured)** and stayed there until v1.10.83. The flee animation never drew an intermediate frame, and "Cant escape!" was overwritten by the enemy's name inside the same tick. It shipped that way for months because seeing it meant losing a real fight and watching a 16 px HUD slot.
+
+  The fix is **not** the gate coming back. Give such a state an explicit duration equal to *the lifetime of the thing it exists to show* — `run-success` holds `RUN_SLIDE_MS` (the flee animation's own ramp), `run-fail` holds `computeMsgTimings({bytes: BATTLE_CANT_ESCAPE}).total` (the message's own clock, so it tracks the string and stretches if the text ever scrolls). `PLAYER_DMG_SHOW_MS` states the same rule one screen above it in `battle-update.js`. The boss no-flee path is the control case: it shows that same message with the menu open, nothing overwrites it, and the beat was intact there the whole time.
+
+  **When you add a state that is only a message, give it a duration in the same commit.** Gate: `tools/check-battle-run.mjs`. Look at it: `tools/run-shot.mjs`.
 
 ## Monster data
 
