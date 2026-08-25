@@ -134,13 +134,15 @@ for (const [id, want] of Object.entries(SCHOOL_OF_SHOP)) {
 // with GREEN CORNERS went up on a wooden wall. A metatile is not chosen until
 // its palette is chosen — `map-renderer.js:549` resolves `tileAttrs[m] & 3`.
 {
-  // ⛔ BOTH TOWNS USE THE CARTRIDGE'S SIGN. FF3 has ONE magic-shop sign for both
-  // schools — map 60 (BLACK) and map 69 (WHITE) use the identical tile+palette.
-  // The school is shown by the KEEPER'S JOB, not the sign. Pinned here because
-  // an invented "black magic" sign shipped twice.
+  // ⭐ ONE MAGIC SIGN, BOTH SCHOOLS — and that is FF3, not a stopgap.
+  // Ur (a BLACK shop) and map 69 (a WHITE shop) both draw $17 pal2; the school
+  // is carried by the KEEPER'S JOB SPRITE, checked above. **FF1** is the game
+  // with separate white/black magic shops. Settled with Joel 2026-08-25.
+  // Pinned so an invented "black magic" sign cannot ship again — two already
+  // did: $67 on the tree/wood palette, then $67 re-pointed to pal3.
   const SIGNS = [
-    ['ur_magic',    114, 10, 18, 0x17, 2, 'the cartridge\'s magic sign'],
-    ['kazus_magic',  10, 14, 24, 0x17, 2, 'the SAME sign — FF3 has no black-magic variant'],
+    ['ur_magic',    114, 10, 18, 0x17, 2, 'FF3\'s one magic sign'],
+    ['kazus_magic',  10, 14, 24, 0x17, 2, 'the SAME sign — both schools share it'],
   ];
   for (const [id, mapId, sx, sy, wantTile, wantPal, why] of SIGNS) {
     const md = loadMap(rom, mapId);
