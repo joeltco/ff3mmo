@@ -85,8 +85,35 @@ export const SUMMON_TIERS = new Map([
   }],
 ]);
 
-// Job indices from src/data/jobs.js. Conjurer is FF3's Evoker; Summoner and
+// Job indices into src/data/jobs.js. Conjurer is FF3's Evoker; Summoner and
 // Sage both fire the third effect on NES.
+//
+// ⭐ THE TIER SPLIT IS MEASURED NOW, not sourced. On the cartridge a summon
+// never opens a target cursor and the game LABELS the target itself — the box
+// reads "Everyone" for an all-target effect and the enemy's own name for a
+// single one. An Evoker's Shiva alternates between the two across RNG cursors
+// (Mesmerize -> "Everyone", 0 damaged; Icy Stare -> "Goblin", exactly 1 of 4
+// damaged), and a Sage's always reads "Everyone" and drops all four bodies'
+// HP within ONE FRAME. Probe: tools/monscan/spell-target-probe.cjs.
+//
+// ⭐ WHICH JOBS MAY CALL AT ALL — read off the game's own spell list, where an
+// uncastable row carries icon tile 0x73:
+//
+//     ROM job byte │ black │ white │ call
+//     15           │   -   │   -   │  8    call only  -> Evoker
+//     17           │   7   │   -   │  -    black only
+//     18           │   -   │   8   │  -    white only
+//     19           │   -   │   -   │  8    call only
+//     20           │   7   │   8   │  8    all three  -> Sage
+//
+// ⛔ DO NOT "FIX" JOB_SUMMONER TO 19 ON THE STRENGTH OF THAT TABLE. Those are
+// ROM JOB BYTES, and this file's constants index ff3mmo's OWN `JOBS` array,
+// where 17 is the Summoner and 19 is the Magus. Setting it to 19 would hand the
+// summoner tier to a black mage. The two orderings agree at 15, 18 and 20 and
+// DISAGREE at 17/19 — worth its own investigation (jobs.js claims "ROM order"
+// and pulls alignment/lvReq from $72010 by index), but it is not this file's
+// bug, and nothing here reads JOB_SUMMONER or JOB_SAGE anyway: the tier rule
+// below tests JOB_CONJURER alone, and 15 is the Evoker in BOTH orderings.
 export const JOB_CONJURER = 15;
 export const JOB_SUMMONER = 17;
 export const JOB_SAGE = 20;

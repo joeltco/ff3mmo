@@ -1,3 +1,67 @@
+## 1.10.87 — 2026-08-25
+
+### Summons reach what their tier says they reach
+
+`startSpellCast` read `_summonEffect.all` **only to narrow**. The magic menu
+commits a summon with `targetMode: 'single'` — summons are kept out of the
+all/column picker deliberately — so `_targets` arrived holding one enemy and an
+`all: true` effect had nothing to widen. Measured through the real menu:
+
+```
+Summoner  Diamond Dust  all=true  -> TARGETS=1
+Summoner  Tidal Wave    all=true  -> TARGETS=1
+Summoner  Mega Flair    all=true  -> TARGETS=1
+Summoner  Zantetsuken   all=true  -> TARGETS=1     <- instant-KO'd ONE body
+```
+
+Now widened through `_enemySideTargets('all')`, the same enumeration the picker
+uses — extracted rather than copied, because two lists of "who is on the enemy
+side" is how the encounter and PVP index conventions drift apart.
+
+### The tier table is measured now, not sourced
+
+Its header said "sourced, not measured off the ROM". The cartridge agrees with
+it on every point tested. A summon never opens a target cursor, and **the game
+labels the target itself** — the box reads "Everyone" for an all-target effect
+and the enemy's own name for a single one:
+
+```
+Evoker  Shiva -> Mesmerize   "Everyone"   0 of 4 damaged
+Evoker  Shiva -> Icy Stare   "Goblin"     1 of 4 damaged
+Sage    Shiva -> Diamond Dust "Everyone"  4 of 4, within ONE FRAME
+```
+
+Exactly three ROM job bytes can call — 15, 19, 20 — matching FF3's Evoker /
+Summoner / Sage. Read off the game's own spell list, where an uncastable row
+carries icon tile `0x73`.
+
+**`JOB_SUMMONER = 17` is correct and documented as such.** ff3mmo's job table and
+the ROM's job byte agree at 15/18/20 and disagree at 17/19; the constants index
+ff3mmo's own array, so "fixing" it to 19 would hand the summoner tier to a black
+mage. Nothing reads it — `summonTierForJob` tests `JOB_CONJURER` alone, and 15 is
+the Evoker in both orderings.
+
+### Known gap, stated rather than silently closed
+
+Every `heal` / `buff` tier effect is flagged `all: true` and still targets the
+player alone. Honouring it would divide the rolled amount across the party
+(Ifrit's Healing Light 90 → ~22 each) — a balance decision, not a bug fix.
+
+### What made this hard, recorded so it is not re-learned
+
+**FF3's RNG is a table, not a tick.** `$FBEF` is
+`LDX $21 / LDA $15,X / INC $15,X / TAX / LDA $7BE3,X`. Idling frames does not
+move it — so fourteen consecutive "0 damaged" Evoker runs were **one sample**,
+and very nearly shipped as a measured proof that the Evoker has no damaging
+branch. What caught it was an RNG witness (party HP after the round) coming back
+byte-identical at every offset. Poking the cursor at `$15,X` made the second
+branch appear immediately.
+
+**The uncastable marker is a tile, not a letter.** It looks like an "x" but is
+icon tile `0x73` beside the school icon; decoding the panel to text renders it as
+a space and every job reads as fully castable. And the school icon is not one
+tile — `$72` summon, `$74` white, `$75` black.
+
 ## 1.10.86 — 2026-08-25
 
 ### The summon cast burst is on the caster now, not floating beside them

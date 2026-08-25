@@ -38,6 +38,14 @@ const ENCOUNTER_SET = 0x05C010;
 const SPECIES_TABLE = 0x05C410, SPECIES_STRIDE = 6, SPECIES_ID_OFF = 2;
 const COUNT_TABLE   = 0x05CA10, COUNT_STRIDE = 4, COUNT_RECORDS = 64;
 const SPELL_DATA    = 0x0618D0, SPELL_STRIDE = 8;
+// Menu tiles: 0x72 is the school icon on every spell row; 0x73 is the
+// "this job cannot cast it" marker drawn one cell to its left.
+// Menu tiles. ⛔ THE SCHOOL ICON IS NOT ONE TILE — docs/design-notes.md#magic:
+// "$72 Summon / $74 White / $75 Black". Looking only for $72 finds no rows at
+// all for black and white and reads as "this job has no spell list".
+const SCHOOL_ICONS = [0x72, 0x74, 0x75];
+const CANNOT_CAST = 0x73;
+const RNG_WAIT = Number(process.env.RNG || 0);
 
 // FF3J SRAM, per src/debug/tabs/emu.js (same recipe spell-cast.cjs uses).
 const SRAM_BASE = 0x6000;
@@ -340,6 +348,23 @@ function damageTiming(spellId, patch5, jobOverride) {
   }
   if (!inBattle) return { error: 'never reached a battle' };
   n.run(60);
+  // ⛔ MOVE THE RNG CURSOR ITSELF. Every run boots the same rom, presses the
+  // same buttons and reaches the battle the same way, so a ROLLED outcome comes
+  // out identical every time and N runs are ONE sample — which is exactly how
+  // fourteen consecutive "0 damaged" reads looked like proof that the Evoker
+  // never rolls its damaging effect.
+  //
+  // ⛔ IDLING FRAMES DOES NOT DO IT. That was the first attempt and the witness
+  // below proved it inert: party HP came back 32/32/31/31 at every offset.
+  // FF3's RNG is a TABLE, not a tick — disassembled at $FBEF:
+  //     LDX $21 / LDA $15,X / INC $15,X / TAX / LDA $7BE3,X
+  // so the stream is `$7BE3[cursor]` with the cursor living at $15,X. Writing
+  // the cursor is what actually moves the rolls.
+  for (let k = 0; k < 4; k++) n.ram[0x15 + k] = (RNG_WAIT + k * 37) & 0xFF;
+  // ⛔ ECHO THE JOB THE RUN ACTUALLY USED. FF3 caches character stats at battle
+  // entry, so a job byte that did not survive the entry would silently make
+  // every result belong to a different job than the label says.
+  const jobLive = n.ram[SRAM_BASE + CHARS_A_OFF + JOB_OFF];
 
   const SHOT = process.env.SHOT ? (process.env.SHOT + '-dmg-') : null;
   let shotN = 0;
@@ -383,10 +408,112 @@ function damageTiming(spellId, patch5, jobOverride) {
       n.press('a', 10, 26);
     }
   }
+  // ⛔ RNG WITNESS. A negative result across N runs is worth nothing unless the
+  // RNG actually MOVED between them. The party's own HP after the round is a
+  // free witness: the goblins' attacks roll, so if these are identical across
+  // every offset the cursor never moved and all those runs are ONE sample.
+  const partyHP = [0, 1, 2, 3].map((i) => n.ram[COMBATANT_BASE + i * COMBATANT_STRIDE]
+                                        | (n.ram[COMBATANT_BASE + i * COMBATANT_STRIDE + 1] << 8));
   const hit = dropAt.filter((v) => v !== null);
   const spread = hit.length > 1 ? Math.max(...hit) - Math.min(...hit) : 0;
-  return { picked, bodies: maxHP.filter((v) => v > 0).length, before, after: cur, dropAt,
+  return { picked, jobLive, partyHP, bodies: maxHP.filter((v) => v > 0).length, before, after: cur, dropAt,
            damaged: hit.length, spreadFrames: spread };
+}
+
+/**
+ * Which spells a JOB may actually cast, read off the game's own list.
+ *
+ * ⛔ THE GAME ALREADY ANSWERS THIS. An uncastable row is drawn with an "x"
+ * between its MP cost and its name — that is what a Black Mage's level-8 row
+ * looks like, and what EVERY summon row looks like for a job with no call
+ * magic. Reading the marker is instant and unambiguous; inferring school access
+ * from "did damage land" costs 40 s a run and cannot tell a refusal apart from
+ * a cast that simply missed, killed nothing, or never got a turn.
+ */
+function listCheck(school, jobOverride) {
+  const s = SCHOOLS[school];
+  const job = jobOverride == null ? s.job : jobOverride;
+  const n = new Nes(fourGoblinRom([]));
+  n.run(300);
+  for (let i = 0; i < 25; i++) n.press('start', 6, 45);
+  let inBattle = false;
+  for (let blk = 0; blk < 20 && !inBattle; blk++) {
+    for (let k = 0; k < 6 && !inBattle; k++) {
+      grantMagic(n, job, s.mask); killOthers(n);
+      n.press('a', 8, 25); inBattle = spriteCount(n) > 12;
+    }
+    if (!inBattle) { grantMagic(n, job, s.mask); killOthers(n); n.press('down', 8, 40); inBattle = spriteCount(n) > 12; }
+  }
+  if (!inBattle) return { error: 'never reached a battle' };
+  n.run(60);
+  const jobLive = n.ram[SRAM_BASE + CHARS_A_OFF + JOB_OFF];
+
+  n.press('a', 8, 30); n.press('down', 8, 30); n.press('a', 8, 30);
+  n.run(20);
+  // Walk the whole list top to bottom.
+  //
+  // ⛔ THE REFUSAL MARKER IS A TILE, NOT A LETTER. It looks like an 'x' on
+  // screen, but it is icon tile 0x73 sitting immediately before the school
+  // icon 0x72 — decoding the panel to text renders it as a space and every
+  // job reads as fully castable. Measured by diffing the raw nametable rows of
+  // a job that CAN cast (0x73 absent) against one that cannot (0x73 present).
+  const seen = new Map();
+  const RAW = process.env.RAW === '1';
+  for (let step = 0; step < 10; step++) {
+    for (const ids of panelTileRows(n)) {
+      let icon = -1;
+      for (const t of SCHOOL_ICONS) { const i = ids.indexOf(t); if (i > 0 && (icon < 0 || i < icon)) icon = i; }
+      if (icon < 1) continue;
+      const blocked = ids[icon - 1] === CANNOT_CAST;
+      let name = '';
+      for (let c = icon + 1; c < 32; c++) {
+        const g = GLYPH[ids[c]];
+        if (g && /[A-Za-z]/.test(g)) name += g;
+        else if (name) break;
+      }
+      if (name.length > 1) seen.set(name, blocked ? 'BLOCKED' : 'ok');
+      if (RAW) console.log(`    ${blocked ? 'x' : ' '} ${name}`);
+    }
+    n.press('down', 8, 24);
+  }
+  if (process.env.TILES === '1') {
+    for (const ids of panelTileRows(n)) {
+      console.log('    ' + ids.slice(0, 14).map((v) => v.toString(16).padStart(2, '0')).join(' '));
+    }
+  }
+  return { jobLive, rows: [...seen.entries()] };
+}
+
+/** Raw nametable tile ids for the panel rows that contain a spell name. */
+function panelTileRows(n) {
+  const nt = n.nametable();
+  const out = [];
+  for (let row = 20; row < 30; row++) {
+    const ids = [];
+    let hasLetter = false;
+    for (let col = 0; col < 32; col++) {
+      const t = nt[row * 32 + col];
+      ids.push(t);
+      if (GLYPH[t] && /[A-Za-z]/.test(GLYPH[t])) hasLetter = true;
+    }
+    if (hasLetter) out.push(ids);
+  }
+  return out;
+}
+
+/** The bottom panel decoded to text lines. */
+function panelLines(n) {
+  const nt = n.nametable();
+  const out = [];
+  for (let row = 20; row < 30; row++) {
+    let t = '';
+    for (let col = 0; col < 32; col++) {
+      const g = GLYPH[nt[row * 32 + col]];
+      t += (g === undefined ? ' ' : g);
+    }
+    if (t.trim()) out.push(t);
+  }
+  return out;
 }
 
 // ── main ───────────────────────────────────────────────────────────────────
@@ -394,16 +521,26 @@ const sweep = arg('sweep', null);
 const rom0 = readFileSync(BASE_ROM);
 const b5of = (id) => rom0[SPELL_DATA + id * SPELL_STRIDE + 5];
 
-if (arg('damage', null) !== null) {
+if (arg('list', null) !== null) {
+  const school = arg('list');
+  const jobO = arg('job', null);
+  const r = listCheck(school, jobO === null ? null : Number(jobO));
+  if (r.error) { console.log('ERROR ' + r.error); process.exit(1); }
+  const blocked = r.rows.filter(([, v]) => v === 'BLOCKED').length;
+  console.log(`school=${school} job=${jobO ?? SCHOOLS[school].job} (live=${r.jobLive})  ` +
+              `rows=${r.rows.length}  BLOCKED=${blocked}  castable=${r.rows.length - blocked}`);
+  console.log('  ' + r.rows.map(([k, v]) => `${k}${v === 'BLOCKED' ? '(x)' : ''}`).join('  '));
+} else if (arg('damage', null) !== null) {
   const id = Number(arg('damage'));
   const p5 = arg('patch5', null);
   const jobO = arg('job', null);
   const r = damageTiming(id, p5 === null ? null : Number(p5), jobO === null ? null : Number(jobO));
   if (r.error) { console.log('ERROR ' + r.error); process.exit(1); }
   console.log(`spell 0x${id.toString(16).padStart(2, '0')} picked=${JSON.stringify(r.picked)} bodies=${r.bodies}` +
-              (jobO === null ? '' : ` job=${jobO}`));
+              (jobO === null ? '' : ` job=${jobO} (live SRAM job byte = ${r.jobLive})`));
   console.log(`  hp ${r.before.join('/')} -> ${r.after.join('/')}`);
   console.log(`  damaged ${r.damaged} of ${r.bodies};  first HP drop at frame ${JSON.stringify(r.dropAt)}`);
+  console.log(`  RNG witness (party HP after the round): ${r.partyHP.join('/')}`);
   console.log(`  spread between first and last drop: ${r.spreadFrames} frames ` +
               `(${(r.spreadFrames / 60).toFixed(2)}s) -> ${r.spreadFrames <= 2 ? 'SIMULTANEOUS' : 'SERIAL'}`);
 } else if (!sweep) {

@@ -242,6 +242,74 @@ console.log('\n[5] what we chose NOT to take from the cartridge');
      'the ally cast path is single-target only; widening the pool needs a multi-target ally path first');
 }
 
+// ── 5b. Summon tiers reach what their own table says ───────────────────────
+// ⛔ `all` USED TO BE READ ONLY TO NARROW. The magic menu commits summons with
+// targetMode 'single' (they are excluded from the all/column picker on
+// purpose), so `_targets` arrived holding ONE enemy and an `all: true` effect
+// had nothing to widen — every Summoner-tier summon hit a single body,
+// Zantetsuken included. Measured through the real menu before the fix:
+// TARGETS=1 for Diamond Dust, Tidal Wave, Mega Flair and Zantetsuken alike.
+//
+// The cartridge: a summon never opens a target cursor, and the game labels the
+// target itself — "Everyone" vs the enemy's own name. A Sage's Shiva drops all
+// four bodies' HP within ONE FRAME.
+console.log('\n[5b] a summon reaches what its tier effect says it reaches');
+{
+  const { battleSt } = await import('../src/battle-state.js');
+  const { ps } = await import('../src/player-stats.js');
+  const { startSpellCast, getSpellTargets, getActiveSummonEffect } = await import('../src/spell-cast.js');
+  const { JOB_CONJURER, JOB_SUMMONER, JOB_SAGE } = await import('../src/data/summon-tiers.js');
+
+  const cast = (job, spellId) => {
+    ps.hp = 500; ps.mp = 99; ps.status = { mask: 0 }; ps.jobIdx = job; ps.palIdx = 0; ps.level = 30;
+    ps.stats = { maxHP: 500, maxMP: 99, agi: 10, str: 20, int: 40, mnd: 40, vit: 10 };
+    battleSt.isRandomEncounter = true; battleSt.battleAllies = [];
+    battleSt.encounterMonsters = [0, 1, 2, 3].map(() => ({ hp: 900, maxHP: 900, atk: 5, def: 2, agi: 4, level: 3, exp: 5, gil: 2, monsterId: 0 }));
+    battleSt.turnQueue = []; battleSt.battleState = 'menu-open'; battleSt.battleTimer = 0;
+    // ⛔ targetMode 'single' ON PURPOSE — that is what the magic menu sends for
+    // a summon. Passing 'all' here would test the picker, not the tier.
+    startSpellCast(spellId, { enemyIndex: 0, targetMode: 'single' });
+    // ⛔ Read the effect the CAST rolled. Re-rolling one here with a forced rng
+    // reports a different subject than the run used — it printed "Icy Stare
+    // all=false" for a cast that had actually rolled the all-target Mesmerize.
+    return { eff: getActiveSummonEffect(), targets: getSpellTargets() };
+  };
+
+  const SUMMONS = [0x30, 0x0d, 0x06, 0x14, 0x22, 0x29, 0x1b, 0x37];
+  let bad = [];
+  for (const job of [JOB_SUMMONER, JOB_SAGE, JOB_CONJURER]) {
+    for (const id of SUMMONS) {
+      // The Evoker rolls, so sample until both branches are seen or we give up.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const { eff, targets } = cast(job, id);
+        if (!eff) { bad.push(`0x${id.toString(16)} job${job}: no effect`); break; }
+        const enemies = targets.filter((t) => t.type === 'enemy').length;
+        if (eff.kind === 'heal' || eff.kind === 'buff') {
+          // Known deliberate gap: party-side effects stay on the player.
+          if (targets.length !== 1 || targets[0].type !== 'player') bad.push(`0x${id.toString(16)} ${eff.name}: buff/heal not on player`);
+        } else if (eff.all) {
+          if (enemies !== 4) bad.push(`0x${id.toString(16)} ${eff.name} (all): ${enemies} enemies, want 4`);
+        } else if (enemies !== 1) {
+          bad.push(`0x${id.toString(16)} ${eff.name} (single): ${enemies} enemies, want 1`);
+        }
+      }
+    }
+  }
+  ok(bad.length === 0, `every tier effect reaches its declared scope${bad.length ? ' — ' + [...new Set(bad)].slice(0, 4).join('; ') : ''}`);
+
+  // The four that were the reported bug, pinned by name.
+  let pinned = 0;
+  for (const [id, name] of [[0x30, 'Diamond Dust'], [0x0d, 'Tidal Wave'], [0x06, 'Mega Flair'], [0x14, 'Zantetsuken']]) {
+    const { eff, targets } = cast(JOB_SUMMONER, id);
+    if (eff && eff.name === name && targets.filter((t) => t.type === 'enemy').length === 4) pinned++;
+    else ok(false, `${name} reaches all four (got ${targets.filter((t) => t.type === 'enemy').length})`);
+  }
+  ok(pinned === 4, 'Diamond Dust / Tidal Wave / Mega Flair / Zantetsuken all reach the whole formation');
+
+  const src = fs.readFileSync(path.join(HERE, '..', 'src', 'spell-cast.js'), 'utf8');
+  ok(/_enemySideTargets\('all'\)/.test(src), 'the widen goes through the SHARED enemy enumeration, not a second copy');
+}
+
 // ── 6. Byte +7 agrees with the school rule ─────────────────────────────────
 console.log('\n[6] the cast-halo byte still agrees with getSpellSchool');
 {

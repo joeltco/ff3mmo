@@ -128,6 +128,10 @@ const _helperSfx = (sfx) => (_sfxPlayed ? null : sfx);
 export function getSpellTargets() { return _targets; }
 export function getSpellHitIdx() { return _hitIdx; }
 export function getCurrentSpellId() { return _spellId; }
+/** The tier-resolved effect the ACTIVE cast is using, or null.
+ *  Exposed so a harness can echo the effect the run actually rolled instead of
+ *  re-rolling its own and reporting a different subject. */
+export function getActiveSummonEffect() { return _summonEffect; }
 // True when the active cast was triggered by a battle item, not a job's spell
 // action. Render paths use this to skip the throw projectile (items go straight
 // to impact) and to align the impact-phase timer to magic-hit start (0 ms).
@@ -228,6 +232,44 @@ function _isEnemyRightCol(idx, count) {
 //   { allyIndex: -1, targetMode: 'all' }    → all living party (player + roster)
 //   { enemyIndex: 0, targetMode: 'all' }    → all living enemies
 //   { enemyIndex: N, targetMode: 'col-X' }  → encounter/PVP enemy column
+/**
+ * Living enemies on the enemy side for a group mode ('all' | 'col-left' |
+ * 'col-right'). Boss path stays single — it has no group.
+ *
+ * Extracted so the SUMMON path can widen through the same enumeration the
+ * picker uses. A summon whose effect is flagged `all` has to reach every enemy,
+ * and building that list a second time is how the encounter/PVP index
+ * conventions drift apart.
+ */
+function _enemySideTargets(mode) {
+  const out = [];
+  if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
+    const mons = battleSt.encounterMonsters;
+    mons.forEach((m, i) => {
+      if (!m || m.hp <= 0) return;
+      const right = _isEnemyRightCol(i, mons.length);
+      if (mode === 'all'
+          || (mode === 'col-right' && right)
+          || (mode === 'col-left'  && !right && mons.length >= 2)) {
+        out.push({ type: 'enemy', index: i });
+      }
+    });
+    return out;
+  }
+  if (pvpSt.isPVPBattle) {
+    // PVP grid: idx 0 = opponent (right col), 1+ = pvpEnemyAllies (left col).
+    const oppAlive = pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0;
+    if ((mode === 'all' || mode === 'col-right') && oppAlive) out.push({ type: 'enemy', index: 0 });
+    if (mode === 'all' || mode === 'col-left') {
+      (pvpSt.pvpEnemyAllies || []).forEach((a, i) => {
+        if (a && a.hp > 0) out.push({ type: 'enemy', index: i + 1 });
+      });
+    }
+    return out;
+  }
+  return [{ type: 'enemy', index: 0 }];
+}
+
 export function startSpellCast(spellId, targetSpec, opts = {}) {
   const spell = SPELLS.get(spellId);
   if (!spell) { _processNextTurn(); return; }
@@ -264,33 +306,7 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
       if (a && a.hp > 0) _targets.push({ type: 'ally', index: i });
     });
   } else if (mode !== 'single' && !onAllies) {
-    // All / column on enemy side. Boss path stays single (no group).
-    _targets = [];
-    if (battleSt.isRandomEncounter && battleSt.encounterMonsters) {
-      const mons = battleSt.encounterMonsters;
-      mons.forEach((m, i) => {
-        if (!m || m.hp <= 0) return;
-        const right = _isEnemyRightCol(i, mons.length);
-        if (mode === 'all'
-            || (mode === 'col-right' && right)
-            || (mode === 'col-left'  && !right && mons.length >= 2)) {
-          _targets.push({ type: 'enemy', index: i });
-        }
-      });
-    } else if (pvpSt.isPVPBattle) {
-      // PVP grid: idx 0 = opponent (right col), 1+ = pvpEnemyAllies (left col).
-      const oppAlive = pvpSt.pvpOpponentStats && pvpSt.pvpOpponentStats.hp > 0;
-      if ((mode === 'all' || mode === 'col-right') && oppAlive) {
-        _targets.push({ type: 'enemy', index: 0 });
-      }
-      if (mode === 'all' || mode === 'col-left') {
-        (pvpSt.pvpEnemyAllies || []).forEach((a, i) => {
-          if (a && a.hp > 0) _targets.push({ type: 'enemy', index: i + 1 });
-        });
-      }
-    } else {
-      _targets = [{ type: 'enemy', index: 0 }];
-    }
+    _targets = _enemySideTargets(mode);
   } else if (targetSpec && targetSpec.enemyIndex != null && targetSpec.enemyIndex >= 0) {
     _targets = [{ type: 'enemy', index: targetSpec.enemyIndex }];
   } else if (targetSpec && targetSpec.allyIndex != null && targetSpec.allyIndex >= 0) {
@@ -315,8 +331,28 @@ export function startSpellCast(spellId, targetSpec, opts = {}) {
   // Support effects ('heal', 'buff') go to the party instead of the enemies.
   if (_summonEffect) {
     if (_summonEffect.kind === 'heal' || _summonEffect.kind === 'buff') {
+      // ⚠ `all` is NOT honoured here yet — a party-wide heal/buff would divide
+      // its rolled amount across the party and change balance, which is a
+      // design call, not a bug fix. Every heal/buff effect in the table IS
+      // flagged all:true, so this stays a known, deliberate gap. See
+      // docs/design-notes.md#magic.
       _targets = [{ type: 'player' }];
-    } else if (!_summonEffect.all) {
+    } else if (_summonEffect.all) {
+      // ⛔ WIDEN. `all` was read ONLY to narrow, so every Summoner-tier summon
+      // — Diamond Dust, Tidal Wave, Mega Flair, Zantetsuken — hit exactly ONE
+      // body: the magic menu commits summons with targetMode 'single' (they are
+      // excluded from the all/column picker on purpose), so `_targets` arrives
+      // holding one enemy and an `all` effect had nothing to widen.
+      //
+      // MEASURED on the cartridge: a summon never opens a target cursor, and
+      // the game labels the target itself — "Everyone" for an all effect,
+      // the enemy's own name for a single one. A Sage's Shiva drops all four
+      // goblins' HP within ONE FRAME. See tools/monscan/spell-target-probe.cjs.
+      const all = _enemySideTargets('all');
+      if (all.length) _targets = all;
+    } else {
+      // Single-target effect (the Evoker's direct attack — also measured: the
+      // target box shows one enemy's name, and exactly one body loses HP).
       const firstEnemy = _targets.find((t) => t.type === 'enemy');
       if (firstEnemy) _targets = [firstEnemy];
     }
