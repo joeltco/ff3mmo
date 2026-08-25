@@ -66,6 +66,56 @@ function sheetOf(rows, outPath) {
 
 const out = flag('--out') || 'backdrop-shot.png';
 
+// ── --fade A B : every frame of the biome crossfade, in order ───────────────
+//
+// ⛔ Drives the SHIPPED `tickTopBoxFade`. Rendering a fade some other way would
+// prove only that the tool can fade. Each row is one 67 ms step, composited the
+// way `_drawHUDTopBox` composites it: the strip, then the ramp frame over it.
+if (args.includes('--fade')) {
+  const fromId = +argAt('--fade', 1), toId = +argAt('--fade', 2);
+  const { hudSt } = await import('../src/hud-state.js');
+  const { tickTopBoxFade } = await import('../src/hud-drawing.js');
+  const a = getBattleBg(rom, fromId), b = getBattleBg(rom, toId);
+  hudSt.topBoxBgCanvas = a.bgCanvas;
+  hudSt.topBoxBgFadeFrames = a.fadeFrames;
+  hudSt.topBoxFade = { phase: 'out', step: 0, timer: 0, toCanvas: b.bgCanvas, toFrames: b.fadeFrames };
+
+  const STEP_MS = 2 * (1000 / 60);   // must match BIOME_FADE_STEP_MS in hud-drawing.js
+  const frames = [];
+  for (let guard = 0; guard < 40; guard++) {
+    const f = hudSt.topBoxFade;
+    frames.push({
+      base: hudSt.topBoxBgCanvas,
+      ramp: hudSt.topBoxBgFadeFrames,
+      step: f ? f.step : 0,
+      phase: f ? f.phase : 'done',
+    });
+    if (!f) break;
+    tickTopBoxFade(STEP_MS);
+  }
+
+  const LH = 16;
+  const c = createCanvas(STRIP_W + PAD * 2, frames.length * (STRIP_H + LH) + PAD * 2);
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#101014'; cx.fillRect(0, 0, c.width, c.height);
+  cx.imageSmoothingEnabled = false; cx.textBaseline = 'top';
+  frames.forEach((fr, i) => {
+    const y = PAD + i * (STRIP_H + LH);
+    cx.fillStyle = '#9aa0b4'; cx.font = '10px monospace';
+    cx.fillText(`${String(i).padStart(2)}  ${String(Math.round(i * STEP_MS)).padStart(3)}ms  ${fr.phase} step ${fr.step}`, PAD, y + 2);
+    // ⛔ Black behind the strip, exactly like `_drawHUDTopBox` does before it
+    // draws anything. Colour index 0 is TRANSPARENT in every frame, so without
+    // this the sheet's own background shows through the fade and the strip
+    // reads as speckled grey when the game would show flat black.
+    cx.fillStyle = '#000'; cx.fillRect(PAD, y + LH, STRIP_W, STRIP_H);
+    cx.drawImage(fr.base, PAD, y + LH);
+    if (fr.step > 0 && fr.ramp) cx.drawImage(fr.ramp[Math.min(fr.step, fr.ramp.length - 1)], PAD, y + LH);
+  });
+  fs.writeFileSync(out, c.toBuffer('image/png'));
+  console.log(`wrote ${out} — ${backdropName(fromId)} -> ${backdropName(toId)}, ${frames.length} frames, ${Math.round((frames.length - 1) * STEP_MS)}ms`);
+  process.exit(0);
+}
+
 if (args.includes('--walk')) {
   const x0 = +argAt('--walk', 1), y0 = +argAt('--walk', 2);
   const x1 = +argAt('--walk', 3), y1 = +argAt('--walk', 4);

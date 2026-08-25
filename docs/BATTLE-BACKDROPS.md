@@ -1,6 +1,6 @@
 # FF3 battle backdrops — decoded, measured, wired
 
-**Status: complete and verified on hardware, 2026-08-25 (v1.10.81).**
+**Status: complete and verified on hardware, 2026-08-25 (v1.10.82).**
 All 24 backdrops match a live PPU on all four of their fields. Both map lookup
 tables are read. Selection is a registry (`src/data/backdrops.js`); the overworld
 strip follows the biome under the party and dungeons resolve per floor.
@@ -261,6 +261,27 @@ per id, so crossing a desert border swaps two canvas references. A per-step
 World 0's tilemap uses five of the six terrain strips — grass 10667 tiles,
 ocean 4548, forest 717, desert 377, rock 75. **Marsh (3) has a props entry but no
 tile on this world's map.**
+
+### The biome crossfade
+
+Walking across a biome border dips the strip instead of cutting it.
+`tickTopBoxFade` (hud-drawing.js) walks the ramp `renderBattleBg` already builds:
+the same strip re-rendered with every colour stepped one row darker on the NES
+palette (`$3x -> $2x -> $1x -> $0F`).
+
+**⛔ Palette swap, never alpha.** `globalAlpha` is a dissolve the console cannot
+do; the gate rejects one in the top box.
+
+* The out-phase must reach the ramp's **last, fully black frame**. Swapping at a
+  mid-brightness step is a hard cut between two half-dimmed strips.
+* Ramps are **3-5 frames** — desert bottoms out in 5, forest in 3 — so the
+  in-phase starts from the *incoming* ramp's own black frame.
+* **Paced against the walk:** a tile is 16 NES frames (~267 ms), a fade step is
+  2, so a dip is 267-333 ms. The gate caps it at two tiles.
+* A second border mid-dip re-aims at the newer strip; a map load swaps outright,
+  because the transition is already fading the whole HUD.
+
+Look at it: `node tools/backdrop-shot.mjs --fade 0 1`.
 
 ### Dungeons, per floor
 

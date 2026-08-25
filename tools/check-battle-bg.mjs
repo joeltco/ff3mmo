@@ -334,6 +334,75 @@ for (let mapId = 0; mapId < 512; mapId++) {
      'world-map-renderer.js has no battleBgIdAt — the terrain lookup has no reader');
 }
 
+// ── 7. THE BIOME CROSSFADE ──────────────────────────────────────────────────
+// ⛔ NES FADE = PALETTE SWAP, NEVER ALPHA. Drives the SHIPPED `tickTopBoxFade`
+// and checks the shape of the dip, not just that it terminates.
+{
+  const { createCanvas } = await import('@napi-rs/canvas');
+  const prevDoc = globalThis.document;
+  globalThis.document = { createElement: () => createCanvas(8, 8), addEventListener() {} };
+  const { hudSt } = await import('../src/hud-state.js');
+  const { tickTopBoxFade } = await import('../src/hud-drawing.js');
+  const { getBattleBg } = await import('../src/battle-bg.js');
+  globalThis.document = prevDoc;
+
+  const STEP_MS = 2 * (1000 / 60);
+  const WALK_TILE_MS = 16 * (1000 / 60);
+
+  const run = (fromId, toId, retargetAt = -1, thirdId = -1) => {
+    const a = getBattleBg(rom, fromId), b = getBattleBg(rom, toId);
+    hudSt.topBoxBgCanvas = a.bgCanvas; hudSt.topBoxBgFadeFrames = a.fadeFrames;
+    hudSt.topBoxFade = { phase: 'out', step: 0, timer: 0, toCanvas: b.bgCanvas, toFrames: b.fadeFrames };
+    const seen = [];
+    for (let i = 0; i < 60; i++) {
+      const f = hudSt.topBoxFade;
+      seen.push({ base: hudSt.topBoxBgCanvas, ramp: hudSt.topBoxBgFadeFrames, phase: f ? f.phase : 'done', step: f ? f.step : 0 });
+      if (!f) break;
+      if (i === retargetAt && thirdId >= 0) {
+        const c = getBattleBg(rom, thirdId);
+        hudSt.topBoxFade = { phase: 'out', step: f.step, timer: f.timer, toCanvas: c.bgCanvas, toFrames: c.fadeFrames };
+      }
+      tickTopBoxFade(STEP_MS);
+    }
+    return seen;
+  };
+
+  const seen = run(0, 1);
+  const a = getBattleBg(rom, 0), b = getBattleBg(rom, 1);
+  ok(seen[seen.length - 1].phase === 'done', 'the biome fade never finished — tickTopBoxFade does not terminate');
+  ok(seen.every((f) => f.phase !== 'out' || f.base === a.bgCanvas),
+     'the OLD strip must stay on screen for the whole out-phase — swapping early is a hard cut, not a fade');
+  ok(seen.every((f) => f.phase !== 'in' || f.base === b.bgCanvas),
+     'the NEW strip must be on screen for the whole in-phase');
+  // ⛔ IT MUST ACTUALLY REACH BLACK. Swapping at a mid-brightness step shows a
+  // hard cut between two half-dimmed strips, which is worse than no fade.
+  const lastOut = seen.filter((f) => f.phase === 'out').pop();
+  ok(lastOut && lastOut.step === a.fadeFrames.length - 1,
+     `the out-phase must bottom out on the ramp's last (black) frame; it stopped at step ${lastOut && lastOut.step} of ${a.fadeFrames.length - 1}`);
+  const firstIn = seen.find((f) => f.phase === 'in');
+  ok(firstIn && firstIn.step === b.fadeFrames.length - 1,
+     'the in-phase must start from the incoming ramp\'s own black frame — ramps are 3-5 long and differ per palette');
+  // Paced against the walk: a tile is 16 NES frames. Two tiles is the ceiling.
+  const ms = (seen.length - 1) * STEP_MS;
+  ok(ms <= WALK_TILE_MS * 2,
+     `the biome fade takes ${Math.round(ms)}ms; a walk tile is ${Math.round(WALK_TILE_MS)}ms and the fade must not outrun two of them`);
+
+  // Crossing a second border mid-fade must re-aim, not snap or stall.
+  const re = run(0, 1, 2, 2);
+  ok(re[re.length - 1].phase === 'done', 're-aiming the fade mid-dip leaves it stuck');
+  ok(re[re.length - 1].base === getBattleBg(rom, 2).bgCanvas,
+     'after re-aiming mid-dip the strip must end on the NEWEST biome, not the one it started toward');
+
+  // The fade must be the palette ramp, not a canvas alpha ramp.
+  const hud = fs.readFileSync(new URL('../src/hud-drawing.js', import.meta.url), 'utf8');
+  const topBox = hud.slice(hud.indexOf('function _drawHUDTopBox'), hud.indexOf('export function tickTopBoxFade'));
+  ok(!/globalAlpha/.test(topBox),
+     'the top box fades with globalAlpha — NES hardware cannot do that; use the palette ramp from renderBattleBg');
+  const ml = fs.readFileSync(new URL('../src/map-loading.js', import.meta.url), 'utf8');
+  ok(/_applyBackdrop\(bgId, true\)/.test(ml),
+     'refreshWorldBackdrop no longer asks for a fade — walking across a biome border would hard-cut');
+}
+
 console.log(fails
   ? `\n${fails} battle-backdrop check(s) FAILED`
   : 'battle backdrop: 24 ids match the PPU, both lookup tables read, registry agrees with the world tiles, overworld strip follows the biome');

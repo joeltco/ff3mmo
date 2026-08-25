@@ -32,7 +32,7 @@ import { pvpSt } from './pvp.js';
 import { drawBattle, drawBattleAllies, drawSWExplosion, drawSWDamageNumbers } from './battle-drawing.js';
 import { render, drawPoisonFlash, drawPondStrobe, updateStarEffect } from './render.js';
 import { drawHUD, clipToViewport, drawHudBox, drawBorderedBox,
-         roundTopBoxCorners, updateHudHpLvStep } from './hud-drawing.js';
+         roundTopBoxCorners, updateHudHpLvStep, tickTopBoxFade } from './hud-drawing.js';
 import { LOAD_FADE_STEP_MS, LOAD_FADE_MAX } from './loading-screen.js';
 
 const CANVAS_W = 256;
@@ -169,6 +169,7 @@ function _gameLoopUpdate(dt) {
   if (hudSt.hudInfoFadeTimer < HUD_INFO_FADE_STEPS * HUD_INFO_FADE_STEP_MS) hudSt.hudInfoFadeTimer += dt;
   if (hudSt.giveItemHealTimer > 0) hudSt.giveItemHealTimer = Math.max(0, hudSt.giveItemHealTimer - dt);
   updateHudHpLvStep(dt);
+  tickTopBoxFade(dt);
   handleInput();
   updateRoster(dt);
   tickPVPSearch(dt);

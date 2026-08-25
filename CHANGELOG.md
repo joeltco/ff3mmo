@@ -1,3 +1,53 @@
+## 1.10.82 — 2026-08-25
+
+### The overworld strip crossfades when the biome changes
+
+Walking grass -> desert used to hard-cut the top-box strip on the step that
+crossed the border. It now dips.
+
+**⛔ NES fade = palette swap, not alpha.** `renderBattleBg` already builds the
+ramp this walks: the same strip re-rendered with every colour stepped one row
+darker on the NES palette (`$3x -> $2x -> $1x -> $0F`). That is what the hardware
+does, what `nesColorFade` has always done, and what every other fade in this game
+uses — the map transition fades this very strip that way. A `globalAlpha` ramp
+would be a Photoshop dissolve on a console that cannot do one, and the gate now
+rejects one.
+
+Out then in: the strip you are standing on dims to black, swaps underneath, and
+the new one climbs back out of it. **The out-phase has to reach the ramp's last,
+fully black frame** — swapping at a mid-brightness step is a hard cut between two
+half-dimmed strips, which looks worse than no fade at all.
+
+Ramps are **3-5 frames** long depending on how bright the strip's brightest
+colour is: the desert bottoms out in 5 steps, the forest in 3. That is a property
+of the palette, not a number to normalise, so the incoming phase starts from its
+OWN black frame rather than the outgoing one's.
+
+**Paced against the walk, not picked for looking nice.** A tile is
+`WALK_DURATION` = 16 NES frames (~267 ms). At 2 frames per fade step a full dip
+is 8-10 steps, so grass->desert takes 333 ms and grass->forest 267 ms — the new
+strip has finished rising about as you finish the step onto it. The first pass
+used 4 frames a step: 670 ms, two and a half tiles, and you were deep into the
+desert before the strip caught up. The gate caps it at two tiles.
+
+Crossing a second border mid-dip re-aims at the newer strip and keeps dipping
+from wherever the ramp had reached, instead of snapping or queueing.
+
+A map load still swaps outright — the transition is already fading the whole HUD
+and a second fade underneath it fights the first.
+
+### New
+
+* `tools/backdrop-shot.mjs --fade A B` — every frame of the crossfade, in order,
+  driven through the SHIPPED `tickTopBoxFade` and composited on black the way
+  `_drawHUDTopBox` composites it. Rendering a fade some other way would prove
+  only that the tool can fade.
+* `check-battle-bg` section 7 pins the shape: the old strip stays up for the
+  whole out-phase, the out-phase reaches black, the in-phase starts from the
+  incoming ramp's own black frame, the whole dip fits two walk tiles, a mid-dip
+  re-aim lands on the newest biome, and the top box contains no `globalAlpha`.
+  All verified to fail on revert.
+
 ## 1.10.81 — 2026-08-25
 
 ### Three backdrops were named off the art. Two of the names were wrong, and one was water.

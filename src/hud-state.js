@@ -19,6 +19,10 @@ export const hudSt = {
   topBoxMode: 'name',      // 'name' | 'battle'
   topBoxBgCanvas: null,    // pre-rendered BG strip (frame 0)
   topBoxBgFadeFrames: null, // [original, step1, step2, ..., black]
+  // Biome crossfade — set when the OVERWORLD strip changes under the party
+  // (grass -> desert). `{ phase:'out'|'in', step, timer, toCanvas, toFrames }`.
+  // null when no fade is running. See `tickTopBoxFade` in hud-drawing.js.
+  topBoxFade: null,
 
   // ── Loading-screen sprite caches (init-once from ROM) ─────────────
   loadingBgFadeFrames: null, // battle BG fade frames for loading screen

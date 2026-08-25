@@ -430,11 +430,32 @@ function _currentBackdropId() {
   });
 }
 
-function _applyBackdrop(bgId) {
+function _applyBackdrop(bgId, fade = false) {
   const { bgCanvas, fadeFrames } = getBattleBg(romRaw, bgId);
-  hudSt.topBoxBgCanvas = bgCanvas;
-  hudSt.topBoxBgFadeFrames = fadeFrames;
   _appliedBackdropId = bgId;
+  // A map load swaps the strip outright — the map TRANSITION is already fading
+  // the whole HUD, and a second fade underneath it fights the first.
+  if (!fade || !hudSt.topBoxBgCanvas) {
+    hudSt.topBoxFade = null;
+    hudSt.topBoxBgCanvas = bgCanvas;
+    hudSt.topBoxBgFadeFrames = fadeFrames;
+    return;
+  }
+  // Walking across a biome border: dim the strip you are on down to black on the
+  // NES palette, swap underneath, and climb back out. `tickTopBoxFade` in
+  // hud-drawing.js walks the ramp; the strip on screen stays the OLD one until
+  // it bottoms out, which is why the target is parked here rather than applied.
+  //
+  // Crossing a second border mid-fade re-aims at the newer strip and dips again
+  // from wherever the ramp had got to, instead of snapping or queueing.
+  const cur = hudSt.topBoxFade;
+  hudSt.topBoxFade = {
+    phase: 'out',
+    step: cur ? cur.step : 0,
+    timer: cur ? cur.timer : 0,
+    toCanvas: bgCanvas,
+    toFrames: fadeFrames,
+  };
 }
 
 /**
@@ -450,7 +471,7 @@ export function refreshWorldBackdrop() {
   if (!romRaw || !mapSt.onWorldMap || topBoxSt.isTown) return;
   const bgId = _currentBackdropId();
   if (bgId === _appliedBackdropId) return;
-  _applyBackdrop(bgId);
+  _applyBackdrop(bgId, true);
 }
 
 export function setupTopBox(mapId, isWorldMap) {

@@ -177,7 +177,60 @@ function _drawTopBoxBattleBG() {
     }
     if (fadeStep > 0) ctx.drawImage(hudSt.topBoxBgFadeFrames[fadeStep], 0, 0);
   }
+  // ── Biome crossfade ───────────────────────────────────────────────────
+  // Only while NO map transition is running — a transition owns the strip and
+  // drives `fadeStep` above with its own timing. Two fades on one strip would
+  // fight, and the transition is the one the player is looking at.
+  if (!topBoxSt.isTown && transSt.state === 'none' && hudSt.topBoxFade && hudSt.topBoxBgFadeFrames) {
+    const st = hudSt.topBoxFade.step;
+    if (st > 0) ctx.drawImage(hudSt.topBoxBgFadeFrames[Math.min(st, hudSt.topBoxBgFadeFrames.length - 1)], topShake, 0);
+  }
   if (!topBoxSt.isTown && transSt.state !== 'loading') roundTopBoxCorners();
+}
+
+// ⛔ NES FADE = PALETTE SWAP, NOT ALPHA. `renderBattleBg` already builds the ramp
+// this walks: each frame is the SAME strip re-rendered with every colour stepped
+// one row darker on the NES palette ($3x -> $2x -> $1x -> $0F), which is what the
+// hardware does and what every other fade in this game uses. A `globalAlpha`
+// ramp would be a Photoshop dissolve on a console that cannot do one.
+//
+// Ramps are 3-5 frames long depending on how bright the strip's brightest colour
+// is — the desert bottoms out in 5 steps, the forest in 3. That is a property of
+// the palette, not a number to normalise away.
+//
+// ⛔ PACED AGAINST THE WALK, not picked because it looked like a nice number.
+// A tile takes `WALK_DURATION` = 16 NES frames (~267 ms). At 2 frames per fade
+// step a full dip is 8-10 steps ~= 270-330 ms, so the desert has finished rising
+// about as you finish the step onto it. The first pass used 4 frames a step:
+// 670 ms, two and a half tiles, and you were well into the desert before the
+// strip caught up.
+const BIOME_FADE_STEP_MS = 2 * (1000 / 60);
+
+/**
+ * Advance the overworld strip's biome crossfade. Called once per frame from the
+ * game loop, next to the other HUD timers.
+ */
+export function tickTopBoxFade(dt) {
+  const f = hudSt.topBoxFade;
+  if (!f) return;
+  f.timer += dt;
+  while (f.timer >= BIOME_FADE_STEP_MS) {
+    f.timer -= BIOME_FADE_STEP_MS;
+    if (f.phase === 'out') {
+      const last = (hudSt.topBoxBgFadeFrames ? hudSt.topBoxBgFadeFrames.length : 1) - 1;
+      if (f.step < last) { f.step++; continue; }
+      // Fully black: swap the strip underneath and climb back out of it. The
+      // incoming ramp has its own length, so start from ITS last frame.
+      hudSt.topBoxBgCanvas = f.toCanvas;
+      hudSt.topBoxBgFadeFrames = f.toFrames;
+      f.phase = 'in';
+      f.step = (f.toFrames ? f.toFrames.length : 1) - 1;
+      continue;
+    }
+    if (f.step > 0) { f.step--; continue; }
+    hudSt.topBoxFade = null;
+    return;
+  }
 }
 
 function _drawTopBoxOverlay(isFading) {
