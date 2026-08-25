@@ -104,30 +104,41 @@ else bad(`(${g.x},${g.y}) is the entrance to map ${onTrigger} — stepping on it
 // and $26, identified through `npcId + 0x202`, wearing borrowed sprites.
 // Cid is npc $1f and his sprite is 0x01D910, matched by PICTURE at 90.2%.
 const room = TOWN_NPCS.get(Q.giver.mapId) || [];
-const cids = room.filter((e) => e.key === Q.giver.npcKey);
-if (cids.length === 1) ok(`exactly one Cid stands on map ${Q.giver.mapId}`);
-else bad(`map ${Q.giver.mapId} holds ${cids.length} entries keyed ${Q.giver.npcKey}`);
-if (cids.length === 1) {
-  const cid = cids[0];
-  if (cid.spec.romOffset === 0x01D910) ok('Cid wears his OWN sprite (0x01D910)');
-  else bad(`Cid wears 0x${(cid.spec.romOffset || 0).toString(16).toUpperCase()} — not his own sprite`);
-  if (RESERVED_BUNDLES.get(0x01D910) === Q.giver.npcKey) ok('0x01D910 is reserved to Cid alone');
-  else bad('0x01D910 is not reserved to Cid — anyone may wear his sprite');
-  // ⛔ HE IS INSIDE THE PUB. Map 10 (17,21) is trigId 2 -> map 12, so that door
-  // IS the pub; v1.10.70 left him on the STREET outside it. The bundle argument
-  // for keeping him out there was circular — map 12 lacks his sprite because the
-  // cartridge never puts Cid inside, not because the room cannot show him.
-  if (Q.giver.mapId === 12) ok('Cid is inside the pub (map 12), not out on the street');
-  else bad(`Cid's quest giver is on map ${Q.giver.mapId} — he belongs in the pub, map 12`);
-  // ⛔ A STILL NPC NEVER YIELDS (`npc.js#tryYieldToPlayer` returns false for
-  // 'static'/'idle-march'), so he must not stand on a doorway or any tile the
-  // player has to walk through.
-  if (cid.spec.wander) bad('Cid WANDERS — he is a special character waiting in the pub, not a stroller');
-  else ok('Cid stands still — correct for a character who is waiting');
+const CID_TILE = [6, 23];   // record $2c — the end of the Kazus pub's bar
+const ghost = room.find((e) => e.key === 'cid_ghost');
+const man = room.find((e) => e.key === 'cid');
+if (ghost && man) ok('both of Cid’s states are declared');
+else bad('the Kazus pub is missing one of cid_ghost / cid');
+if (ghost && man) {
+  // ⛔ THE TILE IS THE POINT. (6,23) sat in `npc-dump.mjs 12` marked DRAWN the
+  // whole time and got walked past twice — once onto the STREET outside the pub
+  // (map 10, 18,22), once onto a BAR STOOL (9,25).
+  for (const e of [ghost, man]) {
+    if (e.x === CID_TILE[0] && e.y === CID_TILE[1]) ok(`${e.key} stands on the ROM tile (${CID_TILE})`);
+    else bad(`${e.key} stands at (${e.x},${e.y}) — Cid's record is (${CID_TILE})`);
+  }
+  if (man.spec.romOffset === 0x01D910) ok('uncursed Cid wears his OWN sprite (0x01D910)');
+  else bad(`uncursed Cid wears 0x${(man.spec.romOffset || 0).toString(16).toUpperCase()}`);
+  if (ghost.spec.romOffset === 0x01ED10) ok('cursed Cid wears the Djinn’s ghost (0x01ED10)');
+  else bad(`cursed Cid wears 0x${(ghost.spec.romOffset || 0).toString(16).toUpperCase()}`);
+  if (ghost.spec.romOffset !== man.spec.romOffset) ok('the two states wear different faces — the curse lifting is visible');
+  else bad('both states wear the same bundle — the curse lifting is invisible');
+  if (RESERVED_BUNDLES.get(0x01D910) === 'cid') ok('0x01D910 is reserved to Cid alone');
+  else bad('0x01D910 is not reserved to Cid');
+  // Exactly one of him in the room, in either story state.
+  const none = () => false, done = (id) => id === Q.id;
+  const before = [ghost, man].filter((e) => !e.when || e.when(none));
+  const after = [ghost, man].filter((e) => !e.when || e.when(done));
+  if (before.length === 1 && before[0].key === 'cid_ghost') ok('before the quest, only the cursed Cid stands there');
+  else bad(`before the quest ${before.length} Cid(s) are placed: ${before.map((e) => e.key).join(', ')}`);
+  if (after.length === 1 && after[0].key === 'cid') ok('after the quest, only the uncursed Cid stands there');
+  else bad(`after the quest ${after.length} Cid(s) are placed: ${after.map((e) => e.key).join(', ')}`);
+  // ⛔ A still NPC never yields — he must not stand on a door.
   const md = loadMap(rom, Q.giver.mapId);
-  const trig = md.triggerMap && md.triggerMap.get(`${cid.x},${cid.y}`);
-  if (!trig) ok(`(${cid.x},${cid.y}) carries no door — he blocks no entrance`);
-  else bad(`(${cid.x},${cid.y}) is a trigger tile — a still Cid there seals it permanently`);
+  if (!md.triggerMap.get(`${CID_TILE[0]},${CID_TILE[1]}`)) ok(`(${CID_TILE}) carries no door — he blocks no entrance`);
+  else bad(`(${CID_TILE}) is a trigger tile — a still Cid there seals it permanently`);
+  if (!ghost.spec.wander && !man.spec.wander) ok('neither state wanders — correct for a man who is waiting');
+  else bad('a Cid state WANDERS');
 }
 
 console.log(failed ? `\ncheck-cid-airship: ${failed} FAILED` : '\ncheck-cid-airship: OK');

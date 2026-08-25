@@ -189,6 +189,9 @@ export const RESERVED_BUNDLES = new Map([
   // ⭐ CID'S OWN SPRITE, and nobody else's. The red cap and robe — matched
   // against all 88 bundles at 90.2%, nine points clear of the next.
   [0x01D910, 'cid'],
+  // His cursed form. The ban on this bundle stands for everyone else — it is
+  // the Djinn's ghost and ordinary villagers must not wear it by accident.
+  [0x01ED10, 'cid_ghost'],
 ]);
 
 export const STORY_SPRITE_BUNDLES = new Map([
@@ -700,6 +703,8 @@ export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
 //
 // ⚠ DIALOGUE IS ROUGH on purpose. The whole NPC-dialogue + quest pass comes
 // after the towns are shaped; these lines carry the beats, not the final voice.
+// ⭐ CID, CURSED. Same man, same tile (6,23) — the Djinn's ghost form, which is
+// the sprite record $2c actually wears. Swaps to CID once the quest is done.
 export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
   'Cid, of Canaan.',
   'The curse caught me here.',
@@ -718,33 +723,29 @@ export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
 // He stands in the KAZUS PUB DOORWAY: map 10, (17,21), tile $70 — a door. That
 // is the cartridge's own record for him and it is where you find him.
 //
-// ⛔ HE IS INSIDE THE PUB — map 12 — not out on the street.
+// ⛔ HE STANDS AT (6,23) — the end of the pub's bar — IN TWO STATES.
 //
-// v1.10.70 put him at map 10 (18,22), beside the pub's front door, on this
-// reasoning: `MAPS=10,12 map-bundles.cjs` shows map 12 does NOT hold 0x1D900 in
-// sprite memory, so "he cannot render in there". That argument is CIRCULAR. A
-// map loads the bundles its own ROM records call for; map 12 lacks Cid's sprite
-// because the cartridge does not place Cid inside, not because the room cannot
-// show him. ff3mmo draws walk bundles straight from ROM offsets — it has no
-// NES CHR-RAM slot budget — and LOADED_BUNDLES is a FIDELITY rule that stops us
-// dressing townsfolk in faces their map never had. Cid is not a townsperson
-// picked off a sheet; he is a named character we are placing on purpose, so he
-// gets an explicit exception in `check-npc-placement`, not a shrug.
+// This tile was in `tools/npc-dump.mjs 12` the whole time, listed DRAWN on a
+// fresh game, and it got walked past twice: v1.10.70 left Cid on the STREET
+// outside (map 10, 18,22) and v1.10.71 put him on a BAR STOOL at (9,25).
+// Record `$2c` @(6,23) is his.
 //
-// Map 10 (17,21) is trigId 2 -> map 12: that door IS the pub. He stands just
-// inside it at (9,25), a ROM record tile in the pub's lower room (the bar side),
-// reachable and talkable — the tile the old `cid_man` stand-in used and passed
-// every gate on.
+// ⭐ KAZUS IS CURSED WHEN YOU FIND HIM, AND SO IS HE. That is why the old
+// `cid_ghost` / `cid_man` pair existed — the two-state idea was right all along,
+// it was just on the wrong tiles wearing the wrong faces. Before the Sealed
+// Cave he is a GHOST (0x01ED10, which map 12 loads and which `$2c` itself
+// wears); after it he is himself (0x01D910, the red cap Joel identified).
+// Both states sit on (6,23); `when` puts exactly one of them in the room.
+//
+// ⛔ NEVER identify him from `npcId + 0x202` again. It put his "I'm Cid from
+// Canaan" line on the Castle Sasune gate guard and named his own sprite
+// "Sara"/"Desch". Sprite + ROM tile, nothing else.
 //
 // ⛔ HE DOES NOT WANDER. `npc.js#tryYieldToPlayer` returns false for `static`
-// and `idle-march`, so a still NPC NEVER yields — keep him off doorways and off
-// any tile the player must walk through.
-//
-// ⛔ THE PARTY JOIN IS NOT BUILT. Cid joins after you talk to him once the
-// Sealed Cave is beaten. That is a special-character system ff3mmo does not
-// have yet; this places him and gives him his lines. Do not invent the join.
+// and `idle-march`, so a still NPC NEVER yields — keep him off doors and off
+// any tile the player must walk through. (6,23) is open floor beside the bar.
 export const CID = {
-  romOffset: 0x01D910,
+  romOffset: 0x01D910,   // ⭐ his own face — AFTER the curse lifts
   palTop: UR_SP3,
   palBtm: UR_SP2,
   dir: DIR_LEFT,
@@ -966,8 +967,11 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_inn_guest_b', x: 9,  y: 26, spec: KAZUS_INN_GUEST_B },
     // ⭐ CID, in two states on two tiles. `when` is evaluated at placement time
     // (npc.js#placeTownNpcs) so exactly one of them is ever in the room.
-    // ⭐ CID — inside the pub, where you find him. See the CID block above.
-    { key: 'cid', x: 9, y: 25, spec: CID },
+    // ⭐ CID — record $2c @(6,23), the end of the bar. Cursed before the Sealed
+    // Cave, himself after. `when` is evaluated at placement time so exactly one
+    // of the two is ever in the room.
+    { key: 'cid_ghost', x: 6, y: 23, spec: CID_GHOST, when: (q) => !q('kazus_cid_airship') },
+    { key: 'cid',       x: 6, y: 23, spec: CID,       when: (q) =>  q('kazus_cid_airship') },
     // ⛔ The two stand-ins that used to be here were never him. `cid_ghost` sat on
     // record $27 @(5,27) — "This cave is the Mythril Mines." — and `cid_man` on
     // $26 @(9,25) — "Kazus developed around the Mythril Mines." Neither is him.

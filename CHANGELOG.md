@@ -1,3 +1,44 @@
+## 1.10.72 — 2026-08-24
+
+### Cid stands at (6,23), and he is a ghost when you find him
+
+Third attempt, and the answer was in `tools/npc-dump.mjs 12` the entire time:
+
+```
+id $2c @(6,23)  gfx 45  bundle 0x1ED10  DRAWN
+```
+
+**DRAWN** — on a fresh game, at the end of the Kazus pub's bar. I walked past
+that line twice: v1.10.70 put Cid on the STREET outside the pub (map 10, 18,22),
+v1.10.71 put him on a BAR STOOL (9,25). Joel pointed at the tile.
+
+### The old two-state model was right all along
+
+`cid_ghost` / `cid_man` were not the mistake. **Kazus is cursed when you find
+Cid, so Cid is cursed too** — record `$2c` wears `0x01ED10`, the Djinn's ghost.
+What was wrong was the tiles and the faces: the pair sat on `$27`@(5,27) and
+`$26`@(9,25), records that belong to other people, and neither wore Cid's own
+sprite.
+
+Both states now sit on **(6,23)**, and `when` puts exactly one in the room:
+
+| state | sprite | when |
+|---|---|---|
+| `cid_ghost` | `0x01ED10` — the Djinn's ghost, which `$2c` itself wears | before the Sealed Cave |
+| `cid` | `0x01D910` — his own red cap | after |
+
+`0x01ED10` is reserved to `cid_ghost` again; the ban stands for everyone else so
+ordinary villagers cannot wear the ghost by accident. `0x01D910` stays reserved
+to Cid alone.
+
+`check-cid-airship` now pins the TILE, both sprites, that the two differ, and
+that exactly one Cid is in the room in either story state. Reverts fail: moving
+him back to the stool → *"cid stands at (9,25) — Cid's record is (6,23)"*;
+putting the uncursed state back in the ghost sprite → *"the curse lifting is
+invisible"*.
+
+⛔ The party join is still NOT built.
+
 ## 1.10.71 — 2026-08-24
 
 ### Cid is IN the pub, not standing outside it
