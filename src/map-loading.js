@@ -297,25 +297,33 @@ function _loadRegularMap(mapId, returnX, returnY) {
   expireResettableChests(mapId);   // Ur chests respawn 24h after looting
   _replayConsumedTiles(mapId, mapData);
   if (TOWN_MAPS.has(mapId)) ps.lastTown = mapId;
-  // ⛔ THERE IS NO BLACK-MAGIC SIGN IN FF3. DO NOT INVENT ONE AGAIN.
+  // ⛔⛔ KAZUS'S BLACK-MAGIC SIGN IS UNFIXED, AND THE NOTE THAT WAS HERE WAS
+  // WRONG. THERE **ARE** TWO DISTINCT MAGIC-SHOP SIGNS IN FF3 — one white, one
+  // black. Do not re-assert otherwise.
   //
-  // Kazus shipped a hand-picked "black magic" sign TWICE and both were wrong:
-  // v1.10.74 used $67 (the same star on pal1, the TREE/WOOD palette — gold star,
-  // GREEN CORNERS on a wooden wall), and the follow-up re-pointed it to pal3 for
-  // a navy star, which is simply a colour I chose.
+  // Three wrong answers shipped from this spot in one day:
+  //   1. $67 — the star glyph on **pal1, the TREE/WOOD palette**. A gold star
+  //      with GREEN CORNERS on a wooden wall. The glyph was picked and its
+  //      ATTRIBUTE never looked at. ⛔ A metatile is not chosen until its
+  //      PALETTE is chosen — `map-renderer.js:549` -> `tileAttrs[m] & 3`.
+  //   2. $67 re-pointed to pal3 — a navy star. A colour I liked. INVENTED.
+  //   3. "FF3 has no black-magic sign" — from a POSITIONAL HEURISTIC that the
+  //      sign is the tile at (x, y-1) above a door. That made map 60 (BLACK)
+  //      and map 69 (WHITE) both read $1c pal2, which I called proof.
+  //      **$1c is the INN sign.** Two inn signs compared; a conclusion drawn
+  //      about magic signs. The same pass also claimed every town exterior is
+  //      tileset 4 — map 78 is TILESET 3.
   //
-  // The cartridge was never asked. Every magic-shop door in the game, walked by
-  // matching each exterior's triggerMap destination against the maps that hold a
-  // mage keeper:
-  //     Ur 114, Kazus 10, map 31/253/254 -> BLACK shops -> sign $17 pal2
-  //     map 60 -> 63 BLACK -> $1c pal2      map 69 -> 75 WHITE -> $1c pal2
-  // A BLACK town and a WHITE town using the IDENTICAL tile and palette is the
-  // whole answer: FF3 does not distinguish magic shops by their sign. It
-  // distinguishes them by the KEEPER'S JOB SPRITE — gfx 3 White Mage vs gfx 4
-  // Black Mage — which `addMageShopkeeper` already does.
+  // ⭐ WHERE TO LOOK when this is picked up: a town with BOTH shops. Map 78
+  // (variants 171, 172), TILESET 3, magic doors at (3,5) and (27,5). The two
+  // fronts differ two rows up — (3,3) = $1 vs (27,3) = $a, both pal1.
+  // RENDER IT: `node tools/tileset-sheet.mjs 78 out.png` draws all 128 metatiles
+  // of tileset 3 with ids; `node tools/map-png.mjs 78 out.png --scale 4` draws
+  // the town. ⚠ Both interiors (79/80) report a gfx-3 WHITE keeper, so
+  // keeper-job does not separate them either — look at the PICTURE.
   //
-  // So Kazus keeps the cartridge's own sign. `check-shops` pins the tile AND its
-  // attribute palette for both towns so a third invented colour cannot ship.
+  // Kazus therefore still ships the cartridge's $17 pal2, same as Ur. That is a
+  // KNOWN-WRONG PLACEHOLDER, not an answer.
   // v1.7.950 — a closed passage nothing can open is just a wall.
   //
   // Tiles $5B/$5C are FF3's closed passage ($5B -> $5D doorframe, $5C -> $5E

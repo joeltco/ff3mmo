@@ -255,6 +255,9 @@ one of them was data already in hand:
 | Cid's line assigned to the Castle Sasune gate guard | Characters were identified from `npcId + 0x202` instead of by **rendering the sprite**. |
 | `check-shops` passing with a counter on open floor | The gate asked `findShopAtCounter` for the shop's **own** coords, so it agreed with itself. |
 | "0 of 28 bundles match" | A `+0x10` applied twice. **Self-test the instrument before believing a negative.** |
+| A "black magic" sign with GREEN CORNERS | `$67` is the star on **pal1, the TREE/WOOD palette**. The glyph was picked and its ATTRIBUTE never checked. **A metatile is not chosen until its palette is chosen** — `map-renderer.js:549` resolves `tileAttrs[m] & 3`. |
+| "FF3 has no black-magic sign" — shipped, and FALSE | Built on a **positional heuristic** (sign = tile at `y-1` above a door). It read map 60's and map 69's **INN** sign (`$1c`) and compared those. ⛔ Never infer a map feature from a position rule. ⛔ **When the user says a thing exists, it exists — go find it.** The town with BOTH magic shops is map 78 / 171 / 172, **tileset 3**, doors (3,5) and (27,5). |
+| "Every town exterior is tileset 4" | Derived from a tileset->maps scan; never checked the towns it did not list. Map 78 is **tileset 3**. |
 
 **Before saying "done", answer out loud:**
 > List every field / byte / column of the record just read. Point at the line of
