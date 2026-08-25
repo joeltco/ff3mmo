@@ -150,6 +150,34 @@ export function summonTotalMs(spellId) {
   return SUMMON_FADE_MS + creature + effect + SUMMON_FADE_MS;
 }
 
+/**
+ * Centre of the cast burst IN BAND COORDINATES, or null.
+ *
+ * ⛔ DERIVED FROM THE CAPTURE, never a literal. The capture emits `cast.box` in
+ * NES SCREEN coordinates and `buildFrames` maps art into the band with x 1:1
+ * and y scaled by BAND_H/SUMMON_SRC_H — so the centre has to go through the
+ * same squeeze or it lands ~3px off and drifts further the taller the art.
+ *
+ * WHY A CENTRE AT ALL: the burst is the CASTER'S animation, and on the NES the
+ * party stands where the capture put it (centre ≈ screen 184,85). This game
+ * puts its caster somewhere else entirely — a 16px HUD portrait slot — so the
+ * band has to be offset by (caster centre − this) to sit on the right person.
+ * Drawing the band at the viewport origin, which is what shipped before
+ * v1.10.86, left the burst floating in empty space over the roster rows.
+ *
+ * ⛔ AND IT MUST BE THE WHOLE BAND THAT MOVES, NOT A CROP. Only the opening
+ * orb is small (14x14). From frame 9 the burst throws four shards outward that
+ * keep expanding for the rest of the animation — measured union across all 30
+ * frames is 94x89. Cropping to the orb would delete every shard.
+ */
+export function summonCastCentre(spellId) {
+  const e = CAPTURED_SUMMONS.get(spellId);
+  if (!e || !e.cast || !e.cast.box) return null;
+  const { x0, x1, y0, y1 } = e.cast.box;
+  const sy = BAND_H / SUMMON_SRC_H;
+  return { x: (x0 + x1) / 2, y: ((y0 + y1) / 2) * sy };
+}
+
 /** Length of the cast burst, so the buildup can be sized to fit it. */
 export function summonCastMs(spellId) {
   const e = CAPTURED_SUMMONS.get(spellId);

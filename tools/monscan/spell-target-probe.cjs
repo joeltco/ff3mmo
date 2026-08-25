@@ -315,9 +315,15 @@ function panelTiles(n) {
  * nothing and puts no physical damage on the goblins, so every HP drop in the
  * window belongs to the spell.
  */
-function damageTiming(spellId, patch5) {
-  const cell = cellForSpell(spellId);
-  if (!cell) return { error: `no menu cell for spell 0x${spellId.toString(16)}` };
+function damageTiming(spellId, patch5, jobOverride) {
+  const cell0 = cellForSpell(spellId);
+  if (!cell0) return { error: `no menu cell for spell 0x${spellId.toString(16)}` };
+  // ⛔ JOB OVERRIDE, for the summon TIER question. FF3 picks which of a summon's
+  // three effects fires from the CASTER'S JOB, so "what does this summon do" is
+  // not answerable without naming the job that cast it. ROM job order (jobs.js,
+  // verified vs disasm 3D/AD85): 15 Conjurer (FF3's Evoker), 17 Summoner,
+  // 20 Sage. The MASK still selects which school the menu lists.
+  const cell = jobOverride == null ? cell0 : { ...cell0, job: jobOverride };
   const patches = [];
   if (patch5 != null) patches.push({ off: SPELL_DATA + spellId * SPELL_STRIDE + 5, val: patch5 });
 
@@ -391,9 +397,11 @@ const b5of = (id) => rom0[SPELL_DATA + id * SPELL_STRIDE + 5];
 if (arg('damage', null) !== null) {
   const id = Number(arg('damage'));
   const p5 = arg('patch5', null);
-  const r = damageTiming(id, p5 === null ? null : Number(p5));
+  const jobO = arg('job', null);
+  const r = damageTiming(id, p5 === null ? null : Number(p5), jobO === null ? null : Number(jobO));
   if (r.error) { console.log('ERROR ' + r.error); process.exit(1); }
-  console.log(`spell 0x${id.toString(16).padStart(2, '0')} picked=${JSON.stringify(r.picked)} bodies=${r.bodies}`);
+  console.log(`spell 0x${id.toString(16).padStart(2, '0')} picked=${JSON.stringify(r.picked)} bodies=${r.bodies}` +
+              (jobO === null ? '' : ` job=${jobO}`));
   console.log(`  hp ${r.before.join('/')} -> ${r.after.join('/')}`);
   console.log(`  damaged ${r.damaged} of ${r.bodies};  first HP drop at frame ${JSON.stringify(r.dropAt)}`);
   console.log(`  spread between first and last drop: ${r.spreadFrames} frames ` +

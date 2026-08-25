@@ -60,3 +60,32 @@ export function encounterGridLayout() {
 export function pvpEnemyCellCenterLocal(idx) {
   return _pvpEnemyCellCenterRaw(idx, 1 + pvpSt.pvpEnemyAllies.length);
 }
+
+// Party-side portrait geometry. Kept here beside `pvpEnemyCellCenterLocal` so
+// "where is this caster" has ONE answer for all three roles.
+const HUD_RIGHT_X = 144;
+const ROSTER_ROW_H = 32;
+
+/**
+ * Centre of a caster's 16x16 portrait, in screen coords.
+ *
+ * ⛔ MUST MATCH THE `drawCastWindup` CALL SITES, which are what every other
+ * spell's cast visual is anchored to: the player at `px + 8, py + 8` with
+ * `px,py = (HUD_RIGHT_X + 8, HUD_VIEW_Y + 8)` (battle-draw-player.js), and an
+ * ally at `ppx + 8, ppy + 8` with `ppy = panelTop + i * ROSTER_ROW_H + 8`
+ * (battle-draw-allies.js). This math is currently ALSO open-coded in those two
+ * files and in battle-drawing.js's SouthWind anchor — new code should call here
+ * rather than add a fourth copy.
+ *
+ * ⚠ The SouthWind anchor uses `+ 8 + 12` for the player rather than `+ 8 + 8`.
+ * That is a 4px difference on one effect and is left alone deliberately; do not
+ * "unify" it without looking at SouthWind on screen first.
+ */
+export function casterPortraitCentre(role, idx = 0) {
+  if (role === 'pvp-enemy') return pvpEnemyCellCenterLocal(idx);
+  if (role === 'ally') {
+    const panelTop = HUD_VIEW_Y + 32;
+    return { x: HUD_RIGHT_X + 8 + 8, y: panelTop + idx * ROSTER_ROW_H + 8 + 8 };
+  }
+  return { x: HUD_RIGHT_X + 8 + 8, y: HUD_VIEW_Y + 8 + 8 };
+}

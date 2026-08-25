@@ -1,3 +1,52 @@
+## 1.10.86 — 2026-08-25
+
+### The summon cast burst is on the caster now, not floating beside them
+
+Every other spell's cast visual is anchored to the caster's portrait through
+`drawCastWindup(..., px + 8, py + 8)`. Summons were the one exception: the
+captured 256×144 band was blitted at the viewport origin, which faithfully
+reproduces the **NES screen** — where the party stands at roughly x 176-190.
+
+This game puts its caster in a 16px HUD portrait slot instead. Measured:
+
+```
+cast burst      screen (184, 85)
+player portrait screen (160, 48)
+-> ~24px right, ~37px below the person casting it, over the roster rows
+```
+
+Identical for all eight creatures, because they share the summon school's cast
+animation (`$55810`) — one fix, not eight.
+
+**Routed by role, not by one hard-coded offset.** A single delta would have
+fixed the player and left an ally casting from the wrong row, and a PvP
+opponent wrong again. `casterPortraitCentre(role, idx)` is new in
+`battle-grid.js`, beside `pvpEnemyCellCenterLocal`, and the band is offset by
+`casterCentre − summonCastCentre(spellId)`.
+
+**⛔ The band is TRANSLATED, never cropped.** An earlier plan in this arc was to
+extract the burst's sub-rect and blit that on the portrait. That was measured
+wrong: only the *opening orb* is 14×14. From frame 9 the burst throws four
+shards that keep expanding for the rest of the animation — the union across all
+30 frames is 94×89. Cropping to the orb would have deleted every shard. The gate
+pins the expansion so the idea cannot come back quietly.
+
+`summonCastCentre` is derived from the capture's own `cast.box`, put through the
+same `BAND_H/SUMMON_SRC_H` squeeze `buildFrames` applies — using the raw box y
+lands ~3px off, and a literal would drift the day the art is re-captured.
+
+### Gate
+
+`check-summon-cast` (15 checks) measures the burst by diffing each frame against
+**the same scene with the animation finished**, so the portraits, boxes and menu
+cancel out and what remains is the burst. Diffing against `menu-open` instead
+also catches the action menu and the message strip, and puts the bounding box on
+those — that first version reported the centre at (139, 121) for a burst plainly
+sitting at (160, 48).
+
+Proven by reverting: putting the band back at the viewport origin collapses all
+three roles onto (183.5, 84.5), the exact pre-fix position.
+
 ## 1.10.85 — 2026-08-25
 
 ### Pin the ally cast path before it becomes the same bug

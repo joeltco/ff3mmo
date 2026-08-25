@@ -7,7 +7,7 @@ import { _dmgBounceY } from './data/animation-tables.js';
 import { DMG_NUM_PAL, HEAL_NUM_PAL, drawBattleNum as _drawBattleNumCtx, drawDmgPopup } from './damage-numbers.js';
 import { getBossBattleCanvas } from './boss-sprites.js';
 import { getMonsterCanvas } from './monster-sprites.js';
-import { encounterGridLayout, pvpEnemyCellCenterLocal } from './battle-grid.js';
+import { encounterGridLayout, pvpEnemyCellCenterLocal, casterPortraitCentre } from './battle-grid.js';
 import { drawEncounterBox, drawBossSpriteBox } from './battle-draw-encounter.js';
 import { SPELLS } from './data/spells.js';
 import { jobBattlePalette } from './data/players.js';
@@ -24,7 +24,8 @@ import { inputSt } from './input-handler.js';
 import { bsc } from './battle-sprite-cache.js';
 import { getCurrentSpellId } from './spell-cast.js';
 import { drawSpellThrow } from './combatant-cast.js';
-import { isSummonSpell, summonPhaseAt, summonCastFrameAt, SUMMON_FADE_STEPS } from './summon-anim.js';
+import { isSummonSpell, summonPhaseAt, summonCastFrameAt, summonCastCentre,
+         SUMMON_FADE_STEPS } from './summon-anim.js';
 import { drawBattleMenu, drawVictoryBox } from './battle-draw-menu.js';
 import { drawBattleAllies } from './battle-draw-allies.js';
 import { drawBattlePortrait, drawBattleCritFlash, drawBattleStrobeFlash } from './battle-draw-player.js';
@@ -185,12 +186,19 @@ function drawBattle() {
 // opponent. The state pair is what selects which to read.
 function _drawSummonPresentation() {
   let spellId = null, castState = null, hitState = null;
+  // The CASTER, resolved on the same axis as the state pair. The cast burst is
+  // the caster's own animation and has to be drawn on them; the creature scene
+  // below is a panel takeover and stays screen-anchored.
+  let role = null, casterIdx = 0;
   if (battleSt.battleState === 'magic-cast' || battleSt.battleState === 'magic-hit') {
     spellId = getCurrentSpellId(); castState = 'magic-cast'; hitState = 'magic-hit';
+    role = 'player';
   } else if (battleSt.battleState === 'ally-magic-cast' || battleSt.battleState === 'ally-magic-hit') {
     spellId = battleSt.allyMagicSpellId; castState = 'ally-magic-cast'; hitState = 'ally-magic-hit';
+    role = 'ally'; casterIdx = Math.max(0, battleSt.allyMagicCasterIdx);
   } else if (battleSt.battleState === 'pvp-enemy-magic-cast' || battleSt.battleState === 'pvp-enemy-magic-hit') {
     spellId = pvpSt.pvpMagicSpellId; castState = 'pvp-enemy-magic-cast'; hitState = 'pvp-enemy-magic-hit';
+    role = 'pvp-enemy'; casterIdx = Math.max(0, pvpSt.pvpMagicCasterCellIdx);
   } else {
     return;
   }
@@ -200,7 +208,30 @@ function _drawSummonPresentation() {
   // opened on a creature appearing out of nothing.
   if (battleSt.battleState === castState) {
     const cf = summonCastFrameAt(spellId, battleSt.battleTimer);
-    if (cf) ui.ctx.drawImage(cf, HUD_VIEW_X, HUD_VIEW_Y);
+    if (cf) {
+      // ⛔ ANCHOR ON THE CASTER, like every other cast visual. Until v1.10.86
+      // this drew the captured band at the viewport origin, which reproduces
+      // the NES SCREEN — where the party stands at roughly x 176-190. This game
+      // puts its caster in a 16px HUD portrait slot instead, so the burst
+      // landed ~24px right and ~37px below the person casting it, floating over
+      // the roster rows. Measured, all eight identical (they share the summon
+      // school's cast, $55810).
+      //
+      // ⛔ THE WHOLE BAND MOVES. Only the opening orb is small; from frame 9 the
+      // burst throws four shards that keep expanding, 94x89 across the full 30
+      // frames. Cropping to the orb and blitting that at the portrait would
+      // delete every shard.
+      const c = casterPortraitCentre(role, casterIdx);
+      const b = summonCastCentre(spellId);
+      const dx = b ? Math.round(c.x - b.x) : 0;
+      const dy = b ? Math.round(c.y - (HUD_VIEW_Y + b.y)) : 0;
+      ui.ctx.save();
+      ui.ctx.beginPath();
+      ui.ctx.rect(HUD_VIEW_X, HUD_VIEW_Y, CANVAS_W, HUD_VIEW_H);
+      ui.ctx.clip();
+      ui.ctx.drawImage(cf, HUD_VIEW_X + dx, HUD_VIEW_Y + dy);
+      ui.ctx.restore();
+    }
     return;
   }
   if (battleSt.battleState !== hitState) return;
