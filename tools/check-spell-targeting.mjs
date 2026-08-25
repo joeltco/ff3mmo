@@ -54,6 +54,7 @@ const { SPELLS, spellHitsAllEnemies, isMultiTargetSpell, getSpellSchool,
         TARGETING_ALL_ENEMIES } = await import('../src/data/spells.js');
 const { SUMMON_TIERS } = await import('../src/data/summon-tiers.js');
 const { ITEMS } = await import('../src/data/items.js');
+const { offensiveSpellPool } = await import('../src/combatant-ai.js');
 
 // ── 1. The record is fully decoded ─────────────────────────────────────────
 console.log('\n[1] every byte of the spell record reaches the game');
@@ -225,6 +226,20 @@ console.log('\n[5] what we chose NOT to take from the cartridge');
   const viaItem = [...ITEMS].filter(([, it]) => it && it.casts != null && spellHitsAllEnemies(it.casts));
   ok(viaItem.length === 0,
      `no item/weapon casts an auto-all spell (${viaItem.length}) — the item path is single-target by design`);
+
+  // ⛔ THE SAME GAP ON THE ALLY SIDE, PINNED BEFORE IT EXISTS. An ally's
+  // offensive cast is architecturally single-target: `_tryAllyOffensiveCast`
+  // stores ONE `allyMagicTargetIdx`, the wire payload carries ONE target, and
+  // the render path draws ONE target effect. Today nothing can reach an
+  // auto-all spell through it — the pool is Fire / Blizzard / Sleep plus the
+  // summons — so there is no bug to fix. But adding Quake to OFFENSIVE_SPELLS
+  // would silently cast it at a single body, which is the exact defect this
+  // whole arc was about, arriving through the one door nobody was watching.
+  const aiPool = offensiveSpellPool();
+  const aiAutoAll = aiPool.filter(spellHitsAllEnemies);
+  ok(aiAutoAll.length === 0,
+     `the ally AI's offensive pool reaches no auto-all spell (${aiAutoAll.length}) — ` +
+     'the ally cast path is single-target only; widening the pool needs a multi-target ally path first');
 }
 
 // ── 6. Byte +7 agrees with the school rule ─────────────────────────────────

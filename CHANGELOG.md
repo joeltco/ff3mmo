@@ -1,3 +1,21 @@
+## 1.10.85 — 2026-08-25
+
+### Pin the ally cast path before it becomes the same bug
+
+An ally's offensive cast is architecturally single-target: `_tryAllyOffensiveCast`
+stores one `allyMagicTargetIdx`, the wire payload carries one target, and the
+render path draws one target effect.
+
+Nothing can reach an auto-all spell through it today — the AI's offensive pool is
+Fire / Blizzard / Sleep plus the summons — so there is no bug to fix here. But
+adding Quake to `OFFENSIVE_SPELLS` is a one-line change, and it would silently
+cast it at a single body: exactly the defect v1.10.84 was about, arriving through
+the one door nobody was watching.
+
+`check-spell-targeting` now fails if the ally pool ever reaches an auto-all
+spell, so widening it fails the build until a multi-target ally path exists.
+Verified by adding Quake to the pool and watching the gate fire.
+
 ## 1.10.84 — 2026-08-25
 
 ### Meteor, Quake and Raze hit everything, the way FF3 does
