@@ -46,7 +46,8 @@ import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
 import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
-import { battleBgIdForMap, renderBattleBg } from './battle-bg.js';
+import { getBattleBg } from './battle-bg.js';
+import { resolveBackdrop } from './data/backdrops.js';
 import { dungeonLabels } from './dungeon/labels.js';
 import { BANNER_FOR_MAP, TOWN_MAPS } from './data/areas.js';
 import { mapEntryMusic } from './map-music.js';
@@ -407,16 +408,59 @@ function _loadRegularMap(mapId, returnX, returnY) {
   }
 }
 
+// ── Backdrop strip ──────────────────────────────────────────────────────────
+//
+// ⛔ ONE APPLIER. Three branches of `setupTopBox` each used to render and assign
+// the strip themselves, each carrying its own copy of the lookup arithmetic —
+// and the overworld branch, having no map id to look up, quietly hardcoded 0.
+// Every branch now names a CONTEXT and this function does the rest.
+//
+// `resolveBackdrop` (src/data/backdrops.js) owns which id a place uses;
+// `getBattleBg` (src/battle-bg.js) owns turning an id into pixels and caches
+// the fade ramp, which matters now that the overworld can change strips mid-walk.
+let _appliedBackdropId = -1;
+
+function _currentBackdropId() {
+  return resolveBackdrop(romRaw, {
+    onWorldMap: mapSt.onWorldMap,
+    mapId: mapSt.currentMapId,
+    tileX: Math.floor(mapSt.worldX / TILE_SIZE),
+    tileY: Math.floor(mapSt.worldY / TILE_SIZE),
+    worldMapRenderer: mapSt.worldMapRenderer,
+  });
+}
+
+function _applyBackdrop(bgId) {
+  const { bgCanvas, fadeFrames } = getBattleBg(romRaw, bgId);
+  hudSt.topBoxBgCanvas = bgCanvas;
+  hudSt.topBoxBgFadeFrames = fadeFrames;
+  _appliedBackdropId = bgId;
+}
+
+/**
+ * Keep the overworld strip on the biome under the party. Called once per
+ * completed step from movement.js.
+ *
+ * ⛔ Cheap on purpose: the id is one table read, and the strip is only rebuilt
+ * when it actually CHANGES — `getBattleBg` memoises the whole fade ramp per id,
+ * so crossing a desert border swaps two canvas references and nothing more. A
+ * per-step `renderBattleBg` would rebuild ~20 canvases every footstep.
+ */
+export function refreshWorldBackdrop() {
+  if (!romRaw || !mapSt.onWorldMap || topBoxSt.isTown) return;
+  const bgId = _currentBackdropId();
+  if (bgId === _appliedBackdropId) return;
+  _applyBackdrop(bgId);
+}
+
 export function setupTopBox(mapId, isWorldMap) {
   if (isWorldMap) {
-    // ⚠ The overworld TOP BOX stays on backdrop 0 (grassland) deliberately.
-    // The overworld's real backdrop is per-TILE (see battle-backdrop.js), and
-    // this runs once at map load — wiring it here would freeze whichever tile
-    // you happened to walk in on and never update as you cross a desert. The
-    // battle screen is where the terrain lookup belongs, and that is wired.
-    const result = renderBattleBg(romRaw, 0);
-    hudSt.topBoxBgCanvas = result.bgCanvas;
-    hudSt.topBoxBgFadeFrames = result.fadeFrames;
+    // ⭐ THE OVERWORLD STRIP IS THE BIOME YOU ARE STANDING IN. It used to be
+    // `table[0]` — grassland, on every tile of every terrain — because the map
+    // lookup is indexed by map id and the overworld is not a map id. The strip
+    // now comes from the tile's own property byte, and `refreshWorldBackdrop`
+    // below keeps it current as you walk out of the grass.
+    _applyBackdrop(_currentBackdropId());
     hudSt.topBoxMode = 'battle';
     topBoxSt.isTown = false;
     topBoxSt.nameBytes = null;
@@ -425,14 +469,11 @@ export function setupTopBox(mapId, isWorldMap) {
     return;
   }
   if (isDungeonMapId(mapId)) {
-    const romMap = resolveDungeonDonor(mapId);
-    // ⛔ `battleBgIdForMap`, NOT `romRaw[LOOKUP + map]`. There are TWO lookup
-    // tables — maps 256-511 live in the second one — and indexing the first
-    // with a map id above 255 silently reads past its end.
-    const result = renderBattleBg(romRaw, battleBgIdForMap(romRaw, romMap));
-    hudSt.topBoxBgCanvas = result.bgCanvas;
-    hudSt.topBoxBgFadeFrames = result.fadeFrames;
-    hudSt.loadingBgFadeFrames = result.fadeFrames;
+    // Per FLOOR — `dungeonRomMapFor` gives a boss floor its skin's donor and a
+    // walkable floor its own `romFloorMaps` entry, so the strip and the
+    // encounter table come from the same cartridge map.
+    _applyBackdrop(resolveBackdrop(romRaw, { onWorldMap: false, mapId }));
+    hudSt.loadingBgFadeFrames = hudSt.topBoxBgFadeFrames;
     // ⛔ WAS A LITERAL "Altar Cave" FOR EVERY DUNGEON. The Cave of Seals opened
     // under Altar Cave's banner; the registry row has carried the right name
     // the whole time. See `dungeon/labels.js`.
@@ -462,10 +503,7 @@ export function setupTopBox(mapId, isWorldMap) {
     topBoxSt.nameBytes = banner;
     hudSt.topBoxMode = 'name';
   } else if (!topBoxSt.isTown) {
-    // Same two-table rule as the dungeon branch above.
-    const result = renderBattleBg(romRaw, battleBgIdForMap(romRaw, mapId));
-    hudSt.topBoxBgCanvas = result.bgCanvas;
-    hudSt.topBoxBgFadeFrames = result.fadeFrames;
+    _applyBackdrop(resolveBackdrop(romRaw, { onWorldMap: false, mapId }));
     hudSt.topBoxMode = 'battle';
   }
 }

@@ -1,8 +1,13 @@
 # FF3 battle backdrops — decoded, measured, wired
 
-**Status: complete and verified on hardware, 2026-08-25 (v1.10.79).**
+**Status: complete and verified on hardware, 2026-08-25 (v1.10.80).**
 All 24 backdrops match a live PPU on all four of their fields. Both map lookup
-tables are read. The overworld terrain path is wired. The battle screen draws it.
+tables are read. Selection is a registry (`src/data/backdrops.js`); the overworld
+strip follows the biome under the party and dungeons resolve per floor.
+
+⛔ **These strips are ff3mmo's AMBIENT ART LAYER — the HUD top box, the dungeon
+loading screen, the title screen — not a battle-screen backdrop.** See
+*Where it is wired*.
 
 Two things here are **not** settled and are labelled as such: bits 5-6 of the map
 lookup byte, and the per-world tile-prop tables for worlds 1 and 2.
@@ -114,11 +119,10 @@ maps that share a backdrop (map 181 is `$08`, map 183 is `$28`).
 
 Measured, not assumed: bytes `$08` / `$28` / `$48` were run on real hardware and
 the backdrop came back **pixel-identical** every time — same palette, same four
-nametable rows. The enemy count wobbled between those runs, but it wobbles for
-`$09` and `$0a` too, so that is the RNG, not the bits.
+nametable rows.
 
-They are not backdrop data. What they *are* is unknown, and
-`src/battle-bg.js` says so in the source rather than masking them away silently.
+They are not backdrop data. What they *are* is unknown, and `src/battle-bg.js`
+says so in the source rather than masking them away silently.
 
 ---
 
@@ -152,8 +156,8 @@ tile bytes match ROM `0x018810` 16 of 16 for backdrop 8.
 
 | tool | what it does |
 |---|---|
-| `tools/check-battle-bg.mjs` | the gate. Shipped renderer vs the PPU capture, pixel for pixel, all 24. Proves both lookup tables are read by finding maps where they disagree. Range-checks all 512 maps. Pins the world-terrain path and the orphan set. Asserts the battle screen actually calls the drawer |
-| `tools/battle-shot.mjs` | the battle viewport through the shipped drawers. `--map N`, `--world X Y`, `--bg N`, `--all out.png` |
+| `tools/check-battle-bg.mjs` | the gate. Shipped renderer vs the PPU capture, pixel for pixel, all 24. Proves both lookup tables are read by finding maps where they disagree. Range-checks all 512 maps. Pins the world-terrain path, the orphan set, the registry's biome rows, per-floor dungeon resolution, and that `setupTopBox` holds no hardcoded id and `movement.js` refreshes the strip |
+| `tools/backdrop-shot.mjs` | the strip a place actually gets, through the shipped resolver. `--walk x0 y0 x1 y1 [steps]` renders a biome crossing; `--dungeon <id>` every floor; `--map N` one map |
 | `tools/battle-bg-sheet.mjs` | all 24 backdrops, labelled with the maps that use them |
 | `tools/monscan/battle-bg-sweep.cjs` | the hardware capture, 24 boots, ~3 min. Re-run after touching any constant |
 | `tools/monscan/battle-bg-probe.cjs` | one battle with arbitrary ROM bytes patched |
@@ -161,21 +165,70 @@ tile bytes match ROM `0x018810` 16 of 16 for backdrop 8.
 
 ## Where it is wired
 
-`src/battle-backdrop.js` is the single source. Resolution happens at **draw
-time** from `mapSt`, not at each battle-start site — random encounters, chest
-mimics, server-rolled PvE, bosses and PvP all get it, and a new kind of battle
-has nothing to forget to set.
+**⛔ The backdrop is not a battle-screen backdrop in this game.** FF3 draws it
+behind the monsters; ff3mmo uses the same strips as its **ambient art layer**,
+which is a deliberate design decision and predates all of this work:
 
-`isFieldStillShowing()` in `battle-state.js` decides when the field map gives way
-to the battle field. It has **two readers** — `render.js` (is the walking sprite
-still drawn?) and `battle-backdrop.js` (blank the viewport yet?) — because those
-two must be the same answer. It is deliberately *not* the same predicate as
-`updateHudHpLvStep` in `hud-drawing.js`, which stays true longer.
+| consumer | what it does with the strip |
+|---|---|
+| HUD top box | `hud-drawing.js` — drawn at (0,0) whenever you are not in a town, with an NES palette fade ramp tied to map transitions |
+| dungeon loading screen | `loading-screen.js#_drawLoadingBG` — scrolls horizontally on `loadingSt.bgScroll`, drawn twice for the wrap |
+| title screen | `title-animations.js` — the sky and ocean |
 
-## Known cosmetic note
+v1.10.79 briefly painted the strip into the battle viewport as well. That was an
+invented system, not asked for, and it was reverted in v1.10.80. **Do not
+rebuild it.**
 
-Monster sprites overlap the bottom of the band by roughly 8 px, because the
-encounter grid centres monsters in a 144 px viewport while the band keeps the
-console's 8 px offset. They read as standing in front of the backdrop, which is
-what a backdrop is for, and the cartridge does the same with tall monsters. Not
-changed — the grid is shipped layout and moving it was not asked for.
+### The registry
+
+`src/data/backdrops.js` owns WHERE each id is used; `src/battle-bg.js` owns
+turning an id into pixels. A new place to show a strip is a new row in
+`BACKDROP_SOURCES` and touches no decoder.
+
+```
+BACKDROP_SOURCES = [
+  { id: 'world',   when: onWorldMap,           resolve: tile props byte 2 },
+  { id: 'dungeon', when: isDungeonMapId,       resolve: dungeonRomMapFor -> map table },
+  { id: 'map',     when: always,               resolve: map table },
+]
+```
+
+Order matters and not cosmetically: a dungeon floor's mapId is ff3mmo's own
+synthetic id (1000+) and would index the ROM's map table meaninglessly, so the
+dungeon row must come before the map row.
+
+`BACKDROPS[24]` carries a name and an `evidence` line per id. **Names describe a
+render; the cartridge does not name its backdrops.** For the six overworld
+strips the evidence is the set of world tiles that select them, which is
+measured. Do not tighten a name into a claim the evidence does not support.
+
+### Overworld biomes
+
+`setupTopBox` used to hardcode grassland for the entire overworld, because the
+map table is indexed by map id and the overworld is not a map id. The strip is
+now the biome under the party, and `refreshWorldBackdrop()` in `map-loading.js` —
+called once per completed step from `movement.js` — keeps it current as you walk.
+
+Cheap on purpose: the id is one table read per step, and the strip is only
+rebuilt when it actually **changes**. `getBattleBg` memoises the whole fade ramp
+per id, so crossing a desert border swaps two canvas references. A per-step
+`renderBattleBg` would rebuild ~20 canvases every footstep.
+
+World 0's tilemap uses five of the six terrain strips — grass 10667 tiles,
+ocean 4548, forest 717, desert 377, rock 75. **Marsh (3) has a props entry but no
+tile on this world's map.**
+
+### Dungeons, per floor
+
+`dungeonRomMapFor(mapId)` gives a boss floor its **skin's** donor and a walkable
+floor its own `romFloorMaps` entry — the same list the encounter tables are keyed
+on, so the strip and the monsters come from the same cartridge map. Side rooms
+and anything unlisted fall back to the dungeon's donor.
+
+Altar Cave: floors 0-3 `cave`, boss floor `ice` (crystal skin, donor 148).
+Cave of Seals: all four `cave`.
+
+⚠ Both shipped dungeons land on `cave` for every walkable floor, so per-floor
+resolution changes nothing visible **today**. That is exactly why the gate pins
+it: a dungeon whose floors cross terrain would otherwise have shipped one strip
+for the lot and looked fine.

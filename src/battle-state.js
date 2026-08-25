@@ -229,26 +229,3 @@ export function setEnemyHP(v) {
   battleSt.enemyHP = v;
 }
 
-/**
- * Is the FIELD MAP still what the battle viewport shows?
- *
- * True before a battle, during the entry strobe, and through a boss roar — the
- * states where the party is still standing on the map and the flash plays over
- * it. False from `encounter-box-expand` onward, when the battle field takes the
- * viewport over.
- *
- * ⛔ ONE DEFINITION, TWO READERS. `render.js` uses it to decide whether the
- * walking sprite is still drawn; `battle-backdrop.js` uses it to decide whether
- * to blank the viewport and paint the ROM backdrop. Those two answers must be
- * the same answer — a sprite drawn over a backdrop, or a map showing through a
- * battle, is what a second hand-copied copy of this list buys you.
- *
- * ⚠ NOT the same predicate as `updateHudHpLvStep` in hud-drawing.js, which also
- * counts the box-expand and boss-appear states. That one asks "is the HUD still
- * in its pre-battle pose", which stays true longer. Deliberately separate.
- */
-export function isFieldStillShowing() {
-  return battleSt.battleState === 'none' ||
-         battleSt.battleState === 'flash-strobe' ||
-         battleSt.battleState.startsWith('roar-');
-}

@@ -27,7 +27,7 @@ import { checkTrigger, openPassage, handleChest, handleSecretWall,
 import { shopSt, openShop, handleShopInput } from './shop.js';
 import { bedSt, handleBedInput } from './bed.js';
 import { findShopAtCounter } from './data/shops.js';
-import { loadWorldMapAtPosition, loadMapById } from './map-loading.js';
+import { loadWorldMapAtPosition, loadMapById, refreshWorldBackdrop } from './map-loading.js';
 import { tickRandomEncounter, isEncounterCheckPending } from './battle-encounter.js';
 import { startBattle } from './battle-update.js';
 import { MapRenderer } from './map-renderer.js';
@@ -438,6 +438,13 @@ function _onMoveComplete() {
     playSFX(SFX.ATTACK_HIT);
     poisonFlashTimer = 0;
   }
+
+  // ⭐ The overworld strip follows the terrain. One table read per step, and
+  // the strip is only rebuilt when the biome actually changes — walking out of
+  // the grass into the desert swaps the top box to the desert strip. Runs
+  // BEFORE the warp/trigger/encounter checks so the strip is already correct if
+  // this step starts a fight or a map load.
+  refreshWorldBackdrop();
 
   if (_checkFalseWall()) return;
   if (_checkWarpTile()) return;

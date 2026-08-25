@@ -158,23 +158,87 @@ for (let mapId = 0; mapId < 512; mapId++) {
      `unreachable backdrops are {${orphans.join(',')}}; only backdrop 6 (sky) is a known orphan`);
 }
 
-// ── 5. WIRED ────────────────────────────────────────────────────────────────
-// ⛔ THE ACTUAL FAILURE THIS FILE WAS WRITTEN FOR. Every number above was
-// already correct while battles rendered over the field map, because nothing
-// asked whether the data reached the screen.
+// ── 5. THE REGISTRY ─────────────────────────────────────────────────────────
+// One row per backdrop, and the biome rows must agree with the tiles that
+// actually select them. A registry that drifts from the table it describes is
+// worse than no registry — it reads like evidence.
 {
-  const drawing = fs.readFileSync(new URL('../src/battle-drawing.js', import.meta.url), 'utf8');
-  ok(/drawBattleBackdrop\(/.test(drawing),
-     'src/battle-drawing.js never calls drawBattleBackdrop — the backdrop is decoded but not drawn');
-  const backdrop = fs.readFileSync(new URL('../src/battle-backdrop.js', import.meta.url), 'utf8');
-  ok(/battleBgIdAt\(/.test(backdrop),
-     'battle-backdrop.js does not use the world-tile lookup — overworld fights would all be grassland');
-  ok(/resolveDungeonDonor\(/.test(backdrop),
-     'battle-backdrop.js does not resolve the dungeon donor map — dungeon fights would read a synthetic map id');
+  const { BACKDROPS, backdropName, resolveBackdrop, backdropSourceFor, dungeonRomMapFor } =
+    await import('../src/data/backdrops.js');
+  ok(BACKDROPS.length === BATTLE_BG_COUNT,
+     `registry has ${BACKDROPS.length} rows, the ROM has ${BATTLE_BG_COUNT} backdrops`);
+  for (let id = 0; id < BATTLE_BG_COUNT; id++) {
+    ok(BACKDROPS[id] && BACKDROPS[id].id === id, `registry row ${id} is missing or misnumbered`);
+    ok(BACKDROPS[id] && BACKDROPS[id].evidence, `backdrop ${id} (${backdropName(id)}) has no evidence line`);
+  }
+  // Every id a WORLD TILE can select must carry a biome; every id it cannot
+  // must not. This is the assertion that would have caught the overworld being
+  // wired to a map lookup.
+  const base = WORLD_TILE_PROPS[0];
+  const selectable = new Set();
+  for (let t = 0; t < 128; t++) {
+    const props = { byte1: rom[base + t * 2], byte2: rom[base + t * 2 + 1] };
+    if (props.byte1 & 0x80) continue;
+    selectable.add(battleBgIdForWorldProps(props));
+  }
+  for (let id = 0; id < BATTLE_BG_COUNT; id++) {
+    const biome = BACKDROPS[id].biome;
+    ok(selectable.has(id) === !!biome,
+       `backdrop ${id} (${backdropName(id)}): world tiles ${selectable.has(id) ? 'DO' : 'do NOT'} select it ` +
+       `but its registry biome is ${biome === null ? 'null' : `'${biome}'`}`);
+  }
+
+  // The source rows must route each context to the right resolver.
+  ok(backdropSourceFor({ onWorldMap: true, mapId: 0 }) === 'world', 'an overworld context must resolve through the world source');
+  ok(backdropSourceFor({ onWorldMap: false, mapId: 1000 }) === 'dungeon', 'a dungeon floor must resolve through the dungeon source, not the map table');
+  ok(backdropSourceFor({ onWorldMap: false, mapId: 114 }) === 'map', 'a town must resolve through the map source');
+  ok(resolveBackdrop(null, { onWorldMap: false, mapId: 114 }) === 0, 'no ROM must resolve to 0, not throw');
+
+  // ⛔ A dungeon FLOOR takes its own ROM map, not one donor for the whole
+  // dungeon. Both shipped dungeons happen to land on `cave` for every floor,
+  // which is exactly why this needs pinning — the bug would be invisible.
+  const { DUNGEONS } = await import('../src/data/dungeons.js');
+  for (const d of DUNGEONS) {
+    if (!Array.isArray(d.romFloorMaps)) continue;
+    for (let f = 0; f < d.romFloorMaps.length; f++) {
+      const mapId = d.base + f;
+      const romMap = dungeonRomMapFor(mapId);
+      const isBoss = f === d.floors - 1;
+      if (isBoss) continue;                             // boss floor takes its skin's donor
+      ok(romMap === d.romFloorMaps[f],
+         `${d.id} floor ${f} draws backdrop from ROM map ${romMap}; its romFloorMaps entry is ${d.romFloorMaps[f]}`);
+    }
+    // The boss floor must NOT inherit the walkable floors' strip when its skin
+    // says otherwise — Altar Cave's crystal chamber is ice, not cave brown.
+    const bossMapId = d.base + d.floors - 1;
+    ok(Number.isInteger(dungeonRomMapFor(bossMapId)), `${d.id} boss floor resolves no ROM map`);
+  }
+}
+
+// ── 6. WIRED ────────────────────────────────────────────────────────────────
+// ⛔ THE ACTUAL FAILURE THIS FILE WAS WRITTEN FOR. Every number above can be
+// correct while nothing reaches the screen. It was: the overworld strip was
+// hardcoded to backdrop 0 for every terrain, and the branch that did it read
+// like a decision.
+{
+  const mapLoading = fs.readFileSync(new URL('../src/map-loading.js', import.meta.url), 'utf8');
+  ok(/resolveBackdrop\(/.test(mapLoading),
+     'src/map-loading.js does not use the backdrop registry — setupTopBox is resolving ids itself again');
+  ok(!/renderBattleBg\(romRaw,\s*\d/.test(mapLoading),
+     'src/map-loading.js renders a HARDCODED backdrop id — that is how the overworld got stuck on grassland');
+  ok(/export function refreshWorldBackdrop/.test(mapLoading),
+     'map-loading.js has no refreshWorldBackdrop — the overworld strip cannot follow the terrain');
+
+  const movement = fs.readFileSync(new URL('../src/movement.js', import.meta.url), 'utf8');
+  ok(/refreshWorldBackdrop\(\)/.test(movement),
+     'src/movement.js never calls refreshWorldBackdrop — the strip would freeze on whichever tile you walked in on');
+
   const renderer = fs.readFileSync(new URL('../src/world-map-renderer.js', import.meta.url), 'utf8');
   ok(/battleBgIdAt\(tileX, tileY\)/.test(renderer),
      'world-map-renderer.js has no battleBgIdAt — the terrain lookup has no reader');
 }
 
-console.log(fails ? `\n${fails} battle-backdrop check(s) FAILED` : 'battle backdrop: 24 ids match the PPU, both lookup tables read, world terrain wired, drawn in battle');
+console.log(fails
+  ? `\n${fails} battle-backdrop check(s) FAILED`
+  : 'battle backdrop: 24 ids match the PPU, both lookup tables read, registry agrees with the world tiles, overworld strip follows the biome');
 process.exit(fails ? 1 : 0);
