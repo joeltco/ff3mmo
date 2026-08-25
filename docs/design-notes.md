@@ -311,7 +311,7 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 - **White magic uses MND, black magic uses INT.** Per NES FF3 disasm. `_rollMagicAmount(power, useMnd)` in `spell-cast.js` and `_applyPauseSpellUse` in `input-handler.js` both branch on `spell.element === 'recovery'` (or `target === 'cure_status'`/`'revive'`) → MND, else INT. Formula: `floor(stat/2) + power + rand(0..floor(atk/2))`.
 - **Battle slot 1 = Magic for mage jobs (3/4/5).** `executeBattleCommand(1)` checks `_MAGE_JOBS` + `ps.knownSpells.length > 0` and routes to magic mode (otherwise Defend). Magic uses `inputSt.menuMode = 'magic'` to piggyback on the item-menu state machine — same `item-menu-out` → `item-list-in` → `item-select` → `item-target-select` fades, branched on `menuMode` for spell-list rendering / spell-pick input.
 - **Battle cast pipeline.** `cmd === 'magic'` in `_playerTurnMagic` (battle-turn.js) → `startSpellCast(spellId, { allyIndex | enemyIndex, targetMode })` in `spell-cast.js`. Deducts MP, builds the target list per `targetMode`, rolls amount (once for multi-target — divided at apply time, like Southwind), sets up state machine: `magic-cast` (250ms windup, victory pose via `isItemUsePose`) → `magic-hit` (400ms anim, apply heal/damage, hold to 1100ms, walk through `_targets[]` if multi-target, end turn). Cure plays `SFX.CURE` (same as Potion) via `applyMagicHeal`; impact SFX for thrown spells is selected by `getSpellImpactSFX(spell)` in `combatant-cast.js` (fire → FIRE_BOOM, ice → SW_HIT, sleep → SLEEP_PUFF, sight → SIGHT). Visual: cast windup + spell throw + target effect dispatch through `combatant-cast.js`; per-spell tile bytes live in `spell-anim.js`.
-- **Multi-target spells.** `MULTI_TARGET_SPELLS = new Set([0x34])` + `isMultiTargetSpell(id)` in `data/spells.js` is the single source of truth. The input picker (`input-handler.js _battleInputItemTargetSelect`) reads it via `allowMulti = isBattleItem || isMultiSpell`; the cast resolver (`spell-cast.js startSpellCast`) reads it via `_targets.length > 1` to switch from per-target re-roll to "roll once / divide by `targets.length`" (Southwind pattern). Adding a new multi-target spell: add the ID to the set. No render-site or callsite edits needed. Picker UX: from any ally pick (player or roster, single mode) press **Right** → `'all-allies'`; **Left** from `'all-allies'` returns to single-ally pick. Enemy side reuses the existing battle-item col-left / col-right / all picker. Cursor blinks at 133ms in `'all'` modes (matches Southwind's enemy-side cursor blink).
+- **Multi-target spells (the PICKER).** `MULTI_TARGET_SPELLS` (four entries — one per target category) + `isMultiTargetSpell(id)` in `data/spells.js` decide which spells OFFER the all/column picker. ⛔ That is this game's own feature and is NOT the same question as `spellHitsAllEnemies(id)`, which is the cartridge's own auto-all flag (Meteor/Quake/Raze — see below) and skips target select entirely. The input picker (`input-handler.js _battleInputItemTargetSelect`) reads it via `allowMulti = isBattleItem || isMultiSpell`; the cast resolver (`spell-cast.js startSpellCast`) reads it via `_targets.length > 1` to switch from per-target re-roll to "roll once / divide by `targets.length`" (Southwind pattern). Adding a new multi-target spell: add the ID to the set. No render-site or callsite edits needed. Picker UX: from any ally pick (player or roster, single mode) press **Right** → `'all-allies'`; **Left** from `'all-allies'` returns to single-ally pick. Enemy side reuses the existing battle-item col-left / col-right / all picker. Cursor blinks at 133ms in `'all'` modes (matches Southwind's enemy-side cursor blink).
 - **⛔ THREE SPELLS AUTO-TARGET EVERY ENEMY, AND THE ROM SAYS SO (v1.10.84).** `spellHitsAllEnemies(id)` → **Meteor 0x02, Quake 0x07, Raze 0x16**. Picking one skips target select entirely and commits with `targetMode: 'all'`; `input-handler.js#_battleInputMagicSelect` routes them down the same `item-list-out` menu-close path the picker itself uses.
 
   This repo previously carried, in `data/spells.js`, the claim *"The ROM does NOT encode single-vs-all for player spells — checked, not assumed."* **That was wrong.** The spell record at `$618D0` is EIGHT bytes; the check had looked at byte **+4**. Byte **+5 bit 6** is where it lives, and `tools/gen-spells-js.js` had been reading that byte into a local literally named `targeting` and discarding it since the file was written — 2 of 8 fields unconsumed.
@@ -324,14 +324,14 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 
   **⛔ THE ALLY PATH IS SINGLE-TARGET ONLY, AND THAT IS A CONSTRAINT, NOT A BUG.** `_tryAllyOffensiveCast` stores ONE `allyMagicTargetIdx`, the wire payload carries ONE target, and the render path draws ONE target effect. Nothing can reach an auto-all spell through it today — the AI pool is Fire / Blizzard / Sleep plus the summons — so there is nothing broken. But adding Quake to `OFFENSIVE_SPELLS` would silently cast it at a single body: the exact defect this whole arc was about, arriving through the one door nobody was watching. Gate section 5 pins it, so widening that pool fails the build until a multi-target ally cast path exists.
 
-  Gates: `check-spell-targeting` (35 checks, drives the real magic menu), `spell-anim-audit` (all 56 spells draw a cast and an impact and hand the turn back). Look at it: `tools/spell-shot.mjs`, `tools/spell-anim-audit.mjs --sheet=0x07`.
+  Gates: `check-spell-targeting` (drives the real magic menu), `spell-anim-audit` (all 56 spells draw a cast and an impact and hand the turn back). Look at it: `tools/spell-shot.mjs`, `tools/spell-anim-audit.mjs --sheet=0x07`.
 - **⛔ THE SUMMON CAST BURST IS ANCHORED ON THE CASTER (v1.10.86).** Every other spell's cast visual goes through `drawCastWindup(layer, ctx, role, idx, px + 8, py + 8)` — the caster's portrait centre. Summons were the one exception: `_drawSummonPresentation` blitted the captured 256×144 band at `HUD_VIEW_X, HUD_VIEW_Y`, which faithfully reproduces the **NES screen**, where the party stands at roughly x 176-190. This game puts its caster in a 16px HUD portrait slot instead, so the burst landed at screen (184, 85) while the player portrait is at (160, 48) — ~24px right and ~37px below the person casting it, floating over the roster rows. Identical for all eight creatures, because they share the summon school's cast animation (`$55810`).
 
   Now: `casterPortraitCentre(role, idx)` (new, in `battle-grid.js` beside `pvpEnemyCellCenterLocal`) resolves player / ally-N / pvp-enemy, and the band is offset by `casterCentre − summonCastCentre(spellId)`. **⛔ The whole band is TRANSLATED, never cropped.** Only the opening orb is small (14×14); from frame 9 the burst throws four shards that keep expanding — union across all 30 frames is 94×89 — so cropping the orb onto the portrait would delete every shard. `summonCastCentre` is **derived** from the capture's `cast.box` through the same `BAND_H/SUMMON_SRC_H` squeeze `buildFrames` applies; using the raw box y lands ~3px off.
 
   ⚠ `casterPortraitCentre` is the single source going forward, but the same math is still open-coded in `battle-draw-player.js`, `battle-draw-allies.js` and battle-drawing's SouthWind anchor — new code should call the helper rather than add a fourth copy. The SouthWind anchor deliberately uses `+8+12` for the player rather than `+8+8`; don't unify that without looking at SouthWind on screen.
 
-  Gate: `check-summon-cast` (15 checks). It measures the burst by diffing against **the same scene with the animation finished** — diffing against `menu-open` also catches the action menu and message strip and puts the bounding box on those instead.
+  Gate: `check-summon-cast`. It measures the burst by diffing against **the same scene with the animation finished** — diffing against `menu-open` also catches the action menu and message strip and puts the bounding box on those instead.
 
 - **⛔ SUMMON REACH IS THE TIER EFFECT'S `all` FLAG, AND IT WIDENS (v1.10.87).** `startSpellCast` used to read `_summonEffect.all` **only to narrow** (`else if (!all)`). The magic menu commits a summon with `targetMode: 'single'` — summons are excluded from the all/column picker on purpose — so `_targets` arrived holding one enemy and an `all: true` effect had nothing to widen. Measured through the real menu: **Diamond Dust, Tidal Wave, Mega Flair and Zantetsuken all resolved to TARGETS=1.** Zantetsuken instant-KO'd one body instead of the formation. It now widens through `_enemySideTargets('all')` — the same enumeration the picker uses, not a second copy.
 
@@ -874,3 +874,33 @@ guesses; none are fixed.
 10. ⚠ **Backdrop 3 (marsh) is defined and never placed.** Four foot-walkable
     world tiles carry it; none appears on world 0's tilemap. The strip exists,
     the terrain does not, so nothing corroborates its name.
+
+### Carried out of the magic/summon arc (v1.10.83-88), PARKED 2026-08-25
+
+None of these are bugs shipped by accident — each is a measured, named decision
+left open on purpose. Parked while the beginner valley is hardened.
+
+11. ⚠ **Summon heal/buff effects ignore their own `all` flag.** Every
+    `kind: 'heal'` / `'buff'` tier effect is flagged `all: true` and still
+    targets the player alone (`spell-cast.js`). Honouring it would divide the
+    rolled amount across the party — Ifrit's Healing Light 90 becomes ~22 each —
+    so it is a BALANCE decision, not a bug fix. The enemy-side half of the same
+    flag was wired in v1.10.87.
+12. ⚠ **Titan does not inherit Quake's `SCREEN_PLACEMENT` pin.** He borrows
+    Quake's crack art; Quake is pinned to straddle the x=144 view boundary by
+    explicit request, Titan now lands at x90-120 in the field. Same crack, two
+    placements.
+13. ⚠ **`jobs.js` claims "22 jobs in ROM order" but disagrees with the
+    cartridge at 17/19.** Measured by reading the magic list's uncastable
+    marker (icon tile `0x73`): ROM job bytes 15/19/20 cast summons, 17 casts
+    black, 18 white. ff3mmo has Summoner at 17 and Magus at 19. The two agree at
+    15/18/20. `summon-tiers.js`'s `JOB_SUMMONER = 17` is CORRECT for ff3mmo's own
+    table and must NOT be "fixed" to 19 — but jobs.js pulls alignment/lvReq from
+    `$72010` BY INDEX, so if the order is wrong there those two jobs may carry
+    each other's job-switch alignment. Not investigated.
+14. ⚠ **Ally and PvP summon casts are architecturally single-target.** One
+    `allyMagicTargetIdx`, one wire target, one rendered target effect. Nothing
+    can reach an auto-all spell through the ally AI pool today
+    (`check-spell-targeting` section 5 pins that), so nothing is broken — but a
+    multi-target ally cast path does not exist and would be real work.
+
