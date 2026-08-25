@@ -174,11 +174,21 @@ export function renderBattleBg(romData, bgId) {
 //
 // ⛔ ENTRANCE TILES DO NOT CARRY A BACKDROP. When byte 1 bit 7 is set the tile
 // is a warp and byte 2 is its destination id instead — ids that run to 0x19,
-// past the 24 real backdrops. You cannot fight standing on one (the warp fires
-// first), but this masks and range-checks anyway rather than trusting that.
+// past the 24 real backdrops.
+//
+// ⛔⛔ AND YOU CAN STAND ON ONE. "The warp fires first, so it never matters" was
+// wrong twice over: leaving a town drops you ON its entrance tile, and this game
+// REMOVES some entrances (`REMOVED_ENTRANCES` — map 180, the Invincible, parked
+// in the desert west of Kazus at world 90,59). A removed entrance is ordinary
+// ground you walk across. Returning 0 for it put a GRASSLAND strip in the dead
+// centre of a desert, which is exactly what Joel saw.
+//
+// So this returns NO_BACKDROP, not a wrong answer. The caller that knows the
+// neighbours decides — see `WorldMapRenderer.battleBgIdAt`.
+export const NO_BACKDROP = -1;
 export function battleBgIdForWorldProps(props) {
   if (!props) return 0;
-  if (props.byte1 & 0x80) return 0;              // warp tile: byte2 is a destination
+  if (props.byte1 & 0x80) return NO_BACKDROP;    // warp tile: byte2 is a destination
   const id = props.byte2 & 0x1F;
   return id < BATTLE_BG_COUNT ? id : 0;
 }

@@ -1,6 +1,6 @@
 # FF3 battle backdrops — decoded, measured, wired
 
-**Status: complete and verified on hardware, 2026-08-25 (v1.10.80).**
+**Status: complete and verified on hardware, 2026-08-25 (v1.10.81).**
 All 24 backdrops match a live PPU on all four of their fields. Both map lookup
 tables are read. Selection is a registry (`src/data/backdrops.js`); the overworld
 strip follows the biome under the party and dungeons resolve per floor.
@@ -70,20 +70,64 @@ The map lookup is indexed by map id and the overworld is not a map id. This is
 128 x 2 table `world-map-loader.js` already parses for passability and
 entrances. Byte 1 was consumed for years; byte 2 was dropped on the floor.
 
-World 0's walkable tiles use exactly six ids:
+World 0's non-warp tiles use exactly six ids. **What reaches a strip matters as
+much as what it looks like** — two of these are water you can only be standing on
+in a boat:
 
-| id | terrain |
-|---|---|
-| 0 | grassland |
-| 1 | desert |
-| 2 | forest |
-| 3 | marsh |
-| 4 | rock / mountain |
-| 5 | ocean |
+| id | name | placed | reachable by |
+|---|---|---|---|
+| 0 | grassland | 2410+ | foot |
+| 1 | desert | 377 | foot |
+| 2 | forest | 717 | foot |
+| 3 | marsh | **0** | — never placed on this world |
+| 4 | **lake** | 75 | canoe / ship — **foot BLOCKED** |
+| 5 | ocean | 4548 | ship — foot and canoe blocked |
+
+Backdrop 4's 75 tiles are one body of water at world **81-87, 38-40**, ringed by
+mountains with a cave mouth on its north shore (`node tools/world-shot.mjs
+84,39`). It was called `mountain` for a day off a glance at the strip art.
+
+**⛔ AN IMPASSABLE TILE'S BYTE 2 IS NEVER SEEN.** You cannot start a fight
+standing on a tile you cannot stand on, so the byte is dead there — the same way
+a warp tile's byte 2 is a destination. World 0's real MOUNTAIN tiles
+(`$05 $06 $07 $15 $16 $17`, byte 1 `$1f`, 855 placed) carry byte 2 = 0 and it
+means nothing. Do not read them as evidence that mountains fight on grassland.
 
 **⛔ Entrance tiles do not carry a backdrop.** When byte 1 bit 7 is set the tile
 is a warp and byte 2 is its destination id instead — ids that run to `0x19`, past
-the 24 real backdrops. `battleBgIdForWorldProps` masks and range-checks anyway.
+the 24 real backdrops. `battleBgIdForWorldProps` returns `NO_BACKDROP` there.
+
+**⛔⛔ AND YOU CAN STAND ON ONE.** "The warp fires first so it never matters" is
+wrong twice: leaving a town drops you **on** its entrance tile, and this game
+REMOVES some entrances — map 180, the Invincible, is parked at world **(90,59)**,
+dead centre of the desert west of Kazus. That tile is ordinary ground you walk
+across, and answering `0` for it painted a **grassland strip in the middle of a
+desert**. Found in play.
+
+`WorldMapRenderer.battleBgIdAt` gives a warp tile the commonest biome of the
+eight tiles around it. ⚠ **Our choice, not the cartridge's** — FF3 reads the
+entrance id as a backdrop and gets nonsense it never shows. Ours gives desert in
+the desert and grass at Kazus' door, and `check-battle-bg` pins both.
+
+### ⛔ Naming: ask the ROM before describing a picture
+
+The cartridge does not name its backdrops, so every registry row carries the
+evidence its name rests on, ranked:
+
+| rank | basis |
+|---|---|
+| ⭐ ROM-NAMED | a map that selects the strip carries a name banner (map property byte 2 → string `0x100+b2`) |
+| TILE-MEASURED | the world tiles that select it, **with their passability** |
+| ⚠ FROM THE RENDER | nothing corroborates it — someone looked at the strip |
+
+**Three names came off the art and were wrong.** `hills` was the MOUNTAIN strip —
+its only two maps are 92 "Summit Road" and 94 "Bahamut's Nest". `ice` was the
+CRYSTAL CHAMBER — 148 "Wind Crystal", 149 "Fire Crystal", which is exactly why
+Altar Cave's crystal boss floor takes it. And `mountain` was a LAKE.
+
+`check-battle-bg` pins all three: backdrop 4's placed tiles must be foot-blocked
+and canoe-passable, backdrop 7's map set must be exactly `{92, 94}`, and backdrop
+15's must contain 148 and 149.
 
 **The tell that this path existed at all:** seven of the 24 backdrops are reached
 by no map in either lookup table. Six of them are the list above; the seventh is
@@ -225,7 +269,7 @@ floor its own `romFloorMaps` entry — the same list the encounter tables are ke
 on, so the strip and the monsters come from the same cartridge map. Side rooms
 and anything unlisted fall back to the dungeon's donor.
 
-Altar Cave: floors 0-3 `cave`, boss floor `ice` (crystal skin, donor 148).
+Altar Cave: floors 0-3 `cave`, boss floor `crystal chamber` (crystal skin, donor 148).
 Cave of Seals: all four `cave`.
 
 ⚠ Both shipped dungeons land on `cave` for every walkable floor, so per-floor

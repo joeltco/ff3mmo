@@ -29,7 +29,7 @@ globalThis.window = { addEventListener() {} };
 globalThis.document = { createElement: () => createCanvas(8, 8), addEventListener() {} };
 
 const { renderBattleBg, battleBgIdForMap, battleBgIdForWorldProps, BATTLE_BG_COUNT,
-        BATTLE_BG_MAP_LOOKUP, BATTLE_BG_MAP_LOOKUP_HI, WORLD_TILE_PROPS } =
+        BATTLE_BG_MAP_LOOKUP, BATTLE_BG_MAP_LOOKUP_HI, WORLD_TILE_PROPS, NO_BACKDROP } =
   await import('../src/battle-bg.js');
 const { NES_SYSTEM_PALETTE } = await import('../src/tile-decoder.js');
 
@@ -129,8 +129,8 @@ for (let mapId = 0; mapId < 512; mapId++) {
   const terrain = new Set(), warps = [];
   for (let t = 0; t < 128; t++) {
     const props = { byte1: rom[base + t * 2], byte2: rom[base + t * 2 + 1] };
-    if (props.byte1 & 0x80) { warps.push(t); ok(battleBgIdForWorldProps(props) === 0,
-      `world tile $${t.toString(16)} is a warp; its byte 2 is a destination id, not a backdrop`); continue; }
+    if (props.byte1 & 0x80) { warps.push(t); ok(battleBgIdForWorldProps(props) === NO_BACKDROP,
+      `world tile $${t.toString(16)} is a warp; its byte 2 is a destination id, so it must answer NO_BACKDROP — not 0, which paints grassland`); continue; }
     const id = battleBgIdForWorldProps(props);
     ok(id === props.byte2, `world tile $${t.toString(16)}: byte 2 is ${props.byte2} but resolved to ${id}`);
     terrain.add(id);
@@ -139,6 +139,34 @@ for (let mapId = 0; mapId < 512; mapId++) {
   ok(got === '0,1,2,3,4,5', `world 0 terrain backdrops are {${got}}, expected {0,1,2,3,4,5}`);
   ok(warps.length > 0, 'no warp tiles found in world 0 — the props table moved');
   ok(battleBgIdForWorldProps(null) === 0, 'a missing tile-prop entry must fall back to backdrop 0, not throw');
+}
+
+// ⛔ REGRESSION: THE GRASSLAND PATCH IN THE MIDDLE OF A DESERT.
+//
+// Tile (90,59) — dead centre of the desert west of Kazus — carries the warp bit
+// for entrance id 0, which is map 180, the Invincible. This game REMOVES that
+// entrance, so it is ordinary ground you walk across, and answering 0 for a warp
+// tile painted a grassland strip there. Joel saw it in play.
+//
+// A warp tile takes the commonest biome around it. Pinned on the real tile, plus
+// a town door, so the fallback cannot be quietly dropped or made to always win.
+{
+  const { createCanvas } = await import('@napi-rs/canvas');
+  const prevDoc = globalThis.document;
+  globalThis.document = { createElement: () => createCanvas(1, 1) };
+  const { loadWorldMap } = await import('../src/world-map-loader.js');
+  const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
+  const r = new WorldMapRenderer(loadWorldMap(rom, 0));
+  globalThis.document = prevDoc;
+
+  ok(r.battleBgIdAt(90, 59) === 1,
+     `world (90,59) is the removed Invincible entrance in the middle of the desert; it must take the desert strip (1), got ${r.battleBgIdAt(90, 59)}`);
+  ok(r.battleBgIdAt(89, 59) === 1 && r.battleBgIdAt(91, 59) === 1,
+     'the desert tiles either side of (90,59) must still be desert');
+  ok(r.battleBgIdAt(93, 59) === 0,
+     `world (93,59) is Kazus' door, surrounded by grass; it must take the grassland strip (0), got ${r.battleBgIdAt(93, 59)}`);
+  // A tile with a biome of its own must NEVER be overruled by its neighbours.
+  ok(r.battleBgIdAt(84, 39) === 4, `world (84,39) is lake and must stay lake, got ${r.battleBgIdAt(84, 39)}`);
 }
 
 // Every backdrop must be reachable by SOMETHING — a map, or a world's terrain.
@@ -186,6 +214,74 @@ for (let mapId = 0; mapId < 512; mapId++) {
     ok(selectable.has(id) === !!biome,
        `backdrop ${id} (${backdropName(id)}): world tiles ${selectable.has(id) ? 'DO' : 'do NOT'} select it ` +
        `but its registry biome is ${biome === null ? 'null' : `'${biome}'`}`);
+  }
+
+  // ⛔ THE THREE NAMES THAT CAME OFF THE ART AND WERE WRONG. Pin the facts that
+  // corrected them, so a re-point or a re-name has to argue with the data.
+  //
+  //   `mountain` was really a LAKE  — foot-blocked, canoe/ship-passable water
+  //   `hills`    was really MOUNTAIN — its only maps are Summit Road / Bahamut's Nest
+  //   `ice`      was really the CRYSTAL CHAMBER — Wind Crystal / Fire Crystal
+  {
+    const { loadWorldMap } = await import('../src/world-map-loader.js');
+    const w = loadWorldMap(rom, 0);
+    const onMap = new Array(128).fill(0);
+    for (let i = 0; i < w.tilemap.length; i++) onMap[w.tilemap[i] & 0x7F]++;
+
+    const base = WORLD_TILE_PROPS[0];
+    const FOOT = 0x01, CANOE = 0x03;
+    let lakeOnMap = 0, oceanOnMap = 0;
+    const lakeUnused = [];
+    for (let t = 0; t < 128; t++) {
+      const b1 = rom[base + t * 2], b2 = rom[base + t * 2 + 1];
+      if (b1 & 0x80) continue;
+      const id = battleBgIdForWorldProps({ byte1: b1, byte2: b2 });
+      // ⛔ ONLY TILES THAT ACTUALLY APPEAR. A tile with zero occurrences can
+      // never be the tile you are standing on, so its properties are not
+      // evidence about the strip. Writing this assertion the lazy way caught
+      // exactly that: tile $3b selects the lake strip and IS foot-walkable,
+      // but it is placed nowhere on world 0.
+      if (id === 4 && onMap[t] === 0) { lakeUnused.push(t); continue; }
+      if (id === 5 && onMap[t] === 0) continue;
+      if (id === 4) {
+        lakeOnMap++;
+        ok((b1 & FOOT) === FOOT, `backdrop 4 is named 'lake': placed world tile $${t.toString(16)} must be FOOT-BLOCKED, byte1 $${b1.toString(16)}`);
+        ok((b1 & CANOE) !== CANOE, `backdrop 4 is named 'lake': placed world tile $${t.toString(16)} must be CANOE-passable, byte1 $${b1.toString(16)}`);
+      }
+      if (id === 5) {
+        oceanOnMap++;
+        ok((b1 & CANOE) === CANOE, `backdrop 5 is named 'ocean': placed world tile $${t.toString(16)} must be canoe-BLOCKED (deep water), byte1 $${b1.toString(16)}`);
+      }
+    }
+    ok(lakeOnMap > 0 && oceanOnMap > 0, `lake/ocean tiles vanished from world 0 (${lakeOnMap}/${oceanOnMap} placed)`);
+    // The one lake tile the cartridge defines and never places. Pinned rather
+    // than skipped quietly, because it is the counter-example to the rule above.
+    ok(lakeUnused.map((t) => '$' + t.toString(16)).join(',') === '$3b',
+       `lake tiles defined but never placed are {${lakeUnused.map((t) => '$' + t.toString(16)).join(',')}}, expected {$3b}`);
+
+    const mapsFor = (id) => { const out = []; for (let m = 0; m < 512; m++) if (battleBgIdForMap(rom, m) === id) out.push(m); return out; };
+    const seven = mapsFor(7).join(',');
+    ok(seven === '92,94', `backdrop 7 is named 'mountain' because ONLY Summit Road (92) and Bahamut's Nest (94) select it; now it is {${seven}}`);
+    ok(mapsFor(15).includes(148) && mapsFor(15).includes(149),
+       `backdrop 15 is named 'crystal chamber' because Wind Crystal (148) and Fire Crystal (149) select it; they no longer do`);
+    ok(mapsFor(17).includes(340), `backdrop 17 is named 'Sewers' because map 340 "Sewers" selects it; it no longer does`);
+    ok(mapsFor(22).includes(461), `backdrop 22 is named 'Dark World' because map 461 "Dark World" selects it; it no longer does`);
+
+    // ⛔⛔ THE SWEEP MUST COVER ALL 512 MAPS. `map-names.mjs` stopped at 256 and
+    // therefore reported every strip used by the back half of the game as
+    // having no named map — which is how `brick water` and `deep water` got
+    // shipped instead of Sewers and Dark World. A sweep that stops early does
+    // not report a gap; it reports a clean result.
+    const { all: allMaps } = await import('./map-names.mjs');
+    ok(allMaps.length === 512, `map-names.mjs sweeps ${allMaps.length} maps, not 512 — names above 255 are invisible again`);
+    ok(allMaps[340] && allMaps[340].name === 'Sewers', `map 340 should be named "Sewers", got ${allMaps[340] && allMaps[340].name}`);
+    ok(allMaps[461] && allMaps[461].name === 'Dark World', `map 461 should be named "Dark World", got ${allMaps[461] && allMaps[461].name}`);
+    // Exactly ONE backdrop is still named from the render alone. If that count
+    // grows, someone described a picture instead of asking the ROM.
+    const { BACKDROPS: REG } = await import('../src/data/backdrops.js');
+    const renderOnly = REG.filter((r) => /NAME FROM THE RENDER/i.test(r.evidence)).map((r) => r.id);
+    ok(renderOnly.join(',') === '3,23',
+       `backdrops named from the render alone are {${renderOnly.join(',')}}; expected {3 (marsh, unreachable), 23 (map 473, no banner)}`);
   }
 
   // The source rows must route each context to the right resolver.

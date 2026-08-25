@@ -2,7 +2,7 @@
 
 import { NES_SYSTEM_PALETTE, buildWaterFrames, decodeTile, drawTile } from './tile-decoder.js';
 import { BOULDER_TILES, BOULDER_PAL } from './data/boulder-sprite.js';
-import { battleBgIdForWorldProps } from './battle-bg.js';
+import { battleBgIdForWorldProps, NO_BACKDROP } from './battle-bg.js';
 
 const TILE_SIZE = 16;
 
@@ -497,6 +497,38 @@ export class WorldMapRenderer {
    * it differently is how a correction lands in one and not the other.
    */
   battleBgIdAt(tileX, tileY) {
+    const own = this._rawBattleBgIdAt(tileX, tileY);
+    if (own !== NO_BACKDROP) return own;
+
+    // ⛔ A WARP TILE HAS NO BIOME OF ITS OWN, and you can be standing on one:
+    // leaving a town drops you on its entrance tile, and a REMOVED entrance
+    // (map 180, the Invincible parked in the desert west of Kazus at 90,59) is
+    // ordinary ground you walk straight across. Answering 0 there painted a
+    // grassland strip in the dead centre of that desert.
+    //
+    // ⚠ THIS IS OUR CHOICE, NOT THE CARTRIDGE'S. FF3 would read the entrance id
+    // as if it were a backdrop and get nonsense; it never shows because the warp
+    // fires first. We take the commonest biome of the eight tiles around it —
+    // deterministic, no stored state, and it gives desert in a desert and grass
+    // outside Kazus. Ties break toward the lower id so the answer is stable.
+    const votes = new Map();
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const id = this._rawBattleBgIdAt(tileX + dx, tileY + dy);
+        if (id === NO_BACKDROP) continue;
+        votes.set(id, (votes.get(id) || 0) + 1);
+      }
+    }
+    let best = 0, bestN = 0;
+    for (const [id, n] of [...votes].sort((a, b) => a[0] - b[0])) {
+      if (n > bestN) { best = id; bestN = n; }
+    }
+    return best;
+  }
+
+  /** This tile's own backdrop, or NO_BACKDROP when it is a warp. */
+  _rawBattleBgIdAt(tileX, tileY) {
     const size = this.data.mapWidth;
     const wx = ((tileX % size) + size) % size;
     const wy = ((tileY % size) + size) % size;

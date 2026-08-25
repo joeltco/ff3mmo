@@ -1,3 +1,113 @@
+## 1.10.81 — 2026-08-25
+
+### Three backdrops were named off the art. Two of the names were wrong, and one was water.
+
+Joel: *"I think mountain and hills aren't named properly. hills are mountains I
+think... and the mountains are, like a river or something?"* Both right.
+
+**backdrop 4 `mountain` -> `lake`.** Its five placed world tiles are
+**foot-BLOCKED and canoe-passable**. All 75 are one body of water at world
+**81-87, 38-40**, ringed by mountains with a cave mouth on its north shore —
+rendered with `tools/world-shot.mjs 84,39` rather than argued about. You only
+ever see this strip from a boat.
+
+**backdrop 7 `hills` -> `mountain`.** The only two maps that select it are 92
+**"Summit Road"** and 94 **"Bahamut's Nest"** — the ROM's own names, off map
+property byte 2. Mountain-summit locations, both.
+
+**backdrop 15 `ice` -> `crystal chamber`.** Selected by 148 **"Wind Crystal"**
+and 149 **"Fire Crystal"**. It is the crystal room, which is exactly why Altar
+Cave's crystal boss floor takes it via skin donor 148 — a fact that was sitting
+in the registry the whole time contradicting the name.
+
+Four more re-derived from ROM map names instead of my description of a picture:
+`red cave` -> **molten cave** (107 "Molten Cave", 156 "Bahamut's Lair"),
+`dark cavern` -> **underground lake** (116 "Subterranean Lake", 151 "Lake Dohr"),
+`pillared hall` -> **temple hall** (96 "Nepto Temple"), `jungle` -> **Castle
+Hein** (135 and its floors). The eight strips whose maps carry no name banner keep
+a description and are now marked `⚠ from the render` in the registry.
+
+### ⛔ An impassable tile's byte 2 is never seen
+
+You cannot start a fight standing on a tile you cannot stand on, so the backdrop
+byte is dead there — the same way a warp tile's byte 2 is a destination. World 0's
+REAL mountain tiles (`$05 $06 $07 $15 $16 $17`, byte 1 `$1f`, 855 placed) carry
+byte 2 = 0. That is not evidence that mountains fight on grassland; it is a byte
+nothing reads.
+
+### Gate
+
+`check-battle-bg` now pins the three corrections against the data they rest on:
+backdrop 4's **placed** tiles must be foot-blocked and canoe-passable, backdrop
+7's map set must be exactly `{92, 94}`, and backdrop 15's must contain 148 and 149.
+
+Writing that first assertion the lazy way immediately caught something real: tile
+`$3b` selects the lake strip and IS foot-walkable — but it is placed **nowhere**
+on world 0, so it is not evidence either way. The gate now asserts over placed
+tiles only and pins `$3b` explicitly as the defined-but-never-placed exception,
+rather than skipping it quietly.
+
+### ⛔ A grassland strip in the dead centre of the desert west of Kazus
+
+Reported from play. World tile **(90,59)** carries the warp bit for entrance id 0
+— **map 180, the Invincible**, parked in that desert. This game REMOVES that
+entrance (`REMOVED_ENTRANCES`), so the tile is ordinary ground you walk straight
+across, and `battleBgIdForWorldProps` answered **0** for any warp tile. Backdrop 0
+is grassland. A grass strip in the middle of a desert.
+
+"You cannot fight standing on a warp tile, the warp fires first" was wrong twice:
+a REMOVED entrance never fires, and leaving a town drops you **on** its entrance
+tile.
+
+A warp tile now answers `NO_BACKDROP` instead of a wrong number, and
+`WorldMapRenderer.battleBgIdAt` takes the commonest biome of the eight tiles
+around it. ⚠ That fallback is OUR choice, not the cartridge's — FF3 would read
+the entrance id as a backdrop and get nonsense, which never shows because its
+warp fires. Ours gives desert in the desert and grass at Kazus' door.
+
+Pinned in `check-battle-bg` on the real tile: (90,59) must be desert, (93,59)
+Kazus' door must be grass, and (84,39) — a tile with a biome of its own — must
+never be overruled by its neighbours.
+
+### ⛔ The name sweep stopped at 255, so half the game had "no name"
+
+`tools/map-names.mjs` swept maps 0-255. FF3 has maps to 511 and the whole back
+half of the game lives up there, so every backdrop used past 255 came back with
+no named map and got a **description** instead. That is how `brick water` and
+`deep water` shipped — Joel read them as the Sewers and the Dark World, and the
+ROM agrees: map **340 "Sewers"**, map **461 "Dark World"**.
+
+Extended to 512: 78 named maps becomes **175**, and seven of the eight
+render-named strips turn out to have carried ROM names all along.
+
+| id | was | is | evidence |
+|---|---|---|---|
+| 11 | green ruin | **ancient ruins** | 361 Doga's Grotto, 420 Ancient Ruins |
+| 12 | crystal cave | **Cave of Shadows** | 393 + every floor |
+| 17 | brick water | **Sewers** | 340 + B2F-B4F |
+| 19 | gold temple | **Goldor Manor** | 347 + floors |
+| 20 | ornate hall | **Ancients' Maze** | 437 |
+| 21 | stone tower | **Eureka** | 487 Forbidden Land Eureka |
+| 22 | deep water | **Dark World** | 461 |
+
+`crystal chamber` goes from two names to ten — Wind/Fire/Water/Earth Crystal, the
+four Dark Crystals, and both Crystal Tower maps.
+
+**Only backdrop 23 is still named from a render.** Map 473 alone selects it and
+neither it nor any map in its bank-1 area carries a banner.
+
+The gate pins the sweep at 512, pins 340/461 by name, and pins the render-only
+set to exactly `{3, 23}` — so if that count grows, someone described a picture
+instead of asking the ROM. `map-names.mjs` also no longer dumps its table when
+imported.
+
+### Catalog
+
+`tools/battle-bg-sheet.mjs` now reports, per strip, how many tiles are placed and
+**what can reach them** (`foot/canoe/flight`, `canoe/ship/flight`,
+`mode3/flight`, `unreachable`). Reading the art without checking that is how
+`mountain` got attached to a lake.
+
 ## 1.10.80 — 2026-08-25
 
 ### ⛔ v1.10.79 painted the backdrop into the battle viewport. Reverted.
