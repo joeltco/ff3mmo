@@ -666,9 +666,16 @@ export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
   'Beds upstairs.',
   'Ale down here.',
 ]);
-export const KAZUS_INN_GUEST_A = interior(0x01E010, DIR_DOWN, [
-  'I came for the mythril.',
-  'I am still waiting.',
+// ⭐ THE PUB'S ITEM KEEPER. He stands BEHIND the bar at (9,23) — ROM record
+// $2e, whose own bundle this is — with the counter slab at (9,24) and the stool
+// the player uses at (9,25). He shipped as `kazus_inn_guest_a`, an idle
+// villager, so facing him across his own counter did nothing. `kazus_item` in
+// `data/shops.js` is his counter; `movement.js#findShopAtCounter` opens it.
+//
+// ⛔ Counter-bound, so DIR_DOWN and no wandering, exactly like Ur's keepers.
+export const KAZUS_ITEM_KEEPER = interior(0x01E010, DIR_DOWN, [
+  'Mythril town, mythril prices.',
+  'Potions and cures.',
 ]);
 export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
   'Sasune lies north.',
@@ -963,7 +970,7 @@ export const TOWN_NPCS = new Map([
     // 0x01ED10 records, which is Cid's sprite now. (9,23) is the ROM's 0x01E010
     // record and (9,26) its 0x01E410 one, so each guest wears what the
     // cartridge puts on the tile they stand on.
-    { key: 'kazus_inn_guest_a', x: 9,  y: 23, spec: KAZUS_INN_GUEST_A },
+    { key: 'kazus_item_keeper', x: 9,  y: 23, spec: KAZUS_ITEM_KEEPER },
     { key: 'kazus_inn_guest_b', x: 9,  y: 26, spec: KAZUS_INN_GUEST_B },
     // ⭐ CID, in two states on two tiles. `when` is evaluated at placement time
     // (npc.js#placeTownNpcs) so exactly one of them is ever in the room.

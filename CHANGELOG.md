@@ -1,3 +1,44 @@
+## 1.10.73 — 2026-08-24
+
+### The Kazus pub's bar is an item shop now
+
+There is a keeper standing behind the bar in the Kazus pub — ROM record `$2e`
+@(9,23) — and facing him did nothing. He shipped as `kazus_inn_guest_a`, an idle
+villager with a line about waiting for mythril. He is the inn item shopkeeper.
+
+**The tile settles it.** (9,24), the bar slab in front of him, is tile **`$1d`** —
+the same counter tile every Ur shop uses. The geometry is Ur's inn item shop
+laid out tile for tile:
+
+```
+  ur_item      keeper (8,14)   counter (8,15) $1d   player (8,16)
+  kazus_item   keeper (9,23)   counter (9,24) $1d   player (9,25)
+```
+
+⚠ The CATALOG is chosen, not captured — like `kazus_magic`, and for the same
+reason: the cartridge has no item shop in Kazus at all (its shop maps are 15
+magic, 16 weapon, 17 armor), so `shop-probe.cjs` has nothing to open and read.
+The item IDs are decoded off the ROM's own name table, not invented: `0xA6`
+Potion, `0xAF` Antidote, `0xAE` Eyedrop, `0xAC` EchoHerb, `0xAB` MaidKiss —
+a tier above Ur in BREADTH, not power. No HiPotion; at 1200 gil it would
+outclass every weapon the town sells.
+
+### ⛔ check-shops agreed with itself
+
+Pointing Kazus's counter at open floor **passed the gate clean**. It asked
+`findShopAtCounter` for the shop's OWN coordinates, so it agreed with itself
+wherever the counter pointed — the expectation derived from the value under
+test. It could not have caught the very bug this release fixes.
+
+It now asserts the tile is real: a non-magic counter must be **SOLID** (you
+serve across it, you do not walk onto it) and a placed NPC must stand
+orthogonally beside it. Magic shops are exempt on purpose — FF3 sells spells off
+orbs and the keeper stands ON the tile.
+
+Reverts, both fail: counter onto floor → *"tile $3a, which the player can WALK
+ON — that is floor, not a counter"* and *"NOBODY is placed next to counter"*;
+keeper moved away → *"the shop opens onto an empty counter"*.
+
 ## 1.10.72 — 2026-08-24
 
 ### Cid stands at (6,23), and he is a ghost when you find him

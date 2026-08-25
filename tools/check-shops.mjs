@@ -22,6 +22,7 @@ globalThis.document = { createElement: () => ({ getContext: () => ({}) }), getEl
 const { SHOPS, findShopAtCounter, getShopType } = await import('../src/data/shops.js');
 const { ITEMS } = await import('../src/data/items.js');
 const { loadMap } = await import('../src/map-loader.js');
+const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -33,7 +34,11 @@ const ok = (m) => console.log('  ✓ ' + m);
 // The roster, pinned. Every town that has shipped shops is listed; a missing
 // entry means content was dropped, which is exactly the failure this catches.
 const EXPECTED = ['ur_weapon', 'ur_armor', 'ur_item', 'ur_magic',
-                  'kazus_weapon', 'kazus_armor', 'kazus_magic'];
+                  // ⭐ kazus_item (v1.10.73) — the keeper standing behind the
+                  // pub's bar, ROM record $2e @(9,23), had no counter wired, so
+                  // facing him did nothing. Counter (9,24) is tile $1d, the
+                  // same counter tile Ur's shops use.
+                  'kazus_weapon', 'kazus_armor', 'kazus_magic', 'kazus_item'];
 
 for (const id of EXPECTED) {
   if (!SHOPS.has(id)) bad(`shop "${id}" is GONE from data/shops.js — a town lost its shop`);
@@ -62,6 +67,36 @@ for (const [id, shop] of SHOPS) {
   if (!getShopType(id)) bad(`${id} has no resolvable type (drives the keeper sprite)`);
 }
 if (!failed) ok('every shop resolves at its counter and stocks known items');
+
+// ⛔ A COUNTER HAS TO BE A COUNTER, AND SOMEONE HAS TO BE BEHIND IT.
+//
+// The check above asks `findShopAtCounter` for the shop's OWN coordinates, so it
+// agrees with itself no matter where the counter is pointed — moving Kazus's
+// counter off the bar onto open floor passed it clean. That is deriving the
+// expectation from the value under test. This asserts the tile is real:
+//
+//   * non-magic shops: the counter tile is SOLID (you serve ACROSS it, you do
+//     not walk onto it) and a placed NPC stands orthogonally next to it
+//   * magic shops: FF3 sells spells off orbs, so the keeper stands ON the tile
+//     and `addBlackMageShopkeeper` is what puts them there (checked above)
+//
+// This is what a keeper standing at an unwired bar looks like from a gate.
+for (const [id, shop] of SHOPS) {
+  if (getShopType(id) === 'magic') continue;
+  const md = loadMap(rom, shop.mapId);
+  const { x, y } = shop.counter;
+  const mid = md.tilemap[y * 32 + x];
+  const col = md.collision[mid < 128 ? mid : mid & 0x7F];
+  const solid = (col & 0x07) === 3 || !!(col & 0x80);
+  if (solid) ok(`${id}: counter (${x},${y}) is a solid tile $${mid.toString(16)}`);
+  else bad(`${id}: counter (${x},${y}) is tile $${mid.toString(16)}, which the player can WALK ON — that is floor, not a counter`);
+  const placed = TOWN_NPCS.get(shop.mapId) || [];
+  const behind = placed.filter((e) => Math.abs(e.x - x) + Math.abs(e.y - y) === 1);
+  if (behind.length) ok(`${id}: ${behind.map((e) => e.key).join(', ')} stands at the counter`);
+  else bad(`${id}: NOBODY is placed next to counter (${x},${y}) — the shop opens onto an empty counter`);
+}
+
+
 
 // A magic shop's keeper is placed by map-loading.js, ON the counter tile,
 // carrying the shopId — that is what opens the menu. A plain TOWN_NPCS villager

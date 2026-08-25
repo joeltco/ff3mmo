@@ -44,6 +44,32 @@ export const SHOPS = new Map([
   // 16's column x=3 matches map 5 tile for tile, counter tile $1d at y=15
   // included. MEASURED: the ROM's shop-marker NPC sits at (3,23) on map 16,
   // which is bare floor.
+  // ⭐ THE PUB'S ITEM COUNTER (v1.10.73). There is a keeper standing behind the
+  // bar in Kazus's pub — ROM record $2e @(9,23) — and nothing opened when you
+  // faced him. He is the inn item shopkeeper, wired here.
+  //
+  // Geometry is Ur's inn item shop, tile for tile: keeper BEHIND the counter,
+  // counter tile SOLID between them, player in front.
+  //     ur_item     keeper (8,14)  counter (8,15)  player (8,16)
+  //     kazus_item  keeper (9,23)  counter (9,24)  player (9,25)
+  // (9,24) is the bar slab itself and (9,25) is the stool in front of it.
+  //
+  // ⚠ CHOSEN, not captured — like `kazus_magic` and for the same reason: the
+  // cartridge has NO item shop in Kazus at all (its shop maps are 15 magic, 16
+  // weapon, 17 armor), so `shop-probe.cjs` has nothing to open and read. This
+  // is ff3mmo's own counter. The ITEM IDS are real and decoded off the ROM's
+  // name table, not invented: 0xA6 Potion, 0xAF Antidote, 0xAE Eyedrop,
+  // 0xAC EchoHerb, 0xAB MaidKiss.
+  //
+  // Stocked a tier ABOVE Ur in BREADTH, not power — Ur sells Potion / Eyedrop /
+  // Antidote, and Kazus adds the two cheap status cures Ur has no answer for.
+  // No HiPotion (1200g): that would outclass every weapon on sale in the town.
+  ['kazus_item', {
+    type: 'item',
+    mapId: 12, counter: { x: 9, y: 24 },
+    items: [0xA6, 0xAF, 0xAE, 0xAC, 0xAB],
+    // Potion 150, Antidote 80, Eyedrop 40, EchoHerb 100, MaidKiss 100
+  }],
   ['kazus_weapon', {
     type: 'weapon',
     // Counter on the ROM's marker tile (id232 @(3,23)), mirroring Ur map 5.
