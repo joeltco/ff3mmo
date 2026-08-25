@@ -46,7 +46,7 @@ import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
 import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
-import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
+import { battleBgIdForMap, renderBattleBg } from './battle-bg.js';
 import { dungeonLabels } from './dungeon/labels.js';
 import { BANNER_FOR_MAP, TOWN_MAPS } from './data/areas.js';
 import { mapEntryMusic } from './map-music.js';
@@ -409,8 +409,12 @@ function _loadRegularMap(mapId, returnX, returnY) {
 
 export function setupTopBox(mapId, isWorldMap) {
   if (isWorldMap) {
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP] & 0x1F;
-    const result = renderBattleBg(romRaw, bgId);
+    // ⚠ The overworld TOP BOX stays on backdrop 0 (grassland) deliberately.
+    // The overworld's real backdrop is per-TILE (see battle-backdrop.js), and
+    // this runs once at map load — wiring it here would freeze whichever tile
+    // you happened to walk in on and never update as you cross a desert. The
+    // battle screen is where the terrain lookup belongs, and that is wired.
+    const result = renderBattleBg(romRaw, 0);
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.topBoxMode = 'battle';
@@ -422,8 +426,10 @@ export function setupTopBox(mapId, isWorldMap) {
   }
   if (isDungeonMapId(mapId)) {
     const romMap = resolveDungeonDonor(mapId);
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + romMap] & 0x1F;
-    const result = renderBattleBg(romRaw, bgId);
+    // ⛔ `battleBgIdForMap`, NOT `romRaw[LOOKUP + map]`. There are TWO lookup
+    // tables — maps 256-511 live in the second one — and indexing the first
+    // with a map id above 255 silently reads past its end.
+    const result = renderBattleBg(romRaw, battleBgIdForMap(romRaw, romMap));
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.loadingBgFadeFrames = result.fadeFrames;
@@ -456,8 +462,8 @@ export function setupTopBox(mapId, isWorldMap) {
     topBoxSt.nameBytes = banner;
     hudSt.topBoxMode = 'name';
   } else if (!topBoxSt.isTown) {
-    const bgId = romRaw[BATTLE_BG_MAP_LOOKUP + mapId] & 0x1F;
-    const result = renderBattleBg(romRaw, bgId);
+    // Same two-table rule as the dungeon branch above.
+    const result = renderBattleBg(romRaw, battleBgIdForMap(romRaw, mapId));
     hudSt.topBoxBgCanvas = result.bgCanvas;
     hudSt.topBoxBgFadeFrames = result.fadeFrames;
     hudSt.topBoxMode = 'battle';

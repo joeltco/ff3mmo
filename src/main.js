@@ -41,6 +41,7 @@ import './pvp-arb-viewer.js';
 // Inert until PVP_ARBITER on.
 import './pvp-arb-adapter.js';
 import { initMapLoading, loadMapById } from './map-loading.js';
+import { initBattleBackdrop } from './battle-backdrop.js';
 import { initBattleAlly } from './battle-ally.js';
 import { initBattleEnemy } from './battle-enemy.js';
 import { buildTurnOrder, processNextTurn } from './battle-turn.js';
@@ -410,6 +411,8 @@ export async function loadROM(arrayBuffer) {
   initTitleAssets(rawBytes);
   _stage('initMapLoading');
   initMapLoading(rawBytes);
+  // The battle backdrop reads the ROM at draw time; hand it the same bytes.
+  initBattleBackdrop(rawBytes);
   _stage('initSpellCast');
   initSpellCast({ processNextTurn });
   _stage('initBattleEncounter');

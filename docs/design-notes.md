@@ -801,3 +801,13 @@ guesses; none are fixed.
 5. ⚠ **The plain Ship's map is unknown.** `VEHICLE-SYSTEM-PLAN.md` listed map 180
    for both the Ship and the Invincible; 180 is the Invincible. Do not guess the
    other — render candidates and look.
+6. ⚠ **Battle-backdrop bits 5-6 are undecoded.** Set on 79 of the 512 map lookup
+   entries; bit 7 never. Measured `$08`/`$28`/`$48` on hardware — the backdrop
+   comes back pixel-identical, so they are not backdrop data. What they ARE is
+   unknown. Do not invent a meaning. `docs/BATTLE-BACKDROPS.md`.
+7. ⚠ **World 1 and world 2 tile-prop tables are stride-derived, not measured.**
+   `0x000610` and `0x000710`. This game loads world 0 and the headless world
+   harness only reaches world 0. Verify them if a second world ever ships.
+8. ⚠ **Backdrop 6 (sky) is selected by nothing** in the cartridge's data.
+   `check-battle-bg` pins the orphan set to exactly `{6}` so a real user for it
+   would be noticed rather than passing quietly.

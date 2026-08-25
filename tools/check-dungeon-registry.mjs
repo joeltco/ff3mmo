@@ -140,7 +140,7 @@ ok(R.rosterLocFor(3010) === R.rosterLocFor(3001),
 const { ENCOUNTERS } = await import('../src/data/encounters.js');
 const { LOOT_POOLS } = await import('../src/data/loot-pools.js');
 const { TRACKS } = await import('../src/music.js');
-const { BATTLE_BG_MAP_LOOKUP } = await import('../src/battle-bg.js');
+const { battleBgIdForMap, BATTLE_BG_COUNT } = await import('../src/battle-bg.js');
 const romForBg = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || 'FF3-English.nes'));
 
 // ⛔ EVERY SHIPPED DUNGEON NEEDS ALL FOUR, AND EACH MISSING ONE FAILS SILENTLY:
@@ -161,8 +161,14 @@ for (const d of DUNGEONS) {
   }
   ok(TRACKS[d.music.floors] !== undefined, `dungeon '${d.id}' names track '${d.music.floors}', which is not in TRACKS`);
   ok(TRACKS[d.music.boss] !== undefined, `dungeon '${d.id}' names boss track '${d.music.boss}', which is not in TRACKS`);
-  const bg = romForBg[BATTLE_BG_MAP_LOOKUP + d.donorMap] & 0x1F;
-  ok(Number.isInteger(bg), `dungeon '${d.id}' donor ${d.donorMap} yields no battle background`);
+  // ⛔ `Number.isInteger` on a masked byte is ALWAYS true — this assertion could
+  // never fail, which is the same self-agreeing shape `check-shops` had when it
+  // asked findShopAtCounter for the shop's own coords. Range-check it instead,
+  // through the shipped two-table resolver so a donor above 255 is read from the
+  // right table.
+  const bg = battleBgIdForMap(romForBg, d.donorMap);
+  ok(bg >= 0 && bg < BATTLE_BG_COUNT,
+     `dungeon '${d.id}' donor ${d.donorMap} yields battle background ${bg}, outside 0-${BATTLE_BG_COUNT - 1}`);
 }
 
 // ⭐ Two dungeons must not silently share an encounter zone or a loot pool —

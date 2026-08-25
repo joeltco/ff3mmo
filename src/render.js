@@ -3,7 +3,7 @@
 import { mapSt } from './map-state.js';
 import { ps } from './player-stats.js';
 import { drawVehicle, hasVehicleSprite } from './vehicle-sprite.js';
-import { battleSt } from './battle-state.js';
+import { battleSt, isFieldStillShowing } from './battle-state.js';
 import { transSt } from './transitions.js';
 import { getFlameSprites, getFlameFrames, getStarTiles } from './flame-sprites.js';
 import { _updateWorldWater, _updateIndoorWater, waterSt } from './water-animation.js';
@@ -73,8 +73,10 @@ function _renderMapAndWater(camX, camY, originX, originY, spriteY) {
     _updateIndoorWater(mapSt.mapRenderer, waterSt.tick);
   }
 
-  const spritesVisible = transSt.state === 'none' &&
-    (battleSt.battleState === 'none' || battleSt.battleState === 'flash-strobe' || battleSt.battleState.startsWith('roar-'));
+  // ⛔ The state list moved to `isFieldStillShowing` in battle-state.js — the
+  // battle backdrop asks the SAME question (blank the viewport yet?) and a
+  // second copy of the list would let the walking sprite outlive the map.
+  const spritesVisible = transSt.state === 'none' && isFieldStillShowing();
   const _drawOverlay = () => {
     if (mapSt.onWorldMap && mapSt.worldMapRenderer) {
       mapSt.worldMapRenderer.drawOverlay(ui.ctx, camX, camY, originX, originY, SCREEN_CENTER_X, spriteY);

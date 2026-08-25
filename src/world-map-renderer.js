@@ -2,6 +2,7 @@
 
 import { NES_SYSTEM_PALETTE, buildWaterFrames, decodeTile, drawTile } from './tile-decoder.js';
 import { BOULDER_TILES, BOULDER_PAL } from './data/boulder-sprite.js';
+import { battleBgIdForWorldProps } from './battle-bg.js';
 
 const TILE_SIZE = 16;
 
@@ -480,5 +481,26 @@ export class WorldMapRenderer {
     if (REMOVED_ENTRANCES.has(destMap)) return null;
 
     return { type: 'entrance', trigId, destMap };
+  }
+
+  /**
+   * Which battle backdrop does a fight starting on this tile use?
+   *
+   * ⛔ DO NOT HALF-ASS THE DATA PULL. The world tile-property pair has TWO
+   * bytes and this game only ever consumed byte 1 (passability + the entrance
+   * bit). Byte 2 is the BATTLE BACKDROP — grass 0, desert 1, forest 2, marsh 3,
+   * rock 4, ocean 5 — and dropping it is why every overworld fight, on every
+   * terrain, opened on the grassland strip.
+   *
+   * Deliberately mirrors `getTriggerAt` above: same wrap, same `& 0x7F`
+   * metatile mask, same `tileProps` lookup. Two readers of one table that index
+   * it differently is how a correction lands in one and not the other.
+   */
+  battleBgIdAt(tileX, tileY) {
+    const size = this.data.mapWidth;
+    const wx = ((tileX % size) + size) % size;
+    const wy = ((tileY % size) + size) % size;
+    const m = this.data.tilemap[wy * size + wx] & 0x7F;
+    return battleBgIdForWorldProps(this.data.tileProps[m]);
   }
 }

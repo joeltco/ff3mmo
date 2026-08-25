@@ -1,6 +1,6 @@
 // Battle drawing functions — extracted from game.js (pure rendering, no state mutation except critFlashTimer)
 
-import { battleSt, getEnemyHP, setEnemyHP, BATTLE_TEXT_STEPS } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_TEXT_STEPS, isFieldStillShowing } from './battle-state.js';
 import { drawText } from './font-renderer.js';
 import { _makeFadedPal } from './palette.js';
 import { _dmgBounceY } from './data/animation-tables.js';
@@ -40,6 +40,7 @@ import { getBattleMsgCurrent, getBattleMsgTimer, computeMsgTimings,
 import { clipToViewport, grayViewport } from './hud-drawing.js';
 import { ui } from './ui-state.js';
 import { isVictoryBattleState as _isVictoryBattleState } from './battle-update.js';
+import { drawBattleBackdrop } from './battle-backdrop.js';
 
 function _cursorTileCanvas() { return ui.cursorTileCanvas; }
 
@@ -144,6 +145,12 @@ export function _itemSparkleFrames(itemId) {
 
 function drawBattle() {
   if (battleSt.battleState === 'none') return;
+  // ⛔ FIRST, and before anything else in the battle draw order: blank the
+  // viewport and lay down the ROM battle backdrop. Until v1.10.79 the field map
+  // kept rendering behind the monsters, so a fight in Ur happened on top of the
+  // shops. `isFieldStillShowing` keeps the map up through the entry strobe —
+  // the flash is supposed to play over the field, not over black.
+  if (!isFieldStillShowing()) drawBattleBackdrop(ui.ctx);
   drawBattleCritFlash();
   drawBattlePortrait();
   drawBattleStrobeFlash();

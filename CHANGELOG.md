@@ -1,3 +1,84 @@
+## 1.10.79 — 2026-08-25
+
+### The battle backdrop was decoded and never drawn.
+
+`src/battle-bg.js` could build all 24 of FF3's battle backdrops. `setupTopBox`
+used them for a HUD strip. **The battle screen never drew one** — every fight,
+in every town and every cave, rendered on top of the frozen field map.
+
+A field decoded but not wired is not done.
+
+**Now wired.** `src/battle-backdrop.js` is the single source: it blanks the
+battle viewport and lays the ROM backdrop band across the top, resolving the id
+from wherever the party is standing. Random encounters, chest mimics,
+server-rolled PvE, bosses and PvP all get it, because resolution happens at DRAW
+time from `mapSt` rather than at each battle-start site — there is nothing for a
+new kind of battle to forget to set.
+
+### Three bugs in the data path, all found by asking the hardware
+
+**1. There are TWO map lookup tables, and only one was read.**
+
+```
+LDX $48            ; map id, LOW byte
+LDA $78 / BEQ +    ; map id HIGH bit
+LDA $BD00,X        ;   maps 256-511   <- never read
+LDA $BC00,X        ; + maps   0-255
+```
+
+FF3 has maps above 255 and `loadMap` reaches 511, so every high map was silently
+drawing map-mod-256's backdrop. `battleBgIdForMap` now reads both.
+
+**2. The overworld had no terrain lookup at all** — it used `table[0]`,
+grassland, on every tile. The tell: **seven of the 24 backdrops are reached by no
+map in either table.** They are the overworld's own — desert, forest, marsh,
+rock, ocean, sky, undersea. On the overworld the backdrop is **byte 2 of the tile
+the party is standing on**, in the same 128x2 world tile-property table this game
+already parsed for passability and entrances. Byte 1 was consumed; byte 2 was
+dropped on the floor. Fighting in the desert now looks like the desert.
+
+**3. `check-dungeon-registry` asserted `Number.isInteger(bg)`** on a byte already
+masked to 0-31 — an assertion that could never fail. Range-checked instead.
+
+### Measured, not read off a disassembly
+
+`tools/monscan/battle-bg-sweep.cjs` hex-patches the map->backdrop byte, boots
+the real cartridge into a real encounter, and reads back what the PPU drew — 24
+times. **All 24 agree with the ROM model on all four fields**: tile bytes,
+palette, tilemap id, metatiles.
+
+* The map index was proven by patching: index 181 changes the backdrop, the
+  other 255 entries change nothing. `$48` becomes 181 at frame 2937 and `$6B`
+  becomes `table[181] & 0x1F` at frame 3609.
+* The overworld link was proven by forcing byte 2 of every world tile to `0x0C`
+  and walking until a fight fired — backdrop 12's palette on screen, `0x0C` in
+  `$6B`. Stock, the same walk gives 0.
+* The band is 256x32 at nametable rows 1-4, read off the PPU, not inferred.
+
+### ⚠ Bits 5-6 of the lookup byte are UNDECODED
+
+Set on 79 of the 512 entries; bit 7 never. Bytes `$08` / `$28` / `$48` were run
+on hardware and the backdrop came back **pixel-identical** every time, so they
+are not backdrop data. The enemy count wobbled between those runs, but it wobbles
+for `$09` and `$0a` too — that is the RNG, not the bits. Named in the source
+rather than quietly masked away.
+
+Backdrop 6 (sky) is selected by nothing in this cartridge's data. Recorded as a
+measured orphan; the gate pins it so a real user showing up gets noticed.
+
+### New
+
+* `tools/check-battle-bg.mjs` — gate. Compares the SHIPPED renderer to the PPU
+  capture pixel for pixel, proves both lookup tables are read, range-checks all
+  512 maps, pins the world-terrain path, and asserts the battle screen actually
+  calls the drawer. Verified to fail on all three reverts.
+* `tools/battle-shot.mjs` — the battle viewport through the shipped drawers.
+  `--all` renders every backdrop with monsters in place.
+* `tools/battle-bg-sheet.mjs` — all 24 backdrops, labelled with the maps that use
+  them.
+* `tools/monscan/battle-bg-sweep.cjs`, `battle-bg-probe.cjs`, `world-bg-probe.cjs`
+  — the hardware probes.
+
 ## 1.10.78 — 2026-08-24
 
 ### ⛔ FF3 has no black-magic sign. Both invented ones are gone.
