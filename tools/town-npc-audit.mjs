@@ -70,6 +70,10 @@ const { calcSpawnY } = await import('./lib/spawn.mjs');
 const { playerRegion, isTalkable, isTransitionTile } = await import('./lib/talkable.mjs');
 const { isOpenAreaTile, isWalkableForNpc, MIN_OPEN_NEIGHBOURS } = await import('../src/data/npc-walk-area.js');
 const { bundleForNpcId } = await import('../src/data/npc-gfx.js');
+// ⛔ IMPORT THE REAL DERIVATION. `placeTownNpcs` overrides a spec's dir/wander
+// from the ROM record's flags byte, so a gate reading the SPEC audits something
+// the player never sees. This is the same module the game calls.
+const { specWithRomFlags, makeCanRoamFrom } = await import('../src/data/npc-flags.js');
 
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const W = 32;
@@ -107,12 +111,20 @@ for (const mapId of [...maps].sort((a, b) => a - b)) {
   };
 
   const list = [
-    ...(TOWN_NPCS.get(mapId) || []).map((e) => ({
-      key: e.key, x: e.x, y: e.y, bundle: e.spec.romOffset,
-      // The game's own resolution, from npc.js#addSceneNpc.
-      mode: e.spec.wander ? 'pause' : (e.spec.animate ? 'idle-march' : 'static'),
-      wander: !!e.spec.wander, when: e.when,
-    })),
+    ...(TOWN_NPCS.get(mapId) || []).map((e) => {
+      // ⛔ THE SHIPPED SPEC, not the declared one. `placeTownNpcs` replaces
+      // dir/wander with the ROM record's flags byte unless the spec opts out,
+      // so auditing `e.spec` audits something the player never sees.
+      const spec = specWithRomFlags(e.spec, md, e.x, e.y, makeCanRoamFrom(isWalkableForNpc, MIN_OPEN_NEIGHBOURS));
+      return {
+        key: e.key, x: e.x, y: e.y, bundle: spec.romOffset,
+        // The game's own resolution, from npc.js#addSceneNpc.
+        mode: spec.wander ? 'pause' : (spec.animate ? 'idle-march' : 'static'),
+        wander: !!spec.wander, dir: spec.dir, romFlagged: !e.spec.ignoreRomFlags,
+        penned: !!spec.penned,
+        when: e.when,
+      };
+    }),
     ...(SPECIAL.get(mapId) || []),
   ];
 
@@ -135,7 +147,11 @@ for (const mapId of [...maps].sort((a, b) => a - b)) {
     }
     rows.push({
       town: townOf.get(mapId) || '?', mapId, key: n.key, x: n.x, y: n.y,
-      mode: n.mode, nb, when: n.when ? 'quest-gated' : '', flags, sprite,
+      // ⛔ SHOW THE RECONCILIATION. The cartridge said roam; ff3mmo's wander
+      // rule (>= MIN_OPEN_NEIGHBOURS) would not let it step, so it holds its
+      // post. Printed, never silently swallowed.
+      mode: n.mode, nb, when: n.when ? 'quest-gated' : '',
+      flags: n.penned ? [...flags, 'ROM-SAYS-ROAM'] : flags, sprite,
     });
   }
 }

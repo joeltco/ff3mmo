@@ -49,7 +49,13 @@ const TOWN_KEEPER_PAL_BTM = [0x1A, 0x0F, 0x12, 0x36]; // SP2 — body / tunic / 
 // Bundle 0x1E210 is the same walk-sprite shape as the opening right attendant
 // but recolored by the town palette. Idle-march (walk-cycle in place) facing
 // down — counter-bound, so it animates without wandering.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const INN_ITEM_KEEPER = {
+  ignoreRomFlags: true,
   romOffset: 0x01E210,
   palTop: TOWN_KEEPER_PAL_TOP,
   palBtm: TOWN_KEEPER_PAL_BTM,
@@ -59,7 +65,13 @@ export const INN_ITEM_KEEPER = {
 
 // Ur inn — the guest upstairs. ROM record id $15 @(4,3), the same id the item
 // keeper wears, so the same bundle. Faces down, stands still.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const INN_GUEST = {
+  ignoreRomFlags: true,
   romOffset: 0x01E210,
   palTop: TOWN_KEEPER_PAL_TOP,
   palBtm: TOWN_KEEPER_PAL_BTM,
@@ -73,7 +85,13 @@ export const INN_GUEST = {
 
 // Ur weapon shop — keeper. Stands at map 5 (3,14), behind the ur_weapon
 // counter at (3,15). Bundle 0x1E610. Idle-march facing down — counter-bound.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const WEAPON_KEEPER = {
+  ignoreRomFlags: true,
   romOffset: 0x01E610,
   palTop: TOWN_KEEPER_PAL_TOP,
   palBtm: TOWN_KEEPER_PAL_BTM,
@@ -84,7 +102,13 @@ export const WEAPON_KEEPER = {
 // Ur inn — innkeeper (the woman). Stands at map 8 (3,14). Bundle 0x1E010 (same
 // walk-sprite shape as the opening left attendant) recolored by the town
 // palette. Idle-march facing down.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const INN_KEEPER = {
+  ignoreRomFlags: true,
   romOffset: 0x01E010,
   palTop: TOWN_KEEPER_PAL_TOP,
   palBtm: TOWN_KEEPER_PAL_BTM,
@@ -692,10 +716,15 @@ export const KAZUS_TOWN_D = kazusNpc(1, {
 });
 
 // Inn (map 12) — indoors, so `interior()`: no wandering, idle-march in place.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
   'Beds upstairs.',
   'Ale down here.',
-]);
+], { ignoreRomFlags: true });
 // ⭐ THE PUB'S ITEM KEEPER. He stands BEHIND the bar at (9,23) — ROM record
 // $2e, whose own bundle this is — with the counter slab at (9,24) and the stool
 // the player uses at (9,25). He shipped as `kazus_inn_guest_a`, an idle
@@ -703,10 +732,15 @@ export const KAZUS_INN_KEEP = interior(0x01DF10, DIR_DOWN, [
 // `data/shops.js` is his counter; `movement.js#findShopAtCounter` opens it.
 //
 // ⛔ Counter-bound, so DIR_DOWN and no wandering, exactly like Ur's keepers.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const KAZUS_ITEM_KEEPER = interior(0x01E010, DIR_DOWN, [
   'Mythril town, mythril prices.',
   'Potions and cures.',
-]);
+], { ignoreRomFlags: true });
 export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
   'Sasune lies north.',
   'The castle still stands.',
@@ -742,10 +776,16 @@ export const KAZUS_INN_GUEST_B = interior(0x01E410, DIR_LEFT, [
 // after the towns are shaped; these lines carry the beats, not the final voice.
 // ⭐ CID, CURSED. Same man, same tile (6,23) — the Djinn's ghost form, which is
 // the sprite record $2c actually wears. Swaps to CID once the quest is done.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
   'Cid, of Canaan.',
   'The curse caught me here.',
 ], {
+  ignoreRomFlags: true,
   answers: {
     airship: [
       'She is west, in the sand.',
@@ -753,7 +793,7 @@ export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
       'I will not send you dead.',
     ],
   },
-});
+}, { ignoreRomFlags: true });
 
 // ── CID — a SPECIAL CHARACTER, not a townsperson ─────────────────────────
 //
@@ -781,7 +821,13 @@ export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
 // ⛔ HE DOES NOT WANDER. `npc.js#tryYieldToPlayer` returns false for `static`
 // and `idle-march`, so a still NPC NEVER yields — keep him off doors and off
 // any tile the player must walk through. (6,23) is open floor beside the bar.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const CID = {
+  ignoreRomFlags: true,
   romOffset: 0x01D910,   // ⭐ his own face — AFTER the curse lifts
   palTop: UR_SP3,
   palBtm: UR_SP2,
@@ -838,14 +884,24 @@ export const CID_MAN = interior(0x01DF10, DIR_DOWN, [
 // records call for. ff3mmo draws bundles straight from ROM offsets with no
 // CHR-RAM budget, so this is a deliberate, listed exception in
 // `check-npc-placement`, not a licence to hand-add ordinary townsfolk.
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const KAZUS_WEAPON_KEEPER = interior(0x01E610, DIR_DOWN, [
   'Mythril holds an edge.',
   'It costs what it costs.',
-]);
+], { ignoreRomFlags: true });
+// ⛔ ignoreRomFlags — this NPC does NOT take facing/movement from the ROM
+// record on its tile. Counter-bound keepers must face their CUSTOMER and must
+// never wander off the counter; the villager whose tile they borrowed faces
+// wherever the cartridge pointed them. Everyone without this marker gets the
+// cartridge's own flags byte (see npc.js#romFlagsAt).
 export const KAZUS_ARMOR_KEEPER = interior(0x01E610, DIR_DOWN, [
   'Mythril plate.',
   'Dear, but it turns a blade.',
-]);
+], { ignoreRomFlags: true });
 
 // Ur's secret house (map 2). ONE person, and the ROM's own tile.
 //

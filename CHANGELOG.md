@@ -1,3 +1,72 @@
+## 1.10.76 — 2026-08-24
+
+### The NPC record's 4th byte, finally used
+
+FF3's per-map NPC entry is `{id, x, y, FLAGS}`. v1.10.69 placed all ten of Ur's
+townsfolk from id/x/y and **threw the flags byte away — after disassembling it
+earlier the same day.** Eight of ten shipped frozen, facing whatever the spec
+guessed. The report was "random NPCs standing in random spots". It was right.
+
+```
+LDA ($8C),Y            ; Y=3, the flags byte
+AND #$F0               -> npc struct +1      MOVEMENT
+ASL x4 / AND #$C0      -> ($8A),Y=5          FACING (bits 2-3)
+```
+
+**MEASURED on hardware, not inferred.** Booted the field ROM, warped, walked the
+party 90 steps, counted distinct tiles per NPC at `$7000 + slot*16`:
+
+| | |
+|---|---|
+| `$00` high nibble → **roams** | `$06 $0a $0c $0d $0e $0f` — 15..27 tiles each |
+| `$C0` high nibble → **holds** | `$05 $07 $08 $09` — 1 tile each |
+
+10 of 10. ⛔ The first attempt **idled** for 1440 frames, saw nobody move, and
+would have "proved" the opposite — FF3 only steps NPCs while the party walks.
+
+Facing is `(flags >> 2) & 3`, read back at `$7100 + slot*16 + 5` as `value << 6`:
+Ur 10/10, Castle Sasune 6/6, Kazus inn 10/10. ⛔ Ur alone exercises only facings
+1 and 2 — maps 18 and 12 were added **because** they carry 3 and 0, so the whole
+domain is covered instead of the cases that could not disagree. The order is
+DOWN/UP/LEFT/RIGHT, identical to `DIR_*`, so it maps through with no table.
+
+`src/data/npc-flags.js` is Node-clean, so the GATES run the same derivation the
+game ships. `check-npc-placement` and `town-npc-audit` were auditing `e.spec` —
+i.e. something the player never sees.
+
+### ⛔ One reconciliation, printed not swallowed
+
+FF3 will step an NPC off a tile with one open neighbour; ff3mmo's wander rule
+needs `MIN_OPEN_NEIGHBOURS`. Three NPCs whose record says roam sit on such tiles
+and would spend the game failing to take a step — indistinguishable from frozen.
+They hold their post and the audit prints them **ROM-SAYS-ROAM**.
+
+### ⛔ The twin rule was stricter than the cartridge
+
+It demanded every sharer of a bundle stand still. FF3 puts **four** people on
+`0x1DF10` in Ur and lets **three** roam — so obeying the flags byte made the gate
+fail on correct data, which is the pressure that gets real data thrown away in
+the first place. The defect was never "two of the same face", it was INVENTED
+duplication. A sharer must now sit on a ROM record for that bundle **and move
+exactly as its flags say**. FF3's own twins pass; a fabricated one cannot.
+
+### The escape hatch is now a pinned list
+
+`ignoreRomFlags` keeps a hand-written pose — needed for counter-bound keepers who
+must face their customer, and for Cid. It is exactly how this shipped broken, so
+only the 11 names in `MAY_IGNORE_ROM_FLAGS` may carry it. Reverting one Ur
+townsman to it fails: *"carries ignoreRomFlags but is not in
+MAY_IGNORE_ROM_FLAGS — dropping the record's flags byte must be a deliberate,
+listed decision"*.
+
+### ⛔⛔ DO NOT HALF-ASS THE DATA PULL
+
+A banner naming every one of the day's failures is at the top of **33 files**
+that read or place ROM data, and the rule is in `CLAUDE.md`: *a record has N
+fields; if you use fewer than N you have not read it, you guessed while holding
+the answer.* Before "done": list every field, point at the line that consumes
+each one.
+
 ## 1.10.75 — 2026-08-24
 
 ### How FF3 actually does it

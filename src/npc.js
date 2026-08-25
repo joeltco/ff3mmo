@@ -55,13 +55,17 @@ import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM, WM_WALK_TOP, WM_WALK_BTM } from './job-sprites.js';
+// ⛔ The NPC record's 4th byte — facing + movement. Lives in a Node-clean data
+// module so the GATES audit the same derivation the game ships, not the spec.
+import { specWithRomFlags, makeCanRoamFrom } from './data/npc-flags.js';
+const _canRoamFrom = makeCanRoamFrom(isWalkableForNpc, MIN_OPEN_NEIGHBOURS);
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT, OPENING_INTRO } from './data/opening-scene.js';
 import { transSt } from './transitions.js';
 import { TOWN_NPCS } from './data/town-npcs.js';
 // The map is the authority on how it colours people — see data/npc-palette.js.
 // Node-clean and shared with the gate so the rule lives in exactly one place.
 import { mapPalettesForSpec } from './data/npc-palette.js';
-import { isOpenAreaTile } from './data/npc-walk-area.js';
+import { isOpenAreaTile, isWalkableForNpc, MIN_OPEN_NEIGHBOURS } from './data/npc-walk-area.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
@@ -413,10 +417,16 @@ export function placeTownNpcs(mapId) {
     // therefore dropped nearly every wanderer into the south plaza, right where
     // the player walks in, while the ROM spreads the same ten people from row
     // 10 to row 28. The ROM's spacing is simply better than the shuffle.
-    if (pool && n.spec.wander && !n.spec.fixedSpawn && pi < pool.length) {
+    // ⛔ THE CARTRIDGE DECIDES WHICH WAY THEY FACE AND WHETHER THEY WALK.
+    // Derived by DEFAULT from the ROM record on this tile, so forgetting gives
+    // you the game's data rather than a guess. `ignoreRomFlags` opts out and
+    // must say why — counter-bound keepers face their customer, not whatever
+    // the villager whose tile they borrowed happened to face.
+    const spec = specWithRomFlags(n.spec, mapSt.mapData, n.x, n.y, _canRoamFrom);
+    if (pool && spec.wander && !spec.fixedSpawn && pi < pool.length) {
       [x, y] = pool[pi++];
     }
-    addSceneNpc(n.key, x, y, mapPalettesForSpec(n.spec, mapSt.mapData));
+    addSceneNpc(n.key, x, y, mapPalettesForSpec(spec, mapSt.mapData));
   }
 }
 

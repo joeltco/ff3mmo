@@ -50,6 +50,11 @@ const rom = new Uint8Array(fs.readFileSync(ROM));
 
 const { loadMap } = await import('../src/map-loader.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
+// ⛔ AUDIT WHAT SHIPS. `placeTownNpcs` replaces dir/wander from the ROM record's
+// flags byte, so `e.spec.wander` is NOT what the player gets.
+const { specWithRomFlags, makeCanRoamFrom } = await import('../src/data/npc-flags.js');
+const { isWalkableForNpc: _walkNpc, MIN_OPEN_NEIGHBOURS: _minOpen } =
+  await import('../src/data/npc-walk-area.js');
 const { bundleForNpcId } = await import('../src/data/npc-gfx.js');
 
 // tileset -> metatile ids that draw as tree canopy.
@@ -168,6 +173,41 @@ const LOADED_BUNDLES = new Map([
   [11,  new Set()],
 ]);
 
+
+// ⛔ WHO IS ALLOWED TO IGNORE THE CARTRIDGE — A PINNED LIST.
+//
+// `ignoreRomFlags` makes an NPC keep its hand-written dir/wander instead of the
+// ROM record's flags byte. That escape hatch is exactly how ten Ur townsfolk
+// shipped frozen: dropping the flags byte has to be a DECISION, never a
+// default and never a sprinkle. Only these keys may carry it, and every one is
+// a counter-bound keeper who must face their customer, or a story character
+// posed on purpose. Adding a name here is a deliberate edit, like check-shops'
+// EXPECTED — if you are reaching for it for an ordinary villager, don't.
+const MAY_IGNORE_ROM_FLAGS = new Set([
+  'inn_item_keeper', 'inn_keeper', 'inn_guest', 'weapon_keeper', 'armor_keeper',
+  'kazus_item_keeper', 'kazus_inn_keep', 'kazus_weapon_keeper', 'kazus_armor_keeper',
+  'cid', 'cid_ghost',
+]);
+{
+  let stray = 0, honoured = 0;
+  for (const [mapId, list] of TOWN_NPCS) {
+    const md = loadMap(rom, mapId);
+    for (const e of list) {
+      const onRecord = md.npcs.some((n) => n.x === e.x && n.y === e.y);
+      if (e.spec && e.spec.ignoreRomFlags) {
+        if (MAY_IGNORE_ROM_FLAGS.has(e.key)) continue;
+        console.error(`  ✗ map ${mapId}: ${e.key} carries ignoreRomFlags but is not in ` +
+          'MAY_IGNORE_ROM_FLAGS — dropping the record\'s flags byte (facing + movement) ' +
+          'must be a deliberate, listed decision');
+        stray++;
+      } else if (onRecord) honoured++;
+    }
+  }
+  if (stray) failed += stray;
+  else console.log(`  ✓ ${honoured} NPCs take facing + movement from their ROM record; ` +
+    `${MAY_IGNORE_ROM_FLAGS.size} listed keepers/story poses opt out`);
+}
+
 {
   let bundleBad = 0;
   for (const [mapId, allowed] of LOADED_BUNDLES) {
@@ -213,14 +253,35 @@ const LOADED_BUNDLES = new Map([
     for (const [off, sharers] of byBundle) {
       if (sharers.length < 2) continue;
       md = md || loadMap(rom, mapId);
+      const canRoam = makeCanRoamFrom(_walkNpc, _minOpen);
+      // ⛔ THE OLD RULE WAS STRICTER THAN THE CARTRIDGE, AND THAT IS ALSO A BUG.
+      //
+      // It said a shared bundle is only allowed if every sharer STANDS STILL.
+      // But FF3 puts FOUR people on 0x1DF10 in Ur and lets THREE of them roam —
+      // so obeying the cartridge's flags byte made this gate fail on correct
+      // data, which is exactly the pressure that gets real data thrown away.
+      //
+      // The real defect was never "two of the same face", it was INVENTED
+      // duplication: a bundle the map never loads, or movement we made up. So
+      // the test is now agreement with the record on the tile — a sharer must
+      // sit on a ROM record for that bundle AND move exactly as that record's
+      // flags say. FF3's own twins pass; a fabricated one cannot.
       for (const e of sharers) {
-        const romHere = md.npcs.some((n) => n.x === e.x && n.y === e.y && bundleForNpcId(rom, n.id) === off);
-        const still = !(e.spec && e.spec.wander);
-        if (romHere && still) continue;
-        console.error(`  ✗ map ${mapId}: ${e.key} shares bundle 0x${off.toString(16).toUpperCase()} with ` +
-          `${sharers.filter((o) => o !== e).map((o) => o.key).join(', ')} but ` +
-          (romHere ? 'WANDERS — a duplicate that walks is the "double NPC" bug'
-                   : `is not on a ROM record for that bundle (${e.x},${e.y})`));
+        const rec = md.npcs.find((n) => n.x === e.x && n.y === e.y && bundleForNpcId(rom, n.id) === off);
+        if (!rec) {
+          console.error(`  ✗ map ${mapId}: ${e.key} shares bundle 0x${off.toString(16).toUpperCase()} with ` +
+            `${sharers.filter((o) => o !== e).map((o) => o.key).join(', ')} but ` +
+            `is not on a ROM record for that bundle (${e.x},${e.y})`);
+          twins++; continue;
+        }
+        if (e.spec && e.spec.ignoreRomFlags) continue;   // keepers: posed on purpose
+        const shipped = specWithRomFlags(e.spec, md, e.x, e.y, canRoam);
+        const romRoams = (rec.flags & 0xF0) === 0;
+        const penned = romRoams && !canRoam(md, e.x, e.y);
+        if (!!shipped.wander === (romRoams && !penned)) continue;
+        console.error(`  ✗ map ${mapId}: ${e.key} shares bundle 0x${off.toString(16).toUpperCase()} and ` +
+          `${shipped.wander ? 'WANDERS' : 'stands still'} but its ROM record (flags $${rec.flags.toString(16)}) ` +
+          `says ${romRoams ? 'roam' : 'hold'} — invented movement on a duplicated face is the "double NPC" bug`);
         twins++;
       }
     }
