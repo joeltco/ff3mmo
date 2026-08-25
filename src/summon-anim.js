@@ -18,6 +18,7 @@
 
 import { CAPTURED_SUMMONS, SUMMON_SRC_W, SUMMON_SRC_H } from './data/summon-anim-captured.js';
 import { CAPTURED_SPELL_ANIMS } from './data/spell-anim-captured.js';
+import { SCREEN_MAP_W } from './spell-anim.js';
 import { _make8Canvas } from './canvas-utils.js';
 
 const BAND_W = 256, BAND_H = 144;
@@ -65,8 +66,28 @@ let _bySpellId = null;
 export function initSummonAnim() {
   _bySpellId = new Map();
   for (const [id, e] of CAPTURED_SUMMONS) {
-    const sx = BAND_W / SUMMON_SRC_W, sy = BAND_H / SUMMON_SRC_H;
-    const buildFrames = (part) => {
+    const sy = BAND_H / SUMMON_SRC_H;
+    // ⛔ TWO DIFFERENT X MAPPINGS, and they are not interchangeable.
+    //
+    //   creature + cast  ->  x 1:1 across the full 256 band. The creature takes
+    //                        over the PARTY PANEL, which lives at x 144-255, so
+    //                        squeezing it into the battle view would drag it off
+    //                        the panel it is supposed to occupy.
+    //   effect           ->  x squeezed into SCREEN_MAP_W (144), the same
+    //                        mapping the screen-anchored spells use.
+    //
+    // The effect is the same kind of thing as Meteo's sweep — a full-screen band
+    // captured off the NES — and spell-anim.js already spells out why 1:1 is
+    // wrong for those (v1.7.846): "the map/battle HUD view is only the LEFT
+    // 144 px; x 144..256 is the player roster box. A 256-wide band drawn at x=0
+    // therefore spilled 112 px straight across the roster." Summon effects were
+    // still doing exactly that: Leviathan's Tidal Wave column sat at x 8-253
+    // with its bulk on the roster, and Titan's BORROWED Quake crack landed at
+    // x 160-207 — inside the roster box — while Quake itself is pinned to
+    // straddle the x=144 boundary.
+    const sxBand = BAND_W / SUMMON_SRC_W;          // 1:1 — creature, cast
+    const sxView = SCREEN_MAP_W / SUMMON_SRC_W;    // 144/256 — effect
+    const buildFrames = (part, sx = sxBand) => {
       const cache = part.pals.map(() => new Array(part.tiles.length));
       const tileFor = (pi, ti) => {
         if (!cache[pi][ti]) cache[pi][ti] = _make8Canvas(part.tiles[ti], part.pals[pi]);
@@ -94,7 +115,7 @@ export function initSummonAnim() {
     // The magic the creature performs. Six of eight capture their own; Titan
     // captures none and BORROWS Quake's crack (see BORROWED_EFFECT), so he does
     // play one. ODIN ALONE has no effect of any kind and simply stands.
-    const fx = e.effect ? { frames: buildFrames(e.effect), holds: e.effect.holds } : null;
+    const fx = e.effect ? { frames: buildFrames(e.effect, sxView), holds: e.effect.holds } : null;
     // The cast burst, played during the buildup like any other school's cast.
     const cast = e.cast ? { frames: buildFrames(e.cast), holds: e.cast.holds } : null;
     // Borrowed effect, if this summon has none of its own. Quake is emitted with
@@ -103,7 +124,7 @@ export function initSummonAnim() {
     let borrowed = null;
     if (!e.effect && BORROWED_EFFECT[id]) {
       const src = CAPTURED_SPELL_ANIMS.get(BORROWED_EFFECT[id].spellId);
-      if (src) borrowed = { frames: buildFrames(src), holds: borrowedHolds(BORROWED_EFFECT[id].ms, src.layouts.length) };
+      if (src) borrowed = { frames: buildFrames(src, sxView), holds: borrowedHolds(BORROWED_EFFECT[id].ms, src.layouts.length) };
     }
     const effectMs = fx ? fx.holds.reduce((a, c) => a + c, 0) : 0;
     const fxFinal = fx || borrowed;

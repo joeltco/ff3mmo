@@ -357,7 +357,12 @@ function _buildBlizzardImpactFrames(pal) {
 // They were one constant, which is fine while everything stays inside the view
 // but makes it impossible to place anything ON the boundary — the canvas would
 // clip the overhanging half away.
-const SCREEN_MAP_W = 144, SCREEN_CANVAS_W = 256, SCREEN_BAND_H = 144;
+// ⭐ EXPORTED so summon-anim.js maps its screen-wide EFFECT the same way.
+// A summon's effect is the same kind of thing as Meteo's sweep — a full-screen
+// band captured off the NES — and mapping it 1:1 instead put part of it on the
+// roster and left the part inside the view small and off-centre.
+export const SCREEN_MAP_W = 144;
+const SCREEN_CANVAS_W = 256, SCREEN_BAND_H = 144;
 
 // Per-spell placement overrides, in POST-MAP battle-view pixels.
 //

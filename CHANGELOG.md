@@ -1,3 +1,48 @@
+## 1.10.88 — 2026-08-25
+
+### Big summon effects follow Meteo's mapping
+
+A summon's effect is a full-screen band captured off the NES, exactly like
+Meteo's sweep — but it was mapped x 1:1 across 256 px while the screen-anchored
+spells squeeze into the battle view. `spell-anim.js` had already written down why
+that is wrong, back in v1.7.846:
+
+> "the map/battle HUD view is only the LEFT 144 px; x 144..256 is the player
+> roster box. A 256-wide band drawn at x=0 therefore spilled 112 px straight
+> across the roster."
+
+Summon effects were still doing it. Measured extents before:
+
+```
+Shiva  (Diamond Dust)  x   4-255      ice swept across the roster
+Leviathan (Tidal Wave) x   8-253      column pinned to the far right edge
+Chocobo                x  24-223
+Titan  (borrowed Quake crack) x 160-207   INSIDE the roster box
+```
+
+Titan is the sharpest case: he borrows Quake's crack, and Quake itself is pinned
+to straddle the x=144 boundary. Same art, and it was landing in the roster.
+
+`buildFrames` now takes an x scale and the parts use two different ones —
+**creature and cast burst stay 1:1** (the creature takes over the party panel at
+x 144-255; squeezing it would drag it off the panel it exists to occupy), while
+**the effect and the borrowed crack map through `SCREEN_MAP_W/256`**, the same
+mapping Meteo uses. `SCREEN_MAP_W` is now exported so "the battle view's width"
+has one definition rather than two.
+
+After: every summon effect lands inside the view, Diamond Dust's ice sweeping the
+field instead of the roster.
+
+### Gate
+
+`check-summon-cast` section 2b pins the containment for all seven summons that
+have effect art (Odin has none), and pins that the creature and cast burst keep
+the 1:1 band mapping — mixing the two up is the whole bug. Reverting the effect
+to 1:1 puts Shiva back at x255, Leviathan at x253 and Titan at x207.
+
+⚠ Titan still does not inherit Quake's `SCREEN_PLACEMENT` pin — same crack, two
+placements. Noted, not changed.
+
 ## 1.10.87 — 2026-08-25
 
 ### Summons reach what their tier says they reach

@@ -180,6 +180,62 @@ console.log('\n[2] the expansion survives — the band moves whole');
      `on screen the late burst still spans ${wide ? wide.maxx - wide.minx : 0}px wide`);
 }
 
+// ── 2b. The EFFECT is mapped into the battle view, like Meteo ──────────────
+// ⛔ TWO DIFFERENT X MAPPINGS in summon-anim.js, and mixing them up is the bug
+// this pins. The creature takes over the PARTY PANEL at x 144-255, so it maps
+// 1:1 across the full band. The EFFECT is a full-screen NES sweep — the same
+// kind of thing as Meteo — and spell-anim.js already spells out why 1:1 is
+// wrong for those (v1.7.846): the battle view is only the LEFT 144 px, so a
+// 256-wide band drawn at x=0 "spilled 112 px straight across the roster".
+// Summon effects were still doing it: Leviathan's Tidal Wave column sat at
+// x 8-253 with its bulk on the roster, Shiva's ice swept the roster too, and
+// Titan's BORROWED Quake crack landed at x 160-207 — inside the roster box —
+// while Quake itself is pinned to straddle x=144.
+console.log('\n[2b] every summon EFFECT lands inside the battle view');
+{
+  const { SCREEN_MAP_W } = await import('../src/spell-anim.js');
+  const band = createCanvas(256, 144);
+  const bg = band.getContext('2d');
+  const unionOf = (frames) => {
+    let U = null;
+    for (const fr of frames) {
+      bg.clearRect(0, 0, 256, 144); bg.drawImage(fr, 0, 0);
+      const d = bg.getImageData(0, 0, 256, 144).data;
+      let a2 = 1e9, x2 = -1;
+      for (let y = 0; y < 144; y++) for (let x = 0; x < 256; x++) {
+        const i = (y * 256 + x) * 4;
+        if (d[i + 3] > 0 && (d[i] | d[i + 1] | d[i + 2])) { if (x < a2) a2 = x; if (x > x2) x2 = x; }
+      }
+      if (x2 < 0) continue;
+      U = U ? { a: Math.min(U.a, a2), x2: Math.max(U.x2, x2) } : { a: a2, x2 };
+    }
+    return U;
+  };
+  // A tile placed at the last mapped column still draws 8px wide.
+  const LIMIT = SCREEN_MAP_W + 8;
+  let over = [];
+  let withFx = 0;
+  for (const id of SUMMON_TIERS.keys()) {
+    const s = getSummon(id);
+    if (!s || !s.fx) continue;             // Odin has no effect art at all
+    withFx++;
+    const u = unionOf(s.fx.frames);
+    if (!u) continue;
+    if (u.x2 > LIMIT) over.push(`0x${id.toString(16)} reaches x${u.x2}`);
+  }
+  ok(withFx >= 7, `seven of eight summons have effect art (${withFx}) — Odin alone has none`);
+  ok(over.length === 0,
+     `every summon effect stays within the battle view (x <= ${LIMIT})${over.length ? ' — ' + over.join(', ') : ''}`);
+
+  const sa = fs.readFileSync(path.join(HERE, '..', 'src', 'summon-anim.js'), 'utf8');
+  ok(/buildFrames\(e\.effect, sxView\)/.test(sa), 'the effect is built with the VIEW mapping');
+  ok(/buildFrames\(src, sxView\)/.test(sa), "Titan's borrowed Quake crack uses it too");
+  ok(/buildFrames\(e\.cast\)/.test(sa) || /buildFrames\(e\.cast, /.test(sa) === false,
+     'the CAST burst keeps the 1:1 band mapping (it is anchored on the caster, not the view)');
+  ok(/const frames = buildFrames\(e\);/.test(sa),
+     'the CREATURE keeps the 1:1 band mapping — it occupies the party panel at x 144-255');
+}
+
 // ── 3. The centre is DERIVED, not a literal ────────────────────────────────
 console.log('\n[3] the burst centre comes from the capture');
 {
