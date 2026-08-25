@@ -26,6 +26,7 @@ const { ps } = await import('../src/player-stats.js');
 const quests = await import('../src/quests.js');
 const { TOWN_NPCS, RESERVED_BUNDLES } = await import('../src/data/town-npcs.js');
 const { loadWorldMap } = await import('../src/world-map-loader.js');
+const { loadMap } = await import('../src/map-loader.js');
 const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
 
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
@@ -112,15 +113,21 @@ if (cids.length === 1) {
   else bad(`Cid wears 0x${(cid.spec.romOffset || 0).toString(16).toUpperCase()} — not his own sprite`);
   if (RESERVED_BUNDLES.get(0x01D910) === Q.giver.npcKey) ok('0x01D910 is reserved to Cid alone');
   else bad('0x01D910 is not reserved to Cid — anyone may wear his sprite');
-  // ⛔ A STILL NPC NEVER YIELDS. `npc.js#tryYieldToPlayer` returns false for
-  // 'static' and 'idle-march', so Cid cannot stand anywhere the player must
-  // walk THROUGH to enter the pub. (17,21) is the door; (17,22) is its only
-  // open neighbour. Either one seals Kazus's pub permanently.
-  const SEALS = [[17, 21], [17, 22]];
-  const onSeal = SEALS.some(([x, y]) => cid.x === x && cid.y === y);
-  if (cid.spec.wander) bad('Cid WANDERS — he is a special character waiting at a door, not a stroller');
-  else if (onSeal) bad(`Cid stands on (${cid.x},${cid.y}) — a still NPC never yields, so he seals the Kazus pub`);
-  else ok(`Cid stands at (${cid.x},${cid.y}), beside the pub door and blocking nothing`);
+  // ⛔ HE IS INSIDE THE PUB. Map 10 (17,21) is trigId 2 -> map 12, so that door
+  // IS the pub; v1.10.70 left him on the STREET outside it. The bundle argument
+  // for keeping him out there was circular — map 12 lacks his sprite because the
+  // cartridge never puts Cid inside, not because the room cannot show him.
+  if (Q.giver.mapId === 12) ok('Cid is inside the pub (map 12), not out on the street');
+  else bad(`Cid's quest giver is on map ${Q.giver.mapId} — he belongs in the pub, map 12`);
+  // ⛔ A STILL NPC NEVER YIELDS (`npc.js#tryYieldToPlayer` returns false for
+  // 'static'/'idle-march'), so he must not stand on a doorway or any tile the
+  // player has to walk through.
+  if (cid.spec.wander) bad('Cid WANDERS — he is a special character waiting in the pub, not a stroller');
+  else ok('Cid stands still — correct for a character who is waiting');
+  const md = loadMap(rom, Q.giver.mapId);
+  const trig = md.triggerMap && md.triggerMap.get(`${cid.x},${cid.y}`);
+  if (!trig) ok(`(${cid.x},${cid.y}) carries no door — he blocks no entrance`);
+  else bad(`(${cid.x},${cid.y}) is a trigger tile — a still Cid there seals it permanently`);
 }
 
 console.log(failed ? `\ncheck-cid-airship: ${failed} FAILED` : '\ncheck-cid-airship: OK');

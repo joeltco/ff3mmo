@@ -718,21 +718,27 @@ export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
 // He stands in the KAZUS PUB DOORWAY: map 10, (17,21), tile $70 — a door. That
 // is the cartridge's own record for him and it is where you find him.
 //
-// ⭐ MAP 10 IS THE ONLY MAP HE CAN RENDER ON. Measured on hardware with
-// `MAPS=10,12 node tools/monscan/map-bundles.cjs`: map 10 holds 0x1D900 in
-// sprite memory, map 12 (the pub interior) does NOT — its set is 0x1DF00,
-// 0x1E000, 0x1ED00, 0x1E400. Putting him inside the pub draws tilemap noise.
+// ⛔ HE IS INSIDE THE PUB — map 12 — not out on the street.
 //
-// ⛔ HE DOES NOT WANDER, and he is ONE TILE OFF the ROM's own coordinate, on
-// purpose. The cartridge puts him ON the door, (17,21). We cannot: FF3 lets you
-// bump a townsperson aside, but `npc.js#tryYieldToPlayer` returns false for
-// `static` and `idle-march` — a still NPC NEVER yields. A still Cid on (17,21)
-// would seal the Kazus pub permanently, and (17,22) is the door's ONLY open
-// neighbour, so standing there plugs the approach just as hard.
+// v1.10.70 put him at map 10 (18,22), beside the pub's front door, on this
+// reasoning: `MAPS=10,12 map-bundles.cjs` shows map 12 does NOT hold 0x1D900 in
+// sprite memory, so "he cannot render in there". That argument is CIRCULAR. A
+// map loads the bundles its own ROM records call for; map 12 lacks Cid's sprite
+// because the cartridge does not place Cid inside, not because the room cannot
+// show him. ff3mmo draws walk bundles straight from ROM offsets — it has no
+// NES CHR-RAM slot budget — and LOADED_BUNDLES is a FIDELITY rule that stops us
+// dressing townsfolk in faces their map never had. Cid is not a townsperson
+// picked off a sheet; he is a named character we are placing on purpose, so he
+// gets an explicit exception in `check-npc-placement`, not a shrug.
 //
-// Row 22 is a wide corridor, so he stands BESIDE the approach at (18,22):
-// right at the pub door, talkable face-to-face from (17,22), blocking nothing.
-// Restore him to (17,21) the day a special-character yield exists.
+// Map 10 (17,21) is trigId 2 -> map 12: that door IS the pub. He stands just
+// inside it at (9,25), a ROM record tile in the pub's lower room (the bar side),
+// reachable and talkable — the tile the old `cid_man` stand-in used and passed
+// every gate on.
+//
+// ⛔ HE DOES NOT WANDER. `npc.js#tryYieldToPlayer` returns false for `static`
+// and `idle-march`, so a still NPC NEVER yields — keep him off doorways and off
+// any tile the player must walk through.
 //
 // ⛔ THE PARTY JOIN IS NOT BUILT. Cid joins after you talk to him once the
 // Sealed Cave is beaten. That is a special-character system ff3mmo does not
@@ -940,9 +946,6 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_town_b', x: 3, y: 28, spec: KAZUS_TOWN_B },   // beside the campfire
     { key: 'kazus_town_c', x: 18, y: 27, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
-    // ⭐ CID, at the pub door. (18,22), not the ROM's (17,21) — see the CID
-    // block: a still NPC never yields, so on the door itself he seals the pub.
-    { key: 'cid', x: 18, y: 22, spec: CID },
   ]],
   // Coordinates MEASURED from the map's largest connected room (63 tiles,
   // x2-6 / y16-20). Map 12's own ROM roster coords are sealed pockets —
@@ -963,7 +966,9 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_inn_guest_b', x: 9,  y: 26, spec: KAZUS_INN_GUEST_B },
     // ⭐ CID, in two states on two tiles. `when` is evaluated at placement time
     // (npc.js#placeTownNpcs) so exactly one of them is ever in the room.
-    // ⛔ CID IS NOT IN HERE, and was never on these tiles. `cid_ghost` sat on
+    // ⭐ CID — inside the pub, where you find him. See the CID block above.
+    { key: 'cid', x: 9, y: 25, spec: CID },
+    // ⛔ The two stand-ins that used to be here were never him. `cid_ghost` sat on
     // record $27 @(5,27) — "This cave is the Mythril Mines." — and `cid_man` on
     // $26 @(9,25) — "Kazus developed around the Mythril Mines." Neither is him.
     // Both were identified through `npcId + 0x202`, which is a description of

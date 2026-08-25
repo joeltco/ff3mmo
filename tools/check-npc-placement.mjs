@@ -114,7 +114,12 @@ const LOADED_BUNDLES = new Map([
   // which map 2 cross-checks — it was in this table already and the measurement
   // reproduced it).
   [10,  new Set([0x01DF10, 0x01E010, 0x01D910, 0x01E210])],            // Kazus town
-  [12,  new Set([0x01DF10, 0x01E010, 0x01ED10, 0x01E410])],            // Kazus inn
+  // ⭐ 0x01D910 is CID'S OWN SPRITE and is ff3mmo's addition, not a measurement.
+  // The cartridge does not place Cid inside the pub, so map 12 never loads his
+  // bundle — that is a fact about the ROM's cast, not a limit on the room. He
+  // is a named character we place deliberately; the rest of this table stays
+  // measured. Do not use this line as licence to hand-add ordinary townsfolk.
+  [12,  new Set([0x01DF10, 0x01E010, 0x01ED10, 0x01E410, 0x01D910])],  // Kazus pub/inn
   [13,  new Set([0x01E010])],                                          // Kazus house
   [14,  new Set([0x01E210])],                                          // Kazus house
   [16,  new Set([0x01DF10, 0x01ED10])],                                // Kazus weapon

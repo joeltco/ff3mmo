@@ -1,3 +1,42 @@
+## 1.10.71 — 2026-08-24
+
+### Cid is IN the pub, not standing outside it
+
+v1.10.70 put him on the street at map 10 (18,22), beside the door. Joel asked
+the obvious question: why is Cid standing outside the pub.
+
+Because I made a circular argument. `MAPS=10,12 map-bundles.cjs` shows map 12
+does not hold `0x1D900` in sprite memory, and I read that as "he cannot render
+in there". **A map loads the bundles its own ROM records call for.** Map 12
+lacks Cid's sprite because the cartridge never places Cid inside — not because
+the room cannot show him. ff3mmo draws walk bundles straight from ROM offsets
+and has no NES CHR-RAM slot budget; `LOADED_BUNDLES` is a FIDELITY rule that
+stops us dressing townsfolk in faces their map never had. Cid is not a
+townsperson picked off a contact sheet. He is a named character we place on
+purpose, and he gets an explicit, commented exception — not a shrug.
+
+**Map 10 (17,21) is trigId 2 → map 12.** That door *is* the pub. He now stands
+just inside it at **(9,25)**, a ROM record tile in the lower room on the bar
+side — reachable, talkable, 3 open neighbours.
+
+| | |
+|---|---|
+| ✓ | exactly one Cid, on map 12 |
+| ✓ | wears his OWN sprite `0x01D910`, reserved to him alone |
+| ✓ | inside the pub, not out on the street |
+| ✓ | stands still — correct for a man who is waiting |
+| ✓ | carries no door — blocks no entrance |
+
+`check-cid-airship` fails on both reverts: moving him onto the pub's exit door
+(3,21) fails as *"a still Cid there seals it permanently"*; moving him back to
+map 10 fails as *"map 10 holds 0 entries keyed cid"*.
+
+⚠ `town-npc-audit` reports the tile's ROM record wears `0x1DF10`. That is the
+warn-not-fail sprite line and it is correct: `$26` stands there on the
+cartridge, and Cid wears his own face instead.
+
+⛔ The party join is still NOT built.
+
 ## 1.10.70 — 2026-08-24
 
 ### Cid is in the Kazus pub
