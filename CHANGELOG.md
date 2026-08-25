@@ -1,3 +1,40 @@
+## 1.10.78 — 2026-08-24
+
+### ⛔ FF3 has no black-magic sign. Both invented ones are gone.
+
+Kazus shipped a hand-picked "black magic" sign twice:
+
+* **v1.10.74** — `$67`, the same star glyph on **pal1, the TREE/WOOD palette**.
+  A gold star with GREEN CORNERS on a wooden wall. The glyph was checked; the
+  attribute palette never was.
+* **the follow-up** — `$67` re-pointed to pal3 for a navy star. Better looking,
+  and still just a colour I chose.
+
+**The cartridge was never asked.** Walking every magic-shop door in the game —
+matching each exterior's `triggerMap` destination against the maps that hold a
+mage keeper:
+
+| exterior | interior | school | sign |
+|---|---|---|---|
+| Ur 114, Kazus 10, 31, 253, 254 | 3 / 15 / 38 | **BLACK** | `$17` pal2 `0f 22 31 30` |
+| map 60 | 63 | **BLACK** | `$1c` pal2 |
+| map 69 | 75 | **WHITE** | `$1c` pal2 |
+
+A BLACK town and a WHITE town using the **identical tile and palette** is the
+whole answer. **FF3 does not distinguish magic shops by their sign** — it
+distinguishes them by the KEEPER'S JOB SPRITE, gfx 3 White Mage vs gfx 4 Black
+Mage, which `addMageShopkeeper` already does as of v1.10.75.
+
+Kazus keeps the cartridge's own `$17`. `check-shops` now pins the sign TILE and
+its ATTRIBUTE PALETTE for both towns, so a third invented colour cannot ship.
+
+### The lesson under it
+
+A metatile is not chosen until its palette is chosen — `map-renderer.js:549`
+resolves `tileAttrs[m] & 3`, and picking a glyph while ignoring that is half the
+data. And when the ROM offers no asset, the answer is to say so, not to pick a
+nice-looking one and call it canon.
+
 ## 1.10.77 — 2026-08-24
 
 ### ⛔ Facing was the PALETTE selector. Ripped out.

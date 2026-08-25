@@ -127,6 +127,37 @@ for (const [id, want] of Object.entries(SCHOOL_OF_SHOP)) {
   else bad(`${id} carries ${got.length} spell(s) at level(s) ${lv.join(',')} — wanted three at level 1`);
 }
 
+// ⛔ THE SIGN OUTSIDE, GLYPH **AND** PALETTE.
+//
+// v1.10.74 put the right glyph on Kazus's magic shop and never checked its
+// ATTRIBUTE: $67 ships pointed at pal1, the TREE/WOOD palette, so a gold star
+// with GREEN CORNERS went up on a wooden wall. A metatile is not chosen until
+// its palette is chosen — `map-renderer.js:549` resolves `tileAttrs[m] & 3`.
+{
+  // ⛔ BOTH TOWNS USE THE CARTRIDGE'S SIGN. FF3 has ONE magic-shop sign for both
+  // schools — map 60 (BLACK) and map 69 (WHITE) use the identical tile+palette.
+  // The school is shown by the KEEPER'S JOB, not the sign. Pinned here because
+  // an invented "black magic" sign shipped twice.
+  const SIGNS = [
+    ['ur_magic',    114, 10, 18, 0x17, 2, 'the cartridge\'s magic sign'],
+    ['kazus_magic',  10, 14, 24, 0x17, 2, 'the SAME sign — FF3 has no black-magic variant'],
+  ];
+  for (const [id, mapId, sx, sy, wantTile, wantPal, why] of SIGNS) {
+    const md = loadMap(rom, mapId);
+    // mirror the per-map overrides src/map-loading.js applies at load
+    const tile = md.tilemap[sy * 32 + sx];
+    const pal = md.tileAttrs[tile < 128 ? tile : tile & 0x7F] & 3;
+    if (tile !== wantTile) {
+      bad(`${id}: sign at map ${mapId} (${sx},${sy}) is tile $${tile.toString(16)}, wanted $${wantTile.toString(16)} — ${why}`);
+    } else if (pal !== wantPal) {
+      bad(`${id}: sign tile $${tile.toString(16)} draws on pal${pal} ` +
+          `(${md.palettes[pal].map((v) => v.toString(16).padStart(2, '0')).join(' ')}), wanted pal${wantPal} — ${why}`);
+    } else {
+      ok(`${id}: sign $${tile.toString(16)} on pal${pal} — ${why}`);
+    }
+  }
+}
+
 // ⛔ THE SHOP-MENU KEEPER MUST MATCH WHAT THE SHOP SELLS.
 //
 // `FF3MMO_TO_FF1` mapped `magic` -> 'white-magic' unconditionally, so EVERY

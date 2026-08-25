@@ -297,19 +297,25 @@ function _loadRegularMap(mapId, returnX, returnY) {
   expireResettableChests(mapId);   // Ur chests respawn 24h after looting
   _replayConsumedTiles(mapId, mapData);
   if (TOWN_MAPS.has(mapId)) ps.lastTown = mapId;
-  // ⭐ KAZUS'S MAGIC SHOP SIGN IS THE BLACK ONE (v1.10.74).
+  // ⛔ THERE IS NO BLACK-MAGIC SIGN IN FF3. DO NOT INVENT ONE AGAIN.
   //
-  // Every town exterior in FF3 shares tileset 4, and the cartridge gives the
-  // magic shop ONE sign — $17, the six-pointed star in white on blue — at Ur,
-  // Kazus and map 31 alike. The tileset also carries an UNUSED dark variant
-  // set that no tileset-4 map places anywhere: $56 INN, $5C sword, $5E shield
-  // and $67, the SAME star glyph in gold on dark. Ur keeps the white sign and
-  // sells white magic; Kazus takes the dark one and sells black.
+  // Kazus shipped a hand-picked "black magic" sign TWICE and both were wrong:
+  // v1.10.74 used $67 (the same star on pal1, the TREE/WOOD palette — gold star,
+  // GREEN CORNERS on a wooden wall), and the follow-up re-pointed it to pal3 for
+  // a navy star, which is simply a colour I chose.
   //
-  // ⛔ REAL TILESET ART, not a hand-drawn tile — `tools/tileset-sheet.mjs 10`
-  // renders all 128 metatiles so this could be picked by looking rather than
-  // guessed. The door below it at (14,25) is trigId 4 -> map 15.
-  if (mapId === 10) mapData.tilemap[24 * 32 + 14] = 0x67;
+  // The cartridge was never asked. Every magic-shop door in the game, walked by
+  // matching each exterior's triggerMap destination against the maps that hold a
+  // mage keeper:
+  //     Ur 114, Kazus 10, map 31/253/254 -> BLACK shops -> sign $17 pal2
+  //     map 60 -> 63 BLACK -> $1c pal2      map 69 -> 75 WHITE -> $1c pal2
+  // A BLACK town and a WHITE town using the IDENTICAL tile and palette is the
+  // whole answer: FF3 does not distinguish magic shops by their sign. It
+  // distinguishes them by the KEEPER'S JOB SPRITE — gfx 3 White Mage vs gfx 4
+  // Black Mage — which `addMageShopkeeper` already does.
+  //
+  // So Kazus keeps the cartridge's own sign. `check-shops` pins the tile AND its
+  // attribute palette for both towns so a third invented colour cannot ship.
   // v1.7.950 — a closed passage nothing can open is just a wall.
   //
   // Tiles $5B/$5C are FF3's closed passage ($5B -> $5D doorframe, $5C -> $5E

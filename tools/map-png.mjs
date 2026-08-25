@@ -66,7 +66,15 @@ const md = loadMap(rom, mapId);
 // `--live` applies the per-map tile overrides `src/map-loading.js` runs at load,
 // so the render is what the GAME draws rather than the raw ROM tilemap. Without
 // it, a shipped tile change is invisible to every map tool.
-if (has('live') && mapId === 10) md.tilemap[24 * 32 + 14] = 0x67;  // Kazus black-magic sign
+// (no per-map tile overrides ship today — see src/map-loading.js)
+// `--attr <tile>=<pal>` re-points a metatile's ATTRIBUTE palette so a candidate
+// can be SEEN before it ships. `map-renderer.js:549` does `tileAttrs[m] & 3`,
+// the same lookup, so what this draws is what the game draws.
+for (let i = 0; i < args.length; i++) {
+  if (args[i] !== '--attr') continue;
+  const [t, pl] = args[i + 1].split('=').map((v) => parseInt(v, 16));
+  md.tileAttrs[t] = (md.tileAttrs[t] & ~3) | (pl & 3);
+}
 // `--passage` mirrors src/map-loading.js#_loadRegularMap (v1.7.950): closed
 // passages open at load unless the map carries the torch opener at (8,16).
 // Use it to see what the GAME draws, not just what the raw tilemap holds.
