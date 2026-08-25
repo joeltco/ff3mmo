@@ -1,3 +1,55 @@
+## 1.10.74 — 2026-08-24
+
+### Ur sells white magic, Kazus sells black
+
+Ur's magic shop sold ONE scroll (Pure). Kazus sold Fire + Ice + Ice2, a mix
+picked before anything connected a scroll to the school it teaches.
+
+| shop | stock |
+|---|---|
+| `ur_magic` | `0xE3` Cure · `0xE4` Pure · `0xE5` Sight — all three level-1 **white** |
+| `kazus_magic` | `0xE0` Fire · `0xE1` Ice · `0xE2` Sleep — all three level-1 **black** |
+
+Schools are not asserted by hand: each scroll carries `learnedSpell`, and
+`getSpellSchool()` in `data/spells.js` reports 52/53/54 white and 49/50/51
+black. Ice2 (`0xE6`, spell 58) is gone — it was the "reach purchase" of a
+catalog already flagged chosen-not-captured, and it is a **level-0** spell, a
+tier the town has no business selling.
+
+### The black-magic sign, and it is real tileset art
+
+Every town exterior in FF3 shares **tileset 4**, and the cartridge gives the
+magic shop exactly ONE sign: `$17`, a six-pointed star in white on blue, used at
+Ur, Kazus and map 31 alike. So there was no black-magic icon to point at.
+
+There is. The tileset carries a complete **dark variant set that no tileset-4
+map places anywhere** — `$56` INN, `$5C` sword, `$5E` shield, and **`$67`, the
+same star glyph in gold on dark**. Kazus's sign at map 10 (14,24) is now `$67`;
+Ur keeps `$17`. Nothing was drawn by hand.
+
+Found by building **`tools/tileset-sheet.mjs`** — renders all 128 metatiles of a
+map's tileset with their ids, in the map's own palettes. `map-png` shows what a
+map *does* draw; there was no way to see what the tileset *has*, so changing a
+tile meant guessing an id. `map-png --live` now applies the shipped per-map tile
+overrides, so a tile change is visible to the map tools instead of invisible.
+
+### check-shops now knows what a magic shop is
+
+It could not tell white from black, or three spells from one. It now pins each
+magic shop's school and that it carries all three level-1 spells of it. Reverts
+fail: Ice2 back in Kazus → *"3 spell(s) at level(s) 1,1,0 — wanted three at
+level 1"*; a black scroll in Ur → *"should sell white magic but stocks 0xe0
+(spell 49, black)"*.
+
+### ⚠ Ur's keeper is still the Black Mage sprite
+
+FF3 distinguishes magic shops by KEEPER JOB — maps 75/76/79/80 put a White Mage
+(gfx 3) behind the counter; Ur and Kazus both get a Black Mage (gfx 4). Kazus is
+now correct by accident of already being black. Swapping Ur to the White Mage
+needs a White Mage **walk** palette and `JOB_WALK_PALS` has no job 3 — the
+existing entries are PPU captures, and hand-authoring one is exactly what this
+project forbids. Left visibly wrong with a note rather than faked.
+
 ## 1.10.73 — 2026-08-24
 
 ### The Kazus pub's bar is an item shop now

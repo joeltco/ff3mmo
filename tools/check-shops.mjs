@@ -21,6 +21,7 @@ globalThis.document = { createElement: () => ({ getContext: () => ({}) }), getEl
 
 const { SHOPS, findShopAtCounter, getShopType } = await import('../src/data/shops.js');
 const { ITEMS } = await import('../src/data/items.js');
+const { getSpellSchool, getSpellLevel } = await import('../src/data/spells.js');
 const { loadMap } = await import('../src/map-loader.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 
@@ -67,6 +68,33 @@ for (const [id, shop] of SHOPS) {
   if (!getShopType(id)) bad(`${id} has no resolvable type (drives the keeper sprite)`);
 }
 if (!failed) ok('every shop resolves at its counter and stocks known items');
+
+// ⛔ A MAGIC SHOP SELLS ONE SCHOOL, AND THE RIGHT ONE.
+//
+// Ur is the WHITE magic shop and Kazus the BLACK one. A magic catalog is a list
+// of scroll item ids, and nothing connected a scroll to the school it teaches —
+// Kazus shipped Fire + Ice (black) alongside Ice2, and Ur sold a single white
+// Pure scroll, with no check that any of it was coherent. The school is not
+// guessed here: each scroll carries `learnedSpell`, and `getSpellSchool()`
+// owns the answer.
+const SCHOOL_OF_SHOP = { ur_magic: 'white', kazus_magic: 'black' };
+for (const [id, want] of Object.entries(SCHOOL_OF_SHOP)) {
+  const shop = SHOPS.get(id);
+  if (!shop) { bad(`${id} is missing`); continue; }
+  const got = shop.items.map((i) => {
+    const sc = ITEMS.get(i);
+    return { i, spell: sc && sc.learnedSpell, school: sc && sc.learnedSpell != null ? getSpellSchool(sc.learnedSpell) : null };
+  });
+  const wrong = got.filter((g) => g.school !== want);
+  if (wrong.length) {
+    bad(`${id} should sell ${want} magic but stocks ` +
+        wrong.map((g) => `0x${g.i.toString(16)} (spell ${g.spell}, ${g.school})`).join(', '));
+  } else ok(`${id} sells ${got.length} ${want} spell(s), all of that school`);
+  // All three of the school's level-1 spells, no more and no less.
+  const lv = got.map((g) => getSpellLevel(g.spell));
+  if (got.length === 3 && lv.every((l) => l === 1)) ok(`${id} carries all THREE level-1 ${want} spells`);
+  else bad(`${id} carries ${got.length} spell(s) at level(s) ${lv.join(',')} — wanted three at level 1`);
+}
 
 // ⛔ A COUNTER HAS TO BE A COUNTER, AND SOMEONE HAS TO BE BEHIND IT.
 //

@@ -33,6 +33,10 @@ const SCALE = Math.max(1, parseInt(flag('scale', '2'), 10));
 const BOX = flag('box', null);
 
 const md = loadMap(rom, mapId);
+// `--live` applies the per-map tile overrides `src/map-loading.js` runs at load,
+// so the render is what the GAME draws rather than the raw ROM tilemap. Without
+// it, a shipped tile change is invisible to every map tool.
+if (has('live') && mapId === 10) md.tilemap[24 * 32 + 14] = 0x67;  // Kazus black-magic sign
 // `--passage` mirrors src/map-loading.js#_loadRegularMap (v1.7.950): closed
 // passages open at load unless the map carries the torch opener at (8,16).
 // Use it to see what the GAME draws, not just what the raw tilemap holds.

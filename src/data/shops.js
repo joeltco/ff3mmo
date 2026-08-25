@@ -89,7 +89,12 @@ export const SHOPS = new Map([
   ['kazus_magic', {
     type: 'magic',
     mapId: 15, counter: { x: 4, y: 4 },
-    items: [0xe0, 0xe1, 0xe6],
+    // ⭐ KAZUS IS THE BLACK MAGIC SHOP (v1.10.74) — all three level-1 BLACK
+    // spells: 0xE0 -> 49 Fire, 0xE1 -> 50 Ice, 0xE2 -> 51 Sleep.
+    // Ice2 (0xE6, spell 58, 700 gil) is GONE. It was the "reach purchase" of a
+    // catalog that was already flagged as chosen-not-captured, and it is a
+    // level-0 spell — a tier the town has no business selling.
+    items: [0xE0, 0xE1, 0xE2],
     // ⚠ CHOSEN, not captured — the only Kazus catalog that is. Map 15 is a
     // round chamber with spell orbs on pedestals rather than a counter room,
     // which is how FF3 sells magic (walk to an ORB, buy that one spell), so
@@ -104,13 +109,16 @@ export const SHOPS = new Map([
   ['ur_magic', {
     type: 'magic',
     mapId: 3, counter: { x: 4, y: 4 },
-    items: [0xE4],
-    // Pure scroll (Poisona). 100 gil. Sells the scroll item — player learns
-    // by using it from inventory (`pause-menu.js#_applyScrollLearn`).
-    // Type stays 'magic' for shopkeeper-sprite lookup; catalog routes
-    // through the regular item-shop buy/sell flow (qty selector, sell-back).
-    // Higher tiers (Cura, Curaga) ship with their respective magic-shop
-    // catalogs as those towns come online.
+    // ⭐ UR IS THE WHITE MAGIC SHOP (v1.10.74) — all three level-1 WHITE
+    // spells, where it used to sell the single Pure scroll.
+    //   0xE3 -> spell 52 Cure   0xE4 -> 53 Pure   0xE5 -> 54 Sight
+    // Schools are not guessed: `getSpellSchool()` in data/spells.js reports
+    // 52/53/54 white and 49/50/51 black, and the scroll->spell mapping is each
+    // item's own `learnedSpell`. Sells the SCROLL; the player learns by using
+    // it from the bag (`pause-menu.js#_applyScrollLearn`). Type stays 'magic'
+    // for the keeper-sprite lookup; the catalog routes through the normal
+    // item-shop buy/sell flow.
+    items: [0xE3, 0xE4, 0xE5],
   }],
 ]);
 

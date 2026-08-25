@@ -267,6 +267,19 @@ function _loadRegularMap(mapId, returnX, returnY) {
   expireResettableChests(mapId);   // Ur chests respawn 24h after looting
   _replayConsumedTiles(mapId, mapData);
   if (TOWN_MAPS.has(mapId)) ps.lastTown = mapId;
+  // ⭐ KAZUS'S MAGIC SHOP SIGN IS THE BLACK ONE (v1.10.74).
+  //
+  // Every town exterior in FF3 shares tileset 4, and the cartridge gives the
+  // magic shop ONE sign — $17, the six-pointed star in white on blue — at Ur,
+  // Kazus and map 31 alike. The tileset also carries an UNUSED dark variant
+  // set that no tileset-4 map places anywhere: $56 INN, $5C sword, $5E shield
+  // and $67, the SAME star glyph in gold on dark. Ur keeps the white sign and
+  // sells white magic; Kazus takes the dark one and sells black.
+  //
+  // ⛔ REAL TILESET ART, not a hand-drawn tile — `tools/tileset-sheet.mjs 10`
+  // renders all 128 metatiles so this could be picked by looking rather than
+  // guessed. The door below it at (14,25) is trigId 4 -> map 15.
+  if (mapId === 10) mapData.tilemap[24 * 32 + 14] = 0x67;
   // v1.7.950 — a closed passage nothing can open is just a wall.
   //
   // Tiles $5B/$5C are FF3's closed passage ($5B -> $5D doorframe, $5C -> $5E
@@ -301,6 +314,13 @@ function _loadRegularMap(mapId, returnX, returnY) {
   } else { mapSt.disabledTrigger = null; }
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
   clearNpcs();
+  // ⚠ UR SELLS WHITE MAGIC BUT ITS KEEPER IS STILL THE BLACK MAGE SPRITE.
+  // FF3 distinguishes its magic shops by KEEPER JOB: maps 75/76/79/80 put a
+  // White Mage (gfx 3) behind the counter, Ur and Kazus a Black Mage (gfx 4).
+  // Swapping Ur to the White Mage needs a White Mage WALK palette, and
+  // `JOB_WALK_PALS` has no job 3 — the existing ones are PPU captures, and a
+  // hand-authored palette is exactly what this project forbids. Needs a
+  // capture; NOT faked here.
   if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
   // Kazus's magic shop, same mechanism. The keeper stands ON the counter tile
   // and carries the shopId, which is what `talkToNpc` reads to open the menu —
