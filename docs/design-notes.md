@@ -773,6 +773,16 @@ steady-state `$40` was the post-consume residual, not the request — see SFX.SI
 
 ---
 
+## Backdrops — CLOSED 2026-08-25 (v1.10.82)
+
+FF3's 24 backdrop strips are decoded, verified against a live PPU on all four of
+their fields, named from the ROM's own map names, and wired through one registry
+(`src/data/backdrops.js`). ⛔ In this game they are the **ambient art layer** —
+HUD top box, dungeon loading screen, title screen — **not** a battle-screen
+backdrop; v1.10.79 built one and it was reverted. The overworld strip follows the
+biome under the party and crossfades on the NES palette when it changes.
+Full writeup: `docs/BATTLE-BACKDROPS.md`. Gate: `tools/check-battle-bg.mjs`.
+
 ## Followups — open as of 2026-08-25
 
 Carried out of the Ur/Kazus/shops arc. All are MEASURED and listed, none are
@@ -811,3 +821,10 @@ guesses; none are fixed.
 8. ⚠ **Backdrop 6 (sky) is selected by nothing** in the cartridge's data.
    `check-battle-bg` pins the orphan set to exactly `{6}` so a real user for it
    would be noticed rather than passing quietly.
+9. ⚠ **Backdrop 23 is the last strip named from a render.** Map 473 alone selects
+   it, it carries no banner, and no map in its bank-1 area does either. The gate
+   pins the render-only set to `{3, 23}`; if that grows, someone described a
+   picture instead of asking the ROM.
+10. ⚠ **Backdrop 3 (marsh) is defined and never placed.** Four foot-walkable
+    world tiles carry it; none appears on world 0's tilemap. The strip exists,
+    the terrain does not, so nothing corroborates its name.

@@ -87,6 +87,15 @@ trig  1 -> map  95  at (82,54)   Cid's Airship
 trig  0 -> map 180  at (90,59)   the INVINCIBLE
 ```
 
+> ⛔ **A DISABLED ENTRANCE IS WALKABLE GROUND, and it has already bitten once.**
+> These three tiles (95 has two) keep their warp bit but no longer fire, so the
+> party walks straight over them. (90,59) sits in the **dead centre of the desert
+> west of Kazus** and its property byte 2 is an entrance id, not terrain — the
+> overworld backdrop lookup read it as a backdrop and painted a GRASSLAND strip
+> in the middle of that desert (v1.10.81, found in play). Anything that reads a
+> world tile's properties has to ask whether the tile is a warp *and* whether the
+> warp still fires. See `docs/BATTLE-BACKDROPS.md`.
+
 > ⛔ **CORRECTED 2026-08-25 — this doc had the wrong map for the Invincible,
 > and the plain SHIP's map is now UNKNOWN rather than quietly reassigned.**
 > **Map 180 IS the Invincible** (confirmed by Joel). **Map 95 is Cid's Airship**

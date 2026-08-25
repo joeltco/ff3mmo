@@ -120,14 +120,24 @@ evidence its name rests on, ranked:
 | TILE-MEASURED | the world tiles that select it, **with their passability** |
 | ⚠ FROM THE RENDER | nothing corroborates it — someone looked at the strip |
 
-**Three names came off the art and were wrong.** `hills` was the MOUNTAIN strip —
+**Five names came off the art and were wrong.** `hills` was the MOUNTAIN strip —
 its only two maps are 92 "Summit Road" and 94 "Bahamut's Nest". `ice` was the
-CRYSTAL CHAMBER — 148 "Wind Crystal", 149 "Fire Crystal", which is exactly why
-Altar Cave's crystal boss floor takes it. And `mountain` was a LAKE.
+CRYSTAL CHAMBER — 148 "Wind Crystal", 149 "Fire Crystal" and eight more, which is
+exactly why Altar Cave's crystal boss floor takes it. `mountain` was a LAKE.
+`brick water` was the **Sewers** (map 340) and `deep water` was the **Dark
+World** (map 461).
 
-`check-battle-bg` pins all three: backdrop 4's placed tiles must be foot-blocked
-and canoe-passable, backdrop 7's map set must be exactly `{92, 94}`, and backdrop
-15's must contain 148 and 149.
+**⛔ The last two survived because the name sweep stopped at 255.**
+`tools/map-names.mjs` read maps 0-255, so every strip used by the back half of
+the game came back with no named map and got a description. FF3 has maps to 511;
+extending the sweep took it from 78 named maps to **175**, and seven of the eight
+render-named strips turned out to have carried ROM names all along. A sweep that
+stops early does not report a gap — it reports a clean result.
+
+`check-battle-bg` pins it: backdrop 4's placed tiles must be foot-blocked and
+canoe-passable, backdrop 7's map set must be exactly `{92, 94}`, backdrop 15's
+must contain 148 and 149, maps 340 and 461 must resolve to their names, the sweep
+must cover 512, and the render-only set must stay exactly `{3, 23}`.
 
 **The tell that this path existed at all:** seven of the 24 backdrops are reached
 by no map in either lookup table. Six of them are the list above; the seventh is
