@@ -72,10 +72,10 @@ than one shared bit, and submerge / fly-over-mountains are not expressible in th
 | Vehicle | Base mode | Extra rule beyond the bits | Source |
 |---|---|---|---|
 | Canoe | bit1 (shallow) | — | `0x240`, King Sasune |
-| Ship | bit2 (ocean) | — | map **180**, already built |
+| Ship | bit2 (ocean) | — | map **?** — see the correction below |
 | Enterprise | bit2 | toggles to flight; lands on water ONLY | `0x08c` |
 | Nautilus | bit2 | submerges | `0x0e7` |
-| Invincible | flight | crosses mountains; boost / stop controls | map **95**, `0x072` |
+| Invincible | flight | crosses mountains; boost / stop controls | map **180**, `0x072` |
 
 ## 3. Entrances
 
@@ -83,14 +83,50 @@ than one shared bit, and submerge / fly-over-mountains are not expressible in th
 `REMOVED_ENTRANCES` (`src/world-map-renderer.js`):
 
 ```
-trig  1 -> map  95  at (82,54)   the Invincible
-trig  0 -> map 180  at (90,59)   the ship
+trig  1 -> map  95  at (82,54)   Cid's Airship
+trig  0 -> map 180  at (90,59)   the INVINCIBLE
 ```
 
-Map 180 is already built — a wooden vessel with a shop counter, barrels, a bed
-and a below-decks section. It has no reachable exit because you are meant to
-disembark. The other three vehicles arrive via events, not world tiles. The
-script also references a hangar (`0x248`) and a Wrecked Ship map (`0x1ae`).
+> ⛔ **CORRECTED 2026-08-25 — this doc had the wrong map for the Invincible,
+> and the plain SHIP's map is now UNKNOWN rather than quietly reassigned.**
+> **Map 180 IS the Invincible** (confirmed by Joel). **Map 95 is Cid's Airship**
+> — that is the ROM's own name banner for it, and it is a 63-tile deck with a
+> single mast, far too small for the Invincible.
+>
+> **Map 180** — tileset 0, entrance (19,11), 102 reachable tiles. FOUR shops in
+> one row at **y=5, x=11-14**, each with its own counter trigger directly below
+> at y=6:
+>
+> | x | sign | trigger | shop |
+> |---|---|---|---|
+> | 11 | `$4e` star on black | `$fb` | magic |
+> | 12 | `$4c` crossed swords | `$eb` | weapon |
+> | 13 | `$4d` shield | `$f1` | armor |
+> | 14 | `$4f` bottle | `$e4` | potions / item |
+>
+> All four triggers resolve to **gfx 115**, the generic undrawn shop-counter
+> marker, so the ROM does not label which keeper staffs which. Also aboard: a
+> helm at (23,10)-(23,11), a bed at (11,15), stairs at (19,10).
+>
+> ⚠ **The plain Ship's map is an open question.** This doc previously listed map
+> 180 for BOTH the Ship and the Invincible. 180 is the Invincible, so the Ship's
+> map is unidentified — it was never separately verified, and guessing one is how
+> the Invincible ended up mislabelled in the first place. Find it by rendering
+> candidates (`tools/map-png.mjs <id> out.png --scale 4`) rather than inferring.
+>
+> ⚠ `$4e` is **tileset 0's** magic sign. It is NOT a second school — FF3 has ONE
+> magic sign per tileset and both schools share it (see `docs/NPC-CATALOG.md`).
+> `$4f` is a POTION BOTTLE; it was briefly misread as a second magic star.
+
+The other three vehicles arrive via events, not world tiles. The script also
+references a hangar (`0x248`) and a Wrecked Ship map (`0x1ae`).
+
+> ⛔ **MAPS GO ABOVE 255.** `loadMap` works to 511 and FF3 uses ids over 255, but
+> `entranceData` is a **byte array** — a door to map 497 stores 241 — so any
+> sweep that reads destinations from it silently cannot see the upper half. A
+> map-id scan that stops at 255 is half a sweep; that is how the Invincible was
+> "not found" for an entire session. Maps above roughly 400 render as repeating
+> garbage (`loadMap` reading past the real table) — do not build on those.
 
 ## 4. Multiplayer
 

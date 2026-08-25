@@ -171,3 +171,41 @@ a mythril ram to the airship. Shops only open once the curse is lifted.
 
 **Our build is the LIVING town** — the curse mechanic is deliberately not
 implemented (decided 2026-08-14). One ghost NPC remains as a quest hook.
+
+
+---
+
+## What shipped in Kazus, 2026-08-24/25
+
+⭐ **Cid is here.** Npc `$1f`, sprite `0x01D910`, **map 12 (6,23)** — the end of
+the pub's bar, record `$2c`. Two states on that one tile: cursed
+(`0x01ED10`, the Djinn's ghost, which `$2c` itself wears) before the Sealed
+Cave, himself after. `when: (q) => q('kazus_cid_airship')` puts exactly one in
+the room. ⛔ He took THREE releases to place — the street outside the pub
+(map 10, 18,22), then a bar stool (9,25) — while `npc-dump.mjs 12` had printed
+`id $2c @(6,23) ... DRAWN` from the first dump. **Read the tool output.**
+⛔ Cid's party join after the Sealed Cave is **NOT built** — that is a
+special-character system ff3mmo does not have. Do not invent it.
+
+⭐ **The pub's bar is an item shop** (`kazus_item`, v1.10.73). Keeper `$2e`
+@(9,23) stood behind the counter doing nothing. Counter (9,24) is tile **`$1d`**,
+the same counter tile every Ur shop uses; the player stands on the stool at
+(9,25). Geometry is Ur's inn item shop tile for tile. Catalog is CHOSEN, not
+captured — the cartridge has no item shop in Kazus at all.
+
+⭐ **Kazus is the BLACK magic shop, Ur is WHITE** (v1.10.74/75) — all three
+level-1 spells each (`0xE0 0xE1 0xE2` vs `0xE3 0xE4 0xE5`), keeper job sprite
+follows the school (gfx 4 vs gfx 3), and the shop-menu keeper art follows it too.
+⛔ **The SIGN does not.** FF3 has ONE magic sign per tileset and both schools
+share it — Kazus keeps `$17` pal2 like every other town. **FF1** is the game with
+two distinct magic shops. Two invented "black magic" signs shipped before that
+was settled; see `CLAUDE.md`.
+
+⭐ Weapon/armor keepers wear Ur's keeper sprite `0x1E610`, not the generic
+villager `0x1DF10` they used to, so the shops read as shops.
+
+⛔ **KAZUS IS STILL INVERTED.** On a fresh game the cartridge draws the CURSED
+cast — the Djinn's ghosts — and hides the living villagers until the Sealed Cave
+falls. ff3mmo shows the living ones and is missing the ghosts. Measured, listed,
+NOT fixed: see the `project_ff3mmo_cursed_town_inversion` memory and
+`docs/NPC-CATALOG.md`.

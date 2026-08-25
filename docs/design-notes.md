@@ -263,6 +263,32 @@ Canonical NES animation pattern, captured from PPU OAM while the Monk punched a 
 
 ## Shops
 
+> ⭐ **v1.10.73-75 — read this before touching a shop.**
+>
+> * A shop is `{type, mapId, counter:{x,y}, items}` and magic shops also carry
+>   **`school: 'white'|'black'`**. School drives BOTH the keeper's job walk
+>   sprite AND the shop-menu keeper art. **Ur = white, Kazus = black.**
+> * `keeperArtForShop(type, school)` picks the menu keeper.
+>   ⛔ `magic` was REMOVED from `FF3MMO_TO_FF1` so it can never resolve
+>   school-blind again — it used to map to `'white-magic'` unconditionally, which
+>   left the captured `'black-magic'` art unreachable and drew a White Mage over
+>   a black-magic shop.
+> * `addMageShopkeeper(x, y, shopId, school)` places the keeper.
+>   `JOB_WALK_PALS[3]` (White Mage, `[0x1A,0x0F,0x15,0x30]`) is a **PPU capture**
+>   off map 75 — never hand-author a walk palette.
+> * A NON-MAGIC counter tile must be **SOLID** (you serve across it) and an NPC
+>   must stand orthogonally beside it. Magic shops are the exception: FF3 sells
+>   spells off orbs and the keeper stands ON the tile.
+> * ⛔ **The SIGN does not vary by school.** FF3 has one magic sign per tileset
+>   (`$17` in tileset 4 towns, `$4e` on the Invincible); FF1 is the game with two
+>   distinct magic shops. `check-shops` pins the sign tile AND its attribute
+>   palette because two invented "black magic" signs shipped.
+> * ⛔ `check-shops` used to ask `findShopAtCounter` for the shop's OWN
+>   coordinates, so it agreed with itself wherever the counter pointed and passed
+>   with a counter on open floor. It now checks the tile is real.
+
+
+
 - **Counters, not NPCs.** Shops in Ur are interior maps (3 = magic, 4 = armor, 5 = weapon, 8 = item). Pressing Z facing a registered counter tile opens the shop. Counter coords + `mapId` are stored on each entry in `src/data/shops.js`; lookup via `findShopAtCounter(mapId, x, y)` in `movement.js#handleAction`. Each entry has a `type` field (`'weapon'|'armor'|'item'|'magic'`); `getShopType(shopId)` is the canonical accessor.
 - **FF1-style keeper sprite (v1.7.257-272).** Each shop renders a 10×10 BG tile keeper figure in the left column of the panel. Tile data lives in `src/data/shop-sprites.js`: 13 unique 2BPP tiles per keeper (the FF1 `lut_ShopkeepImage` rect is 10×10 but only 13 cells are non-blank), keyed by FF1 canonical type (`weapon`/`armor`/`white-magic`/`black-magic`/`item`) with a 4-color palette pulled from FF1's `lut_BackdropPal`. ff3mmo's 4 shop types map through `FF3MMO_TO_FF1` (current: `magic → white-magic`; black-magic keeper is staged for when a `bmagic` type lands). `_drawShopkeeper(ctx, x, y, fadeStep)` in shop.js walks `SHOPKEEP_IMAGE_LAYOUT` and decodes each tile via `tile-decoder.js`. Keeper fade is scoped to outer shop-in / shop-out (v1.7.261) — intra-shop sub-state transitions don't touch it.
 - **Panel layout (v1.7.257+).** Three-zone split:
@@ -401,6 +427,29 @@ A from-scratch rebuild is planned. **Read the `ff3mmo-coop-rebuild` auto-memory 
 - **No pickup mechanism yet.** Data-only registration. Drop tables / shop slots / job-mastery hooks deferred. When implementing pickup, candidates are: (a) rare drops from new endgame monsters (mirrors the Onion-equipment-from-dragons pattern), (b) a post-game crystal shop, (c) job-level-99 grant (closest to DS semantics).
 
 ## NPCs
+
+> ⭐ **v1.10.76-77 — the record's 4th byte.**
+>
+> FF3's entry is `{id, x, y, FLAGS}`. `placeTownNpcs` derives **movement** from
+> it via `src/data/npc-flags.js#specWithRomFlags` — high nibble `$00` roams,
+> `$C0` holds. Measured on hardware, Ur 10/10.
+> ⛔ **FACING IS NOT DECODED.** Bits 2-3 are the **palette selector**
+> (`flame-sprites.js:92`), shipped as facing once and standing NPCs faced wrong.
+> Facing comes from the spec, hand-set.
+> ⛔ `ignoreRomFlags` opts an NPC out and is a **PINNED LIST**
+> (`MAY_IGNORE_ROM_FLAGS` in `check-npc-placement`) — counter keepers and story
+> poses only. Sprinkling it is how ten Ur townsfolk shipped frozen.
+> ⛔ The twin rule was once STRICTER than the cartridge (every sharer must stand
+> still). FF3 puts four people on `0x1DF10` in Ur with three roaming, so obeying
+> the ROM made the gate fail on correct data. A sharer must now sit on a ROM
+> record for that bundle AND move exactly as its flags say.
+> ⛔ One reconciliation, PRINTED not swallowed: FF3 steps an NPC off a 1-neighbour
+> tile, ff3mmo needs `MIN_OPEN_NEIGHBOURS`; those hold and the audit says
+> **ROM-SAYS-ROAM**.
+> ⛔ Identify a character by **PICTURE**, never `npcId + 0x202`. Confirmed names
+> live in `src/data/sprite-names.js`, keyed on **npc id** (FF3 reuses sprites).
+
+
 
 `src/npc.js` is the canonical NPC runtime (v1.7.291-297). First NPC shipped: a moogle on Altar Cave floor 1.
 
@@ -721,3 +770,34 @@ box sits on top of the battle.
 starting REC *before* death (the genuine `$7F49=$D1` write). An earlier capture's
 steady-state `$40` was the post-consume residual, not the request — see SFX.SIGHT
 / FIRE_BOOM notes.
+
+---
+
+## Followups — open as of 2026-08-25
+
+Carried out of the Ur/Kazus/shops arc. All are MEASURED and listed, none are
+guesses; none are fixed.
+
+1. ⛔ **The cursed-town inversion.** On a fresh game the cartridge draws the
+   CURSED cast — Kazus and Castle Sasune are full of the Djinn's ghosts and the
+   living villagers are switched off until the Sealed Cave falls. ff3mmo has it
+   backwards: it SHOWS 16 people the cartridge hides (both Kazus town walkers,
+   all three inn NPCs, both house residents, both shop keepers, five of six
+   Sasune courtyard guards, both hall servants) and HIDES the 21 it shows (the
+   Kazus inn's four ghosts, `$25` in both shops, four `$35` Takka in each of
+   halls 25/26/27, and `$37 $31 $33` in the throne room). Cid's two-state
+   `when:` pattern is the template. Full list in the
+   `project_ff3mmo_cursed_town_inversion` memory.
+2. ⛔ **Cid's party join.** He joins after you talk to him once the Sealed Cave
+   is beaten. That is a special-character system ff3mmo does not have. NOT built
+   — do not invent it.
+3. ⚠ **NPC facing.** Undecoded; comes from each spec by hand. Bits 2-3 of the
+   record are the palette selector, not facing. The two still NPCs measured
+   (`$05`, `$1e`) both draw RIGHT, but n=2 is not a rule. Method to finish it:
+   `facedir.cjs` — match on-screen OAM tiles to a bundle group + read the H-flip
+   bit — run over every still NPC in the game.
+4. ⚠ **Ur's ten townsfolk face DOWN** by spec while the cartridge has at least
+   two of them facing right. Blocked on (3).
+5. ⚠ **The plain Ship's map is unknown.** `VEHICLE-SYSTEM-PLAN.md` listed map 180
+   for both the Ship and the Invincible; 180 is the Invincible. Do not guess the
+   other — render candidates and look.

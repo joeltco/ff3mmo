@@ -97,8 +97,15 @@ the single most-placed index (184 uses).
    is **absent**. The NPC wearing Cid is **id 31 at (17,21)**. The earlier note
    claiming map 10 loads the ghost bundle was a bad measurement.
 
-Both are recorded here rather than acted on — changing who stands where in a
-live town is a content decision, not a cataloguing one.
+> ⭐ **BOTH ARE NOW ACTED ON (v1.10.72).** This section said "recorded rather
+> than acted on", and note 2 was RIGHT ALL ALONG — *"The NPC wearing Cid is id 31
+> at (17,21)"*. It was later overruled by `npcId + 0x202`, which named that
+> bundle's wearers "Sara" and "Desch", and Cid's label was deleted. A sprite
+> match put it back: see **Cid** below.
+>
+> `0x01D910` is now RESERVED to `cid`; `0x01ED10` is reserved to `cid_ghost` and
+> still banned for everyone else. Cid ships in the Kazus pub at map 12 (6,23) in
+> two states.
 
 ---
 
@@ -136,6 +143,108 @@ on four maps by where the traced pointer landed.
 > stops being true.
 
 ---
+
+## FF3 — the record's 4th byte, and the visibility bitmap
+
+Two fields that were shipped broken by being ignored. Both are MEASURED on
+hardware, not inferred.
+
+### The flags byte: movement is decoded, facing is NOT
+
+The per-map entry is `{id, x, y, FLAGS}` — four bytes. The record handler
+(bank `$3B`, `$B34E`) splits the last one:
+
+```
+LDA ($8C),Y            ; Y=3, the flags byte
+AND #$F0               -> npc struct +1      MOVEMENT
+ASL x4 / AND #$C0      -> ($8A),Y=5          bits 2-3
+```
+
+**MOVEMENT — high nibble `$00` roams, `$C0` holds its post.** Measured by
+booting the field ROM, warping to Ur, walking the party 90 steps and counting
+distinct tiles per NPC at `$7000 + slot*16` (+2/+3 = x/y):
+
+| | |
+|---|---|
+| `$00` | `$06 $0a $0c $0d $0e $0f` — 15..27 tiles each |
+| `$C0` | `$05 $07 $08 $09` — 1 tile each |
+
+10 of 10. ⛔ **Idling proves nothing** — FF3 only steps NPCs while the party is
+walking. A first attempt sat still for 1440 frames, saw nobody move, and would
+have "proved" the opposite.
+
+> ⛔ **BITS 2-3 ARE NOT FACING — they are the PALETTE SELECTOR.**
+> `flame-sprites.js:92` reads exactly `((flags >> 2) & 3) >= 2 ? 1 : 0` to pick a
+> torch palette. v1.10.76 shipped them as facing and standing NPCs faced wrong.
+>
+> The trap: that byte was verified to arrive at `$7100 + slot*16 + 5` as
+> `value << 6` on **26 records across three maps**. A perfect score — which
+> proves the number ARRIVES, not what it MEANS. The meaning was then taken from
+> a comment. **Verifying transport is not verifying semantics.**
+>
+> What killed it (`facedir.cjs`): match an NPC's on-screen OAM tiles back to a
+> 4-tile group of its own walk bundle and read the H-flip bit.
+> `$05` (map 114, value 2) and `$1e` (map 10, value 1) BOTH draw RIGHT.
+> Different values, identical facing.
+>
+> ⛔ A walk bundle holds **DOWN, UP, LEFT-f0, LEFT-f1** — only THREE directions.
+> RIGHT is a mirrored LEFT, so a group index is not a facing index either.
+>
+> Facing is undecoded. It comes from the spec, hand-set per NPC.
+
+`src/data/npc-flags.js` is Node-clean so the GATES run the same derivation the
+game ships — they were auditing `e.spec`, which the player never sees.
+
+### Whether a record is drawn at all: the visibility bitmap
+
+Each record is gated by a **per-npc-id bitmap**, not by the flags byte and not
+by the story flags at `$6020`:
+
+```
+addr = $6080 + (npcId >> 3)      bit = 1 << (npcId & 7)
+$78 != 0  ->  addr += $20        ; the second bank at $60A0
+```
+
+Flag CLEAR → the id is overwritten with **0** and the record is not drawn
+(bank `$3B` `$B51A`, called from the record handler). On a new game
+`$6080..$60BF` is copied from a ROM table at **bank 0 `$B600` = file offset
+`0x1610`**; live SRAM matches that table byte for byte, both banks.
+
+Event opcodes: **`$F4 <npcId>` shows** an NPC, **`$F5 <npcId>` hides** one —
+distinct from `$F2`/`$F3`, which set the story flags. Across all 512 scripts, 15
+ids are ever shown and 54 ever hidden.
+
+> ⛔ **On a fresh game the cartridge draws the CURSED cast.** Kazus and Castle
+> Sasune are full of the Djinn's ghosts and the living villagers are switched
+> off until the Sealed Cave falls. ff3mmo currently has this INVERTED — it shows
+> 16 people the cartridge hides and hides 21 it shows. Unfixed; see the
+> `project_ff3mmo_cursed_town_inversion` memory.
+
+Read the cast the game actually draws with **`tools/monscan/npc-cast.cjs`**
+(`ROM=` a field ROM, `MAPS=`), which reads the engine's own slot table at
+`$7000` rather than re-deriving it. ⛔ The bitmap is SRAM — it only exists after
+a real boot; warping a cold machine returns all zeros, which reads exactly like
+"everyone is hidden".
+
+### Cid
+
+**Cid is npc `$1f`, sprite bundle `0x01D910`**, and he stands in the **Kazus pub
+at map 12 (6,23)** — record `$2c`, cursed (`0x01ED10`, the Djinn's ghost) before
+the Sealed Cave and himself after.
+
+> ⛔ **NEVER identify a character from `npcId + 0x202`.** It is a description of
+> the string table with a measured counterexample, not a derivation. It put
+> Cid's *"I'm Cid from Canaan"* line on the **Castle Sasune gate guard**, and it
+> named `0x01D910`'s wearers "Sara" and "Desch" — which is what got Cid's label
+> deleted from `STORY_SPRITE_BUNDLES` in the first place.
+>
+> **Identify by PICTURE.** Shape-match a reference against the DOWN frame of all
+> 88 bundles (`0x1C010 + gfx*0x100`, 4 tiles row-major, compare the transparency
+> mask). Cid scored 90.2%, nine points clear of second place.
+>
+> ⚠ FF3 reuses walk sprites heavily — ids 31, 67, 192 and 217 all wear
+> `0x01D910`. Only id 31 is the man himself, so `src/data/sprite-names.js` keys
+> confirmed names on the **npc id**, never the bundle.
 
 ## FF3 — the dialogue table, decoded
 

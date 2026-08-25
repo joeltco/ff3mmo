@@ -182,6 +182,8 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | gate | what it pins |
 |---|---|
 | `check-npc-room` / `check-npc-placement` | every placed NPC is in the room the player walks into, and on a sprite bundle that map loads |
+| `check-shops` | every shop resolves at its counter; a non-magic counter tile is SOLID with an NPC beside it; each magic shop's SCHOOL matches its stock, its menu keeper art and the mage `map-loading.js` staffs it with; weapon/armor keepers share one sprite across towns; the magic SIGN tile **and its attribute palette** are pinned |
+| `check-npc-placement` | …plus `MAY_IGNORE_ROM_FLAGS`: only listed keepers/story poses may drop the record's flags byte, and a shared-bundle sharer must sit on a ROM record for that bundle AND move exactly as its flags say |
 | `check-npc-gfx` | the NPC id → sprite lookup stays decoded — the table at ROM `0x1410`, the people/object arrays, and the drawn/undrawn split. See `docs/NPC-CATALOG.md`; sprite sheets in `docs/sprites/` |
 | `check-npc-dialogue` | FF3's script stays decoded — the DTE table at `0x75FA1`, the string pointer table, and `stringId = npcId + 0x202`, pinned against lines read off a running game |
 | `check-ff12-text` | FF1's and FF2's scripts stay decoded — FF1's reversed DTE halves + `dialogueId == objType`, FF2's 45-kana run. Pinned against text read off a running game |
@@ -198,6 +200,9 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-ff2-sfx` / `check-ff2-sfx-audio` | the ripped blips execute AND render audible PCM through libgme |
 | `check-pve-claim` | the end-of-battle claim describes the battle it came from |
 | `ur-audit` (manual) | sweeps every Ur interior: spawn, exits, chests, NPC rooms |
+| `tools/tileset-sheet.mjs <map> out.png` | renders ALL 128 metatiles of a map's tileset with their ids, in that map's palettes. `map-png` shows what a map DOES draw; this shows what the tileset HAS. **Use it before changing any tile** — and remember a metatile is not chosen until its attribute PALETTE is chosen |
+| `tools/monscan/npc-cast.cjs` | who the game ACTUALLY draws on a map, read off the engine's own slot table at `$7000`. The per-map record list is not the cast — each record is gated by the visibility bitmap at `$6080`. Hex-patch ROM `0x1610` to ask about a later story state |
+| `tools/nes-run.mjs --dumpram <hex>:<len>` | dump any RAM range after the warp — SRAM `$6020` story flags, `$6080` NPC visibility |
 | `ff3-make-boss-state` (generator) | rebuilds `tools/states/ff3-boss.state.gz` — a LAND TURTLE boss fight, the second FF3 starting point next to `ff3-freeroam` (two Goblins, level-0 Onion Knights). Use it when a probe needs code the freeroam encounter never reaches. ⭐ The state stands alone: the generator verifies it replays against the UNPATCHED rom before writing. ⛔ Xande/dragons spawn but render garbled — their graphics are not loaded on this map |
 | `check-ff3-monster-fields` (manual) | the rest of FF3's 16-byte monster record — special rate/id, status-on-hit, weakness/resist element bits, status resist, and the three NIBBLE-PACKED fields. Kept OUT of `deploy.sh`: 27 real battles, ~17 min. Run after touching `tools/lib/ff3-monsters.mjs`. Catalog: `docs/FF3-MONSTERS.md` |
 
@@ -264,7 +269,7 @@ one of them was data already in hand:
 > code that CONSUMES each one. If any field is unconsumed, you are NOT done —
 > wire it, or say plainly which one you dropped and why.
 
-**Then render it and look.** `map-png --grid --box --live`, `tileset-sheet.mjs`,
+**Then render it and look.** `map-png --grid --box`, `tileset-sheet.mjs`,
 `npc-sheet-ff3.mjs`, `monscan/npc-cast.cjs`, `ff3-npc-palette.mjs`. "The code
 looks right" is not a check. A source banner repeating this is at the top of
 every file that reads or places ROM data — do not delete it.
