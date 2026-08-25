@@ -10,7 +10,7 @@ import { titleSt, onNameEntryKeyDown } from './title-screen.js';
 import { ps, recalcCombatStats, getHitWeapon, getJobLevelStatBonus } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
 import { ITEMS, isHandEquippable, isWeapon, weaponSubtype, hasReadyBow, isArrow } from './data/items.js';
-import { SPELLS, getSpellMPCost, isMultiTargetSpell } from './data/spells.js';
+import { SPELLS, getSpellMPCost, isMultiTargetSpell, spellHitsAllEnemies } from './data/spells.js';
 import { rollHits, calcPotentialHits, elemMultiplier } from './battle-math.js';
 import { blindHitPenalty, miniToadAtkMult } from './status-effects.js';
 import { normalizeGrip, isDualWield } from './realized-stats.js';
@@ -655,6 +655,23 @@ function _battleInputMagicSelect() {
     inputSt.itemTargetAllyIndex = -1;
     inputSt.itemTargetMode = 'single';
     inputSt.playerActionPending = { command: 'magic', spellId };
+    // ⛔ THREE SPELLS NEVER ASK. Meteor / Quake / Raze carry bit 6 of the spell
+    // record's byte +5, and on the cartridge picking one commits immediately —
+    // no target cursor ever opens — and every enemy takes damage in the same
+    // frame. Sending them to `item-target-select` let the player aim them at a
+    // single body, which is both the wrong reach and a prompt FF3 does not
+    // show. Commit straight down the menu-close path the target picker itself
+    // uses, so the list closes exactly as it always did.
+    if (spellHitsAllEnemies(spellId)) {
+      inputSt.itemTargetType = 'enemy';
+      inputSt.itemTargetMode = 'all';
+      inputSt.playerActionPending.target = Math.max(0, inputSt.itemTargetIndex);
+      inputSt.playerActionPending.allyIndex = -1;
+      inputSt.playerActionPending.targetMode = 'all';
+      battleSt.battleState = 'item-list-out';
+      battleSt.battleTimer = 0;
+      return;
+    }
     battleSt.battleState = 'item-target-select';
     battleSt.battleTimer = 0;
   }

@@ -106,6 +106,7 @@ for (let id = 0; id < 88; id++) {
   const target = rom[off + 4];
   const targeting = rom[off + 5];
   const anim = rom[off + 6];
+  const castAnim = rom[off + 7];
 
   const name = spellStr(id);
   const props = [];
@@ -127,6 +128,30 @@ for (let id = 0; id < 88; id++) {
     props.push(`statusMask: 0x${type.toString(16).padStart(2, '0')}`);
   }
   props.push(`anim: 0x${anim.toString(16).padStart(2, '0')}`);
+  // ⛔ BYTE +5 — READ SINCE THE FIRST VERSION OF THIS FILE AND NEVER EMITTED.
+  // It sat in a local named `targeting` that nothing consumed, and on the
+  // strength of that `src/data/spells.js` carried the claim "The ROM does NOT
+  // encode single-vs-all for player spells — checked, not assumed". The check
+  // had looked at byte +4 only.
+  //
+  //   bit 6 (0x40) = HITS EVERY ENEMY, and the game does not ask for a target.
+  //   bit 7 (0x80) = the spell is aimed at the PARTY side.
+  //   bits 0-5     = the effect/art index (Fire and Blizzard share 0x08).
+  //
+  // Bit 6 was proven CAUSALLY on the cartridge, both directions, by
+  // tools/monscan/spell-target-probe.cjs: Fire asks for a target and damages
+  // one of four goblins; patch its byte +5 from 0x08 to 0x48 — one bit, nothing
+  // else — and the same spell stops asking and damages all four. Clearing bit 6
+  // on Quake turns it back into a single-target spell. All 56 castable spells
+  // were then swept on the cartridge and agree, 56/56.
+  props.push(`targeting: 0x${targeting.toString(16).padStart(2, '0')}`);
+  // Byte +7 — the CAST HALO. Its three groups line up exactly with the CHR
+  // block each spell's cast loads (tools/monscan/spell-sweep.json): {2e,2f,3d}
+  // all load $555D0, {30,31,32,3e} all load $556D0, and 0x3f is the eight
+  // summons. That is black / white / call, and it agrees with the position
+  // rule in `getSpellSchool` on all 56 — an independent ROM witness for a
+  // school split that until now was derived from menu position alone.
+  props.push(`castAnim: 0x${castAnim.toString(16).padStart(2, '0')}`);
 
   const comment = name || `spell_${id}`;
   lines.push(`  [0x${id.toString(16).padStart(2, '0')}, { ${props.join(', ')} }], // ${comment}`);

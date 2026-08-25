@@ -20,94 +20,94 @@ import { STATUS_NAME_TO_FLAG } from '../status-effects.js';
 
 // ─── BEGIN GENERATED (tools/gen-spells-js.js) ───
 export const SPELLS = new Map([
-  [0x00, { power: 200, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Flare
-  [0x01, { power:   0, hit:  35, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Death
-  [0x02, { power: 180, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x03 }], // Meteor
-  [0x03, { power:   4, hit:  40, element: 'air', type: 'damage', target: 'enemy', anim: 0x00 }], // Tornado
-  [0x04, { power: 255, hit:   0, element: 'recovery', type: 'death', target: 'revive', anim: 0x05 }], // Arise
-  [0x05, { power: 160, hit: 100, element: 'holy', type: 'damage', target: 'enemy', anim: 0x00 }], // Holy
-  [0x06, { power: 250, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Bahamur
-  [0x07, { power: 133, hit: 100, element: 'earth', type: 'damage', target: 'enemy', anim: 0x02 }], // Quake
-  [0x08, { power:   0, hit:  40, element: 'earth', type: 'petrify', target: 'enemy_status', anim: 0x07 }], // Breakga
-  [0x09, { power: 160, hit: 100, element: 'recovery', type: 'damage', target: 'drain', anim: 0x04 }], // Drain
-  [0x0a, { power: 220, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Curaja
-  [0x0b, { power:   0, hit:  60, element: null, type: 'cure_status', target: 'cure_status', statusMask: 0xff, anim: 0x00 }], // Esuna
-  [0x0c, { power:   0, hit:  75, element: null, type: 'damage', target: 'reflect', anim: 0x00 }], // Reflect
-  [0x0d, { power: 180, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Leviath
-  [0x0e, { power: 150, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00 }], // Firaga
-  [0x0f, { power: 130, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Bio
-  [0x10, { power:   0, hit:   0, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Warp
-  [0x11, { power: 115, hit: 100, element: ['ice','air'], type: 'damage', target: 'enemy', anim: 0x00 }], // Aeroga
-  [0x12, { power:   0, hit:  60, element: null, type: 'haste', target: 'cure_status', statusMask: 0x07, anim: 0x00 }], // Stone
-  [0x13, { power:   5, hit:  16, element: null, type: 'damage', target: 'haste', anim: 0x00 }], // Haste
-  [0x14, { power: 150, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Catas
-  [0x15, { power: 110, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00 }], // Taga
-  [0x16, { power: 100, hit: 100, element: null, type: 'death', target: 'enemy_status', anim: 0x01 }], // Raze
-  [0x17, { power:   0, hit:  60, element: null, type: 'damage', target: 'erase', anim: 0x00 }], // Erase
-  [0x18, { power: 180, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Curaga
-  [0x19, { power:   1, hit:  15, element: 'recovery', type: 'death', target: 'revive', anim: 0x05 }], // Raise
-  [0x1a, { power:   5, hit:  75, element: null, type: 'damage', target: 'protect', anim: 0x00 }], // Protect
-  [0x1b, { power: 120, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Hyper
-  [0x1c, { power:   0, hit:  50, element: 'earth', type: 'petrify', target: 'enemy', anim: 0x00 }], // Break
-  [0x1d, { power:  85, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00 }], // Bzzaga
-  [0x1e, { power:   0, hit:  80, element: null, type: 'all_status', target: 'enemy_status', anim: 0x00 }], // Shade
-  [0x1f, { power:   0, hit: 100, element: null, type: 'damage', target: 'libra', anim: 0x00 }], // Libra
-  [0x20, { power:   0, hit:  25, element: null, type: 'confuse', target: 'enemy_status', anim: 0x00 }], // Confuse
-  [0x21, { power:   0, hit:  60, element: null, type: 'silence', target: 'enemy_status', anim: 0x00 }], // Sence
-  [0x22, { power:  85, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Heatra
-  [0x23, { power:  55, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00 }], // Fira
-  [0x24, { power:  55, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00 }], // Bzzara
-  [0x25, { power:  55, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00 }], // Tara
-  [0x26, { power: 125, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Cura
-  [0x27, { power:   0, hit:   0, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Tport
-  [0x28, { power:   0, hit:  75, element: null, type: 'blind', target: 'cure_status', statusMask: 0x04, anim: 0x00 }], // Bndna
-  [0x29, { power:  65, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Spark
-  [0x2a, { power:  35, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00 }], // Thunder
-  [0x2b, { power:  20, hit:  60, element: null, type: 'poison', target: 'enemy', anim: 0x00 }], // Poison
-  [0x2c, { power:  10, hit:  60, element: null, type: 'blind', target: 'enemy_status', anim: 0x00 }], // Blind
-  [0x2d, { power:  45, hit: 100, element: ['ice','air'], type: 'damage', target: 'enemy', anim: 0x00 }], // Aero
-  [0x2e, { power:   0, hit:   0, element: null, type: 'toad', target: 'toggle_status', statusMask: 0x20, anim: 0x08 }], // Toad
-  [0x2f, { power:   0, hit:   0, element: null, type: 'mini', target: 'toggle_status', statusMask: 0x08, anim: 0x0d }], // Mini
-  [0x30, { power:  50, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Icen
-  [0x31, { power:  25, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00 }], // Fire
-  [0x32, { power:  25, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00 }], // Bzzard
-  [0x33, { power:   0, hit:  15, element: null, type: 'sleep', target: 'enemy_status', anim: 0x00 }], // Sleep
-  [0x34, { power:  42, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00 }], // Cure
-  [0x35, { power:   0, hit:  50, element: null, type: 'poison', target: 'cure_status', statusMask: 0x02, anim: 0x00 }], // Poisona
-  [0x36, { power:   0, hit: 100, element: null, type: 'damage', target: 'sight', anim: 0x00 }], // Sight
-  [0x37, { power:  40, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Escape
-  [0x38, { power:  32, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00 }], // Zantetsuken
-  [0x39, { power:  40, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x10 }], // Fire
-  [0x3a, { power:  40, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x11 }], // Blizzard
-  [0x3b, { power:  40, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x12 }], // Thunder
-  [0x3c, { power:   0, hit:  80, element: null, type: 'poison', target: 'enemy', anim: 0x00 }], // Poison
-  [0x3d, { power:  80, hit: 100, element: 'earth', type: 'damage', target: 'enemy', anim: 0x02 }], // Earthquake
-  [0x3e, { power:   0, hit:  80, element: 'earth', type: 'petrify', target: 'enemy_status', anim: 0x0b }], // Glare
-  [0x3f, { power:  30, hit: 100, element: 'recovery', type: 'damage', target: 'restore', anim: 0x00 }], // Restore 1
-  [0x40, { power:   0, hit: 100, element: null, type: 'damage', target: 'elixir', anim: 0x00 }], // Elixir
-  [0x41, { power:  37, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x0a }], // Tidal Wave
-  [0x42, { power:  80, hit: 100, element: null, type: 'damage', target: 'all_enemies', anim: 0x09 }], // ParcleBeam
-  [0x43, { power:   0, hit: 100, element: null, type: 'damage', target: 'explode', anim: 0x0c }], // Explosion
-  [0x44, { power:   0, hit:  80, element: null, type: 'sleep', target: 'enemy_status', anim: 0x0b }], // Glare
-  [0x45, { power:   0, hit:  80, element: null, type: 'confuse', target: 'enemy_status', anim: 0x0b }], // Glare
-  [0x46, { power:   0, hit:  60, element: null, type: 'all_status', target: 'enemy_status', anim: 0x00 }], // Bad Breath
-  [0x47, { power:   0, hit:  80, element: null, type: 'all_status', target: 'enemy_status', anim: 0x0b }], // Mind Blast
-  [0x48, { power:   0, hit: 100, element: null, type: 'damage', target: 'summon', anim: 0x06 }], // Summon
-  [0x49, { power:   0, hit: 100, element: null, type: 'damage', target: 'divide', anim: 0x06 }], // Divide 1
-  [0x4a, { power:  80, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x0b }], // Mega Flare
-  [0x4b, { power:   0, hit: 100, element: null, type: 'damage', target: 'guard', anim: 0x00 }], // Guard
-  [0x4c, { power:  40, hit: 100, element: null, type: 'damage', target: 'bite', anim: 0x00 }], // Bite
-  [0x4d, { power:   0, hit: 100, element: null, type: 'damage', target: 'barrier_shift', anim: 0x0b }], // BarrrShift
-  [0x4e, { power:   0, hit: 100, element: null, type: 'damage', target: 'multiply', anim: 0x06 }], // Multiply
-  [0x4f, { power:   0, hit: 100, element: null, type: 'damage', target: 'divide', anim: 0x06 }], // Divide 2
-  [0x50, { power:  90, hit:  50, element: 'earth', type: 'damage', target: 'enemy', anim: 0x0e }], // Earthquake
-  [0x51, { power:   0, hit:  30, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Quicksand
-  [0x52, { power: 120, hit:  30, element: 'air', type: 'damage', target: 'all_enemies', anim: 0x00 }], // Wind Slash
-  [0x53, { power:   0, hit:  40, element: null, type: 'death', target: 'enemy_status', anim: 0x00 }], // Swamp
-  [0x54, { power:   0, hit:  40, element: 'bolt', type: 'death', target: 'enemy_status', anim: 0x00 }], // FastCurrent
-  [0x55, { power: 120, hit:  60, element: 'air', type: 'damage', target: 'enemy', anim: 0x00 }], // Whirlpool
-  [0x56, { power: 120, hit:  60, element: 'air', type: 'damage', target: 'enemy', anim: 0x00 }], // Tornado
-  [0x57, { power: 120, hit:  40, element: 'earth', type: 'damage', target: 'enemy', anim: 0x03 }], // Avalanche
+  [0x00, { power: 200, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0f, castAnim: 0x3d }], // Flare
+  [0x01, { power:   0, hit:  35, element: null, type: 'death', target: 'enemy_status', anim: 0x00, targeting: 0x2f, castAnim: 0x3d }], // Death
+  [0x02, { power: 180, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x03, targeting: 0x4f, castAnim: 0x3d }], // Meteor
+  [0x03, { power:   4, hit:  40, element: 'air', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x17, castAnim: 0x3e }], // Tornado
+  [0x04, { power: 255, hit:   0, element: 'recovery', type: 'death', target: 'revive', anim: 0x05, targeting: 0xb7, castAnim: 0x3e }], // Arise
+  [0x05, { power: 160, hit: 100, element: 'holy', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x37, castAnim: 0x3e }], // Holy
+  [0x06, { power: 250, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x07, castAnim: 0x3f }], // Bahamur
+  [0x07, { power: 133, hit: 100, element: 'earth', type: 'damage', target: 'enemy', anim: 0x02, targeting: 0x4e, castAnim: 0x2e }], // Quake
+  [0x08, { power:   0, hit:  40, element: 'earth', type: 'petrify', target: 'enemy_status', anim: 0x07, targeting: 0x2e, castAnim: 0x2e }], // Breakga
+  [0x09, { power: 160, hit: 100, element: 'recovery', type: 'damage', target: 'drain', anim: 0x04, targeting: 0x2e, castAnim: 0x2e }], // Drain
+  [0x0a, { power: 220, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00, targeting: 0x96, castAnim: 0x30 }], // Curaja
+  [0x0b, { power:   0, hit:  60, element: null, type: 'cure_status', target: 'cure_status', statusMask: 0xff, anim: 0x00, targeting: 0xb6, castAnim: 0x30 }], // Esuna
+  [0x0c, { power:   0, hit:  75, element: null, type: 'damage', target: 'reflect', anim: 0x00, targeting: 0xb6, castAnim: 0x30 }], // Reflect
+  [0x0d, { power: 180, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x06, castAnim: 0x3f }], // Leviath
+  [0x0e, { power: 150, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0d, castAnim: 0x2e }], // Firaga
+  [0x0f, { power: 130, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0d, castAnim: 0x2e }], // Bio
+  [0x10, { power:   0, hit:   0, element: null, type: 'death', target: 'enemy_status', anim: 0x00, targeting: 0x2d, castAnim: 0x2e }], // Warp
+  [0x11, { power: 115, hit: 100, element: ['ice','air'], type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x15, castAnim: 0x30 }], // Aeroga
+  [0x12, { power:   0, hit:  60, element: null, type: 'haste', target: 'cure_status', statusMask: 0x07, anim: 0x00, targeting: 0xb5, castAnim: 0x30 }], // Stone
+  [0x13, { power:   5, hit:  16, element: null, type: 'damage', target: 'haste', anim: 0x00, targeting: 0xb5, castAnim: 0x30 }], // Haste
+  [0x14, { power: 150, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x05, castAnim: 0x3f }], // Catas
+  [0x15, { power: 110, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0c, castAnim: 0x2e }], // Taga
+  [0x16, { power: 100, hit: 100, element: null, type: 'death', target: 'enemy_status', anim: 0x01, targeting: 0x4c, castAnim: 0x2e }], // Raze
+  [0x17, { power:   0, hit:  60, element: null, type: 'damage', target: 'erase', anim: 0x00, targeting: 0x0c, castAnim: 0x2e }], // Erase
+  [0x18, { power: 180, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00, targeting: 0x94, castAnim: 0x30 }], // Curaga
+  [0x19, { power:   1, hit:  15, element: 'recovery', type: 'death', target: 'revive', anim: 0x05, targeting: 0xb4, castAnim: 0x30 }], // Raise
+  [0x1a, { power:   5, hit:  75, element: null, type: 'damage', target: 'protect', anim: 0x00, targeting: 0xb4, castAnim: 0x30 }], // Protect
+  [0x1b, { power: 120, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x04, castAnim: 0x3f }], // Hyper
+  [0x1c, { power:   0, hit:  50, element: 'earth', type: 'petrify', target: 'enemy', anim: 0x00, targeting: 0x2b, castAnim: 0x2f }], // Break
+  [0x1d, { power:  85, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0b, castAnim: 0x2f }], // Bzzaga
+  [0x1e, { power:   0, hit:  80, element: null, type: 'all_status', target: 'enemy_status', anim: 0x00, targeting: 0x0b, castAnim: 0x2f }], // Shade
+  [0x1f, { power:   0, hit: 100, element: null, type: 'damage', target: 'libra', anim: 0x00, targeting: 0x33, castAnim: 0x31 }], // Libra
+  [0x20, { power:   0, hit:  25, element: null, type: 'confuse', target: 'enemy_status', anim: 0x00, targeting: 0x13, castAnim: 0x31 }], // Confuse
+  [0x21, { power:   0, hit:  60, element: null, type: 'silence', target: 'enemy_status', anim: 0x00, targeting: 0x13, castAnim: 0x31 }], // Sence
+  [0x22, { power:  85, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x03, castAnim: 0x3f }], // Heatra
+  [0x23, { power:  55, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0a, castAnim: 0x2f }], // Fira
+  [0x24, { power:  55, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0a, castAnim: 0x2f }], // Bzzara
+  [0x25, { power:  55, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x0a, castAnim: 0x2f }], // Tara
+  [0x26, { power: 125, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00, targeting: 0x92, castAnim: 0x32 }], // Cura
+  [0x27, { power:   0, hit:   0, element: null, type: 'death', target: 'enemy_status', anim: 0x00, targeting: 0x32, castAnim: 0x32 }], // Tport
+  [0x28, { power:   0, hit:  75, element: null, type: 'blind', target: 'cure_status', statusMask: 0x04, anim: 0x00, targeting: 0xb1, castAnim: 0x32 }], // Bndna
+  [0x29, { power:  65, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x02, castAnim: 0x3f }], // Spark
+  [0x2a, { power:  35, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x09, castAnim: 0x2f }], // Thunder
+  [0x2b, { power:  20, hit:  60, element: null, type: 'poison', target: 'enemy', anim: 0x00, targeting: 0x09, castAnim: 0x2f }], // Poison
+  [0x2c, { power:  10, hit:  60, element: null, type: 'blind', target: 'enemy_status', anim: 0x00, targeting: 0x09, castAnim: 0x2f }], // Blind
+  [0x2d, { power:  45, hit: 100, element: ['ice','air'], type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x11, castAnim: 0x31 }], // Aero
+  [0x2e, { power:   0, hit:   0, element: null, type: 'toad', target: 'toggle_status', statusMask: 0x20, anim: 0x08, targeting: 0x32, castAnim: 0x32 }], // Toad
+  [0x2f, { power:   0, hit:   0, element: null, type: 'mini', target: 'toggle_status', statusMask: 0x08, anim: 0x0d, targeting: 0x31, castAnim: 0x32 }], // Mini
+  [0x30, { power:  50, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x01, castAnim: 0x3f }], // Icen
+  [0x31, { power:  25, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x08, castAnim: 0x2f }], // Fire
+  [0x32, { power:  25, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x08, castAnim: 0x2f }], // Bzzard
+  [0x33, { power:   0, hit:  15, element: null, type: 'sleep', target: 'enemy_status', anim: 0x00, targeting: 0x08, castAnim: 0x2f }], // Sleep
+  [0x34, { power:  42, hit: 100, element: 'recovery', type: 'damage', target: 'ally', anim: 0x00, targeting: 0x90, castAnim: 0x32 }], // Cure
+  [0x35, { power:   0, hit:  50, element: null, type: 'poison', target: 'cure_status', statusMask: 0x02, anim: 0x00, targeting: 0xb0, castAnim: 0x32 }], // Poisona
+  [0x36, { power:   0, hit: 100, element: null, type: 'damage', target: 'sight', anim: 0x00, targeting: 0x30, castAnim: 0x32 }], // Sight
+  [0x37, { power:  40, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x00, castAnim: 0x3f }], // Escape
+  [0x38, { power:  32, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x4f, castAnim: 0x00 }], // Zantetsuken
+  [0x39, { power:  40, hit: 100, element: 'fire', type: 'damage', target: 'enemy', anim: 0x10, targeting: 0x4d, castAnim: 0x00 }], // Fire
+  [0x3a, { power:  40, hit: 100, element: 'ice', type: 'damage', target: 'enemy', anim: 0x11, targeting: 0x4a, castAnim: 0x00 }], // Blizzard
+  [0x3b, { power:  40, hit: 100, element: 'bolt', type: 'damage', target: 'enemy', anim: 0x12, targeting: 0x4a, castAnim: 0x00 }], // Thunder
+  [0x3c, { power:   0, hit:  80, element: null, type: 'poison', target: 'enemy', anim: 0x00, targeting: 0x49, castAnim: 0x00 }], // Poison
+  [0x3d, { power:  80, hit: 100, element: 'earth', type: 'damage', target: 'enemy', anim: 0x02, targeting: 0x4e, castAnim: 0x00 }], // Earthquake
+  [0x3e, { power:   0, hit:  80, element: 'earth', type: 'petrify', target: 'enemy_status', anim: 0x0b, targeting: 0x2e, castAnim: 0x00 }], // Glare
+  [0x3f, { power:  30, hit: 100, element: 'recovery', type: 'damage', target: 'restore', anim: 0x00, targeting: 0xb0, castAnim: 0x00 }], // Restore 1
+  [0x40, { power:   0, hit: 100, element: null, type: 'damage', target: 'elixir', anim: 0x00, targeting: 0xb0, castAnim: 0x00 }], // Elixir
+  [0x41, { power:  37, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x0a, targeting: 0x4e, castAnim: 0x00 }], // Tidal Wave
+  [0x42, { power:  80, hit: 100, element: null, type: 'damage', target: 'all_enemies', anim: 0x09, targeting: 0x4e, castAnim: 0x00 }], // ParcleBeam
+  [0x43, { power:   0, hit: 100, element: null, type: 'damage', target: 'explode', anim: 0x0c, targeting: 0x2a, castAnim: 0x00 }], // Explosion
+  [0x44, { power:   0, hit:  80, element: null, type: 'sleep', target: 'enemy_status', anim: 0x0b, targeting: 0x28, castAnim: 0x00 }], // Glare
+  [0x45, { power:   0, hit:  80, element: null, type: 'confuse', target: 'enemy_status', anim: 0x0b, targeting: 0x33, castAnim: 0x00 }], // Glare
+  [0x46, { power:   0, hit:  60, element: null, type: 'all_status', target: 'enemy_status', anim: 0x00, targeting: 0x2b, castAnim: 0x00 }], // Bad Breath
+  [0x47, { power:   0, hit:  80, element: null, type: 'all_status', target: 'enemy_status', anim: 0x0b, targeting: 0x4b, castAnim: 0x00 }], // Mind Blast
+  [0x48, { power:   0, hit: 100, element: null, type: 'damage', target: 'summon', anim: 0x06, targeting: 0x80, castAnim: 0x00 }], // Summon
+  [0x49, { power:   0, hit: 100, element: null, type: 'damage', target: 'divide', anim: 0x06, targeting: 0x2b, castAnim: 0x00 }], // Divide 1
+  [0x4a, { power:  80, hit: 100, element: null, type: 'damage', target: 'enemy', anim: 0x0b, targeting: 0x4f, castAnim: 0x00 }], // Mega Flare
+  [0x4b, { power:   0, hit: 100, element: null, type: 'damage', target: 'guard', anim: 0x00, targeting: 0xab, castAnim: 0x00 }], // Guard
+  [0x4c, { power:  40, hit: 100, element: null, type: 'damage', target: 'bite', anim: 0x00, targeting: 0x2b, castAnim: 0x00 }], // Bite
+  [0x4d, { power:   0, hit: 100, element: null, type: 'damage', target: 'barrier_shift', anim: 0x0b, targeting: 0xab, castAnim: 0x00 }], // BarrrShift
+  [0x4e, { power:   0, hit: 100, element: null, type: 'damage', target: 'multiply', anim: 0x06, targeting: 0xab, castAnim: 0x00 }], // Multiply
+  [0x4f, { power:   0, hit: 100, element: null, type: 'damage', target: 'divide', anim: 0x06, targeting: 0xab, castAnim: 0x00 }], // Divide 2
+  [0x50, { power:  90, hit:  50, element: 'earth', type: 'damage', target: 'enemy', anim: 0x0e, targeting: 0x40, castAnim: 0x00 }], // Earthquake
+  [0x51, { power:   0, hit:  30, element: null, type: 'death', target: 'enemy_status', anim: 0x00, targeting: 0x20, castAnim: 0x00 }], // Quicksand
+  [0x52, { power: 120, hit:  30, element: 'air', type: 'damage', target: 'all_enemies', anim: 0x00, targeting: 0x20, castAnim: 0x00 }], // Wind Slash
+  [0x53, { power:   0, hit:  40, element: null, type: 'death', target: 'enemy_status', anim: 0x00, targeting: 0x20, castAnim: 0x00 }], // Swamp
+  [0x54, { power:   0, hit:  40, element: 'bolt', type: 'death', target: 'enemy_status', anim: 0x00, targeting: 0x20, castAnim: 0x00 }], // FastCurrent
+  [0x55, { power: 120, hit:  60, element: 'air', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x20, castAnim: 0x00 }], // Whirlpool
+  [0x56, { power: 120, hit:  60, element: 'air', type: 'damage', target: 'enemy', anim: 0x00, targeting: 0x20, castAnim: 0x00 }], // Tornado
+  [0x57, { power: 120, hit:  40, element: 'earth', type: 'damage', target: 'enemy', anim: 0x03, targeting: 0x40, castAnim: 0x00 }], // Avalanche
 ]);
 // ─── END GENERATED ───
 
@@ -184,13 +184,25 @@ export function getSpellBuyPrice(spellId) {
 // of 56 could only ever be aimed at a single target: Meteo, every Fire2/3,
 // Bolt2/3, Ice2/3, Cure2/3/4 and the whole status family.
 //
-// The ROM does NOT encode single-vs-all for player spells — checked, not
-// assumed: no castable id uses the `all_enemies` target byte (0x17 / 0x33),
-// those values belong to monster-only abilities at 0x38+. In FF3 the player
-// chooses at target-select and the rolled amount is divided, which is what the
-// comment above already describes.
+// ⛔ THE CLAIM THAT USED TO STAND HERE WAS WRONG. It read: "The ROM does NOT
+// encode single-vs-all for player spells — checked, not assumed: no castable id
+// uses the `all_enemies` target byte (0x17 / 0x33)". That check looked at the
+// spell record's byte +4 and stopped. The record has EIGHT bytes, and byte +5 —
+// which `tools/gen-spells-js.js` had been reading into a local named `targeting`
+// and throwing away since the file was written — carries it in bit 6.
 //
-// So the four entries were never arbitrary — they are ONE PER CATEGORY:
+// Proven causally on the cartridge, both directions, by
+// `tools/monscan/spell-target-probe.cjs`: Fire asks which goblin and damages one
+// of four. Patch its byte +5 from 0x08 to 0x48 — one bit, nothing else — and the
+// same spell stops asking and damages all four. Clear bit 6 on Quake and it
+// starts asking. All 56 castable spells were then swept on the cartridge:
+// 56/56 agree with "bit 6 set, or a summon".
+//
+// See `spellHitsAllEnemies` below for what that means, and note what it does
+// NOT change: the all/column PICKER this set feeds is ff3mmo's own feature, the
+// cartridge has no such thing, and it stays.
+//
+// The four entries below are ONE PER CATEGORY:
 //   'enemy'         Fire 0x31, Blizzard 0x32
 //   'enemy_status'  Sleep 0x33
 //   'ally'          Cure 0x34
@@ -214,6 +226,34 @@ export function isMultiTargetSpell(spellId) {
   if (SUMMON_TIERS.has(spellId)) return false;
   const spell = SPELLS.get(spellId);
   return !!spell && MULTI_TARGET_SCOPES.has(spell.target);
+}
+
+// Byte +5 of the spell record. Bit 6 is the one that matters here; bit 7 marks
+// a party-side spell and the low bits are the effect/art index.
+export const TARGETING_ALL_ENEMIES = 0x40;
+export const TARGETING_PARTY_SIDE  = 0x80;
+
+/**
+ * Does this spell hit EVERY enemy on its own, with no target select at all?
+ *
+ * ⛔ MEASURED ON THE CARTRIDGE, NOT CHOSEN. Three spells: Meteor 0x02,
+ * Quake 0x07, Raze 0x16. Picking any of them in FF3 commits immediately — the
+ * game never opens a target cursor — and all four bodies of a four-goblin
+ * formation lose HP within ONE FRAME of each other. Picking Fire opens a cursor
+ * on one goblin and damages exactly that one. Full method and the 56/56 sweep:
+ * `tools/monscan/spell-target-probe.cjs`, gate `tools/check-spell-targeting.mjs`.
+ *
+ * ⛔ SUMMONS ARE DELIBERATELY EXCLUDED. On the cartridge all eight also skip
+ * target select, but in this game a summon's reach is the TIER system's call —
+ * a Conjurer's roll can land on a single-target attack, a Summoner's third
+ * effect always hits everyone (`resolveSummonEffect` / `summon-tiers.js`).
+ * Routing them through here would silently overrule that. It is a KNOWN,
+ * intentional divergence, not an oversight; see docs/design-notes.md#magic.
+ */
+export function spellHitsAllEnemies(spellId) {
+  if (SUMMON_TIERS.has(spellId)) return false;
+  const spell = SPELLS.get(spellId);
+  return !!spell && (spell.targeting & TARGETING_ALL_ENEMIES) !== 0;
 }
 
 /**

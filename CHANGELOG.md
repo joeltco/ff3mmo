@@ -1,3 +1,91 @@
+## 1.10.84 — 2026-08-25
+
+### Meteor, Quake and Raze hit everything, the way FF3 does
+
+Three castable spells auto-target every enemy in FF3, and this game let you aim
+all three at a single body through a target cursor the cartridge never shows.
+
+**Where the wrong answer came from.** The spell record at `$618D0` is EIGHT
+bytes. `tools/gen-spells-js.js` consumed six of them and read a seventh into a
+local variable named `targeting` that nothing ever used. On the strength of the
+six that WERE read, `src/data/spells.js` carried this in a comment:
+
+> "The ROM does NOT encode single-vs-all for player spells — checked, not
+> assumed: no castable id uses the `all_enemies` target byte (0x17 / 0x33)"
+
+That check looked at byte **+4**. The answer is in byte **+5, bit 6** — the byte
+sitting in the discarded variable whose name says what it is. Two of eight
+fields were unconsumed; the other is +7, decoded in the same pass.
+
+**Proven causally on the cartridge, both directions.** Not pattern-matched off a
+table — `tools/monscan/spell-target-probe.cjs` forces a four-goblin formation,
+drives the real magic menu, and reads the game's own answer off the nametable:
+
+```
+control   Fire   +5=0x08         opens a cursor on ONE goblin, damages 1 of 4
+positive  Quake  +5=0x4e         no cursor at all,             damages 4 of 4
+causal    Fire   +5=0x08 -> 0x48 no cursor at all,             damages 4 of 4
+reverse   Quake  +5=0x4e -> 0x0e opens a cursor on ONE goblin, damages 1 of 4
+```
+
+One bit, nothing else, and the same spell flips both ways. All 56 castable
+spells were then swept on the cartridge: **56 of 56** agree with "bit 6 set, or a
+summon". The captures are checked in and the gate replays them.
+
+**Byte +7 as well** — no point decoding one and leaving the other. It is the
+**cast halo**: its three groups line up exactly with the CHR block each spell's
+cast loads (`{2e,2f,3d}` → `$555D0`, `{30,31,32,3e}` → `$556D0`, `0x3f` = the
+eight summons), which is black / white / call. It agrees with the position rule
+in `getSpellSchool` on all 56 — an independent ROM witness for a school split
+that until now rested on menu position alone.
+
+### Damage numbers when everything is targeted
+
+On the cartridge an all-target cast drops every body's HP within **one frame**
+(measured: 662/662/663/663 across four goblins). Meteor/Quake/Raze already take
+this game's *parallel* apply path, so all four numbers pop together in 0.75 s —
+it matched with nothing to change.
+
+The **serial impact walk** — 1400 ms per target, one number on screen at a time,
+~5 s for four bodies — belongs to the player-driven all/column picker, which is
+this game's own feature; the cartridge has no such thing. Rendered, looked at,
+and deliberately left alone: each target gets its own burst and its own number,
+which is what it was written to do.
+
+### What was deliberately NOT taken from the cartridge
+
+All eight summons skip target select in FF3 too. Here a summon's reach is the
+TIER system's call — a Conjurer's roll can land on a single-target attack, a
+Summoner's third effect always hits everyone. `spellHitsAllEnemies` excludes
+summons so it cannot silently overrule that, and the gate pins the exclusion so
+it stays a decision rather than decaying into a bug.
+
+### Animation audit
+
+`tools/spell-anim-audit.mjs` casts all 56 spells through the shipped state
+machine and draws every frame with the shipped renderer, diffing each against a
+**no-spell baseline frame** of the same battle. The baseline is the whole point:
+a battle screen is never blank, so counting lit pixels reports every spell in the
+game as healthy. Result: **0 of 56 draw nothing** during either the cast or the
+impact, and all 56 hand the turn back.
+
+Two things this audit caught in its own harness before they could be reported as
+bugs in the game — both worth naming, because both looked exactly like the thing
+being hunted:
+
+- Every spell appeared to draw **no animation at all**. That was
+  `initSpriteAssets` never having been called; the tool now uses the shipped
+  boot init instead of a hand-picked subset of it.
+- Every cast appeared to **hang in `magic-hit` forever**. `_processNextTurn`
+  inside `spell-cast.js` is a NO-OP until `initSpellCast` wires it, which
+  `src/main.js` does at boot and the harness did not.
+
+### Gates
+
+`check-spell-targeting` (34 checks) replays the cartridge sweep, drives the real
+magic menu to prove the cursor no longer opens, and pins the summon divergence.
+`spell-anim-audit` doubles as a gate. Both were proven by reverting each fix.
+
 ## 1.10.83 — 2026-08-25
 
 ### Run is visible again
