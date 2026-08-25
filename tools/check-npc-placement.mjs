@@ -122,8 +122,12 @@ const LOADED_BUNDLES = new Map([
   [12,  new Set([0x01DF10, 0x01E010, 0x01ED10, 0x01E410, 0x01D910])],  // Kazus pub/inn
   [13,  new Set([0x01E010])],                                          // Kazus house
   [14,  new Set([0x01E210])],                                          // Kazus house
-  [16,  new Set([0x01DF10, 0x01ED10])],                                // Kazus weapon
-  [17,  new Set([0x01DF10, 0x01ED10])],                                // Kazus armor
+  // ⭐ 0x01E610 is UR'S SHOP-KEEPER sprite, added on purpose so Kazus's weapon
+  // and armor shops read as shops instead of houses with a villager in them.
+  // ff3mmo's addition, NOT a measurement — the rest of this table stays
+  // measured off the PPU.
+  [16,  new Set([0x01DF10, 0x01ED10, 0x01E610])],                      // Kazus weapon
+  [17,  new Set([0x01DF10, 0x01ED10, 0x01E610])],                      // Kazus armor
   [18,  new Set([0x01E010, 0x01EE10])],                                // Sasune courtyard
   [25,  new Set([0x01ED10, 0x01EE10])],                                // Sasune inner hall
   [26,  new Set([0x01ED10, 0x01EE10])],                                // Sasune (shares 25's roster)

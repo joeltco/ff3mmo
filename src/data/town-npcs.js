@@ -795,12 +795,24 @@ export const CID_MAN = interior(0x01DF10, DIR_DOWN, [
 });
 
 // Shop keepers — one tile above their counter facing DOWN, as Ur's keepers
-// stand. Bundles are the only non-ghost ones their maps load.
-export const KAZUS_WEAPON_KEEPER = interior(0x01DF10, DIR_DOWN, [
+// stand.
+//
+// ⭐ THEY WEAR UR'S KEEPER SPRITE, 0x1E610 (v1.10.75). They used to wear
+// 0x1DF10, the generic villager every other townsperson wears, so a Kazus shop
+// looked like a house with a stranger in it while Ur's read as shops. The
+// cartridge does dress them as villagers — record $28 wears 0x1DF10 — but
+// ff3mmo's shops should read as shops, and Ur already set that pattern.
+//
+// ⛔ Maps 16/17 do not LOAD 0x1E610, and that is the same circular argument
+// Cid's placement cost a release to: a map loads the bundles its own ROM
+// records call for. ff3mmo draws bundles straight from ROM offsets with no
+// CHR-RAM budget, so this is a deliberate, listed exception in
+// `check-npc-placement`, not a licence to hand-add ordinary townsfolk.
+export const KAZUS_WEAPON_KEEPER = interior(0x01E610, DIR_DOWN, [
   'Mythril holds an edge.',
   'It costs what it costs.',
 ]);
-export const KAZUS_ARMOR_KEEPER = interior(0x01DF10, DIR_DOWN, [
+export const KAZUS_ARMOR_KEEPER = interior(0x01E610, DIR_DOWN, [
   'Mythril plate.',
   'Dear, but it turns a blade.',
 ]);

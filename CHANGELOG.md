@@ -1,3 +1,61 @@
+## 1.10.75 — 2026-08-24
+
+### How FF3 actually does it
+
+**By the shop-marker NPC id, and the id picks the keeper's job sprite.** Map 3
+(Ur) is marker `$F3`, map 15 (Kazus) is `$F4` — **both resolve to gfx 4, the
+Black Mage.** The White Mage keepers (gfx 3) are markers `$F8` and `$BD` on maps
+75/76/79/80. So the cartridge has no mismatch: Ur and Kazus are BOTH black-magic
+shops and the white ones are in later towns. **Ur being white is ff3mmo's design
+choice, not FF3's** — which means we own making the keeper match.
+
+### The menu drew a White Mage for every magic shop
+
+```js
+FF3MMO_TO_FF1 = { weapon:'weapon', armor:'armor', item:'item',
+                  magic: 'white-magic' };   // ← unconditional
+```
+
+`SHOP_KEEPER_TILES` has had **captured `black-magic` keeper art all along** and
+no code path could reach it. Kazus sold black magic under a White Mage.
+
+Magic shops now declare `school`, and `keeperArtForShop(type, school)` resolves
+the picture. `magic` is GONE from `FF3MMO_TO_FF1` so it cannot be resolved
+school-blind again.
+
+### The keeper in the room now matches the school too
+
+`addMageShopkeeper(x, y, shopId, 'white'|'black')` picks the job walk sprite —
+Ur gets the White Mage (gfx 3), Kazus keeps the Black Mage (gfx 4).
+
+`JOB_WALK_PALS` had no job 3, so the palette was **PPU-captured**, not invented:
+`tools/ff3-npc-palette.mjs --map 75` — the map where FF3 puts a White Mage behind
+a counter — reads `$3F10-$3F1F` and clusters OAM. Both of the keeper's 16x16
+halves use sprite palette 3, measured **`0f 15 30`**: white robe, red trim. One
+palette for the whole sprite, unlike the Black Mage's face/robe split.
+
+### Kazus's weapon and armor keepers wore the town villager
+
+Ur's wore `0x1E610`, a shop-keeper sprite. Kazus's wore `0x1DF10` — the same
+generic villager as everyone else in town, which is why one town's shops read as
+shops and the other's read as houses. Both towns now wear `0x1E610`.
+
+⛔ Maps 16/17 do not LOAD `0x1E610`. That is the same circular argument Cid's
+placement cost a release to — a map loads the bundles ITS OWN ROM records call
+for, and ff3mmo has no CHR-RAM budget. Listed as a deliberate exception in
+`check-npc-placement`; the rest of that table stays measured.
+
+### check-shops now compares the picture to the stock
+
+It never did. Four new assertions, all fail on revert:
+
+| revert | failure |
+|---|---|
+| drop Kazus's `school` | *"is a magic shop with no `school` — the menu cannot pick a keeper"* |
+| staff Ur with a black mage | *"sells white magic but map-loading.js staffs it with the black mage"* |
+| Kazus weapon keeper back to `0x1DF10` | *"weapon keepers wear DIFFERENT sprites — one town's shop reads as a house"* |
+| a black scroll in Ur | *"should sell white magic but stocks 0xe0 (spell 49, black)"* |
+
 ## 1.10.74 — 2026-08-24
 
 ### Ur sells white magic, Kazus sells black

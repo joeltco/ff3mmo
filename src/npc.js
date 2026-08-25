@@ -24,7 +24,7 @@ import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
 import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
-import { BM_WALK_TOP, BM_WALK_BTM } from './job-sprites.js';
+import { BM_WALK_TOP, BM_WALK_BTM, WM_WALK_TOP, WM_WALK_BTM } from './job-sprites.js';
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT, OPENING_INTRO } from './data/opening-scene.js';
 import { transSt } from './transitions.js';
 import { TOWN_NPCS } from './data/town-npcs.js';
@@ -149,6 +149,15 @@ const _SPRITE_FACTORIES = {
     s.setGfxID(4); // jobIdx 4 = Black Mage walk-sprite GFX bank
     return s;
   },
+  // ⭐ FF3 tells its magic shops apart by the KEEPER'S JOB, not by the sign:
+  // maps 75/76/79/80 put a White Mage (gfx 3) behind the counter, Ur (map 3)
+  // and Kazus (map 15) a Black Mage (gfx 4). A white-magic shop staffed by a
+  // Black Mage is the mismatch this exists to end.
+  white_mage: () => {
+    const s = new Sprite(romRaw, WM_WALK_TOP, WM_WALK_BTM);
+    s.setGfxID(3); // jobIdx 3 = White Mage walk-sprite GFX bank
+    return s;
+  },
   scene: (npc) => {
     const spec = npc.scene;
     const s = new Sprite(romRaw, spec.palTop, spec.palBtm);
@@ -215,8 +224,18 @@ export function addMoogle(tileX, tileY) {
 
 // Stationary shopkeeper NPC — walks in place; opens `shopId` on Z.
 export function addBlackMageShopkeeper(tileX, tileY, shopId) {
-  _npcs.push(_makeNpc('bm_shop', tileX, tileY, {
-    spriteKey: 'black_mage',
+  addMageShopkeeper(tileX, tileY, shopId, 'black');
+}
+
+/**
+ * A magic-shop keeper of the school the shop actually sells.
+ * `school` is 'white' or 'black' and picks BOTH the job walk sprite and the
+ * npc key, so a shop can never be staffed by the wrong mage.
+ */
+export function addMageShopkeeper(tileX, tileY, shopId, school) {
+  const white = school === 'white';
+  _npcs.push(_makeNpc(white ? 'wm_shop' : 'bm_shop', tileX, tileY, {
+    spriteKey: white ? 'white_mage' : 'black_mage',
     shopId,
     mode:      'idle-march',
   }));

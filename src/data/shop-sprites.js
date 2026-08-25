@@ -71,12 +71,22 @@ export const SHOP_PALETTES = {
 // maps to FF1's white-magic keeper. When a black-magic shop opens in a
 // later town, add a separate ff3mmo shop type (or split magic into
 // `wmagic`/`bmagic`) and point it at black-magic here.
+// ⛔ `magic` HAS NO SINGLE ANSWER — it depends on the school the shop sells.
+// This map used to send it to 'white-magic' unconditionally, which is how a
+// black-magic shop showed a White Mage behind the counter while the
+// 'black-magic' keeper art below sat captured and unreachable. Resolve a magic
+// shop through `keeperArtForShop()`, never through this table alone.
 export const FF3MMO_TO_FF1 = {
   weapon: 'weapon',
   armor:  'armor',
   item:   'item',
-  magic:  'white-magic',
 };
+
+/** FF1 keeper-art key for a shop, school included. `shop` is a SHOPS entry. */
+export function keeperArtForShop(type, school) {
+  if (type === 'magic') return school === 'black' ? 'black-magic' : 'white-magic';
+  return FF3MMO_TO_FF1[type] || null;
+}
 
 // Shopkeeper tile data, keyed by FF1 canon type. Each entry is the
 // 13 keeper-specific tiles ($01..$0D) in `SHOPKEEP_IMAGE_LAYOUT` order
@@ -258,8 +268,8 @@ export const SHOP_KEEPER_TILES = new Map([
 // Resolve `{ tiles, palette }` for the active ff3mmo shop type. Caller
 // must guard against the null return (no capture landed yet for the
 // requested type).
-export function getShopSprite(ff3mmoType) {
-  const ff1Type = FF3MMO_TO_FF1[ff3mmoType];
+export function getShopSprite(ff3mmoType, school) {
+  const ff1Type = keeperArtForShop(ff3mmoType, school);
   if (!ff1Type) return null;
   const tiles = SHOP_KEEPER_TILES.get(ff1Type);
   if (!tiles) return null;

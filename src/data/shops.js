@@ -88,6 +88,7 @@ export const SHOPS = new Map([
   }],
   ['kazus_magic', {
     type: 'magic',
+    school: 'black',
     mapId: 15, counter: { x: 4, y: 4 },
     // ⭐ KAZUS IS THE BLACK MAGIC SHOP (v1.10.74) — all three level-1 BLACK
     // spells: 0xE0 -> 49 Fire, 0xE1 -> 50 Ice, 0xE2 -> 51 Sleep.
@@ -108,6 +109,10 @@ export const SHOPS = new Map([
   }],
   ['ur_magic', {
     type: 'magic',
+    // ⭐ SCHOOL drives BOTH the keeper's job sprite and the shop-menu keeper
+    // art. Without it `FF3MMO_TO_FF1` sent every magic shop to the
+    // 'white-magic' picture, so Kazus sold black magic under a White Mage.
+    school: 'white',
     mapId: 3, counter: { x: 4, y: 4 },
     // ⭐ UR IS THE WHITE MAGIC SHOP (v1.10.74) — all three level-1 WHITE
     // spells, where it used to sell the single Pure scroll.

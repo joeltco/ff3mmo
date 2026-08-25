@@ -22,6 +22,7 @@ globalThis.document = { createElement: () => ({ getContext: () => ({}) }), getEl
 const { SHOPS, findShopAtCounter, getShopType } = await import('../src/data/shops.js');
 const { ITEMS } = await import('../src/data/items.js');
 const { getSpellSchool, getSpellLevel } = await import('../src/data/spells.js');
+const { keeperArtForShop, getShopSprite } = await import('../src/data/shop-sprites.js');
 const { loadMap } = await import('../src/map-loader.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 
@@ -96,6 +97,45 @@ for (const [id, want] of Object.entries(SCHOOL_OF_SHOP)) {
   else bad(`${id} carries ${got.length} spell(s) at level(s) ${lv.join(',')} — wanted three at level 1`);
 }
 
+// ⛔ THE SHOP-MENU KEEPER MUST MATCH WHAT THE SHOP SELLS.
+//
+// `FF3MMO_TO_FF1` mapped `magic` -> 'white-magic' unconditionally, so EVERY
+// magic shop drew a White Mage in the menu — including one selling black magic
+// — while the captured 'black-magic' keeper art sat in `SHOP_KEEPER_TILES`
+// unreachable by any code path. Nothing noticed, because nothing compared the
+// picture to the stock.
+for (const [id, shop] of SHOPS) {
+  const type = getShopType(id);
+  const art = keeperArtForShop(type, shop.school);
+  if (!getShopSprite(type, shop.school)) { bad(`${id}: no keeper art resolves for ${art}`); continue; }
+  if (type === 'magic') {
+    const want = shop.school === 'black' ? 'black-magic' : 'white-magic';
+    if (!shop.school) bad(`${id} is a magic shop with no \`school\` — the menu cannot pick a keeper`);
+    else if (art === want) ok(`${id} (${shop.school}) draws the ${art} keeper`);
+    else bad(`${id} sells ${shop.school} magic but draws the ${art} keeper`);
+  } else ok(`${id} draws the ${art} keeper`);
+}
+
+// ⛔ AND SO MUST THE PERSON STANDING IN THE ROOM. Ur's weapon and armor keepers
+// wore a shop-keeper sprite while Kazus's wore the generic villager everyone
+// else in town wears, so one town's shops read as shops and the other's read as
+// houses. Same trade, same face.
+{
+  const KEEPERS = [
+    ['weapon', [[5, 'weapon_keeper'], [16, 'kazus_weapon_keeper']]],
+    ['armor',  [[4, 'armor_keeper'],  [17, 'kazus_armor_keeper']]],
+  ];
+  for (const [trade, list] of KEEPERS) {
+    const offs = list.map(([map, key]) => {
+      const e = (TOWN_NPCS.get(map) || []).find((n) => n.key === key);
+      return e ? e.spec.romOffset : null;
+    });
+    if (offs.some((o) => o == null)) { bad(`${trade}: a keeper is missing from TOWN_NPCS`); continue; }
+    if (new Set(offs).size === 1) ok(`every ${trade} keeper wears 0x${offs[0].toString(16).toUpperCase()}`);
+    else bad(`${trade} keepers wear DIFFERENT sprites (${offs.map((o) => '0x' + o.toString(16).toUpperCase()).join(' vs ')}) — one town's shop reads as a house`);
+  }
+}
+
 // ⛔ A COUNTER HAS TO BE A COUNTER, AND SOMEONE HAS TO BE BEHIND IT.
 //
 // The check above asks `findShopAtCounter` for the shop's OWN coordinates, so it
@@ -106,7 +146,7 @@ for (const [id, want] of Object.entries(SCHOOL_OF_SHOP)) {
 //   * non-magic shops: the counter tile is SOLID (you serve ACROSS it, you do
 //     not walk onto it) and a placed NPC stands orthogonally next to it
 //   * magic shops: FF3 sells spells off orbs, so the keeper stands ON the tile
-//     and `addBlackMageShopkeeper` is what puts them there (checked above)
+//     and `addMageShopkeeper` is what puts them there (checked above)
 //
 // This is what a keeper standing at an unwired bar looks like from a gate.
 for (const [id, shop] of SHOPS) {
@@ -135,13 +175,22 @@ for (const [id, shop] of SHOPS) {
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   for (const [id, shop] of SHOPS) {
     if (getShopType(id) !== 'magic') continue;
-    const re = new RegExp(`addBlackMageShopkeeper\\(\\s*${shop.counter.x}\\s*,\\s*${shop.counter.y}\\s*,\\s*['"]${id}['"]`);
-    if (!re.test(src)) {
-      bad(`${id}: map-loading.js never calls addBlackMageShopkeeper(${shop.counter.x}, ${shop.counter.y}, '${id}') — ` +
+    // ⭐ The keeper's SCHOOL is part of the call now — `addMageShopkeeper(x, y,
+    // id, 'white'|'black')` picks the job walk sprite, so a white-magic shop
+    // cannot be staffed by a Black Mage. The old check only looked for
+    // `addBlackMageShopkeeper`, which could not have caught that.
+    const want = shop.school === 'black' ? 'black' : 'white';
+    const re = new RegExp(
+      `addMageShopkeeper\\(\\s*${shop.counter.x}\\s*,\\s*${shop.counter.y}\\s*,\\s*['"]${id}['"]\\s*,\\s*['"](white|black)['"]`);
+    const hit = re.exec(src);
+    if (!hit) {
+      bad(`${id}: map-loading.js never calls addMageShopkeeper(${shop.counter.x}, ${shop.counter.y}, '${id}', ...) — ` +
           'the magic shop would have no keeper carrying its shopId, so no menu');
+    } else if (hit[1] !== want) {
+      bad(`${id} sells ${want} magic but map-loading.js staffs it with the ${hit[1]} mage`);
     }
   }
-  if (!failed) ok('every magic shop has its keeper placed with the shopId that opens it');
+  if (!failed) ok('every magic shop is staffed by a mage of the school it sells');
 }
 
 // The counter tile should be the tile the ROM uses for a counter, so a typo in

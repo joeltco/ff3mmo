@@ -24,11 +24,23 @@ export const MO_WALK_BTM = [0x1A, 0x0F, 0x22, 0x36];
 export const BM_WALK_TOP = [0x1A, 0x0F, 0x27, 0x36];
 export const BM_WALK_BTM = [0x1A, 0x0F, 0x21, 0x36];
 
+// White Mage walk palette — PPU capture off MAP 75, which is where FF3 puts a
+// White Mage behind a magic-shop counter (marker id 248 -> gfx 3).
+// `tools/ff3-npc-palette.mjs --map 75` reads $3F10-$3F1F and clusters OAM: the
+// keeper's BOTH 16x16 halves use sprite palette 3, measured `0f 15 30` — white
+// robe (0x30) with red trim (0x15). One palette for the whole sprite, unlike
+// the Black Mage's face/robe split, so top and bottom are the same here.
+// ⛔ MEASURED, not chosen. There is no job-3 entry to copy and inventing one is
+// exactly what this project forbids.
+export const WM_WALK_TOP = [0x1A, 0x0F, 0x15, 0x30];
+export const WM_WALK_BTM = [0x1A, 0x0F, 0x15, 0x30];
+
 // Per-job walk sprite palettes: [topPal, bottomPal]
 const JOB_WALK_PALS = {
   0: [SPRITE_PAL_TOP, SPRITE_PAL_BTM],   // Onion Knight: red top, green/magenta bottom
   1: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Warrior: all red
   2: [MO_WALK_TOP, MO_WALK_BTM],         // Monk: brown hair + peach skin top, blue gi bottom
+  3: [WM_WALK_TOP, WM_WALK_BTM],         // White Mage: white robe, red trim (PPU, map 75)
   4: [BM_WALK_TOP, BM_WALK_BTM],         // Black Mage: peach face top, blue robe bottom
   5: [SPRITE_PAL_TOP, SPRITE_PAL_TOP],   // Red Mage: all red (same pattern as Warrior)
 };

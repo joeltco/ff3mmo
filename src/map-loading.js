@@ -14,7 +14,7 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
 import { transSt, topBoxSt } from './transitions.js';
 import { BATTLE_BG_MAP_LOOKUP, renderBattleBg } from './battle-bg.js';
 import { dungeonLabels } from './dungeon/labels.js';
@@ -314,19 +314,17 @@ function _loadRegularMap(mapId, returnX, returnY) {
   } else { mapSt.disabledTrigger = null; }
   rebuildFlameSprites(mapSt.mapData, mapSt.mapRenderer, TILE_SIZE);
   clearNpcs();
-  // ⚠ UR SELLS WHITE MAGIC BUT ITS KEEPER IS STILL THE BLACK MAGE SPRITE.
-  // FF3 distinguishes its magic shops by KEEPER JOB: maps 75/76/79/80 put a
-  // White Mage (gfx 3) behind the counter, Ur and Kazus a Black Mage (gfx 4).
-  // Swapping Ur to the White Mage needs a White Mage WALK palette, and
-  // `JOB_WALK_PALS` has no job 3 — the existing ones are PPU captures, and a
-  // hand-authored palette is exactly what this project forbids. Needs a
-  // capture; NOT faked here.
-  if (mapId === 3) addBlackMageShopkeeper(4, 4, 'ur_magic');
+  // ⭐ THE KEEPER'S JOB FOLLOWS THE SCHOOL (v1.10.75). FF3 tells its magic
+  // shops apart this way — maps 75/76/79/80 put a White Mage (gfx 3) behind the
+  // counter, Ur and Kazus a Black Mage (gfx 4). ff3mmo makes Ur the WHITE shop,
+  // so Ur gets the White Mage and Kazus keeps the Black one. The walk palette
+  // for job 3 is a PPU capture off map 75, not a hand-authored guess.
+  if (mapId === 3) addMageShopkeeper(4, 4, 'ur_magic', 'white');
   // Kazus's magic shop, same mechanism. The keeper stands ON the counter tile
   // and carries the shopId, which is what `talkToNpc` reads to open the menu —
   // a plain TOWN_NPCS villager next to the counter has neither, which is how
   // v1.8.12 shipped a magic shop that only said a line.
-  if (mapId === 15) addBlackMageShopkeeper(4, 4, 'kazus_magic');
+  if (mapId === 15) addMageShopkeeper(4, 4, 'kazus_magic', 'black');
   if (mapId === 7) placeOpeningScene();
   // Ur (114) has a dark-tile patch in the town that spawns wild
   // grasslands encounters (Werewolves + Bees). Flood-fill from the seed

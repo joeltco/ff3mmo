@@ -593,7 +593,9 @@ function _drawGil(ctx, fadeStep) {
 // during shop-in / shop-out and sub-state transitions. Slot 0 stays
 // transparent and is never recolored.
 function _drawShopkeeper(ctx, originX, originY, fadeStep = 0) {
-  const sprite = getShopSprite(getShopType(shopSt.shopId));
+  // The school picks white- vs black-magic keeper art; non-magic shops ignore it.
+  const _shop = SHOPS.get(shopSt.shopId);
+  const sprite = getShopSprite(getShopType(shopSt.shopId), _shop && _shop.school);
   if (!sprite || !sprite.tiles || sprite.tiles.length < 13 * 16) return;
   const basePal = sprite.palette;
   if (!basePal || basePal.length < 4) return;
