@@ -1,3 +1,19 @@
+> # ⛔ THIS DOCUMENT IS LARGELY VOID — DO NOT BUILD ON IT
+>
+> Written 2026-08-26 and superseded the same day.
+>
+> * **§2 (the principles) is INVENTED.** Nobody asked for "a chest never offers
+>   what a valley shop stocks", and the cartridge disproves it — FF3's own Ur
+>   chests are full of Ur's shop stock. ff3mmo ships chests AT shop tier by
+>   Joel's decision (v1.10.94).
+> * **§4 (the proposed tables) is JUNK.** It violates its own §2 in twelve
+>   entries, and it puts Carapace (map 161/24, unreachable) and Ice Helm / Ice
+>   Shield (FF3 shop 242, the 1200-2400 G tier) into a valley whose shops cap at
+>   500 G.
+> * **§1 (the diagnosis) holds**, except its shop-stock complaint.
+>
+> The real audit is `docs/BEGINNER-VALLEY-LOOT-AUDIT.md`.
+
 # Cave of Seals loot — a new table
 
 Status: **PROPOSED, nothing built.** 2026-08-26, against v1.10.91.

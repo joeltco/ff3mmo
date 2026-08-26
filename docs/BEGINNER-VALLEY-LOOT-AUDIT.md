@@ -1,6 +1,12 @@
 # Beginner valley loot — audit
 
-2026-08-26, against v1.10.92. Regenerate with `node tools/valley-loot-audit.mjs`.
+2026-08-26, against v1.10.94. Regenerate with `node tools/valley-loot-audit.mjs`.
+
+> ⚠ **READ §1 AND §5 FIRST.** Two of this document's original findings were
+> WRONG and were acted on before anyone checked them — one measured the game
+> against an invented rule, the other read a constant in source and called it
+> behaviour. Both are struck in place rather than deleted, because the mistake is
+> more useful than the missing text. Everything in §8 survived verification.
 
 Covers every loot source in the valley: Ur (town, interiors, well, hidden
 spots), Kazus (town, interiors, hidden spots), the Mythril Mines, Castle Sasune
@@ -13,8 +19,17 @@ ff3mmo rolls instead**.
 
 ## 1. The headline
 
-**Between 50% and 100% of every loot table in the game is stuff the valley's own
-shops already sell — and three of the eight tables can never fire at all** (§5).
+⛔ **THIS SECTION IS RETRACTED.** It measured the tables against a rule nobody
+gave: *"a chest never offers what a valley shop stocks."* That rule was invented
+mid-session, written into `SEALED-CAVE-LOOT-PLAN.md` as Principle 1, and then
+used to rank a finding here.
+
+**The cartridge disproves it.** FF3's own Ur chests hold Long sword, Leather,
+Dagger and Staff — every one sold in Ur's shops; the Sealed Cave's own map 103
+chests hold Long sword and Nunchuck, both sold in Ur. Chests at shop tier are
+what FF3 does, and it is what ff3mmo does by Joel's decision (v1.10.94).
+
+The table below is kept as a record of what the tables contain, not as a fault.
 
 | table | mimic | gil | items | of which shop stock |
 |---|---|---|---|---|
@@ -153,28 +168,27 @@ indexed by floor and shared by both dungeons:
 ⭐ **Generated dungeons place no hidden-treasure vases either** — there is no
 `$78-$7B` anywhere in the generator.
 
-### ⛔ THREE OF THE EIGHT LOOT TABLES CAN NEVER FIRE
+### ⛔ RETRACTED — "three of the eight tables can never fire"
 
-| table | the floor it is for | chests placed there | reachable? |
-|---|---|---|---|
-| `altar_f1` | Altar 1000, floor 0 | 2-4 | ✅ |
-| `altar_f2` | Altar 1001, floor 1 | 4-6 | ✅ |
-| `altar_f3` | Altar 1002, floor 2 | **0** | only via a locked-room chest |
-| `altar_f4` | Altar 1003, floor 3 | **0** | only via a locked-room chest |
-| `seals_f1` | Seals 2000, floor 0 | 2-4 | ✅ |
-| `seals_f2` | Seals 2001, floor 1 | 4-6 | ✅ |
-| `seals_f3` | Seals 2002, floor 2 | **0** | ⛔ **NEVER** |
+**This section claimed `seals_f3`, `altar_f3` and `altar_f4` were unreachable.
+It was WRONG and it was acted on.** The claim came from reading
+`FLOOR_CONFIG[floorIndex].chests` in `dungeon-generator.js` and seeing `0` on
+floors 2 and 3. That constant is one of several placement paths — the floor-2 and
+floor-3 layouts push `extraRooms`, and the scatter gives each a 50% corner chest.
 
-`altar_f3` and `altar_f4` survive only because a locked-room chest rolls a RANDOM
-normal floor of its dungeon (v1.7.675) — the Altar Cave has locked rooms at 1010
-and 1011, two chests each, and each spawns on a 50% seed roll.
+Generating the floors, five seeds each:
 
-⛔ **The Cave of Seals has `lockedRooms: []` and `secretRooms: []`.** It has no
-second path. So **`seals_f3` is dead data** — and that is the table holding
-`WSlayer` (1000 G) and `Carapace` (1250 G) at 9.2% each.
+```
+altar  f0=3.2  f1=6.0  f2=3.6  f3=3.4   chests
+seals  f0=3.2  f1=6.0  f2=3.6
+```
 
-**The two most valuable items in the valley cannot drop.** Every argument about
-where they belong was about a table that does not fire.
+**Every floor of both dungeons places chests. Every table fires.** The Cave of
+Seals is a working clone of the Altar Cave — same layout, same rock puzzle on
+floor 2, same chest counts.
+
+⛔ The lesson, which this session relearned four times: **a constant in source is
+not behaviour.** Generate the thing and count it.
 
 ---
 
@@ -190,15 +204,19 @@ Mythril Mines   0 chests   0 hidden spots   -> nothing at all
 Castle Sasune  11 chests   0 hidden spots   -> UNDESIGNED  (3 behind a refused door)
 ```
 
-**Dungeons** are generated, so the count is per run, not per map:
+**Dungeons** are generated, so the count is per run, not per map. MEASURED by
+generating five seeds per floor and counting `$7C` tiles:
 
 ```
-Altar Cave    floor 0: 2-4 chests   floor 1: 4-6   floors 2-3: 0   boss: 0
-              + locked rooms 1010 / 1011 (2 chests each, 50% spawn)
-              + secret rooms 1020 / 1021
-Cave of Seals floor 0: 2-4 chests   floor 1: 4-6   floor 2: 0      boss: 0
-              + NO locked rooms, NO secret rooms
+Altar Cave    f0=3.2   f1=6.0   f2=3.6   f3=3.4      boss: 0
+              + locked rooms 1010 / 1011, secret rooms 1020 / 1021
+Cave of Seals f0=3.2   f1=6.0   f2=3.6               boss: 0
+              + no locked or secret rooms (registry says deliberate)
 ```
+
+⭐ **The Cave of Seals is a faithful clone of the Altar Cave** — same generator,
+same layout branches, same rock puzzle on floor 2, same chest counts. Its only
+structural difference is one fewer walkable floor and no side rooms.
 
 ---
 
@@ -213,63 +231,53 @@ this audit does not quote them.
 - ⭐ **The map property record is 16 bytes and ff3mmo reads ELEVEN.** Bytes 2,
   12, 13, 14 and 15 are dropped. Byte 2 is the map-name index; byte 13 is a
   constant `$84`.
-- ⛔ **Byte 12 is NOT confirmed as the chest base.** It climbs monotonically and
-  reads `$00` on maps with no treasure tile, which is what a base would do.
-  Scored over all 256 maps:
+- ⭐ **Byte 12 IS the chest base.** An earlier pass called it unconfirmed on the
+  strength of 49 "collisions" across 256 maps. Those were mis-measured: **19 of
+  the 21 shared bases belong to maps with BYTE-IDENTICAL TILEMAPS** — FF3 packs
+  several interiors per tilemap, so two maps legitimately sharing a base is the
+  format working, not the decode failing. Only 2 are genuinely odd (maps 72/74
+  and 158/175).
+- ⚠ **The per-tile index rule is still approximate.** Bracketing a chest to "the
+  map with the largest base ≤ its index" answers WHICH REGION reliably — that is
+  how Carapace was traced — but adjacent maps' ranges can overlap, so it does not
+  reliably answer WHICH CHEST. Carapace #89 is claimed by both map 24 (base $57,
+  +2) and map 161 (base $59, +0).
 
-  | rule | indices | collisions | gaps |
-  |---|---|---|---|
-  | `base + tilemap-wide trigId` | 106 | **49** | 75 |
-  | `base + this map's own order` | 100 | **48** | 81 |
-
-  Neither partitions the table. Two maps claiming the same chest is not a decode.
-
-**To settle it:** open a known chest in a running game and read what lands in the
-inventory, then work backwards. Until then the audit tool prints the ROM column
-as `cand#`.
+**To settle the per-tile rule:** open a known chest in a running game and read
+what lands in the inventory, then work backwards.
 
 ---
 
-## 8. Findings, ranked
+## 8. Findings — what survived verification
 
-1. ⛔ **`seals_f3` can never fire.** Seals floor 2 places no chests and the
-   dungeon has no locked or secret rooms. `WSlayer` and `Carapace` — the two most
-   valuable items in the valley — are unreachable.
-2. ⛔ **`altar_f3` and `altar_f4` fire only through locked-room chests**, which
-   need a 50% room spawn AND the Magic Key. Two whole floors of ladder are almost
-   never seen.
-3. ⛔ **Every table is mostly shop stock** — 50-100%, and 8/8 on `seals_f1`,
-   which IS one of the tables that fires.
-4. ⛔ **Castle Sasune's eleven chests have no designed table**, and three sit
-   behind map 24, which the engine refuses at the door.
-5. ⛔ **FenixDown (3000 G) is in six tables**, four of which fire, in dungeons
-   whose chests skip the server replay gate.
-6. ⛔ **The Mythril Mines has no loot at all.**
-7. ⚠ **Ur's fourteen tiles share one two-line table** — the secret room pays what
+⛔ Findings 1, 2 and 3 of the original list are RETRACTED (§1, §5). What is left
+was measured and holds:
+
+1. ⛔ **Carapace, WSlayer and FenixDown were not from the valley.** Read out of
+   the ROM chest table and bracketed to their maps: Carapace to map 161/24 (both
+   unreachable), WSlayer to maps 140/170, FenixDown to ten maps and not one in
+   the valley. All three removed in v1.10.93; WSlayer is now the Djinn's drop.
+2. ⛔ **Castle Sasune's eleven chests had no table.** Fixed v1.10.94 — they roll
+   `kazus_tier`. Three of the eleven are still behind map 24, which the engine
+   refuses at the door.
+3. ⛔ **The Mythril Mines has no loot at all.** Zero treasure tiles, both sides.
+4. ⚠ **Ur's fourteen tiles share one two-line table** — the secret room pays what
    a tavern pot pays.
-8. ⚠ **The Altar Cave's mimic rate falls with depth** (15.2% → 11.8%).
-9. ⚠ **MagicKey is a 3% random drop** on the floors that place chests — and it is
-   what unlocks the rooms that are the only way to reach `altar_f3`/`f4`.
+5. ⚠ **The Altar Cave's mimic rate falls with depth** (15.2% → 12.1%).
+6. ⚠ **MagicKey is a 3% random drop** on every Altar Cave floor — a key item on a
+   dice roll.
+7. ⚠ **Map 105 and map 111 hold no ROM chests**, so those donor maps contribute
+   nothing (irrelevant to play, since the dungeons are generated).
 
 ---
 
 ## 9. The gate
 
-`tools/check-loot-tables.mjs` pins the structure and **is currently RED on
-finding 1**. It is deliberately NOT in `deploy.sh`:
+`tools/check-loot-tables.mjs` — green. Its dead-table check was removed: it was
+based on the retracted claim in §5 and shipped red for two versions.
 
-```
-✗ table 'seals_f3' is DEAD — seals floor 2 places no chests and the dungeon
-  has no locked or secret rooms to reach it through
-```
-
-Clearing it means picking one of three, and all three are design calls:
-
-1. give the Cave of Seals a locked or secret room (it is the only dungeon with
-   neither — the Altar Cave has two of each);
-2. make `FLOOR_CONFIG` place chests on floor 2, which changes BOTH dungeons since
-   the config is indexed by floor and shared;
-3. accept that Seals floor 2 has no loot and delete `seals_f3`.
+⚠ It is still not in `deploy.sh`. Wire it in once someone has read it end to end;
+this file has a poor record.
 
 ## 10. Not decided here
 

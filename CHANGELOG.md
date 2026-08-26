@@ -1,3 +1,51 @@
+## 1.10.95 — 2026-08-26
+
+### Retraction: `seals_f3` was never dead
+
+v1.10.92-93 claimed three loot tables could never fire, and v1.10.93 shipped a
+gate that failed on it. **The claim was wrong.** It came from reading
+`FLOOR_CONFIG[floorIndex].chests` in `dungeon-generator.js`, seeing `0` on floors
+2 and 3, and never generating a floor to check.
+
+That constant is one of several placement paths — the floor-2 and floor-3 layouts
+push `extraRooms`, and the scatter gives each a 50% corner chest. Generating five
+seeds per floor and counting `$7C`:
+
+```
+altar  f0=3.2  f1=6.0  f2=3.6  f3=3.4
+seals  f0=3.2  f1=6.0  f2=3.6
+```
+
+Every floor of both dungeons places chests. **The Cave of Seals is a faithful
+clone of the Altar Cave** — same generator, same layout branches, same rock
+puzzle on floor 2, same chest counts.
+
+The bad assertion is out of `check-loot-tables`, which is green again.
+
+### Retraction: the shop-stock rule
+
+The audit ranked "every table is mostly shop stock" as a finding. It was
+measuring the game against a rule invented mid-session — *"a chest never offers
+what a valley shop stocks"* — that nobody asked for and the cartridge disproves.
+FF3's own Ur chests hold Long sword, Leather, Dagger and Staff, all sold in Ur.
+
+Struck from `BEGINNER-VALLEY-LOOT-AUDIT.md`; `SEALED-CAVE-LOOT-PLAN.md` is
+marked void at the top.
+
+### Correction: byte 12 IS the chest base
+
+Called unconfirmed on the strength of 49 "collisions" across 256 maps. Those were
+mis-measured: **19 of the 21 shared bases belong to maps with byte-identical
+tilemaps** — FF3 packs several interiors per tilemap, so a shared base is the
+format working. The per-TILE index rule is still approximate (adjacent ranges
+overlap), so it answers which REGION reliably and not which chest.
+
+### What survived
+
+Carapace / WSlayer / FenixDown removal (region-checked, unaffected by the
+above), Sasune on `kazus_tier`, the Djinn's WSlayer drop at 2/7, the loot
+registry, the boss-identity and ice-weakness fixes.
+
 ## 1.10.94 — 2026-08-26
 
 Loot rebalance, first pass — Joel's calls, not mine.
