@@ -90,7 +90,6 @@ export const LOOT_TABLES = {
     { weight:  5, pool: [0x58] },
     { weight:  3, pool: [0xE3, 0xE1] },
     { weight:  3, pool: [0x98] },
-    { weight:  2, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
   altar_f3: [
@@ -100,7 +99,6 @@ export const LOOT_TABLES = {
     { weight: 10, pool: [0x73] },
     { weight:  3, pool: [0xE3, 0xE1] },
     { weight:  3, pool: [0x98] },
-    { weight:  2, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
   altar_f4: [
@@ -110,10 +108,36 @@ export const LOOT_TABLES = {
     { weight: 20, pool: [0x8B, 0x24] },
     { weight:  3, pool: [0xE3, 0xE1] },
     { weight:  3, pool: [0x98] },
-    { weight:  3, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
 
+  // ⛔ THREE ITEMS REMOVED 2026-08-26 — they are not from here.
+  //
+  // Read out of the ROM's own chest table (`0x3C10`) and bracketed to the maps
+  // that hold them by the per-map chest base (map property byte 12). The
+  // beginner valley is areas $18 $26 $30 $65 $6c $6d:
+  //
+  //   Carapace  0x65 / 0x76  ->  map 161, area $37 — VIKING'S COVE. The only
+  //                              two Carapace chests in the entire cartridge,
+  //                              adjacent, in a cove 41 tiles from Ur that NO
+  //                              vehicle in this game can reach: on foot 267
+  //                              tiles, canoe 296, airship 304, and it is in
+  //                              none of them. Hand-typed into these tables on
+  //                              2026-08-22 as "Shell Helm" / "She Armor".
+  //   WSlayer   0x25         ->  maps 140 ($46) and 170 ($1e). Also elsewhere.
+  //   FenixDown 0xA9         ->  maps 164 74 177 120 126 136 143 183 166 170 —
+  //                              TEN chests and not one in the valley. 3000 G,
+  //                              in six of eight tables, in dungeons whose
+  //                              chests skip the server replay gate.
+  //
+  // ⛔ NOTHING WAS PUT IN THEIR PLACE. The weights simply redistribute. What
+  // SHOULD be here is a separate decision and inventing a replacement is the
+  // mistake that produced docs/SEALED-CAVE-LOOT-PLAN.md §4.
+  //
+  // What the cartridge DOES place in the valley, same method: Long sword (map
+  // 103, the Sealed Cave itself), Mithril sword (84, $18), Tonfa (23, Castle
+  // Sasune), Mithril rod (191), Copper (175), Potion (all over).
+  //
   // ── Cave of Seals ───────────────────────────────────────────────────────
   //
   // ⚠ CARRIED OVER UNCHANGED FROM `LOOT_POOLS[2000..2002]`, and known to be
@@ -128,25 +152,21 @@ export const LOOT_TABLES = {
     { weight: 22, pool: [0x24, 0x73] },
     { weight: 15, pool: [0x8B, 0x1F] },
     { weight:  4, pool: [0xE3, 0xE1] },
-    { weight:  3, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
   seals_f2: [
     { weight:  6, pool: [0xA6] },
     { weight: 30, pool: [GIL(220, 450)] },
-    { weight: 24, pool: [0x09, 0x65] },
+    { weight: 24, pool: [0x09] },
     { weight: 16, pool: [0x20, 0x27] },
     { weight:  5, pool: [0xE3, 0xE1] },
-    { weight:  4, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
   seals_f3: [
     { weight:  4, pool: [0xA6] },
     { weight: 30, pool: [GIL(300, 650)] },
     { weight: 24, pool: [0x27, 0x07] },
-    { weight: 18, pool: [0x25, 0x76] },
     { weight:  5, pool: [0xE3, 0xE1] },
-    { weight:  5, pool: [0xA9] },
     { weight: 12, monster: true },
   ],
 };

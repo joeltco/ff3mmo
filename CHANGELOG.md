@@ -1,3 +1,55 @@
+## 1.10.93 — 2026-08-26
+
+### Carapace is from Viking's Cove
+
+`Carapace` armour was in the Cave of Seals loot tables — helm on floor 2, body on
+floor 3 at 9.2%. Read straight out of the ROM's chest table at `0x3C10` and
+bracketed to its map by the per-map chest base (map property byte 12):
+
+```
+chest #89  0x76  Carapace BODY (1250 G)   map 161
+chest #90  0x65  Carapace HELM (450 G)    map 161
+```
+
+**Map 161 is Viking's Cove, area `$37`.** Those are the only two Carapace chests
+in the entire cartridge, adjacent, in a cove **41 tiles from Ur that nothing in
+this game can reach** — on foot 267 tiles, canoe 296, airship 304, and Viking's
+Cove is in none of them. It was hand-typed into these tables on 2026-08-22 as
+"Shell Helm" / "She Armor".
+
+Two more failed the same check:
+
+| item | ROM chests | area | valley? |
+|---|---|---|---|
+| `WSlayer` 0x25 | maps 140, 170 | `$46`, `$1e` | ❌ |
+| `FenixDown` 0xA9 | 164 74 177 120 126 136 143 183 166 170 | — | ❌ **ten chests, none in the valley** |
+
+All three are removed from every table. **Nothing was put in their place** — the
+weights redistribute. What *should* be there is a separate decision, and
+inventing a replacement is exactly what produced the junk in
+`docs/SEALED-CAVE-LOOT-PLAN.md` §4.
+
+What the cartridge DOES place in the valley, same method: Long sword (map 103 —
+the Sealed Cave itself), Mithril sword (84, area `$18`), Tonfa (23, Castle
+Sasune), Mithril rod (191), Copper (175), Potion (all over).
+
+### The method
+
+The valley is areas `$18 $26 $30 $65 $6c $6d`. An item's home is found by
+scanning the chest-contents table for its id, then bracketing each hit to the map
+with the largest chest base ≤ that index. Carapace resolved cleanly because base
+`$59` is unique to map 161.
+
+⚠ The bracket is not a full decode — neither candidate index rule partitions the
+table (49 and 48 collisions across 256 maps), so it is used here to answer
+"which region" and not "which chest". `docs/BEGINNER-VALLEY-LOOT-AUDIT.md` §7.
+
+### Still open
+
+`seals_f3` remains DEAD — Seals floor 2 places no chests and the dungeon has no
+locked or secret rooms. `check-loot-tables` fails on it and is deliberately not
+in `deploy.sh`; clearing it is a design call (audit §9).
+
 ## 1.10.92 — 2026-08-26
 
 ### Loot is a registry now, not six copies of a fallback chain
