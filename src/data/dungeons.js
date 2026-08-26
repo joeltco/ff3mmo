@@ -83,6 +83,22 @@ export const DUNGEONS = [
     bossSkinId: 'seals',          // the dais from ROM map 106 — no crystal
     ending: ENDING_BOSS,          // ⛔ NOT a crystal dungeon. Altar Cave is.
     bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
+    // ⭐ THE DJINN DROPS THE WSLAYER, 2 in 7 (28.6%). Joel, 2026-08-26.
+    //
+    // `WSlayer` (0x25) is a HOLY sword, and every encounter in this cave is
+    // undead (Mummy, Skeleton, Shadow, Laruwai, CurseCoin, Revenant — all
+    // `weakness: [fire, holy]`). It used to sit in `seals_f3` at 9.2%, a table
+    // that CANNOT FIRE, so it was unobtainable.
+    //
+    // ⛔ IT CANNOT LIVE IN `data/monsters.js` — that file is generated from the
+    // ROM and hand-edits vanish on the next run — and it is not a ROM drop:
+    // FF3 gives bosses rate 0, which `check-drop-roll` correctly pins. The
+    // encounter drop roll never sees a boss either; it iterates
+    // `battleSt.encounterMonsters`, and a boss fight has no such array.
+    //
+    // `rate` is the ROM's own ladder (rate/7, the same `DROP_GATE_DIE` the
+    // encounter roll uses) so there is ONE drop-chance idiom in the codebase.
+    bossDrop: { item: 0x25, rate: 2 },
     music: { floors: 'DUNGEON_CAVE', boss: 'DUNGEON_CAVE' },
     rosterPrefix: 'seals',
     bossRosterLoc: 'seals-boss',

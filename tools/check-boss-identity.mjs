@@ -194,5 +194,50 @@ ps.quests = {}; ps.flags = {};
   }
 }
 
+// ── 7. the boss drop ──────────────────────────────────────────────────────
+//
+// ⭐ The Djinn drops the WSlayer at 2/7 (Joel, 2026-08-26). It cannot live in
+// `data/monsters.js` (generated from the ROM) and is not a ROM drop (FF3 gives
+// bosses rate 0), so it hangs off the DUNGEON REGISTRY row and is rolled on the
+// boss-death path with the ROM's own `DROP_GATE_DIE`.
+{
+  const { DROP_GATE_DIE } = await import('../src/data/monsters.js');
+  const { ITEMS } = await import('../src/data/items.js');
+  for (const d of DUNGEONS) {
+    if (!d.bossDrop) continue;
+    const bd = d.bossDrop;
+    if (!ITEMS.get(bd.item)) { bad(`${d.id}: bossDrop item 0x${(bd.item | 0).toString(16)} is not a real item`); continue; }
+    if (!(bd.rate > 0 && bd.rate < DROP_GATE_DIE)) {
+      bad(`${d.id}: bossDrop rate ${bd.rate} is outside the ROM ladder 1..${DROP_GATE_DIE - 1}`);
+      continue;
+    }
+    ok(`${d.id}: boss drops 0x${bd.item.toString(16)} at ${bd.rate}/${DROP_GATE_DIE} (${(bd.rate / DROP_GATE_DIE * 100).toFixed(1)}%)`);
+
+    // ⛔ It must not ALSO be sitting in a chest table — that is where it came
+    // from, and leaving it in both makes the boss drop meaningless.
+    const LT = await import('../src/data/loot-tables.js');
+    for (const [name, tiers] of Object.entries(LT.LOOT_TABLES)) {
+      for (const t of tiers) {
+        if (t.monster) continue;
+        if (t.pool.includes(bd.item)) bad(`${d.id}'s boss drop 0x${bd.item.toString(16)} is ALSO in loot table '${name}'`);
+      }
+    }
+  }
+
+  // The roll itself, through the shipped gate expression.
+  const rate = (DUNGEONS.find((d) => d.bossDrop) || {}).bossDrop;
+  if (rate) {
+    let hits = 0;
+    const N = 70000;
+    let seed = 12345;
+    const rng = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let i = 0; i < N; i++) if (Math.floor(rng() * DROP_GATE_DIE) < rate.rate) hits++;
+    const pct = hits / N;
+    const want = rate.rate / DROP_GATE_DIE;
+    if (Math.abs(pct - want) > 0.01) bad(`the drop gate produced ${(pct * 100).toFixed(1)}%, the ladder says ${(want * 100).toFixed(1)}%`);
+    else ok(`the drop gate lands at ${(pct * 100).toFixed(1)}% over ${N} rolls`);
+  }
+}
+
 console.log(failed ? `\ncheck-boss-identity: ${failed} FAILED` : '\ncheck-boss-identity: OK');
 process.exit(failed ? 1 : 0);

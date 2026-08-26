@@ -1,3 +1,63 @@
+## 1.10.94 — 2026-08-26
+
+Loot rebalance, first pass — Joel's calls, not mine.
+
+### Chests sit AT shop tier, and that is correct
+
+A chest saves you the gil rather than handing you something unbuyable.
+
+⛔ **An earlier pass this session asserted the opposite** — *"a chest never
+offers what a valley shop stocks"* — wrote it into a plan as Principle 1, and
+then ranked "every table is mostly shop stock" as the audit's third finding.
+Nobody asked for that rule, it was invented, and **the cartridge disproves it**:
+FF3's own Ur chests hold Long sword, Leather, Dagger and Staff, every one of them
+sold in Ur's shops. The finding is struck and the rule is banned in the source.
+
+### Castle Sasune rolls Kazus's table
+
+Sasune's eleven chests had no table at all. They now use `kazus_tier` — the
+mythril town's shop band, which is the tier the castle sits in:
+
+```
+30%  gil 60-180
+20%  Potion
+16%  Mithril gloves / helm   (120-130 G)
+14%  Antidote / Eyedrop
+10%  EchoHerb / MaidKiss
+ 7%  Mithril shield / mail   (180-350 G)
+ 3%  Mithril rod             (400 G)
+```
+
+Kazus's own two hidden spots roll it too.
+
+### The Djinn drops the WSlayer at 2 in 7
+
+`WSlayer` (0x25) is a **holy** sword and every encounter in the Cave of Seals is
+undead. It was sitting in `seals_f3` at 9.2% — a table that cannot fire — so it
+was unobtainable.
+
+It lives on the **dungeon registry row**, because it cannot live anywhere else:
+`data/monsters.js` is generated from the ROM, FF3 gives bosses **rate 0** (which
+`check-drop-roll` correctly pins), and the encounter drop roll never sees a boss
+— it iterates `battleSt.encounterMonsters`, which a boss fight does not have.
+
+```js
+bossDrop: { item: 0x25, rate: 2 },   // 2/7 = 28.6%
+```
+
+`rate` reuses the ROM's own ladder and the same `DROP_GATE_DIE` the encounter
+roll uses, so there is one drop-chance idiom in the codebase. Rolled with the
+seeded RNG on the boss-death path so the PvE arbiter can replay it.
+
+`check-boss-identity` gains the drop: the item is real, the rate is on the ROM
+ladder, the gate lands at 29.2% over 70000 rolls, and **the drop is not also
+sitting in a chest table** — leaving it in both would make the boss drop
+meaningless.
+
+### Still open
+
+`seals_f3` is still a table for a floor that places no chests. Unresolved.
+
 ## 1.10.93 — 2026-08-26
 
 ### Carapace is from Viking's Cove

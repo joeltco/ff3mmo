@@ -74,6 +74,31 @@ export const LOOT_TABLES = {
     { weight: 30, pool: [GIL(10, 30)] },
   ],
 
+  // ⭐ KAZUS TIER — Joel, 2026-08-26: Castle Sasune's chests get "kazus loot".
+  //
+  // Kazus is the mythril town, and its shops are the valley's second tier:
+  // armour 120-350 G, weapons 400-500 G. Sasune sits beside it in progression
+  // and its eleven chests had no table at all, so both places roll this.
+  //
+  // ⭐ AT SHOP TIER ON PURPOSE — also Joel's call, and it is what the CARTRIDGE
+  // does: FF3's own Ur chests hold Long sword, Leather, Dagger and Staff, every
+  // one of them sold in Ur's shops. A chest here saves you the gil, it does not
+  // hand you something unbuyable.
+  //
+  // ⛔ An earlier pass in this session asserted the opposite — "a chest never
+  // offers what a valley shop stocks" — as a design principle. That was
+  // invented, nobody asked for it, and the cartridge disproves it. Do not
+  // reintroduce it.
+  kazus_tier: [
+    { weight: 30, pool: [GIL(60, 180)] },
+    { weight: 20, pool: [0xA6] },                       // Potion
+    { weight: 14, pool: [0xAF, 0xAE] },                 // Antidote, Eyedrop
+    { weight: 10, pool: [0xAC, 0xAB] },                 // EchoHerb, MaidKiss
+    { weight: 16, pool: [0x8D, 0x8E, 0x64] },           // Mithril gloves x2, helm
+    { weight:  7, pool: [0x5A, 0x75] },                 // Mithril shield, mail
+    { weight:  3, pool: [0x09] },                       // Mithril rod
+  ],
+
   // ── Altar Cave ──────────────────────────────────────────────────────────
   altar_f1: [
     { weight: 16, pool: [0xA6] },
@@ -179,7 +204,12 @@ export const LOOT_TABLES = {
 /** Area `loc` -> table name. An area absent here is UNDESIGNED, on purpose. */
 export const AREA_LOOT = {
   ur: 'ur_town',
-  // kazus / sasune / sasune-throne: UNDESIGNED — see the note on UNDESIGNED.
+  // ⭐ Sasune rolls KAZUS's table, per Joel — the castle is that tier, and its
+  // eleven chests were falling through to the Altar Cave's floor-1 table before
+  // v1.10.92 and to the bare town baseline after it.
+  kazus: 'kazus_tier',
+  sasune: 'kazus_tier',
+  'sasune-throne': 'kazus_tier',
 };
 
 /** Dungeon id -> its per-floor table names, shallowest first. */

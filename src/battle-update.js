@@ -1074,6 +1074,12 @@ const _updateBattleRun = updateBattleRun;
 
 // ── Boss dissolve ──────────────────────────────────────────────────────────
 
+/** The current dungeon's boss drop, or null. */
+function _dungeonForBossDrop() {
+  const d = dungeonForMapId(mapSt.currentMapId);
+  return (d && d.bossDrop && d.bossDrop.item != null) ? d.bossDrop : null;
+}
+
 function _updateBossDissolve(dt) {
   if (battleSt.battleState !== 'boss-dissolve') return false;
   const dFrame = Math.floor(battleSt.battleTimer / BOSS_DISSOLVE_FRAME_MS);
@@ -1089,6 +1095,18 @@ function _updateBossDissolve(dt) {
     // monster id, so clearing a dungeon's ordinary encounters must not satisfy
     // it (that is the whole difference from `defeat` with a count of 1).
     try { noteBossDefeated(battleSt.bossId ?? DEFAULT_BOSS_ID); } catch (_) { /* quests are cosmetic here */ }
+    // ⭐ THE BOSS'S OWN DROP. Rolled with the seeded RNG, like the encounter
+    // drop, so the PvE arbiter can replay it — raw Math.random would diverge
+    // between client and server.
+    //
+    // ⛔ Uses the ROM's own gate (`rate/7`, `DROP_GATE_DIE`) rather than a second
+    // chance idiom. A boss carries no ROM drop table — FF3 gives them rate 0 —
+    // so the item and rate come from the DUNGEON REGISTRY row, which is
+    // hand-maintained and is where a dungeon's identity already lives.
+    const _bd = _dungeonForBossDrop();
+    if (_bd && Math.floor(rand() * DROP_GATE_DIE) < (_bd.rate | 0)) {
+      battleSt.encounterDropItem = _bd.item;
+    }
     // Land Turtle → Wind Crystal: keep the overworld sprite and flip it into
     // the blink→crystal reveal. It blinks once the battle HUD exits (updateNpcs
     // only ticks in the overworld), then morphs to the standing crystal. The
