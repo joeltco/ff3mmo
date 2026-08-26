@@ -521,7 +521,22 @@ valley.
 
 ---
 
-## 11. Carried out of v1.10.89 — OPEN
+## 11. Carried out of v1.10.89 / v1.10.90 — OPEN
+
+0. ⚠ **THE DJINN IS UNBEATABLE AT THE LEVEL CAP.** Fixed in v1.10.90 is the
+   *identity* — `battleSt.bossId` was never assigned, so every boss chamber
+   fought the Land Turtle and `kazus_sealed_cave` could not advance. The boss is
+   now the right one, and `tools/battle-sim.js` at 200 runs says:
+
+   | boss | HP | atk | party wins | dmg taken/turn |
+   |---|---|---|---|---|
+   | Land Turtle `0xCC` | 120 | 9 | 100% | 3.3 |
+   | **Djinn `0xCD`** | **480** | **16** | **0%** | **29.6** |
+
+   Four Knights at `MAX_LEVEL` win 2%. The party reaches roughly half his HP and
+   dies. **Deliberately not tuned** — a ROM-statted boss in a game that caps at
+   level 5 is a design call. The knobs are the boss's stats, the level cap, the
+   party size, or the gear available by then; picking one is Joel's.
 
 1. ⬜ **Prose is still in the server's table** (§5.1). `data/quests.js` remains
    ~45% English and `economy-arbiter.js` / `api.js` still import it. Deferred so
