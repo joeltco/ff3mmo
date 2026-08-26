@@ -17,7 +17,7 @@ import fs from 'node:fs';
 globalThis.document = { createElement: (t) => (t === 'canvas' ? createCanvas(1, 1) : {}) };
 
 const { ps } = await import('../src/player-stats.js');
-const { QUESTS, QUEST_ACTIVE } = await import('../src/data/quests.js');
+const { QUESTS } = await import('../src/data/quests.js');
 const q = await import('../src/quests.js');
 
 const holes = [];
@@ -26,7 +26,14 @@ const okay = (m) => console.log(`  ok   ${m}`);
 
 const QID = 'ur_missing_brother';
 const quest = QUESTS[QID];
-const { mapId, npcKey } = quest.giver;
+// ⭐ Stage-aware. `quest.giver` is gone: stage 0 is who you ASK, the last stage
+// is who you hand in to. For the Ur quests those are the same man, which is why
+// the port could be behaviour-preserving.
+const S0 = quest.stages[0];
+const SLAST = quest.stages[quest.stages.length - 1];
+const { map: mapId, npc: npcKey } = SLAST.at;
+const OBJ_COUNT = SLAST.objective.count;
+const ACTIVE_STAGE = SLAST.id;
 const raw = (p) => fs.readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 // ⛔ Source checks read CODE, never comments. The first cut of this harness
 // tested `/saveSlotsToDB/.test(src)` and `/reward\.item/.test(body)` against the
@@ -47,8 +54,13 @@ console.log('\n── 1. reward durability vs quest-state durability');
   const code = src('src/quests.js');
   // The hand-in branch itself must persist, and so must acceptQuest — a quest
   // taken and not saved loses the ACCEPT, not just the payout.
-  const handIn = /bestRank === _RANK_HANDIN\)[\s\S]{0,300}?(_persist\(\)|saveSlotsToDB\(\))/.test(code);
-  const accept = /export function acceptQuest[\s\S]{0,400}?(_persist\(\)|saveSlotsToDB\(\))/.test(code);
+  const handIn = /function _advance\([\s\S]{0,900}?(_persist\(\)|saveSlotsToDB\(\))/.test(code);
+  // ⛔ FOLLOW THE CALL, don't grep one function body. `acceptQuest` persists via
+  // `_startQuest`, which is also what the offer-on-sight path uses — a regex
+  // that only looked inside acceptQuest's own braces would report a hole that
+  // is not there, and would keep reporting it however the code is factored.
+  const accept = /export function acceptQuest[\s\S]{0,400}?_startQuest\(/.test(code)
+              && /function _startQuest\([\s\S]{0,400}?(_persist\(\)|saveSlotsToDB\(\))/.test(code);
   const wired  = /(_persist\s*=|function _persist)[\s\S]{0,200}?saveSlotsToDB\(\)/.test(code);
   if (handIn && accept && wired) okay('the completion path persists the quest state');
   else {
@@ -56,7 +68,7 @@ console.log('\n── 1. reward durability vs quest-state durability');
     // discard the unsaved half (a force-quit / mobile swipe — beforeunload does
     // not fire on iOS), reload from that save, collect again.
     let paid = 0;
-    ps.quests = { [QID]: { s: QUEST_ACTIVE, n: quest.objective.count } };
+    ps.quests = { [QID]: { s: ACTIVE_STAGE, n: OBJ_COUNT } };
     const lastSave = JSON.parse(JSON.stringify(ps.quests));   // what save-state.js wrote
     for (let attempt = 0; attempt < 3; attempt++) {
       ps.quests = q.sanitizeQuests(JSON.parse(JSON.stringify(lastSave)));
@@ -75,14 +87,20 @@ console.log('\n── 1. reward durability vs quest-state durability');
 console.log('\n── 2. a second quest from the same NPC');
 {
   const second = {
-    id: 'audit_second', giver: { mapId, npcKey },
-    objective: { kind: 'defeat', zonePrefix: 'altar_cave', count: 1 },
-    reward: { gil: 1 }, offer: ['b'], active: ['b'], complete: ['b'], done: ['b'],
+    id: 'audit_second',
+    reward: { gil: 1 },
+    stages: [
+      { id: 'ask', at: { map: mapId, npc: npcKey }, offer: ['b'], accepted: ['b'], denied: ['b'] },
+      { id: 'clear', at: { map: mapId, npc: npcKey },
+        objective: { kind: 'defeat', zonePrefix: 'altar_cave', count: 1 },
+        say: ['b'], onAdvance: ['b'] },
+    ],
+    after: { [npcKey]: ['b'] },
   };
   QUESTS[second.id] = second;
-  ps.quests = { [QID]: { s: 'done', n: quest.objective.count } };
+  ps.quests = { [QID]: { s: 'done', n: OBJ_COUNT } };
   const pages = q.talkQuest(mapId, npcKey, () => {});
-  if ((pages || []).join('|') === quest.done.join('|')) {
+  if ((pages || []).join('|') === quest.after[npcKey].join('|')) {
     hole('a giver can only ever hold one quest',
       'talkQuest returns on the FIRST matching giver, so the finished quest keeps ' +
       'answering forever and the second quest (no startWord, should offer on sight) is unreachable.');
@@ -132,9 +150,9 @@ console.log('\n── 4. server-side authority');
   }
   // The server clamp is looser than the client's.
   const { _testValidateSaveData } = await import('../api.js');
-  const v = _testValidateSaveData({ quests: { [QID]: { s: 'active', n: 9999 } } });
-  const serverN = v.data.quests[QID].n;
-  const clientN = q.sanitizeQuests({ [QID]: { s: 'active', n: 9999 } })[QID].n;
+  const v = _testValidateSaveData({ quests: { [QID]: { s: ACTIVE_STAGE, n: 9999 } } });
+  const serverN = v.data.quests[QID] ? v.data.quests[QID].n : null;
+  const clientN = q.sanitizeQuests({ [QID]: { s: ACTIVE_STAGE, n: 9999 } })[QID].n;
   if (serverN !== clientN) {
     hole('client and server clamp the objective count differently',
       `server keeps n=${serverN} (bounded 0..9999, shape-only); client clamps to the objective (${clientN}). ` +
@@ -156,19 +174,21 @@ console.log('\n── 5. is every quest actually reachable?');
   if (specs.size < 10) { console.error(`  harness self-test FAILED: only ${specs.size} NPC specs read`); process.exit(2); }
   okay(`read ${specs.size} placed NPC specs from TOWN_NPCS`);
   for (const qq of Object.values(QUESTS)) {
-    const spec = specs.get(qq.giver.npcKey);
-    if (!spec) { hole(`quest ${qq.id} has no placed giver`, `npcKey ${qq.giver.npcKey} is not in TOWN_NPCS`); continue; }
+    const g0 = (qq.stages || [])[0];
+    if (!g0 || !g0.at) { hole(`quest ${qq.id} has no stage 0`, 'stages[] is empty'); continue; }
+    const spec = specs.get(g0.at.npc);
+    if (!spec) { hole(`quest ${qq.id} has no placed stage-0 NPC`, `npcKey ${g0.at.npc} is not in TOWN_NPCS`); continue; }
     if (!qq.startWord) { okay(`${qq.id}: offers on sight, no word gate`); continue; }
     const participates = ((spec.teaches || []).length > 0) || Object.keys(spec.answers || {}).length > 0;
     if (!participates) {
       hole(`quest ${qq.id} is unreachable`,
         `word-menu.js#_verbRows only opens the ASK menu for an NPC with teaches/answers; ` +
-        `${qq.giver.npcKey} has neither, so the start word can never be put to them.`);
+        `${g0.at.npc} has neither, so the start word can never be put to them.`);
     } else {
       okay(`${qq.id}: giver takes part in Word Memory, so ASK reaches them`);
       if (!(spec.answers || {})[qq.startWord]) {
         hole(`quest ${qq.id}'s start word shows as unanswerable`,
-          `_askRows dims a term the NPC has no answers[] entry for. ${qq.giver.npcKey} would render ` +
+          `_askRows dims a term the NPC has no answers[] entry for. ${g0.at.npc} would render ` +
           `${qq.startWord.toUpperCase()} grey — "this one knows nothing" — while it is the one term that opens the quest.`);
       }
     }
@@ -183,7 +203,7 @@ console.log('\n── 5. is every quest actually reachable?');
 // message box would render as literal "{n}" on screen.
 console.log('\n── 6. player-facing progress');
 {
-  ps.quests = { [QID]: { s: QUEST_ACTIVE, n: 1 } };
+  ps.quests = { [QID]: { s: ACTIVE_STAGE, n: 1 } };
   const mid = q.talkQuest(mapId, npcKey, () => {});
   const joined = (mid || []).join(' ');
   if (/\{|\}/.test(joined)) {
@@ -191,19 +211,36 @@ console.log('\n── 6. player-facing progress');
       `talkQuest returned ${JSON.stringify(mid)} — the player would read the braces.`);
   } else if (!/\b1\b/.test(joined) || !/\b3\b/.test(joined)) {
     hole('the giver does not say how far along the player is',
-      `at n=1 of ${quest.objective.count} the ACTIVE line was "${joined}" — no count in it. ` +
+      `at n=1 of ${OBJ_COUNT} the ACTIVE line was "${joined}" — no count in it. ` +
       'ps.quests[id].n is tracked, clamped, saved and server-validated; if nothing reads it out ' +
       'the player has no way to know where they are, and the design note rules out a journal screen.');
   } else okay(`ACTIVE line reads the count out: "${joined}"`);
 
-  // Every stage, not just the one: an unfilled token anywhere is a rendered brace.
-  for (const [stage, pages] of [['offer', quest.offer], ['complete', quest.complete], ['done', quest.done]]) {
-    if (pages.some(p => /\{/.test(p))) {
-      ps.quests = { [QID]: { s: 'done', n: quest.objective.count } };
-      const out = (q.talkQuest(mapId, npcKey, () => {}) || []).join(' ');
-      if (/\{/.test(out)) hole(`${stage} pages carry an unfilled token`, out);
+  // ⛔ EVERY page of EVERY stage, not just the one this section exercises — an
+  // unfilled token anywhere is a rendered brace in front of the player. Walks
+  // the whole table now that pages live per stage, including `also` and
+  // `after`, which the old top-level list could not see.
+  const _tokened = [];
+  for (const qq of Object.values(QUESTS)) {
+    for (const st of qq.stages || []) {
+      for (const part of ['offer', 'accepted', 'denied', 'say', 'onAdvance']) {
+        for (const pg of st[part] || []) if (/\{/.test(pg)) _tokened.push(`${qq.id}.${st.id}.${part}`);
+      }
+      for (const [k, pgs] of Object.entries(st.also || {})) {
+        for (const pg of pgs || []) if (/\{/.test(pg)) _tokened.push(`${qq.id}.${st.id}.also.${k}`);
+      }
+    }
+    // `after` pages are shown with NO stage, so a token there can never be
+    // filled — quests.js passes `stage: null` and the count reads 0. That is a
+    // page the player would see braces on, not a formatting nit.
+    for (const [k, pgs] of Object.entries(qq.after || {})) {
+      for (const pg of pgs || []) if (/\{/.test(pg)) {
+        hole(`after.${k} of ${qq.id} carries a progress token`,
+          `"${pg}" — \`after\` pages are rendered with no stage, so {n}/{count}/{left} cannot be filled.`);
+      }
     }
   }
+  if (_tokened.length) okay(`progress tokens live on ${_tokened.length} page group(s): ${_tokened.join(', ')}`);
 }
 
 // ── 7. dead API ───────────────────────────────────────────────────────────

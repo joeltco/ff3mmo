@@ -12,7 +12,7 @@ import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
 import { jobHasMagic } from './data/jobs.js';
 import { currentEncounterZoneKey } from './battle-encounter.js';
-import { noteEncounterVictory } from './quests.js';
+import { noteEncounterVictory, noteBossDefeated } from './quests.js';
 import { ps, grantExp, grantCP, getHitWeapon, isHitRightHand, gainJobJP, grantGil } from './player-stats.js';
 import { IDLE_FRAME_MS } from './combatant-pose.js';
 import { bsc, getSlashFramesForWeapon, getSlashPattern, setSlashOffsetForFrame } from './battle-sprite-cache.js';
@@ -1070,6 +1070,13 @@ function _updateBossDissolve(dt) {
   if (dBlock !== prevBlock && dBlock > 0 && (dBlock & 3) === 0) playSFX(SFX.BOSS_DEATH);
   if (battleSt.battleTimer >= BOSS_BLOCKS * BOSS_DISSOLVE_STEPS * BOSS_DISSOLVE_FRAME_MS) {
     battleSt.enemyDefeated = true; mapSt.bossSprite = null;
+    // Quest objectives of kind `boss`. Fired at the GENERIC boss-death point —
+    // battle-update, battle-ally and spell-cast all route any non-random,
+    // non-PVP kill through here, so this is the one place a boss is provably
+    // dead exactly once. ⛔ NOT `noteEncounterVictory`: a boss objective names a
+    // monster id, so clearing a dungeon's ordinary encounters must not satisfy
+    // it (that is the whole difference from `defeat` with a count of 1).
+    try { noteBossDefeated(battleSt.bossId ?? DEFAULT_BOSS_ID); } catch (_) { /* quests are cosmetic here */ }
     // Land Turtle → Wind Crystal: keep the overworld sprite and flip it into
     // the blink→crystal reveal. It blinks once the battle HUD exits (updateNpcs
     // only ticks in the overworld), then morphs to the standing crystal. The

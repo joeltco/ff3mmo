@@ -28,6 +28,7 @@ const { msgState } = await import('../src/message-box.js');
 const { knownWords } = await import('../src/word-memory.js');
 const hasWord = (id) => knownWords().includes(id);
 const { talkQuest } = await import('../src/quests.js');
+const { QUESTS } = await import('../src/data/quests.js');
 
 const fail = [];
 const err = (m) => fail.push(m);
@@ -152,7 +153,10 @@ pick('ASK');
 pick('BROTHER');
 pick('ACCEPT');
 const e = ps.quests.ur_missing_brother;
-if (!e || e.s !== 'active' || e.n !== 0) err(`ACCEPT did not start the quest (got ${JSON.stringify(e)})`);
+// ⭐ `s` is the STAGE ID, not 'active'. Accepting puts the player on stage 1 —
+// stage 0 IS the offer, so taking it means stepping past it.
+const _stage1 = QUESTS.ur_missing_brother.stages[1].id;
+if (!e || e.s !== _stage1 || e.n !== 0) err(`ACCEPT did not start the quest (got ${JSON.stringify(e)}, expected stage ${_stage1})`);
 wm.closeWordMenu();
 
 // ── 5. Someone with nothing to say opens no menu ─────────────────────────

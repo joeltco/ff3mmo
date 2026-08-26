@@ -50,6 +50,8 @@ import { sendNetInvEvent, SERVER_ECONOMY, sendNetQuestClaim, setNetQuestResultHa
 import { openWordMenu } from './word-menu.js';
 import { talkQuest, revertQuestHandIn } from './quests.js';
 import { QUESTS, QUEST_DONE } from './data/quests.js';
+import { hasFlag } from './story-flags.js';
+import { resolvePages } from './data/dialogue.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -392,6 +394,21 @@ function _questDone(id) {
   return !!e && e.s === QUEST_DONE;
 }
 
+/**
+ * The two things a placement predicate is allowed to ask about.
+ *
+ * ⭐ `flag` is the one to reach for. A quest id answers "did THIS PLAYER run
+ * THAT ERRAND"; a flag answers "is this true of the world". The cursed-town
+ * inversion needs the second — 37 NPCs across two towns change together when
+ * the curse lifts, and keying all of them to a quest id welds the towns'
+ * appearance to one quest's identity, so retiring or renaming that quest would
+ * silently un-curse them. `questDone` is kept for the placements that really do
+ * mean one errand.
+ */
+function _placementFacts() {
+  return { questDone: _questDone, flag: hasFlag };
+}
+
 export function placeTownNpcs(mapId) {
   const list = TOWN_NPCS.get(mapId);
   if (!list) return;
@@ -406,9 +423,14 @@ export function placeTownNpcs(mapId) {
     // ⭐ `when` — a placement that depends on story state. Cid is a ghost in the
     // Kazus inn until his quest is handed in and his own self afterwards, on a
     // different tile, so the two are separate rows and exactly one is placed.
-    // The predicate is handed a quest-done test rather than `ps` so this stays
-    // the only place that knows how quest state is stored.
-    if (n.when && !n.when(_questDone)) continue;
+    // The predicate is handed test FUNCTIONS rather than `ps` so this stays the
+    // only place that knows how story state is stored. Two forms are supported:
+    // the legacy `when: (q) => q('quest_id')` and `when: (q, f) => f('flag')`,
+    // where the second argument reads data/flags.js — see `_placementFacts`.
+    if (n.when) {
+      const f = _placementFacts();
+      if (!n.when(f.questDone, f.flag)) continue;
+    }
     let x = n.x, y = n.y;
     // `fixedSpawn` keeps the declared (ROM) coordinates and still wanders from
     // there. The random pool is drawn from a map's "grass" tiles, and on Ur
@@ -779,10 +801,19 @@ setNetQuestResultHandler((msg) => {
 });
 
 // Does this NPC owe the player a notice from a rejected claim?
+//
+// ⛔ ANY of the quest's people may carry it, not just a single giver. With
+// stages the hand-in NPC is not necessarily the one who offered, and a refused
+// claim reverts to the LAST stage — so the person who owes the explanation is
+// whoever that stage belongs to. Matching one hard-coded giver, as this did,
+// would strand the notice on an NPC the player has no reason to walk back to.
 function _takeQuestNotice(npc) {
   if (!_questNotice || !npc || !npc.key) return null;
   const quest = QUESTS[_questNotice.questId];
-  if (!quest || quest.giver.mapId !== mapSt.currentMapId || quest.giver.npcKey !== npc.key) return null;
+  if (!quest) return null;
+  const speaks = (quest.stages || []).some(
+    (st) => st.at && st.at.map === mapSt.currentMapId && st.at.npc === npc.key);
+  if (!speaks) return null;
   const pages = _questNotice.pages;
   _questNotice = null;
   return pages;
@@ -880,7 +911,12 @@ export function talkToNpc(npc) {
     _sayThenOfferWords(npc, qPages);
     return;
   }
-  if (!npc.dialogue || npc.dialogue.length === 0) return;
+  // ⭐ Idle lines may be STATE-DEPENDENT (data/dialogue.js) — resolved against
+  // the story flags, first match wins. A variant list with no unguarded default
+  // resolves to null, and an NPC with nothing to say stays silent rather than
+  // rendering `undefined`.
+  const idle = resolvePages(npc.dialogue, hasFlag);
+  if (!idle || idle.length === 0) return;
   // NPC turns to face the player. Player's facing = direction they walked
   // INTO the NPC, so the NPC's talk-facing is the opposite axis.
   if (playerSprite) {
@@ -890,7 +926,7 @@ export function talkToNpc(npc) {
     else if (pdir === DIR_LEFT)  npc.talkFacing = DIR_RIGHT;
     else if (pdir === DIR_RIGHT) npc.talkFacing = DIR_LEFT;
   }
-  _sayThenOfferWords(npc, npc.dialogue);
+  _sayThenOfferWords(npc, idle);
 }
 
 // Show an NPC's lines, then hand off to the FF2-style ASK/LEARN menu if this

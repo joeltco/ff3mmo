@@ -6,7 +6,11 @@ import { MAX_LEVEL, INV_CAP } from './src/data/limits.js';
 // v1.8.6 — the save validator clamps quest counts against the REAL objective
 // instead of a shape-only 0..9999 bound. data/quests.js is import-free for
 // exactly this reason; see its header before adding an import there.
-import { QUESTS } from './src/data/quests.js';
+import { QUESTS, maxObjectiveCount, isLegalStage } from './src/data/quests.js';
+// Story flags. Import-free leaf, same reason as QUESTS above: the two halves of
+// one save must agree on what is legal, so the server drops exactly the flags
+// the client's `sanitizeFlags` drops.
+import { isFlag } from './src/data/flags.js';
 // v1.8.7 — same reason, one file over: the save validator drops term ids that
 // are not in the vocabulary instead of keeping any string it is handed.
 // data/keywords.js is import-free; keep it that way.
@@ -276,8 +280,18 @@ function _validateSaveData(data) {
       if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
       const quest = QUESTS[id];
       if (!quest) continue;                                   // unknown id -> drop
-      const max = quest.objective ? (quest.objective.count | 0) : 0;
-      q[id] = { s: v.s === 'done' ? 'done' : 'active', n: _clamp(v.n | 0, 0, max) };
+      // ⛔ `s` is a STAGE ID now, not 'active'/'done', and an unknown stage is
+      // DROPPED rather than coerced. Coercing to the first stage would silently
+      // restart a finished quest; coercing to 'done' would hand out a quest the
+      // player never ran. Matches the client's `sanitizeQuests` exactly — two
+      // halves of one save must agree on what is legal (v1.8.6's lesson).
+      if (!isLegalStage(quest, v.s)) continue;
+      // Clamped to the LARGEST objective across the quest's stages. The legal
+      // bound depends on which stage the save claims, and trusting `s` to pick
+      // the bound would mean trusting the field being validated. The largest is
+      // the honest ceiling: progress is not what pays — the quest_claims ledger
+      // is — so it cannot be used to forge a payout.
+      q[id] = { s: v.s, n: _clamp(v.n | 0, 0, maxObjectiveCount(quest)) };
     }
     out.quests = q;
   }
@@ -301,6 +315,24 @@ function _validateSaveData(data) {
       if (v) w[id] = 1;
     }
     out.words = w;
+  }
+  // Story flags: { flagId: 1 }. Validated against the REAL flag table, the same
+  // way quests and words above are — an undeclared id is dropped, exactly as
+  // the client's `sanitizeFlags` drops it.
+  //
+  // A flag is a WORLD FACT, not a payout. Forging `curse_lifted` changes which
+  // townspeople that player sees and nothing else: the quest reward still rides
+  // the once-per-(user, slot, quest) `quest_claims` ledger, and the canoe is
+  // granted through that same claim. There is nothing here to buy.
+  if (data.flags && typeof data.flags === 'object' && !Array.isArray(data.flags)) {
+    const f = {};
+    for (const id of Object.keys(data.flags).slice(0, 128)) {
+      if (typeof id !== 'string' || id.length > 64) continue;
+      if (!isFlag(id)) continue;                              // undeclared -> drop
+      if (!data.flags[id]) continue;                          // falsey -> absent
+      f[id] = 1;
+    }
+    out.flags = f;
   }
   if (data.consumedTiles && typeof data.consumedTiles === 'object' && !Array.isArray(data.consumedTiles)) {
     // Keep as-is; capped indirectly by overall payload size. Each key is a

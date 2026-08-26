@@ -239,13 +239,34 @@ const KAZUS_TOWN_BUNDLES = [
  * whole pre-quest game as a ghost in the Kazus inn. Reserving beats banning —
  * every other villager is still kept off it, by key rather than by hope.
  */
+// Bundle -> the SET of npc keys allowed to wear it. Everyone else is refused by
+// `check-npc-placement`.
+//
+// ⛔ IT WAS ONE KEY PER BUNDLE, AND THE ROM SAYS THAT WAS WRONG BOTH TIMES.
+// Widened 2026-08-25, from the cartridge's own id->gfx table at ROM 0x1410:
+//
+//   0x01D910 is gfx 25, worn by ids 31, 67 (SARA), 192 (Desch) and 217. It is a
+//   SHARED townsfolk sprite, which docs/NPC-CATALOG.md already flagged when it
+//   said the "Cid" label on this bundle was wrong. Cid keeps it — Joel supplied
+//   that art and it shape-matches at 90.2%, and that decision stands. Princess
+//   Sara joins him because ID 67 IS HER: this is not a lookalike, it is the
+//   sprite the cartridge dresses her in. They stand in different rooms (Cid in
+//   the pub, map 12; Sara out in the town, map 10) and are never co-visible.
+//
+//   0x01ED10 is gfx 45, worn by TEN ids — the entire cursed cast of Kazus and
+//   Castle Sasune. It is THE CURSE'S SPRITE, not one man's costume. The v1.10.66
+//   ban ("dressing ordinary villagers as ghosts was not the world we ship")
+//   rests on a premise the hardware contradicts: they are not ordinary villagers
+//   wearing a ghost, they are the town's ENTIRE early-game population, and the
+//   curse lifts. Measured with tools/monscan/npc-cast.cjs in both story states.
+//
+// ⛔ STILL RESERVED, NOT OPEN. Every key listed here is a character the story
+// puts in that sprite on purpose. An ordinary villager must not drift onto
+// either bundle by accident — that is what this table is for, and it is why the
+// widening is a LIST of names rather than a deletion.
 export const RESERVED_BUNDLES = new Map([
-  // ⭐ CID'S OWN SPRITE, and nobody else's. The red cap and robe — matched
-  // against all 88 bundles at 90.2%, nine points clear of the next.
-  [0x01D910, 'cid'],
-  // His cursed form. The ban on this bundle stands for everyone else — it is
-  // the Djinn's ghost and ordinary villagers must not wear it by accident.
-  [0x01ED10, 'cid_ghost'],
+  [0x01D910, new Set(['cid', 'sara'])],
+  [0x01ED10, new Set(['cid', 'sasune_king', 'sasune_attendant_w', 'sasune_attendant_e'])],
 ]);
 
 export const STORY_SPRITE_BUNDLES = new Map([
@@ -787,6 +808,13 @@ export const CID_GHOST = interior(0x01ED10, DIR_DOWN, [
 ], {
   ignoreRomFlags: true,
   answers: {
+    // The start word of `kazus_sealed_cave`. Without an entry the ASK list dims
+    // it and the quest looks unaskable.
+    djinn: [
+      'North, past the water.',
+      'It did this to me.',
+      'It did this to all of us.',
+    ],
     airship: [
       'She is west, in the sand.',
       'Clear the cave road first.',
@@ -841,6 +869,10 @@ export const CID = {
     'keeps me here.',
   ],
   answers: {
+    djinn: [
+      'Sealed, and good riddance.',
+      'I owe you a face.',
+    ],
     airship: [
       'She is mine, and west.',
       'Clear the road first.',
@@ -973,10 +1005,38 @@ export const KAZUS_HOUSE3_RESIDENT = interior(0x01E210, DIR_DOWN, [
 // versa. Nothing caught it because both bundles ARE loaded by map 18 — the
 // bundle rule only asks whether the map holds it, not whether the person on
 // that tile wears it.
+// ⭐ HE TEACHES SARA, and the King does NOT. A giver who teaches their own start
+// word is a chain with no walk in it (the note on ur_lost_riders). You hear the
+// princess named at the gate, and carry it inside to her father.
 export const SASUNE_GUARD_W = sasuneNpc(1, {
   wander: false,
   dir: DIR_RIGHT,
-  dialogue: ['The gate stays open.', 'His Majesty wills it.'],
+  // ⛔ EVERY VARIANT NAMES SARA. A teacher whose later lines drop the word
+  // stops being a teacher halfway through the story, and the ASK list would
+  // still offer LEARN on it. `check-words` fails the build on that.
+  dialogue: [
+    { when: 'curse_lifted', pages: [
+      'The gate stays open.',
+      'Sara is home. Ask her',
+      'yourself.',
+    ] },
+    { pages: [
+      'The gate stays open.',
+      'Nobody comes anyway.',
+      'Not since Sara went.',
+    ] },
+  ],
+  teaches: ['sara'],
+  answers: {
+    sara: [
+      { when: 'sara_found', pages: ['Back, and no thanks to us.'] },
+      { pages: [
+        'The princess. Gone,',
+        'and the King past speaking',
+        'sense about it.',
+      ] },
+    ],
+  },
 });
 export const SASUNE_GUARD_E = sasuneNpc(0, {
   wander: false,
@@ -1017,6 +1077,261 @@ export const SASUNE_HALL_SERVANT = interior(0x01EE10, DIR_DOWN, [
   'Keep to the lit ones.',
 ]);
 
+// ── CASTLE SASUNE: THE THRONE ROOM ───────────────────────────────────────
+//
+// ⛔ THE THRONE ROOM WAS EMPTY. `node tools/npc-dump.mjs 29` lists ELEVEN NPC
+// records on map 29 and ff3mmo placed ZERO of them — there was no King in this
+// game at all, in the room the whole Sasune chain starts from.
+//
+// ⭐ AND THE CARTRIDGE HAD ALREADY PAIRED THE CURSE. Map 29's records come in
+// SAME-TILE PAIRS, one cursed and one not:
+//
+//     (10,6) the throne   $37 ghost / $38 living   living bundle 0x1EF10
+//     (9,7)               $31 ghost / $32 living   living bundle 0x1EE10
+//     (11,7)              $33 ghost / $34 living   living bundle 0x1EE10
+//
+// Every cursed id resolves through the id->gfx table at ROM 0x1410 to gfx 45 =
+// 0x1ED10, the ghost. The two-state design was in the data the whole time.
+//
+// ⭐ THE KING IS $38, and his bundle 0x1EF10 is worn by NO OTHER RECORD IN THE
+// GAME — one id, one room. He sits on the throne tile ($3e) at (10,6).
+// ⛔ Identified by PLACEMENT AND SPRITE, never by `npcId + 0x202`, which is a
+// description of the string table with a measured counterexample.
+//
+// Both states carry the SAME KEY. See the note on the TOWN_NPCS rows below —
+// that is the whole fix for the class of bug that killed `kazus_cid_airship`.
+const throneNpc = (romOffset, extra = {}) => ({
+  romOffset,
+  ignoreRomFlags: true,
+  palTop: UR_SP3,
+  palBtm: UR_SP2,
+  dir: DIR_DOWN,
+  wander: false,
+  animate: true,
+  fixedSpawn: true,
+  ...extra,
+});
+
+/** King Sasune, cursed — a ghost on his own throne. Records $37 @(10,6). */
+export const SASUNE_KING_CURSED = throneNpc(0x01ED10, {
+  dialogue: [
+    'King Sasune. Or I was.',
+    'The Djinn made ghosts',
+    'of my whole house.',
+  ],
+  teaches: ['djinn'],
+  answers: {
+    // ⛔ THE START WORD MUST BE ANSWERABLE. The ASK list greys out terms an NPC
+    // has no entry for, so without this his own daughter's name reads as a dead
+    // end right up until the player picks it anyway.
+    sara: [
+      'My daughter. Gone a week.',
+      'She took the ring and',
+      'told nobody.',
+    ],
+    djinn: [
+      'It was sealed once.',
+      'The quake let it out.',
+      'Seal it and we are men again.',
+    ],
+    ring: [
+      'Mythril, cut in Kazus.',
+      'Made for my daughter.',
+      'It is the only thing',
+      'that binds him.',
+    ],
+  },
+});
+
+/** King Sasune, restored. Record $38 @(10,6) — bundle 0x1EF10, his alone. */
+export const SASUNE_KING = throneNpc(0x01EF10, {
+  dialogue: [
+    'The Djinn is sealed.',
+    'Flesh again, all of us.',
+    'Sasune cannot repay this.',
+  ],
+  teaches: ['djinn'],
+  answers: {
+    djinn: [
+      'Sealed, and may it hold.',
+      'My thanks are yours.',
+    ],
+    sara: [
+      'She is home. She sulks',
+      'that you did not need her.',
+    ],
+  },
+});
+
+/** The throne-room attendants, in both states. Records $31/$32 and $33/$34. */
+export const SASUNE_ATTENDANT_CURSED = throneNpc(0x01ED10, {
+  dialogue: ['We cannot even weep.', 'Ghosts have no water in them.'],
+});
+export const SASUNE_ATTENDANT = throneNpc(0x01EE10, {
+  dialogue: ['I have my hands back.', 'I keep looking at them.'],
+});
+
+// ── CASTLE SASUNE: THE RUNNER ────────────────────────────────────────────
+//
+// ⭐ Script `0x238`: "I only escaped the curse because I was out running
+// errands." The cartridge already has the one un-cursed servant in the castle,
+// and he is the only person in Sasune who was OUTSIDE when the Djinn struck —
+// which makes him the only one who could have seen the princess leave.
+//
+// He is not a new placement: `sasune_hall_servant` already stands on the ROM's
+// own $36 record at map 25 (9,23), on 0x1EE10, which map 25 loads. This adds
+// his words.
+export const SASUNE_RUNNER_WORDS = {
+  dialogue: [
+    { when: 'sara_found', pages: [
+      'Sara is back. I carried',
+      'the news and dropped',
+      'nothing this time.',
+    ] },
+    { pages: [
+      'I was out when it came.',
+      'Eggs. I was carrying eggs.',
+      'I saw Sara go.',
+    ] },
+  ],
+  teaches: ['sara'],
+  answers: {
+    sara: [
+      { when: 'sara_found', pages: ['She came home on her own feet.', 'Mostly.'] },
+      { pages: [
+        'She went out the east gate.',
+        'Asked me the road to Kazus.',
+        'I was carrying eggs.',
+        'I did not think to stop her.',
+      ] },
+    ],
+    djinn: [
+      'I was on the road when',
+      'it came. That is all',
+      'that saved me.',
+    ],
+    ring: [
+      'She never took it off.',
+      'Not since she was small.',
+    ],
+  },
+};
+
+// ── KAZUS: THE SMITH ─────────────────────────────────────────────────────
+//
+// ⭐ Script `0x231`: "The Mythril Ring can seal the Djinn. It's only made in
+// this town. That's why the Djinn attacked us." And `0x22f`: "there was a
+// Mythril Ring made for Princess Sara of Castle Sasune."
+//
+// ROM record $23 @(22,12) on map 10 — up by the mine mouth, native bundle
+// 0x1DF10, which map 10 loads. Unplaced until now; one of the six Kazus town
+// records ff3mmo was not using.
+export const KAZUS_SMITH = kazusNpc(0, {
+  romOffset: 0x01DF10, wander: false, animate: true, dir: DIR_DOWN,
+  dialogue: [
+    { when: 'curse_lifted', pages: [
+      'The forge is lit again.',
+      'That ring of hers held.',
+    ] },
+    { pages: [
+      'I cut the ring here.',
+      'Mythril. That is why',
+      'it came for us.',
+    ] },
+  ],
+  teaches: ['ring'],
+  answers: {
+    ring: [
+      { when: 'sara_found', pages: ['You found her, then.', 'Good. It was my work.'] },
+      { pages: [
+        'I cut hers myself.',
+        'She was back a week ago',
+        'asking what crosses water.',
+        'I had no answer for her.',
+      ] },
+    ],
+    djinn: [
+      'Mythril binds it.',
+      'Nothing else we make does.',
+    ],
+    sara: [
+      { when: 'sara_found', pages: ['She has more nerve', 'than her father.'] },
+      { pages: ['The princess? Here.', 'She has not left.'] },
+    ],
+  },
+});
+
+// ── PRINCESS SARA ────────────────────────────────────────────────────────
+//
+// ⭐ HER OWN SPRITE. `gfxForNpcId(rom, 67)` -> gfx 25 -> bundle 0x1D910. The
+// cartridge places her only on maps 33/34 (a late-game pair) and NEVER in
+// Sasune or the Sealed Cave — in FF3 she is put on screen by event script, not
+// by the static NPC table, so where she stands here is ff3mmo's call.
+//
+// ⛔ SHE IS NOT IN THE EAST TOWER, and that is a MEASUREMENT, not a preference.
+// Script `0x243` says her room is at the top of the east tower, and map 174 is
+// exactly that room — but `MAPS=174,19,30 node tools/monscan/map-bundles.cjs`
+// (2026-08-25) shows it loads NINE player/battle bundles and NOT ONE townsfolk
+// bundle. FF3 is CHR-RAM: anybody placed there renders as tilemap noise, the
+// same as map 11.
+//
+// ⛔ SHE SHARES A SPRITE WITH OUR CID, and there is no third option. gfx 25 is
+// worn by ids 31, 67 (Sara), 192 (Desch) and 217 — a shared townsfolk sprite,
+// which `docs/NPC-CATALOG.md` already flagged when it said the "Cid" label on
+// this bundle was wrong. Rendering every bundle the valley can draw
+// (`tools/valley-cast-sheet.mjs`) shows the alternative is a generic blue-cap
+// villager: dressing the princess as a townsman is worse than sharing a face
+// with a man who stands in a different room. Cid is in the pub (map 12); she is
+// out in the town (map 10). They are never on screen together.
+//
+// ⛔ NOT ON (17,21). That is the pub DOORWAY — one open neighbour, and the tile
+// Cid's own ROM record sits on. Placing her there would block the entrance.
+// (15,20) is the ROM's $21 record, out in the open west of the inn.
+export const SARA = {
+  romOffset: 0x01D910,
+  ignoreRomFlags: true,
+  palTop: UR_SP3,
+  palBtm: UR_SP2,
+  dir: DIR_DOWN,
+  wander: false,
+  animate: true,
+  fixedSpawn: true,
+  dialogue: [
+    { when: 'djinn_sealed', pages: [
+      'The ring did its work.',
+      'I felt it go.',
+      'Take me home, would you.',
+    ] },
+    { when: 'sara_found', pages: [
+      'I still have the ring.',
+      'I am not going home',
+      'while that thing is down there.',
+    ] },
+    { pages: [
+      'Sara. Of Castle Sasune.',
+      'The ring is why I am',
+      'still standing here.',
+    ] },
+  ],
+  teaches: ['ring'],
+  answers: {
+    ring: [
+      'Mythril. It kept the curse',
+      'off me and nothing else.',
+      'It will bind the Djinn.',
+    ],
+    djinn: [
+      'North, past the water.',
+      'I got as far as the shore',
+      'and no further.',
+    ],
+    sara: [
+      'That is me. Yes.',
+      'You may stop looking.',
+    ],
+  },
+};
+
 export const TOWN_NPCS = new Map([
   // --- Castle Sasune --- (two bundles; see the block above SASUNE_GUARD_W)
   [18, [
@@ -1034,10 +1349,41 @@ export const TOWN_NPCS = new Map([
     { key: 'sasune_post_nw', x:  7, y: 17, spec: { ...SASUNE_POST_GUARD, dir: DIR_DOWN } },
     { key: 'sasune_post_ne', x: 23, y: 18, spec: { ...SASUNE_POST_GUARD, dir: DIR_DOWN } },
   ]],
+  // --- Castle Sasune, THRONE ROOM (map 29) ---
+  //
+  // ⭐⭐ BOTH STATES CARRY THE SAME KEY, AND THAT IS THE POINT.
+  //
+  // `kazus_cid_airship` shipped DEAD because its two Cids had DIFFERENT keys
+  // (`cid_ghost` / `cid`) while the quest named only one of them — so the giver
+  // did not exist until the quest he gave was already finished. A person is not
+  // two people because their face changed. The KEY is the identity; the spec is
+  // the costume; `when` picks the costume. A quest stage binds to
+  // `sasune_king` and finds him in either state.
+  //
+  // ROM records, all on their cartridge tiles (tools/npc-dump.mjs 29):
+  //   (10,6) throne   $37 ghost / $38 King      (11,7)  $33 ghost / $34 living
+  //   (9,7)           $31 ghost / $32 living
+  [29, [
+    { key: 'sasune_king', x: 10, y: 6, spec: SASUNE_KING_CURSED, when: (q, f) => !f('curse_lifted') },
+    { key: 'sasune_king', x: 10, y: 6, spec: SASUNE_KING,        when: (q, f) =>  f('curse_lifted') },
+    { key: 'sasune_attendant_w', x: 9, y: 7,
+      spec: { ...SASUNE_ATTENDANT_CURSED, dir: DIR_RIGHT }, when: (q, f) => !f('curse_lifted') },
+    { key: 'sasune_attendant_w', x: 9, y: 7,
+      spec: { ...SASUNE_ATTENDANT, dir: DIR_RIGHT },        when: (q, f) =>  f('curse_lifted') },
+    { key: 'sasune_attendant_e', x: 11, y: 7,
+      spec: { ...SASUNE_ATTENDANT_CURSED, dir: DIR_LEFT },  when: (q, f) => !f('curse_lifted') },
+    { key: 'sasune_attendant_e', x: 11, y: 7,
+      spec: { ...SASUNE_ATTENDANT, dir: DIR_LEFT },         when: (q, f) =>  f('curse_lifted') },
+  ]],
+
   // Inner hall — the ROM's own id54 coordinate, the only record in this room on
   // a bundle map 25 loads and is allowed to use.
   [25, [
-    { key: 'sasune_hall_servant', x: 9, y: 23, spec: { ...SASUNE_HALL_SERVANT, dir: DIR_RIGHT } },
+    // ⭐ THE RUNNER — script 0x238, the one servant the curse missed because he
+    // was outside on an errand. He is the only person in Sasune who could have
+    // seen the princess go, which is why the King's chain passes through him.
+    { key: 'sasune_hall_servant', x: 9, y: 23,
+      spec: { ...SASUNE_HALL_SERVANT, ...SASUNE_RUNNER_WORDS, dir: DIR_RIGHT } },
     // Its PAIR. Both id54 records, both on 0x01EE10 — a matched pair flanking
     // the hall, same as the gate posts above.
     { key: 'sasune_hall_servant_e', x: 11, y: 23, spec: { ...SASUNE_HALL_SERVANT, dir: DIR_LEFT } },
@@ -1052,6 +1398,14 @@ export const TOWN_NPCS = new Map([
     { key: 'kazus_town_b', x: 3, y: 28, spec: KAZUS_TOWN_B },   // beside the campfire
     { key: 'kazus_town_c', x: 18, y: 27, spec: KAZUS_TOWN_C },
     { key: 'kazus_town_d', x: 14, y: 17, spec: KAZUS_TOWN_D },
+    // ⭐ THE SMITH — ROM record $23 @(22,12), up by the mine mouth, on the
+    // native 0x1DF10 map 10 already loads. Kazus cuts the mythril (script
+    // 0x231), so the man who made Sara's ring is the lead that points north.
+    { key: 'kazus_smith', x: 22, y: 12, spec: KAZUS_SMITH },
+    // ⭐ PRINCESS SARA — ROM record $21 @(15,20), open ground west of the inn.
+    // See the SARA spec for why she is here and not in her tower: map 174 loads
+    // no townsfolk bundle at all (measured), so nobody can be drawn there.
+    { key: 'sara', x: 15, y: 20, spec: SARA },
   ]],
   // Coordinates MEASURED from the map's largest connected room (63 tiles,
   // x2-6 / y16-20). Map 12's own ROM roster coords are sealed pockets —
@@ -1075,8 +1429,21 @@ export const TOWN_NPCS = new Map([
     // ⭐ CID — record $2c @(6,23), the end of the bar. Cursed before the Sealed
     // Cave, himself after. `when` is evaluated at placement time so exactly one
     // of the two is ever in the room.
-    { key: 'cid_ghost', x: 6, y: 23, spec: CID_GHOST, when: (q) => !q('kazus_cid_airship') },
-    { key: 'cid',       x: 6, y: 23, spec: CID,       when: (q) =>  q('kazus_cid_airship') },
+    // ⭐⭐ ONE KEY, TWO COSTUMES — and this is the bug fix, not a tidy-up.
+    //
+    // These rows used to be keyed `cid_ghost` and `cid`, and the quest named
+    // `cid` as its giver. `cid`'s row is gated on that quest being DONE, so the
+    // giver did not exist until the quest he gave was already finished: the
+    // offer could never fire, on any save, and it shipped that way. A man is
+    // not two people because the curse took his face. The key is the identity;
+    // `when` picks the costume; the quest binds to `cid` and finds him either
+    // way. `tools/check-quest-stages.mjs` is the gate that now catches this.
+    //
+    // ⛔ Gated on the FLAG, not on the quest id. The curse lifting is a fact
+    // about the world that Kazus and Sasune both read; keying it to one quest's
+    // name means renaming that quest silently un-curses two towns.
+    { key: 'cid', x: 6, y: 23, spec: CID_GHOST, when: (q, f) => !f('curse_lifted') },
+    { key: 'cid', x: 6, y: 23, spec: CID,       when: (q, f) =>  f('curse_lifted') },
     // ⛔ The two stand-ins that used to be here were never him. `cid_ghost` sat on
     // record $27 @(5,27) — "This cave is the Mythril Mines." — and `cid_man` on
     // $26 @(9,25) — "Kazus developed around the Mythril Mines." Neither is him.

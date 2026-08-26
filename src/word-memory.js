@@ -14,6 +14,8 @@
 // is losing the exploration.
 
 import { ps } from './player-stats.js';
+import { resolvePages, isVariantList } from './data/dialogue.js';
+import { hasFlag } from './story-flags.js';
 import { saveSlotsToDB } from './save-state.js';
 import { KEYWORDS } from './data/keywords.js';
 
@@ -58,7 +60,13 @@ export function learnableFrom(npcSpec) {
 //               teaches: 'vein' },
 //   }
 function _answerEntry(npcSpec, id) {
-  const a = npcSpec && npcSpec.answers && npcSpec.answers[id];
+  let a = npcSpec && npcSpec.answers && npcSpec.answers[id];
+  // ⭐ An answer may be STATE-DEPENDENT — a list of `{ when, pages }` variants
+  // keyed to story flags (data/dialogue.js). What somebody tells you about the
+  // Djinn before the cave and after it are not the same sentence. Resolved
+  // here, at the single place an answer is read, so every caller and every gate
+  // sees the same one.
+  if (isVariantList(a)) a = resolvePages(a, hasFlag);
   if (Array.isArray(a)) return a.length ? { pages: a, teaches: null } : null;
   if (a && typeof a === 'object' && Array.isArray(a.pages) && a.pages.length) {
     return { pages: a.pages, teaches: a.teaches || null };

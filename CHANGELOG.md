@@ -1,3 +1,164 @@
+## 1.10.89 — 2026-08-25
+
+### Quests are stages now, and one of the three was dead
+
+`kazus_cid_airship` could not be started **on any save, ever, since it shipped**.
+Its giver was `cid`, and `cid`'s placement row in `data/town-npcs.js` reads
+`when: (q) => q('kazus_cid_airship')` — he is only put in the room once the quest
+he gives is already finished. On a fresh save the tile holds `cid_ghost`, a
+different key, so `askQuestWord(12, 'cid_ghost', 'airship')` matched nothing.
+Asking the ghost about AIRSHIP returned his flavour lines and no offer, forever.
+
+Every quest gate in the repo passed it. `check-quests` walks offer → objective →
+hand-in through `talkQuest()`; `audit-quests` checks the giver has the right
+`answers` entry; `check-cid-airship` checks both Cid states stand on the ROM
+tile. Not one of them asked whether the NPC was **standing there** at the moment
+the quest needed him.
+
+**The fix is structural, because the bug is.** A quest was welded to ONE person —
+`talkQuest`, `askQuestWord` and `_takeQuestNotice` each filtered on
+`giver.mapId && giver.npcKey` — so a quest offered by a cursed man and remembered
+by an uncursed one had nowhere to put the second binding. A quest is now a list
+of **stages**, each naming its own NPC:
+
+```js
+stages: [
+  { id: 'ask',    at: { map: 29, npc: 'sasune_king' }, offer: [...] },
+  { id: 'errand', at: { map: 25, npc: 'sasune_hall_servant' }, onAdvance: [...] },
+  { id: 'found',  at: { map: 10, npc: 'sara' }, sets: ['sara_found'] },
+]
+```
+
+`ps.quests[id].s` holds the stage id instead of `'active'`/`'done'` — same two
+fields, same wire, same server clamp. The two Ur quests were ported unchanged
+and `check-quests` walks them to prove the port is behaviour-preserving.
+
+And Cid is **one key with two costumes** now, not two NPCs on one tile. A man is
+not two people because the curse took his face.
+
+### `tools/check-quest-stages.mjs`
+
+Reconstructs the story state at every stage — the quest parked there, plus every
+flag the earlier stages set — then runs the map's **real** `when` predicates and
+looks for the key. Reverting the Cid fix fails it with the room contents printed:
+
+```
+✗ kazus_cid_airship/ask needs cid on map 12 — NOT PLACED.
+    Room holds: kazus_inn_keep, kazus_item_keeper, kazus_inn_guest_b, cid_ghost
+```
+
+### Objective kinds are a registry
+
+`noteEncounterVictory` used to open with `if (obj.kind !== 'defeat') continue;`,
+which is why **every quest in the game was "win N encounters in zone X"** — a
+second kind had nowhere to land. The Cid entry admitted it: *"there is no
+fetch-an-item objective kind yet"*, which is how FF3's Mythril Ring errand
+shipped as *kill 4 things in the Altar Cave*. Kinds now live in
+`quest-objectives.js` and the runtime knows none of them by name: `defeat`,
+`boss` (by monster id), `talk`, `flag`.
+
+### Story flags
+
+`ps.flags` — world facts, separate from one player's progress through one
+errand. `data/flags.js` is an import-free leaf so `api.js` validates against the
+same table, client and server dropping exactly the same undeclared ids.
+**Per-player, on purpose**: a server-wide curse would mean whoever kills the
+Djinn first ends the early game for every player who arrives afterwards.
+
+Placement predicates and dialogue both read them, so the cursed-town inversion
+can key 37 NPCs to `curse_lifted` rather than to one quest's name.
+
+### Dialogue can change with the world
+
+`dialogue` and `answers[term]` accept `[{ when: 'curse_lifted', pages: [...] },
+{ pages: [...] }]`, first match wins, unguarded last. Before this the only way to
+change what somebody said was to swap the whole person — which is why Cid was two
+NPCs. Swapping a person is right when the SPRITE changes; swapping their lines is
+right when it does not.
+
+### Castle Sasune had no King
+
+`node tools/npc-dump.mjs 29` lists **eleven** NPC records on the throne-room map
+and ff3mmo placed **zero** of them. There was no King in this game, in the room
+the whole Sasune chain starts from.
+
+And the cartridge had already paired the curse — map 29's records come in
+**same-tile pairs**, one cursed and one not:
+
+| tile | cursed | living | living bundle |
+|---|---|---|---|
+| (10,6) the throne | `$37` | `$38` | **0x1EF10**, worn by no other record in the game |
+| (9,7) | `$31` | `$32` | 0x1EE10 |
+| (11,7) | `$33` | `$34` | 0x1EE10 |
+
+Every cursed id resolves through the id→gfx table at ROM `0x1410` to gfx 45 =
+`0x1ED10`, the ghost. The two-state design was in the data the whole time.
+
+### The King's Daughter → the canoe
+
+Grounded in script `0x23f` (the King's own words), `0x238` (the one servant who
+was outside on an errand), `0x231`/`0x22f` (the ring was cut in Kazus), `0x245`
+(her ring kept the curse off her) and `0x240` — *"King Sasune gave you a Canoe."*
+
+Gate → throne → the runner → the smith → the princess → back to the throne.
+
+**The order is ours, and the map is why.** In FF3 the canoe is the reward *after*
+the Djinn is sealed and Cid's airship crosses the lake to the cave. Flooding our
+world with the ROM's own mask table at `$C6CD`:
+
+| mode | tiles | Sealed Cave |
+|---|---|---|
+| on foot | 267 | ❌ |
+| **canoe** | **296** | ✅ |
+| airship / Invincible | 304 | ❌ |
+
+Both cave mouths carry tile `byte1 = 0x9e`; bit 4 is the flight barrier, so no
+flying craft can land on either. The canoe is the only key that fits our lock.
+
+So Sara cannot be in the cave — it is behind the canoe that finding her grants.
+
+### Princess Sara
+
+`gfxForNpcId(rom, 67)` → gfx 25 → bundle `0x1D910`. The cartridge places her only
+on maps 33/34 and never in Sasune or the Sealed Cave; in FF3 she is put on screen
+by event script, not by the static NPC table.
+
+**Not in her tower, and that is a measurement.** Script `0x243` puts her room at
+the top of the east tower, and map 174 is exactly that room — but
+`MAPS=174,19,30 node tools/monscan/map-bundles.cjs` shows it loads nine
+player/battle bundles and **no townsfolk bundle at all**. FF3 is CHR-RAM: anybody
+placed there renders as tilemap noise, same as map 11.
+
+She wears `0x1D910`, which our Cid also wears. `RESERVED_BUNDLES` said that
+sprite was "Cid alone"; the ROM says gfx 25 is worn by ids 31, **67 (Sara)**, 192
+and 217 — a shared townsfolk sprite, which `NPC-CATALOG.md` had already flagged.
+Rendering every bundle the valley can draw (`tools/valley-cast-sheet.mjs`, new)
+shows the alternative is a generic blue-cap villager. Cid is in the pub, Sara is
+out in the town; they are never on screen together.
+
+### The Sealed Cave → the curse lifts
+
+Replaces `kazus_cid_airship`. Same man, same pub, same parked airship — but the
+errand is `objective: { kind: 'boss', bossId: 0xCD }`, the Djinn, instead of
+grinding four Altar Cave encounters for a genie in a different dungeon. Sets
+`djinn_sealed` and `curse_lifted`.
+
+Two flags on purpose: one is the event, the other is the world afterwards.
+
+### Also
+
+- `RESERVED_BUNDLES` is bundle → **set** of keys. `0x1ED10` is worn by ten ids —
+  the entire cursed cast of Kazus and Sasune. It is the curse's sprite, not one
+  man's costume.
+- `check-words` now checks **every** dialogue variant says the word it teaches; a
+  teacher whose later lines drop it silently stops being one. `.join(' ')` on a
+  variant list yields `[object Object]`, so the old form failed variant NPCs for
+  the wrong reason.
+- `audit-quests` caught two exports added speculatively in this arc and they were
+  removed rather than kept as dead API.
+- Reject-notice delivery is stage-aware — a refused claim reverts to the last
+  stage, so the person who owes the explanation is whoever that stage belongs to.
+
 ## 1.10.88 — 2026-08-25
 
 ### Big summon effects follow Meteo's mapping

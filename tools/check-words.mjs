@@ -20,6 +20,7 @@ globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false
 globalThis.document = { createElement: () => ({ getContext: () => ({}) }), addEventListener() {} };
 
 const { KEYWORDS } = await import('../src/data/keywords.js');
+const { allPageSets, isVariantList, hasDefault } = await import('../src/data/dialogue.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 const { QUESTS } = await import('../src/data/quests.js');
 const { _nameToBytes } = await import('../src/text-utils.js');
@@ -51,6 +52,21 @@ for (const p of placed) {
   }
   for (const [t, rawAnswer] of Object.entries(p.spec.answers || {})) {
     if (!KEYWORDS[t]) { err(`${who} answers unknown term "${t}"`); continue; }
+    // A state-dependent answer is answerable in every state it declares; each
+    // variant is checked on its own so an empty branch is caught.
+    if (isVariantList(rawAnswer)) {
+      const sets = allPageSets(rawAnswer);
+      if (!sets.length || sets.some((pg) => !Array.isArray(pg) || !pg.length)) {
+        err(`${who} answers.${t} has an empty variant`); continue;
+      }
+      if (!hasDefault(rawAnswer)) {
+        err(`${who} answers.${t} has no unguarded default — silent for anyone who has not hit the flag`);
+        continue;
+      }
+      if (!answerers.has(t)) answerers.set(t, []);
+      answerers.get(t).push(who);
+      continue;
+    }
     const e = answerEntry(rawAnswer);
     if (!e || !Array.isArray(e.pages) || !e.pages.length) { err(`${who} answers.${t} is empty`); continue; }
     if (!answerers.has(t)) answerers.set(t, []);
@@ -106,9 +122,18 @@ for (const term of Object.keys(KEYWORDS)) {
 for (const [term, def] of Object.entries(KEYWORDS)) {
   for (const p of placed) {
     if (!(p.spec.teaches || []).includes(term)) continue;
-    const said = (p.spec.dialogue || []).join(' ').toLowerCase();
-    if (!said.includes(def.text.toLowerCase())) {
-      err(`map ${p.mapId} ${p.key} teaches "${term}" but never says "${def.text}" in their dialogue`);
+    // ⛔ EVERY VARIANT MUST SAY IT, not just one. Lines can be state-dependent
+    // now (data/dialogue.js), and a teacher whose CURSED lines name the word
+    // while their restored lines do not is a teacher who silently stops being
+    // one halfway through the story — the ASK list would offer LEARN on a word
+    // they no longer utter. `.join(' ')` on a variant list yields
+    // "[object Object]", so the old form failed every variant NPC for the wrong
+    // reason.
+    for (const pages of allPageSets(p.spec.dialogue)) {
+      const said = (pages || []).join(' ').toLowerCase();
+      if (!said.includes(def.text.toLowerCase())) {
+        err(`map ${p.mapId} ${p.key} teaches "${term}" but one of their dialogue variants never says "${def.text}"`);
+      }
     }
   }
 }
@@ -118,15 +143,19 @@ for (const q of Object.values(QUESTS)) {
   if (!q.startWord) continue;
   if (!KEYWORDS[q.startWord]) { err(`quest ${q.id} startWord "${q.startWord}" is not a term`); continue; }
   if (!teachers.has(q.startWord)) err(`quest ${q.id} can never be started: nobody teaches "${q.startWord}"`);
-  const giver = placed.find(p => p.mapId === q.giver.mapId && p.key === q.giver.npcKey);
-  if (!giver) { err(`quest ${q.id} giver ${q.giver.npcKey} is not placed on map ${q.giver.mapId}`); continue; }
+  // ⛔ The START WORD is put to STAGE 0's NPC, not to "the giver" — a quest has
+  // several people now and only the first can be asked to open it.
+  const s0 = (q.stages || [])[0];
+  if (!s0 || !s0.at) { err(`quest ${q.id} has no stage 0`); continue; }
+  const giver = placed.find(p => p.mapId === s0.at.map && p.key === s0.at.npc);
+  if (!giver) { err(`quest ${q.id} stage-0 NPC ${s0.at.npc} is not placed on map ${s0.at.map}`); continue; }
   // The ASK list greys out terms the NPC has no answer for. Without an entry
   // the giver's own start word reads as a dead end right up until you pick it.
   if (!(giver.spec.answers || {})[q.startWord]) {
-    err(`quest ${q.id} giver has no answers.${q.startWord} — the start word looks unanswerable in the ASK list`);
+    err(`quest ${q.id} stage-0 NPC has no answers.${q.startWord} — the start word looks unanswerable in the ASK list`);
   }
-  for (const stage of ['offer', 'accepted', 'denied']) {
-    if (!Array.isArray(q[stage]) || !q[stage].length) err(`quest ${q.id} is missing ${stage} pages`);
+  for (const part of ['offer', 'accepted', 'denied']) {
+    if (!Array.isArray(s0[part]) || !s0[part].length) err(`quest ${q.id} stage 0 is missing ${part} pages`);
   }
 }
 

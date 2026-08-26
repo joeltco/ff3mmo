@@ -19,6 +19,13 @@ export const KEYWORDS = {
   riders:  { text: 'RIDERS' },    // ur_elder_kin_a: "for riders long gone."
   vein:    { text: 'VEIN' },      // ur_tavern_drinker_b: "the vein went black."
   airship: { text: 'AIRSHIP' },   // kazus_town_d: "He left an airship west."
+  // ── The Sasune / Sealed Cave chain ──────────────────────────────────────
+  // Every one is a word somebody SAYS in a line they would say anyway — that is
+  // what makes LEARN honest, and `check-words` fails the build on a term with
+  // no teacher or no answerer among the NPCs actually placed.
+  sara:  { text: 'SARA' },     // sasune_guard_w: "Not since Sara went."
+  ring:  { text: 'RING' },     // kazus_smith: "I cut the mythril here."
+  djinn: { text: 'DJINN' },    // sasune_king: "The Djinn made ghosts of us."
 };
 
 /** Display text for a term id, or null if the id is unknown. */

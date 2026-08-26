@@ -187,6 +187,26 @@ const MAY_IGNORE_ROM_FLAGS = new Set([
   'inn_item_keeper', 'inn_keeper', 'inn_guest', 'weapon_keeper', 'armor_keeper',
   'kazus_item_keeper', 'kazus_inn_keep', 'kazus_weapon_keeper', 'kazus_armor_keeper',
   'cid', 'cid_ghost',
+  // ⭐ THE SASUNE THRONE ROOM AND PRINCESS SARA — added 2026-08-25, as a listed
+  // decision and not a shrug.
+  //
+  // ⛔ THE HONEST REASON IS THAT FACING IS STILL UNDECODED. `design-notes`
+  // followup 3: bits 2-3 of the record are the PALETTE selector, not facing, and
+  // the two still NPCs measured both draw RIGHT — n=2 is not a rule. Until
+  // `facedir.cjs` settles it there is no way to take facing FROM the byte, so a
+  // story pose has to be written by hand. These four are poses the scene
+  // requires:
+  //
+  //   sasune_king          on his throne at (10,6) — faces the room, not a wall
+  //   sasune_attendant_w   at (9,7), faces RIGHT, in toward the throne
+  //   sasune_attendant_e   at (11,7), faces LEFT, in toward the throne
+  //   sara                 stands still in Kazus; a princess who has stopped
+  //                        walking is the whole point of the scene
+  //
+  // Their MOVEMENT is not being dropped to make them convenient — every one of
+  // them is meant to be still, and `check-npc-placement` still proves they
+  // animate rather than freeze.
+  'sasune_king', 'sasune_attendant_w', 'sasune_attendant_e', 'sara',
 ]);
 {
   let stray = 0, honoured = 0;
@@ -314,11 +334,14 @@ const MAY_IGNORE_ROM_FLAGS = new Set([
     let story = 0;
     for (const [mapId, list] of TOWN_NPCS) {
       for (const e of list) {
-        // ⭐ RESERVED, not banned (v1.10.66). 0x01ED10 is the cursed-ghost sprite
-        // and it is CID'S — he wears it in the Kazus inn until his quest is
-        // handed in. Reserving it by npc key keeps every other villager off it
-        // while letting the one character it belongs to use it.
-        if (RESERVED_BUNDLES.get(e.spec && e.spec.romOffset) === e.key) continue;
+        // ⭐ RESERVED, not banned (v1.10.66), and reserved to a SET of keys
+        // rather than one (2026-08-25). 0x01ED10 is the curse's sprite — the
+        // ROM dresses ten ids in it, the whole cursed cast of Kazus and Sasune —
+        // and 0x01D910 is shared by Cid and Princess Sara, who really is id 67.
+        // Reserving by npc key keeps every other villager off both while letting
+        // the characters the story puts there use them. See the table's note.
+        const _allowed = RESERVED_BUNDLES.get(e.spec && e.spec.romOffset);
+        if (_allowed && _allowed.has(e.key)) continue;
         const who = e.spec && STORY_SPRITE_BUNDLES.get(e.spec.romOffset);
         if (!who) continue;
         console.error(`  ✗ map ${mapId}: ${e.key} uses 0x${e.spec.romOffset.toString(16).toUpperCase()}, ` +

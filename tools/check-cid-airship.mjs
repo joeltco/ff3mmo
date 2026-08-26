@@ -65,18 +65,31 @@ let failed = 0;
 const ok = (m) => console.log('  ✓ ' + m);
 const bad = (m) => { console.error('  ✗ ' + m); failed++; };
 
-const Q = QUESTS.kazus_cid_airship;
-if (!Q) { console.error('check-cid-airship: no kazus_cid_airship quest'); process.exit(2); }
-const g = Q.grantsVehicle;
-if (!g) { bad('the quest declares no grantsVehicle'); }
+// ⭐ RETARGETED 2026-08-25. `kazus_cid_airship` was replaced by
+// `kazus_sealed_cave`: same man, same pub, same parked airship, but the errand
+// is now beating the Djinn instead of grinding four Altar Cave encounters, and
+// the curse lifting is what restores him. The assertions below are about the
+// CRAFT and the two Cids, both of which survived the rewrite intact.
+const Q = QUESTS.kazus_sealed_cave;
+if (!Q) { console.error('check-cid-airship: no kazus_sealed_cave quest'); process.exit(2); }
+const S0 = Q.stages[0];
+const SLAST = Q.stages[Q.stages.length - 1];
+const g = Q.reward && Q.reward.vehicle;
+if (!g) { bad('the quest declares no reward.vehicle'); }
 
 // ── 1. the quest hands the craft over ──────────────────────────────────────
 ps.quests = {};
 ps.vehicle = 0; ps.vehicleParked = 0; ps.vehicleParkedX = 0; ps.vehicleParkedY = 0; ps.vehicleParkedMode = 0;
 quests.acceptQuest(Q.id);
-for (let i = 0; i < Q.objective.count; i++) quests.noteEncounterVictory('altar_cave_f1');
+// ⛔ The objective is a BOSS now, named by monster id — clearing the dungeon's
+// ordinary encounters must NOT satisfy it. Both are driven here so the
+// distinction is proven rather than assumed.
+for (let i = 0; i < 8; i++) quests.noteEncounterVictory('seals_cave_f1');
+if ((ps.quests[Q.id] || {}).n) bad('ordinary encounters advanced a BOSS objective');
+else ok('ordinary encounters do not satisfy the boss objective');
+quests.noteBossDefeated(SLAST.objective.bossId);
 const paid = [];
-quests.talkQuest(Q.giver.mapId, Q.giver.npcKey, (r, id) => paid.push([r, id]));
+quests.talkQuest(SLAST.at.map, SLAST.at.npc, (r, id) => paid.push([r, id]));
 
 if (ps.quests[Q.id] && ps.quests[Q.id].s === QUEST_DONE) ok('hand-in marks the quest done');
 else bad('hand-in did not finish the quest');
@@ -133,12 +146,16 @@ else bad(`(${g.x},${g.y}) is the entrance to map ${onTrigger} — stepping on it
 // were not him: they stood on records $27 ("This cave is the Mythril Mines.")
 // and $26, identified through `npcId + 0x202`, wearing borrowed sprites.
 // Cid is npc $1f and his sprite is 0x01D910, matched by PICTURE at 90.2%.
-const room = TOWN_NPCS.get(Q.giver.mapId) || [];
+const room = TOWN_NPCS.get(S0.at.map) || [];
 const CID_TILE = [6, 23];   // record $2c — the end of the Kazus pub's bar
-const ghost = room.find((e) => e.key === 'cid_ghost');
-const man = room.find((e) => e.key === 'cid');
+// ⭐ ONE KEY, TWO ROWS. Both states are keyed `cid` now — that is the fix for
+// the circular gate that killed the old quest, so they are told apart by SPEC,
+// not by key.
+const cidRows = room.filter((e) => e.key === 'cid');
+const ghost = cidRows.find((e) => e.spec && e.spec.romOffset === 0x01ED10);
+const man = cidRows.find((e) => e.spec && e.spec.romOffset === 0x01D910);
 if (ghost && man) ok('both of Cid’s states are declared');
-else bad('the Kazus pub is missing one of cid_ghost / cid');
+else bad('the Kazus pub is missing one of Cid\'s two states');
 if (ghost && man) {
   // ⛔ THE TILE IS THE POINT. (6,23) sat in `npc-dump.mjs 12` marked DRAWN the
   // whole time and got walked past twice — once onto the STREET outside the pub
@@ -153,18 +170,29 @@ if (ghost && man) {
   else bad(`cursed Cid wears 0x${(ghost.spec.romOffset || 0).toString(16).toUpperCase()}`);
   if (ghost.spec.romOffset !== man.spec.romOffset) ok('the two states wear different faces — the curse lifting is visible');
   else bad('both states wear the same bundle — the curse lifting is invisible');
-  if (RESERVED_BUNDLES.get(0x01D910) === 'cid') ok('0x01D910 is reserved to Cid alone');
+  // ⛔ NOT "to Cid alone" any more, and the ROM is why: gfx 25 is worn by ids
+  // 31, 67 (SARA), 192 and 217. Princess Sara is id 67 — it is the sprite the
+  // cartridge dresses her in, not a lookalike. Reserved to the two of them and
+  // nobody else; they stand in different rooms and are never co-visible.
+  const _res = RESERVED_BUNDLES.get(0x01D910);
+  if (_res && _res.has('cid') && _res.has('sara') && _res.size === 2) {
+    ok('0x01D910 is reserved to Cid and Sara — the ROM\'s own wearers of gfx 25');
+  }
   else bad('0x01D910 is not reserved to Cid');
   // Exactly one of him in the room, in either story state.
-  const none = () => false, done = (id) => id === Q.id;
-  const before = [ghost, man].filter((e) => !e.when || e.when(none));
-  const after = [ghost, man].filter((e) => !e.when || e.when(done));
-  if (before.length === 1 && before[0].key === 'cid_ghost') ok('before the quest, only the cursed Cid stands there');
+  // ⛔ Gated on the FLAG now, not the quest id — the curse lifting is a fact
+  // about the world that Kazus and Sasune both read.
+  // Predicates take (questDone, flag) — see npc.js#_placementFacts.
+  const noQuest = () => false;
+  const noFlag = () => false, lifted = (id) => id === 'curse_lifted';
+  const before = [ghost, man].filter((e) => !e.when || e.when(noQuest, noFlag));
+  const after = [ghost, man].filter((e) => !e.when || e.when(noQuest, lifted));
+  if (before.length === 1 && before[0].spec.romOffset === 0x01ED10) ok('before the curse lifts, only the cursed Cid stands there');
   else bad(`before the quest ${before.length} Cid(s) are placed: ${before.map((e) => e.key).join(', ')}`);
-  if (after.length === 1 && after[0].key === 'cid') ok('after the quest, only the uncursed Cid stands there');
+  if (after.length === 1 && after[0].spec.romOffset === 0x01D910) ok('after the curse lifts, only the uncursed Cid stands there');
   else bad(`after the quest ${after.length} Cid(s) are placed: ${after.map((e) => e.key).join(', ')}`);
   // ⛔ A still NPC never yields — he must not stand on a door.
-  const md = loadMap(rom, Q.giver.mapId);
+  const md = loadMap(rom, S0.at.map);
   if (!md.triggerMap.get(`${CID_TILE[0]},${CID_TILE[1]}`)) ok(`(${CID_TILE}) carries no door — he blocks no entrance`);
   else bad(`(${CID_TILE}) is a trigger tile — a still Cid there seals it permanently`);
   if (!ghost.spec.wander && !man.spec.wander) ok('neither state wanders — correct for a man who is waiting');

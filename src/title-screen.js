@@ -3,6 +3,7 @@
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
 import { sanitizeQuests } from './quests.js';
 import { sanitizeWords } from './word-memory.js';
+import { sanitizeFlags } from './data/flags.js';
 import { nesColorFade, _makeFadedPal } from './palette.js';
 import { _nameToBytes } from './text-utils.js';
 import { selectCursor, saveSlots, nameBuffer, NAME_MAX_LEN,
@@ -754,6 +755,9 @@ function _updateTitleMainOutCase() {
   ps.quests = sanitizeQuests(slot && slot.quests);
   // Key Terms — same treatment: a term removed from the vocabulary drops out.
   ps.words = sanitizeWords(slot && slot.words);
+  // Story flags. Same treatment: an undeclared flag (one retired since the save
+  // was written) is dropped rather than carried as a fact nothing can read.
+  ps.flags = sanitizeFlags(slot && slot.flags);
   ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
   ps.consumedTilesAt = (slot && slot.consumedTilesAt) ? JSON.parse(JSON.stringify(slot.consumedTilesAt)) : {};
   swapBattleSprites(ps.jobIdx);

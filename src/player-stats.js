@@ -66,6 +66,9 @@ export const ps = {
   // $6000 (placed) / $6001,$6002 (world tile) / $600B (which craft). Walking
   // onto that tile boards it ($C633 matches the party position against it);
   // disembarking writes it back ($C59E).
+  // Story flags — world facts, `{ flagId: 1 }`. See data/flags.js. Separate
+  // from `quests`, which is one player's progress through one errand.
+  flags: {},
   vehicleParked: 0,      // 0 = none placed
   vehicleParkedX: 0,
   vehicleParkedY: 0,

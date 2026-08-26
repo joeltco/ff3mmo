@@ -59,16 +59,17 @@ mb.registerMsgHighlights(Object.values(KEYWORDS).map(k => k.text));
 const QID = flag('quest', 'ur_missing_brother');
 const quest = QUESTS[QID];
 if (!quest) { console.error('unknown quest ' + QID); process.exit(2); }
-const { mapId, npcKey } = quest.giver;
+const SLAST = quest.stages[quest.stages.length - 1];
+const { map: mapId, npc: npcKey } = SLAST.at;
 const stage = flag('stage', 'active');
 const n = parseInt(flag('n', '1'), 10);
 
 // Put the save in the state that produces the stage we want, then ask the real
 // talk handler for the pages.
 ps.quests = stage === 'done'
-  ? { [QID]: { s: 'done', n: quest.objective.count } }
+  ? { [QID]: { s: 'done', n: SLAST.objective.count } }
   : stage === 'complete'
-    ? { [QID]: { s: 'active', n: quest.objective.count } }
+    ? { [QID]: { s: SLAST.id, n: SLAST.objective.count } }
     : { [QID]: { s: 'active', n } };
 const pages = q.talkQuest(mapId, npcKey, () => {});
 if (!pages) { console.error('talkQuest returned no pages for stage ' + stage); process.exit(2); }

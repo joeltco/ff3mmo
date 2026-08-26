@@ -87,6 +87,9 @@ export async function saveSlotsToDB() {
     slot.quests = ps.quests ? JSON.parse(JSON.stringify(ps.quests)) : {};
     // Word Memory (Key Terms learned). Same lockstep rule as quests above.
     slot.words = ps.words ? JSON.parse(JSON.stringify(ps.words)) : {};
+    // Story flags (world facts). Same lockstep rule again — data/flags.js is
+    // import-free so api.js validates against the very same table.
+    slot.flags = ps.flags ? JSON.parse(JSON.stringify(ps.flags)) : {};
     slot.consumedTiles = ps.consumedTiles ? JSON.parse(JSON.stringify(ps.consumedTiles)) : {};
     slot.consumedTilesAt = ps.consumedTilesAt ? JSON.parse(JSON.stringify(ps.consumedTilesAt)) : {};
   }
@@ -124,6 +127,7 @@ export async function saveSlotsToDB() {
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
       quests: s.quests || {},
       words: s.words || {},
+      flags: s.flags || {},
       consumedTiles: s.consumedTiles || {},
       consumedTilesAt: s.consumedTilesAt || {},
     } : null);

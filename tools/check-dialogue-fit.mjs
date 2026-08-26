@@ -21,6 +21,7 @@ globalThis.document = { createElement: () => ({ getContext: () => ({}) }), addEv
 const { _nameToBytes } = await import('../src/text-utils.js');
 const { msgLineCount, MSG_MAX_LINES, MSG_MAX_CHARS } = await import('../src/message-box.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
+const { allPageSets, isVariantList } = await import('../src/data/dialogue.js');
 const { QUESTS } = await import('../src/data/quests.js');
 
 let failed = 0, checked = 0;
@@ -34,15 +35,24 @@ const check = (where, page) => {
   }
 };
 
+// ⛔ EVERY VARIANT, not the one that happens to be showing. Lines may be
+// state-dependent (`[{ when, pages }, ...]`, data/dialogue.js), and a variant
+// that only appears after the curse lifts still has to fit the box — it would
+// otherwise overflow for the first time in front of a player who got that far.
 for (const [mapId, list] of TOWN_NPCS) {
   for (const e of list) {
-    for (const page of e.spec.dialogue || []) check(`map ${mapId} ${e.key}`, page);
+    for (const pages of allPageSets(e.spec.dialogue)) {
+      for (const page of pages || []) check(`map ${mapId} ${e.key}`, page);
+    }
     // ASK replies go through the same box.
     // An answer is bare pages, or `{ pages, teaches }` when asking about it
-    // hands over the next term (v1.8.8). Both render through the same box.
+    // hands over the next term (v1.8.8), or a variant list. All render here.
     for (const [term, a] of Object.entries(e.spec.answers || {})) {
-      const pages = Array.isArray(a) ? a : (a && a.pages) || [];
-      for (const page of pages) check(`map ${mapId} ${e.key} answers.${term}`, page);
+      const sets = isVariantList(a) ? allPageSets(a)
+                 : [Array.isArray(a) ? a : (a && a.pages) || []];
+      for (const pages of sets) {
+        for (const page of pages || []) check(`map ${mapId} ${e.key} answers.${term}`, page);
+      }
     }
   }
 }
@@ -50,8 +60,8 @@ for (const [mapId, list] of TOWN_NPCS) {
 // by quests.js#talkQuest. Check the RAW page and every expansion: raw happens
 // to be the wider string for a single-digit objective, and relying on that
 // silently stops being true the day a quest wants 12 of something.
-const _expansions = (page, q) => {
-  const total = q.objective ? (q.objective.count | 0) : 0;
+const _expansions = (page, stage) => {
+  const total = stage && stage.objective ? (stage.objective.count | 0) : 0;
   const out = [page];
   for (let n = 0; n <= total; n++) {
     out.push(String(page).replace(/\{n\}/g, String(n))
@@ -60,11 +70,24 @@ const _expansions = (page, q) => {
   }
   return out;
 };
+// ⛔ EVERY page a quest can put on screen, from every stage — including `also`
+// (what the quest's OTHER people say mid-stage) and `after`. A page that only
+// appears on one branch still has to fit the box.
 for (const q of Object.values(QUESTS)) {
-  for (const stage of ['offer', 'accepted', 'denied', 'active', 'complete', 'done']) {
-    for (const page of q[stage] || []) {
-      for (const variant of _expansions(page, q)) check(`quest ${q.id}.${stage}`, variant);
+  for (const stage of q.stages || []) {
+    for (const part of ['offer', 'accepted', 'denied', 'say', 'onAdvance']) {
+      for (const page of stage[part] || []) {
+        for (const variant of _expansions(page, stage)) check(`quest ${q.id}.${stage.id}.${part}`, variant);
+      }
     }
+    for (const [npcKey, pages] of Object.entries(stage.also || {})) {
+      for (const page of pages || []) {
+        for (const variant of _expansions(page, stage)) check(`quest ${q.id}.${stage.id}.also.${npcKey}`, variant);
+      }
+    }
+  }
+  for (const [npcKey, pages] of Object.entries(q.after || {})) {
+    for (const page of pages || []) check(`quest ${q.id}.after.${npcKey}`, page);
   }
 }
 
