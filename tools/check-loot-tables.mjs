@@ -18,6 +18,14 @@
 //
 //   node tools/check-loot-tables.mjs
 //   node tools/check-loot-tables.mjs --list    # every place and its table
+//
+// ⚠ NOT IN deploy.sh YET, ON PURPOSE. Section 8 is currently RED on a real
+// finding — `seals_f3` is a loot table for a floor that places no chests, in a
+// dungeon with no locked or secret rooms to reach it through. Fixing that means
+// choosing one of: give the Cave of Seals a side room, make floor 2 place
+// chests, or accept that floor 2 has no loot and delete the table. All three are
+// DESIGN decisions and none of them belongs to whoever is next to run a gate.
+// Wire this in once that is settled — see docs/BEGINNER-VALLEY-LOOT-AUDIT.md §8.
 
 import fs from 'node:fs';
 
@@ -157,7 +165,42 @@ const { SHOPS } = await import('../src/data/shops.js');
   if (!mismatches) ok(`the server union accepts every client roll across ${maps.length} maps, locked rooms included`);
 }
 
-// ── 8. the debt is VISIBLE, not silent ────────────────────────────────────
+// ── 8. no table is DEAD ───────────────────────────────────────────────────
+//
+// ⛔ A TABLE NO CHEST CAN EVER ROLL IS DEAD DATA, and it reads as live content.
+// `seals_f3` held `WSlayer` (1000 G) and `Carapace` (1250 G) — the two most
+// valuable items in the valley — at 9.2% each, and could not fire: the dungeon
+// generator places chests on floors 0 and 1 ONLY (`FLOOR_CONFIG`), Seals floor 2
+// gets none, and the Cave of Seals has `lockedRooms: []` / `secretRooms: []` so
+// there is no second path in. An entire loot ladder that nobody could reach, and
+// a redesign was argued over it before anyone checked.
+//
+// A floor with no chests is fine. A TABLE for a floor with no chests, and no
+// locked room to reach it through, is not.
+{
+  const src = fs.readFileSync(new URL('../src/dungeon-generator.js', import.meta.url).pathname, 'utf8');
+  const m = src.match(/const FLOOR_CONFIG = \[([\s\S]*?)\n\];/);
+  if (!m) bad('FLOOR_CONFIG not found in dungeon-generator.js — cannot tell which floors place chests');
+  else {
+    // One entry per line; `chests: 0` or `chests: [a, b]`.
+    const placesChests = m[1].split('\n').filter((l) => /\{/.test(l))
+      .map((l) => { const c = l.match(/chests:\s*(\[[^\]]*\]|\d+)/); return c ? !/^0$/.test(c[1]) : false; });
+    for (const d of DUNGEONS) {
+      const names = LT.DUNGEON_LOOT[d.id] || [];
+      const hasSideRooms = (d.lockedRooms || []).length > 0 || (d.secretRooms || []).length > 0;
+      names.forEach((name, floorIdx) => {
+        const chests = placesChests[floorIdx];
+        if (chests || hasSideRooms) return;
+        bad(`table '${name}' is DEAD — ${d.id} floor ${floorIdx} places no chests and the ` +
+            'dungeon has no locked or secret rooms to reach it through');
+      });
+    }
+    const live = placesChests.filter(Boolean).length;
+    ok(`FLOOR_CONFIG places chests on ${live} floor index(es); every table has a way to fire`);
+  }
+}
+
+// ── 9. the debt is VISIBLE, not silent ────────────────────────────────────
 {
   const undesigned = [];
   for (const a of AREAS) if (!LT.AREA_LOOT[a.loc]) undesigned.push(a.loc);

@@ -14,7 +14,7 @@ ff3mmo rolls instead**.
 ## 1. The headline
 
 **Between 50% and 100% of every loot table in the game is stuff the valley's own
-shops already sell.**
+shops already sell — and three of the eight tables can never fire at all** (§5).
 
 | table | mimic | gil | items | of which shop stock |
 |---|---|---|---|---|
@@ -129,37 +129,75 @@ the king's castle could turn into a goblin.
 (`map-triggers.js#STRANDING_MAPS`) because its ROM entrance drops the player in a
 pocket with no exit. Its chests are content nobody can ever open.
 
-### Altar Cave — 12 chests
+### ⛔ THE DUNGEONS ARE GENERATED — the ROM's chests there are IRRELEVANT
 
-| ROM map | floor | chests | table |
+**Corrected 2026-08-26.** The first cut of this audit read the chest tiles out of
+ROM maps 22, 103, 104, 106, 111, 112, 113 and 115 and reported them as the
+dungeons' loot. They are not. Those are **donor maps** — the dungeon registry
+uses them for tiles, CHR and palettes only (`donorMap`, `romFloorMaps`), and
+`dungeon-generator.js` builds the layout and scatters the chests itself. A player
+never walks the cartridge's version of those rooms.
+
+What ff3mmo actually places, from `FLOOR_CONFIG` (`dungeon-generator.js:754`),
+indexed by floor and shared by both dungeons:
+
+| floor | chests |
+|---|---|
+| 0 | 2-4 |
+| 1 | 4-6 |
+| 2 | **0** |
+| 3 | **0** |
+| boss | **0** — the whole feature block is inside `if (!isBossFloor(...))` |
+
+⭐ **Boss chambers place no chests.** Neither does any floor past the second.
+⭐ **Generated dungeons place no hidden-treasure vases either** — there is no
+`$78-$7B` anywhere in the generator.
+
+### ⛔ THREE OF THE EIGHT LOOT TABLES CAN NEVER FIRE
+
+| table | the floor it is for | chests placed there | reachable? |
 |---|---|---|---|
-| 111 | f1 | **0** | `altar_f1` |
-| 115 | f2 | 3 | `altar_f2` |
-| 112 | f3 | 2 | `altar_f3` |
-| 113 | f4 | 5 | `altar_f4` |
-| 22 | boss | 2 | ⚠ **UNDESIGNED** |
+| `altar_f1` | Altar 1000, floor 0 | 2-4 | ✅ |
+| `altar_f2` | Altar 1001, floor 1 | 4-6 | ✅ |
+| `altar_f3` | Altar 1002, floor 2 | **0** | only via a locked-room chest |
+| `altar_f4` | Altar 1003, floor 3 | **0** | only via a locked-room chest |
+| `seals_f1` | Seals 2000, floor 0 | 2-4 | ✅ |
+| `seals_f2` | Seals 2001, floor 1 | 4-6 | ✅ |
+| `seals_f3` | Seals 2002, floor 2 | **0** | ⛔ **NEVER** |
 
-### Cave of Seals — 5 chests
+`altar_f3` and `altar_f4` survive only because a locked-room chest rolls a RANDOM
+normal floor of its dungeon (v1.7.675) — the Altar Cave has locked rooms at 1010
+and 1011, two chests each, and each spawns on a 50% seed roll.
 
-| ROM map | floor | chests | table |
-|---|---|---|---|
-| 103 | f1 | 2 | `seals_f1` |
-| 104 | f2 | 1 | `seals_f2` |
-| 105 | f2b | **0** | `seals_f2` |
-| 106 | B3F/boss | 2 | ⚠ **UNDESIGNED** |
+⛔ **The Cave of Seals has `lockedRooms: []` and `secretRooms: []`.** It has no
+second path. So **`seals_f3` is dead data** — and that is the table holding
+`WSlayer` (1000 G) and `Carapace` (1250 G) at 9.2% each.
 
-⛔ **Both boss chambers hold chests and neither has a table.** Map 22 and map 106
-each carry two, and both fall through.
+**The two most valuable items in the valley cannot drop.** Every argument about
+where they belong was about a table that does not fire.
 
 ---
 
 ## 6. Totals
 
+**Towns and castles** read their tilemaps straight from the ROM, so these counts
+are what a player walks up to:
+
 ```
-44 treasure tiles reachable in the valley
-   36 chests   8 hidden spots
-   19 on a designed table   12 on ur_town   13 UNDESIGNED (was: the Altar Cave's f1 table)
-    3 unreachable (map 24, refused at the door)
+Ur              8 chests   6 hidden spots   -> ur_town (one table for all 14)
+Kazus           0 chests   2 hidden spots   -> UNDESIGNED
+Mythril Mines   0 chests   0 hidden spots   -> nothing at all
+Castle Sasune  11 chests   0 hidden spots   -> UNDESIGNED  (3 behind a refused door)
+```
+
+**Dungeons** are generated, so the count is per run, not per map:
+
+```
+Altar Cave    floor 0: 2-4 chests   floor 1: 4-6   floors 2-3: 0   boss: 0
+              + locked rooms 1010 / 1011 (2 chests each, 50% spawn)
+              + secret rooms 1020 / 1021
+Cave of Seals floor 0: 2-4 chests   floor 1: 4-6   floor 2: 0      boss: 0
+              + NO locked rooms, NO secret rooms
 ```
 
 ---
@@ -194,21 +232,46 @@ as `cand#`.
 
 ## 8. Findings, ranked
 
-1. ⛔ **Every table is mostly shop stock** — 50-100%, and 8/8 on Seals floor 1.
-2. ⛔ **FenixDown (3000 G) is in six farmable dungeon tables.**
-3. ⛔ **Castle Sasune's eleven chests have no designed table**, and three of them
-   are behind a door the engine refuses.
-4. ⛔ **Both boss chambers have chests and no table.**
-5. ⛔ **The Mythril Mines has no loot at all.**
-6. ⚠ **The Altar Cave's mimic rate falls with depth.**
-7. ⚠ **MagicKey is a 3% random drop** on every Altar Cave floor.
-8. ⚠ **Ur's secret room pays the same as a tavern pot** — 14 tiles, one table.
-9. ⚠ **Map 105 and map 111 have zero chests**, so `seals_f2` and `altar_f1` cover
-   fewer tiles than their names suggest.
+1. ⛔ **`seals_f3` can never fire.** Seals floor 2 places no chests and the
+   dungeon has no locked or secret rooms. `WSlayer` and `Carapace` — the two most
+   valuable items in the valley — are unreachable.
+2. ⛔ **`altar_f3` and `altar_f4` fire only through locked-room chests**, which
+   need a 50% room spawn AND the Magic Key. Two whole floors of ladder are almost
+   never seen.
+3. ⛔ **Every table is mostly shop stock** — 50-100%, and 8/8 on `seals_f1`,
+   which IS one of the tables that fires.
+4. ⛔ **Castle Sasune's eleven chests have no designed table**, and three sit
+   behind map 24, which the engine refuses at the door.
+5. ⛔ **FenixDown (3000 G) is in six tables**, four of which fire, in dungeons
+   whose chests skip the server replay gate.
+6. ⛔ **The Mythril Mines has no loot at all.**
+7. ⚠ **Ur's fourteen tiles share one two-line table** — the secret room pays what
+   a tavern pot pays.
+8. ⚠ **The Altar Cave's mimic rate falls with depth** (15.2% → 11.8%).
+9. ⚠ **MagicKey is a 3% random drop** on the floors that place chests — and it is
+   what unlocks the rooms that are the only way to reach `altar_f3`/`f4`.
 
 ---
 
-## 9. Not decided here
+## 9. The gate
+
+`tools/check-loot-tables.mjs` pins the structure and **is currently RED on
+finding 1**. It is deliberately NOT in `deploy.sh`:
+
+```
+✗ table 'seals_f3' is DEAD — seals floor 2 places no chests and the dungeon
+  has no locked or secret rooms to reach it through
+```
+
+Clearing it means picking one of three, and all three are design calls:
+
+1. give the Cave of Seals a locked or secret room (it is the only dungeon with
+   neither — the Altar Cave has two of each);
+2. make `FLOOR_CONFIG` place chests on floor 2, which changes BOTH dungeons since
+   the config is indexed by floor and shared;
+3. accept that Seals floor 2 has no loot and delete `seals_f3`.
+
+## 10. Not decided here
 
 This is the audit. It deliberately proposes **no numbers** — the previous attempt
 at that (`docs/SEALED-CAVE-LOOT-PLAN.md` §4) put gear from a 1200-2400 G shop
