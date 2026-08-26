@@ -41,7 +41,7 @@ async function table(mod, name) {
 const AREA_NAMES = await table('../src/data/areas.js', 'AREA_NAMES');
 const SHOPS      = await table('../src/data/shops.js', 'SHOPS');
 const TOWN_NPCS  = await table('../src/data/town-npcs.js', 'TOWN_NPCS');
-const LOOT_POOLS = await table('../src/data/loot-pools.js', 'LOOT_POOLS');
+const LOOT_POOLS = await table('../src/data/loot-tables.js', 'LOOT_TABLES');
 const ENCOUNTERS = await table('../src/data/encounters.js', 'ENCOUNTERS');
 
 // NOT columns, because neither is per-map hand-authored work:

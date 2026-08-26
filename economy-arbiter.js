@@ -12,7 +12,7 @@ import { SHOPS, getShopType } from './src/data/shops.js';
 import { ITEMS, isQuestItem } from './src/data/items.js';
 import { mirrorReadFullState, consumedTileConsumedAt, questClaimedAt } from './api.js';
 import { QUESTS } from './src/data/quests.js';
-import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './src/data/loot-pools.js';
+import { resolvedPoolFor } from './src/data/loot-tables.js';
 
 const INV_CAP = 16;       // mirrors src/inventory.js#INV_CAP
 
@@ -274,51 +274,17 @@ export function validateQuestClaim(userId, slot, payload) {
   return { ok: true, questId, gil, itemId, events };
 }
 
-// Resolve the chest pool for a mapId: union of all tier items + max gil +
-// whether a mimic tier is present. Mirrors src/map-triggers.js#rollLootEntry
-// fallback chain (Ur interior → 114; unknown → DEFAULT_LOOT). Locked-room
-// (mapId 1010) draws from any altar floor — union of all four.
-function _resolvedChestPool(mapId) {
-  let tiers;
-  if (mapId === 1010) {
-    tiers = [];
-    for (const id of [1000, 1001, 1002, 1003]) {
-      const t = LOOT_POOLS[id];
-      if (t) tiers = tiers.concat(t);
-    }
-  } else {
-    tiers = LOOT_POOLS[mapId];
-    if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
-    if (!tiers) tiers = DEFAULT_LOOT;
-  }
-  if (!tiers || !tiers.length) return null;
-  const items = new Set();
-  let gilMax = 0;
-  let hasMonster = false;
-  for (const t of tiers) {
-    if (t.monster) { hasMonster = true; continue; }
-    for (const entry of t.pool) {
-      if (typeof entry === 'number') items.add(entry);
-      else if (entry && entry.gil) gilMax = Math.max(gilMax, entry.gil[1] | 0);
-    }
-  }
-  return { items, gilMax, hasMonster };
-}
-
-function _resolvedVasePool(mapId) {
-  let tiers = LOOT_POOLS[mapId];
-  if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
-  if (!tiers) tiers = DEFAULT_LOOT;
-  if (!tiers || !tiers.length) return null;
-  const items = new Set();
-  let gilMax = 0;
-  for (const t of tiers) {
-    if (t.monster) continue;
-    for (const entry of t.pool) {
-      if (typeof entry === 'number') items.add(entry);
-      else if (entry && entry.gil) gilMax = Math.max(gilMax, entry.gil[1] | 0);
-    }
-  }
-  return { items, gilMax };
-}
+// ⛔ THE SERVER DERIVES ITS UNION FROM THE CLIENT'S OWN TABLES.
+//
+// These were two hand-written walks over `LOOT_POOLS`, each preceded by its own
+// copy of the `LOOT_POOLS[mapId] -> UR_CHEST_MAPS -> DEFAULT_LOOT` chain — four
+// of the six copies of that rule lived in this file and src/map-triggers.js.
+// Drift between the halves is not an abstract risk: it is a player opening a
+// real chest and being told the claim is a forgery.
+//
+// `data/loot-tables.js#resolvedPoolFor` is the single source, and it handles the
+// locked-room union (any floor of the dungeon) that the chest branch used to
+// special-case on the literal mapId 1010.
+const _resolvedChestPool = (mapId) => resolvedPoolFor(mapId, 'chest');
+const _resolvedVasePool  = (mapId) => resolvedPoolFor(mapId, 'vase');
 

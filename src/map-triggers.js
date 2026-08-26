@@ -29,7 +29,8 @@ import { sendNetInvEvent, SERVER_ECONOMY, PVE_ARBITER, sendNetChestOpen, sendNet
 import { saveSlotsToDB } from './save-state.js';
 import { sprite } from './player-sprite.js';
 import { DIR_DOWN } from './sprite.js';
-import { LOOT_POOLS, DEFAULT_LOOT, UR_CHEST_MAPS } from './data/loot-pools.js';
+import { pickLootEntry } from './data/loot-tables.js';
+import { isAreaMap } from './data/areas.js';
 
 const TILE_SIZE = 16;
 const BATTLE_FLASH_FRAMES = 65;
@@ -61,23 +62,15 @@ export function isHiddenTreasureTile(tileId) {
   return tileId >= HIDDEN_TREASURE_TILE_MIN && tileId <= HIDDEN_TREASURE_TILE_MAX;
 }
 
-// Pull from the area's existing chest pool. Ur maps without their own
-// LOOT_POOLS entry inherit map 114's pool (Ur defaults). Chest mimic tiers
-// are filtered out — a vase that spawns a battle would be off-tone.
-function rollHiddenTreasureLoot(mapId) {
-  let tiers = LOOT_POOLS[mapId];
-  if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
-  if (!tiers) tiers = DEFAULT_LOOT;
-  tiers = tiers.filter(t => !t.monster);
-  if (tiers.length === 0) return null;
-  const total = tiers.reduce((s, t) => s + t.weight, 0);
-  let roll = Math.random() * total;
-  let tier = tiers[0];
-  for (const t of tiers) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
-  return tier.pool[Math.floor(Math.random() * tier.pool.length)];
-}
+// Vase loot — the map's own table with mimic tiers dropped, because a vase is
+// "search here", not "spawn a battle".
+//
+// ⛔ WAS A LOCAL COPY of the resolve-and-pick loop, one of SIX across three
+// files. `data/loot-tables.js` owns it now; the only thing that was ever
+// different here is the `kind`.
+const rollHiddenTreasureLoot = (mapId) => pickLootEntry(mapId, 'vase');
 
-// Chest loot pools live in `./data/loot-pools.js` (imported above) so the
+// Chest loot tables live in `./data/loot-tables.js` (imported above) so the
 // server-side PvE economy arbiter can validate claims against the same
 // table. Crystal room (1004) is a boss room and has no chests. The data
 // file also exports a pure `rollLootEntry` that resolves gil to a single
@@ -85,31 +78,14 @@ function rollHiddenTreasureLoot(mapId) {
 // `{ gil: [min, max] }` tuple back so the caller can roll the amount
 // with the same RNG it uses for everything else.
 
-function rollLootEntry(mapId) {
-  // Ur interior maps (1-9, 147) don't have their own LOOT_POOLS entry; route
-  // them to the Ur overworld pool (114) so we don't fall through to
-  // DEFAULT_LOOT — that's the cave pool with a `{ monster: true }` mimic
-  // tier, which made Ur chests roll chest mimics (player bug-report
-  // 2026-05-23). v1.7.627.
-  // Locked-room chest (mapId 1010) draws from ANY altar floor — picks a
-  // random altar floorId (1000-1003), then uses that pool. So locked-room
-  // chests have a chance at deeper-floor loot the player hasn't reached
-  // yet. v1.7.675.
-  const _lootSide = sideRoomForMapId(mapId);
-  if (_lootSide?.kind === 'locked') {
-    const floors = normalFloorMapIds(_lootSide.dungeon);
-    mapId = floors[Math.floor(Math.random() * floors.length)];
-  }
-  let tiers = LOOT_POOLS[mapId];
-  if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
-  if (!tiers) tiers = DEFAULT_LOOT;
-  const total = tiers.reduce((s, t) => s + t.weight, 0);
-  let roll = Math.random() * total;
-  let tier = tiers[0];
-  for (const t of tiers) { if (roll < t.weight) { tier = t; break; } roll -= t.weight; }
-  if (tier.monster) return { monster: true };   // chest mimic — caller starts a battle
-  return tier.pool[Math.floor(Math.random() * tier.pool.length)];
-}
+// Chest loot. Returns the RAW entry — `{ gil: [min,max] }` stays a tuple so the
+// caller rolls the amount with the same RNG it uses for everything else.
+//
+// ⛔ WAS THE FIFTH COPY of the fallback chain. Locked-room redirection and the
+// area lookup both live in `data/loot-tables.js#lootTableFor` now, so the
+// client and the server's economy arbiter cannot disagree about what a chest
+// may contain.
+const rollLootEntry = (mapId) => pickLootEntry(mapId, 'chest');
 
 function encodeNumber(n) {
   const s = String(n);
@@ -174,7 +150,10 @@ function _stampChestTime(facedX, facedY) {
 // consumedTiles, so the fresh-from-ROM tilemap keeps its closed chest. Only
 // OPENED_CHEST mutations are touched; secret walls / rock puzzles never expire.
 export function expireResettableChests(mapId) {
-  if (!UR_CHEST_MAPS.has(mapId)) return;
+  // ⛔ TOWN maps, not "Ur's loot maps". These were the same hand-written Set
+  // carrying two unrelated meanings; the reset rule is about being a town, and
+  // `AREA_MAPS` is where that is declared.
+  if (!isAreaMap(mapId)) return;
   const consumed = ps.consumedTiles && ps.consumedTiles[mapId];
   if (!consumed) return;
   const times = (ps.consumedTilesAt && ps.consumedTilesAt[mapId]) || null;

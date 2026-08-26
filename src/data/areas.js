@@ -182,6 +182,27 @@ for (const a of AREAS) { SHIPPED_MAPS.add(a.head); for (const r of a.rooms.keys(
 /** Is this door destination a place we ship? Dungeon/world ids are not doors. */
 export function isShippedMap(mapId) { return SHIPPED_MAPS.has(mapId); }
 
+/**
+ * Every map that belongs to a town/castle area — head map and interiors.
+ *
+ * ⛔ THIS IS WHAT `UR_CHEST_MAPS` WAS. That was a hand-written Set of Ur's
+ * eleven map ids living in `data/loot-pools.js`, byte-for-byte identical to what
+ * this table already declares, and it carried TWO unrelated meanings at once:
+ * "which chests reset after 24h" (a town rule) and "which maps share Ur's loot"
+ * (a loot rule). Adding a room to Ur updated neither.
+ *
+ * The town-chest reset rule is this one. The loot rule is `AREA_LOOT` in
+ * data/loot-tables.js, keyed by area, and it is no longer Ur-only.
+ */
+export const AREA_MAPS = new Set();
+for (const a of AREAS) {
+  AREA_MAPS.add(a.head);
+  for (const mapId of a.rooms.keys()) AREA_MAPS.add(mapId);
+}
+
+/** Is this a town/castle map (as opposed to a generated dungeon floor)? */
+export function isAreaMap(mapId) { return AREA_MAPS.has(mapId); }
+
 /** Every map in a named area -> its roster location key. */
 export const ROSTER_LOC = new Map();
 for (const a of AREAS) {

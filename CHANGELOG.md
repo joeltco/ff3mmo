@@ -1,3 +1,103 @@
+## 1.10.92 — 2026-08-26
+
+### Loot is a registry now, not six copies of a fallback chain
+
+This chain was written **six times** — twice in `data/loot-pools.js`, twice in
+`src/map-triggers.js`, twice in `economy-arbiter.js`, client *and* server:
+
+```js
+let tiers = LOOT_POOLS[mapId];
+if (!tiers && UR_CHEST_MAPS.has(mapId)) tiers = LOOT_POOLS[114];
+if (!tiers) tiers = DEFAULT_LOOT;            // === LOOT_POOLS[1000]
+```
+
+`DEFAULT_LOOT` was **the Altar Cave's floor-1 table**. So every place nobody had
+written a table for handed out the opening dungeon's loot, mimic tier and all.
+`tools/valley-loot-audit.mjs` (new) walks every treasure tile the player can
+actually reach:
+
+| area | tiles | own table | Ur fallback | **Altar-Cave fallback** |
+|---|---|---|---|---|
+| Ur | 14 | 2 | 12 | 0 |
+| Kazus | 2 | 0 | 0 | **2** |
+| Castle Sasune | 11 | 0 | 0 | **11** |
+| Altar Cave | 12 | 12 | 0 | 0 |
+| Cave of Seals | 5 | 5 | 0 | 0 |
+| | **44** | 19 | 12 | **13** |
+
+**Thirteen treasure tiles — every one in Kazus and Castle Sasune — rolled the
+Altar Cave's floor-1 table.** A chest in the king's castle could turn into a
+goblin. Nobody designed that; it is what "fall back to `DEFAULT_LOOT`" means when
+nobody wrote a table.
+
+And `UR_CHEST_MAPS` was a hand-copy of `{1,2,3,4,5,6,7,8,9,114,147}` — byte for
+byte the map set `data/areas.js` already declares for Ur, carrying two unrelated
+meanings at once ("which chests reset after 24h" and "which maps share Ur's
+loot"). Add a room to Ur and neither updated.
+
+### `src/data/loot-tables.js`
+
+Tables are named after the **place** — `ur_town`, `altar_f1..f4`, `seals_f1..f3`
+— and a map finds its table through the registries that already say where a map
+belongs: `AREAS` for towns, `DUNGEONS` for floors. Nothing keyed by a bare map
+id, nothing special-cased by hand.
+
+- `lootTableFor(mapId)` — **the** resolver, including locked-room redirection
+- `pickLootEntry(mapId, kind)` — **the** picker; `kind` is `'chest'` or `'vase'`,
+  and that single flag is the entire difference the four copies encoded
+- `resolvedPoolFor(mapId, kind)` — the server's union, derived from the same
+  tables the client rolls, so the two halves cannot disagree about what a chest
+  may contain
+- `AREA_MAPS` / `isAreaMap()` move to `data/areas.js`, derived — that is the
+  town-chest-reset rule, which is what `UR_CHEST_MAPS` was really being used for
+  in `expireResettableChests`
+
+`src/data/loot-pools.js` is **deleted**, not shimmed.
+
+### Kazus and Castle Sasune are marked UNDESIGNED
+
+They have real chests and no table. They now get a town baseline — gil and
+consumables, **no mimic** — and `check-loot-tables` prints them every run so the
+debt is visible instead of silent.
+
+⛔ The fix is not to point them at a dungeon. That is the bug being removed.
+
+### `tools/check-loot-tables.mjs`
+
+Pins that the six copies are gone and `loot-pools.js` stays deleted, that no area
+borrows a dungeon table, that the UNDESIGNED fallback has no mimic tier, that
+every dungeon names one table per walkable floor, that vases never roll a mimic
+across 4000 rolls a map, and that **the server union accepts every roll the
+client can make** across 13 maps including locked rooms. Reverting the fallback
+fails it:
+
+```
+✗ the UNDESIGNED fallback contains a mimic tier — a chest in a castle could eat you
+```
+
+### `tools/valley-loot-audit.mjs`
+
+Every treasure tile in Ur, Kazus, the Mythril Mines, Castle Sasune, the Altar
+Cave and the Cave of Seals — filtered to tiles reachable from **that map's own
+entrance**, because FF3 packs several interiors per tilemap and without it Ur's
+magic shop, weapon shop and tavern all report the secret room's chests as theirs.
+
+It also records what the map property record actually holds: **16 bytes, of which
+ff3mmo reads eleven.** Byte 2 is the map name, byte 13 is a constant `$84`, and
+12/14/15 have never been read.
+
+⛔ The chest-index decode is **not settled** and is labelled a candidate in the
+output. The contents table at `0x3C10` is confirmed (matches
+`tools/rom-dump-chests.txt` byte for byte); byte 12 looks like a per-map base but
+neither candidate rule partitions the table — 49 and 48 collisions over 256 maps.
+Not quotable until a running game confirms it.
+
+### Not in this release
+
+The Cave of Seals loot **contents** are carried over unchanged and are still
+wrong — `docs/SEALED-CAVE-LOOT-PLAN.md` §1 measures why. This release is the
+plumbing; the contents are a separate decision and were not invented here.
+
 ## 1.10.91 — 2026-08-25
 
 ### The Djinn has an ice weakness and the game was throwing it away

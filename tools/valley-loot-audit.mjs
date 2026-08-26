@@ -55,7 +55,7 @@ applyIPS(rom, new Uint8Array(fs.readFileSync(R + 'patches/ff3-awj.ips')));
 const td = await import(R + 'src/text-decoder.js');
 td.initTextDecoder(rom);
 const { loadMap } = await import(R + 'src/map-loader.js');
-const { LOOT_POOLS, UR_CHEST_MAPS } = await import(R + 'src/data/loot-pools.js');
+const { lootTableFor } = await import(R + 'src/data/loot-tables.js');
 const { applyPassageForTools, spawnOf } = await import(R + 'tools/lib/spawn.mjs');
 const { ITEMS } = await import(R + 'src/data/items.js');
 const { SHOPS } = await import(R + 'src/data/shops.js');
@@ -124,13 +124,13 @@ const AREAS = [
 // ff3mmo's dungeon maps are GENERATED, so their ROM counterpart is the donor.
 const { DUNGEONS, normalFloorMapIds } = await import(R + 'src/data/dungeons.js');
 const ourPoolFor = (romMapId) => {
+  // A generated dungeon floor's ROM counterpart is its donor map.
   for (const d of DUNGEONS) {
     const i = (d.romFloorMaps || []).indexOf(romMapId);
-    if (i >= 0) return { pool: LOOT_POOLS[d.base + i], label: `LOOT_POOLS[${d.base + i}]` };
+    if (i >= 0) { const r = lootTableFor(d.base + i, () => 0); return { label: r.name + (r.designed ? '' : ' ⚠') }; }
   }
-  if (LOOT_POOLS[romMapId]) return { pool: LOOT_POOLS[romMapId], label: `LOOT_POOLS[${romMapId}]` };
-  if (UR_CHEST_MAPS && UR_CHEST_MAPS.has && UR_CHEST_MAPS.has(romMapId)) return { pool: LOOT_POOLS[114], label: 'LOOT_POOLS[114] (Ur fallback)' };
-  return { pool: null, label: 'DEFAULT_LOOT = LOOT_POOLS[1000] (Altar Cave floor 1!)' };
+  const r = lootTableFor(romMapId, () => 0);
+  return { label: r.designed ? r.name : 'UNDESIGNED ⚠ (no table written for this place)' };
 };
 
 const out = [];

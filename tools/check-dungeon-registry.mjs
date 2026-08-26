@@ -33,7 +33,7 @@ const ok = (cond, msg) => { if (!cond) fails.push(msg); };
 const BANNED = [1000, 1001, 1002, 1003, 1004, 1010, 1011, 1020, 1021];
 const GUARDED = [
   'src/dungeon-generator.js', 'src/map-loading.js', 'src/map-triggers.js',
-  'src/roster.js', 'src/battle-encounter.js', 'src/data/loot-pools.js',
+  'src/roster.js', 'src/battle-encounter.js', 'src/data/loot-tables.js',
   'src/dungeon-locked-room.js', 'src/dungeon/boss-chamber.js', 'src/main.js',
 ];
 // ⛔ NAMES COUNT TOO, NOT JUST NUMBERS. The number guard below let a hardcoded
@@ -138,7 +138,7 @@ ok(R.rosterLocFor(3010) === R.rosterLocFor(3001),
 // all exist — a typo'd prefix silently falls back to `RATE_STEPS.normal` and the
 // floor rolls nothing rather than throwing.
 const { ENCOUNTERS } = await import('../src/data/encounters.js');
-const { LOOT_POOLS } = await import('../src/data/loot-pools.js');
+const { lootTableFor } = await import('../src/data/loot-tables.js');
 const { TRACKS } = await import('../src/music.js');
 const { battleBgIdForMap, BATTLE_BG_COUNT } = await import('../src/battle-bg.js');
 const romForBg = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || 'FF3-English.nes'));
@@ -156,8 +156,13 @@ for (const d of DUNGEONS) {
     const z = ENCOUNTERS.get(key);
     ok(z && z.formations && z.formations.length > 0, `zone '${key}' has no formations`);
   }
+  // ⛔ Every walkable floor must resolve to a DESIGNED table. `lootTableFor`
+  // never returns nothing — an unmapped floor lands on the town baseline — so
+  // asserting "a table exists" would pass on the very fall-through this checks
+  // for. The `designed` flag is the honest question.
   for (const mapId of normalFloorMapIds(d)) {
-    ok(!!LOOT_POOLS[mapId], `LOOT_POOLS has no entry for ${d.id} floor map ${mapId} — chests fall back to DEFAULT_LOOT`);
+    const t = lootTableFor(mapId, () => 0);
+    ok(t.designed, `${d.id} floor map ${mapId} has no loot table of its own — it falls back to '${t.name}'`);
   }
   ok(TRACKS[d.music.floors] !== undefined, `dungeon '${d.id}' names track '${d.music.floors}', which is not in TRACKS`);
   ok(TRACKS[d.music.boss] !== undefined, `dungeon '${d.id}' names boss track '${d.music.boss}', which is not in TRACKS`);
