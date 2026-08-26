@@ -147,6 +147,11 @@ for (const [area, ids] of AREAS) {
     // Only tiles reachable ON FOOT FROM THIS MAP'S OWN ENTRANCE count. Same
     // method `check-npc-room` uses, through the SHARED helpers — a hand-copied
     // spawn rule has been wrong four times in this repo already.
+    // ⭐ `processTriggerTiles` does NOT mutate the tilemap — it returns a Map and
+    // leaves the original tile ids in place (map-loader.js#processTriggerTiles).
+    // So the tile id is still readable. Snapshot it anyway BEFORE
+    // `applyPassageForTools`, which DOES rewrite tiles ($5B/$5C -> $5D/$5E).
+    const rawTiles = Uint8Array.from(md.tilemap);
     applyPassageForTools(md);
     const reach = reachableFrom(md);
     const spots = [];
@@ -154,7 +159,15 @@ for (const [area, ids] of AREAS) {
       if (t.type !== 2) continue;
       const [x, y] = xy.split(',').map(Number);
       if (!reach.has(y * 32 + x)) continue;
-      spots.push({ x, y, trigId: t.trigId });
+      // ⛔ TYPE 2 IS TWO DIFFERENT THINGS. `map-loader.js#TRIGGER_TYPE_TABLE`
+      // marks BOTH `$78-$7B` (hidden-treasure vases — "search here", no visible
+      // chest) and `$7C` (a real chest) as type 2. They roll different tables
+      // (`kind: 'vase'` drops the mimic tiers) and they are different content.
+      // Counting them together reports a town's secret spots as chests.
+      // `processTriggerTiles` REWRITES the tilemap, so the original tile has to
+      // come off the pristine copy.
+      const tile = rawTiles[y * 32 + x];
+      spots.push({ x, y, trigId: t.trigId, tile, vase: tile >= 0x78 && tile <= 0x7B });
     }
     spots.sort((a, b) => a.trigId - b.trigId);
     if (!spots.length) continue;
@@ -169,7 +182,8 @@ for (const [area, ids] of AREAS) {
     out.push({ area, mapId, base, spots: rows, ourPool: label });
 
     if (AS_JSON) continue;
-    console.log(`\n  map ${String(mapId).padStart(3)}   ${spots.length} treasure tile(s)   chest base $${base.toString(16).padStart(2, '0')}`);
+    const nChest = rows.filter((r) => !r.vase).length, nVase = rows.filter((r) => r.vase).length;
+    console.log(`\n  map ${String(mapId).padStart(3)}   ${nChest} chest(s), ${nVase} hidden spot(s)   chest base $${base.toString(16).padStart(2, '0')}`);
     console.log(`      ff3mmo rolls from: ${label}`);
     for (const r of rows) {
       const flags = [];
