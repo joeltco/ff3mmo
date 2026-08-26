@@ -523,7 +523,18 @@ valley.
 
 ## 11. Carried out of v1.10.89 / v1.10.90 — OPEN
 
-0. ⚠ **THE DJINN IS UNBEATABLE AT THE LEVEL CAP.** Fixed in v1.10.90 is the
+0. ✅ **RESOLVED v1.10.91 — he was never unbeatable.** The Djinn's ice weakness
+   was in our bestiary and no boss-path branch read it; with one Blizzara caster
+   the party wins 98.7% in 3.3 turns. No stats were tuned. The stale analysis is
+   kept below because the SHAPE of the mistake is worth keeping: a boss that is
+   "too hard" may be a boss whose counterplay does not function.
+
+   ⚠ **BEFORE THE INVERSION LANDS:** Kazus's black magic shop sells the ice
+   scroll. Its keeper comes from `map-loading.js`, not `TOWN_NPCS`, so gating the
+   weapon/armor/inn keepers does not hide it — but re-check, because a cursed
+   town that hides its only ice vendor deadlocks the Djinn.
+
+   ~~**THE DJINN IS UNBEATABLE AT THE LEVEL CAP.**~~ Fixed in v1.10.90 is the
    *identity* — `battleSt.bossId` was never assigned, so every boss chamber
    fought the Land Turtle and `kazus_sealed_cave` could not advance. The boss is
    now the right one, and `tools/battle-sim.js` at 200 runs says:
