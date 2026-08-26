@@ -403,8 +403,14 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
     // neutral damage where the PLAYER with the same weapon gets the weakness
     // multiplier. Per hand, matching how the player's path rolls each hand with
     // its own element.
-    const _aWeak = monTgt ? monTgt.weakness : null;
-    const _aRes  = monTgt ? monTgt.resist : (pvpTgt ? pvpTgt.elemResist : null);
+    // ⛔ The BOSS branch (no monTgt, no pvpTgt) fell through to null/null, so an
+    // ally swinging an ice blade at a fire genie dealt flat damage while the
+    // player beside them — after the same fix in input-handler.js — did not.
+    // The v1.7.860 note below is about the ally path missing `elemMult`
+    // entirely; this is the same omission one branch over.
+    const _aBoss = (!monTgt && !pvpTgt) ? activeBossStats() : null;
+    const _aWeak = monTgt ? monTgt.weakness : (_aBoss ? _aBoss.weakness : null);
+    const _aRes  = monTgt ? monTgt.resist : (pvpTgt ? pvpTgt.elemResist : (_aBoss ? _aBoss.resist : null));
     const _aElem = (id) => elemMultiplier(isWeapon(id) ? (ITEMS.get(id)?.element || null) : null, _aWeak, _aRes);
     battleSt.allyHitResults = rollHits(allyMainAtk, targetDef, allyHitRate, potentialHits, {
       critPct: _allyJob.critPct || 0,
@@ -412,7 +418,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       elemMult:  _aElem(dualWield ? _aGrip.weaponR : (aRw ? _aGrip.weaponR : _aGrip.weaponL)),
       lElemMult: _aElem(_aGrip.weaponL),
       shieldEvade: pvpTgt ? (pvpTgt.shieldEvade || 0) : 0,
-      evade: monTgt ? (monTgt.evade || 0) : pvpTgt ? (pvpTgt.evade || 0) : 0,
+      evade: monTgt ? (monTgt.evade || 0) : pvpTgt ? (pvpTgt.evade || 0) : (_aBoss ? (_aBoss.evade || 0) : 0),
       defendHalve: oppDefending,
       lAtk: allyLAtk,
       splitRH: dualWield,

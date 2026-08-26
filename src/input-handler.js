@@ -272,10 +272,18 @@ function _battleTargetConfirm() {
       // any time the defender uses Defend. See
       // docs/MULTIPLAYER-AUDIT-2026-05-15.md #1.
       const oppDefending = tgt === pvpSt.pvpOpponentStats && !!pvpSt.pvpOpponentIsDefending;
+      // ⛔ THE BOSS HAS A WEAKNESS AND AN EVADE, and this branch passed neither.
+      // The encounter branch right above sends `elemMult` and `evade` from the
+      // monster; the boss got flat neutral damage and never dodged, because
+      // "the boss has no monster object". It has a bestiary RECORD —
+      // `activeBossStats()` — and an ice weapon should bite a fire genie the
+      // same way an ice spell does.
+      const _bossTgt = tgt ? null : activeBossStats();
       return rollHits(handAtk, targetDef, handHit, hitsPerHand, {
         ...critOpts,
+        elemMult: _bossTgt ? elemMultiplier(handElem, _bossTgt.weakness, _bossTgt.resist) : 1,
         shieldEvade: tgt ? (tgt.shieldEvade || 0) : 0,
-        evade: tgt ? (tgt.evade || 0) : 0,
+        evade: tgt ? (tgt.evade || 0) : (_bossTgt ? (_bossTgt.evade || 0) : 0),
         defendHalve: oppDefending,
       });
     }

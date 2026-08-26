@@ -129,5 +129,70 @@ for (const quest of Object.values(QUESTS)) {
 }
 ps.quests = {}; ps.flags = {};
 
+// ── 5. the boss's ELEMENT reaches the damage math ─────────────────────────
+//
+// ⛔ THE BOSS WAS NOT A COMBATANT. Every boss-path branch in the game skipped
+// the bestiary record's element fields on the grounds that "the boss has no
+// monster object" — it has no monster object, but it has a RECORD, and that is
+// where `weakness` / `resist` / `evade` / `mdef` / `atkElem` live.
+//
+// The Djinn is the case that exposed it. His record says `weakness: 'ice',
+// resist: 'fire'` and the cartridge says so out loud in script 0x07c: "The Djinn
+// is a fire genie. It won't like the cold." With the multiplier dropped, ice did
+// flat damage to him and Fire did FULL damage to a fire genie. battle-sim at the
+// level cap: 0% party wins without the weakness, 98.7% with one ice caster.
+//
+// The fight was never too hard. The counterplay did not function.
+{
+  const { elemMultiplier } = await import('../src/battle-math.js');
+  const seals = DUNGEONS.find((d) => d.bossId === 0xCD);
+  if (seals) {
+    mapSt.currentMapId = bossFloorMapId(seals);
+    startBattle();
+    const b = activeBossStats();
+    if (b.weakness !== 'ice' || b.resist !== 'fire') {
+      bad(`the Djinn's record lost its elements: weakness=${b.weakness} resist=${b.resist}`);
+    } else ok("activeBossStats carries the Djinn's ice weakness and fire resist");
+
+    const ice = elemMultiplier('ice', b.weakness, b.resist);
+    const fire = elemMultiplier('fire', b.weakness, b.resist);
+    if (!(ice > 1)) bad(`ice on the Djinn multiplies by ${ice} — the weakness is not being applied`);
+    else ok(`ice on the Djinn multiplies by ${ice}`);
+    if (!(fire < 1)) bad(`fire on the Djinn multiplies by ${fire} — a fire genie is not resisting fire`);
+    else ok(`fire on the Djinn multiplies by ${fire}`);
+  }
+}
+
+// ── 6. every boss-path branch actually passes it through ─────────────────
+//
+// ⛔ SOURCE CHECK, DELIBERATELY. The four branches below live behind battle
+// state a headless harness cannot easily reach, and the failure mode is a branch
+// QUIETLY not passing a field — which no amount of driving the OTHER branch
+// would reveal. Read on STRIPPED text so a comment naming the symbol cannot
+// satisfy it; that is exactly how an early cut of `audit-quests` passed against
+// a reverted fix.
+{
+  const fs = await import('node:fs');
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const src = (rel) => strip(fs.readFileSync(new URL('../' + rel, import.meta.url).pathname, 'utf8'));
+
+  const sites = [
+    ['src/spell-cast.js', /isBoss\)\s*\{[\s\S]{0,900}?elemMultiplier\(\s*spell\.element/,
+      'a spell on the boss applies the element multiplier'],
+    ['src/spell-cast.js', /isBoss\)\s*\{[\s\S]{0,900}?mdef/,
+      "a spell on the boss subtracts the boss's mdef"],
+    ['src/input-handler.js', /_bossTgt[\s\S]{0,400}?elemMult:[\s\S]{0,120}?elemMultiplier/,
+      "the player's weapon element applies to the boss"],
+    ['src/battle-turn.js', /_aBoss\s*=[\s\S]{0,400}?_aWeak[\s\S]{0,200}?_aBoss/,
+      "an ally's weapon element applies to the boss"],
+    ['src/battle-enemy.js', /monAtkElem\s*=[\s\S]{0,160}?activeBossStats\(\)\.atkElem/,
+      "the boss's own attacks carry its element"],
+  ];
+  for (const [file, re, what] of sites) {
+    if (re.test(src(file))) ok(what);
+    else bad(`${what} — not found in ${file}; that branch drops the bestiary record`);
+  }
+}
+
 console.log(failed ? `\ncheck-boss-identity: ${failed} FAILED` : '\ncheck-boss-identity: OK');
 process.exit(failed ? 1 : 0);

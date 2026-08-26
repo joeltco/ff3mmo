@@ -1,3 +1,68 @@
+## 1.10.91 — 2026-08-25
+
+### The Djinn has an ice weakness and the game was throwing it away
+
+Joel: *"shouldn't be unbeatable. djinn has an ice weakness... right?"* He does,
+and the cartridge says so out loud — script `0x07c`:
+
+> "Sara: The Djinn is a fire genie. It won't like the cold."
+
+Our own bestiary already had it: `weakness: 'ice'`, `resist: 'fire'`,
+`atkElem: 'fire'`, `attacks: ['Fire']`. **Nothing in a boss fight read any of
+it.**
+
+Every boss-path branch skipped the record on the grounds that *"the boss has no
+monster object"* — `_getEnemyAt` returns `null` for the boss and says so in a
+comment. It has no monster object; it has a **bestiary record**, and that is
+where `weakness` / `resist` / `evade` / `mdef` / `atkElem` live. Four branches
+dropped it:
+
+| where | what was lost |
+|---|---|
+| `spell-cast.js` boss branch | `const dmg = Math.max(1, amount)` — raw spell damage, no element, no mdef |
+| `input-handler.js` boss branch | no `elemMult`, no `evade` — the encounter branch one line up passes both |
+| `battle-turn.js` ally path | `_aWeak`/`_aRes` fell through to `null`/`null` |
+| `battle-enemy.js` | `monAtkElem` null, so a fire genie swung an elementless blow |
+
+So ice did flat damage to the Djinn, and **Fire did full damage to a fire
+genie**. The spell branch now mirrors `combatant-cast.js#applyMagicDamage`
+exactly — same order, same clamp.
+
+### The fight was never too hard
+
+`tools/battle-sim.js`, at the level cap:
+
+| party | party wins | turns | dmg/turn dealt |
+|---|---|---|---|
+| KN5 KN5 WM5 BM5, physical only | **0%** | 9.4 | 29.1 |
+| the same party, one Blizzara caster | **98.7%** | 3.3 | 162.8 |
+
+v1.10.90 called the Djinn unbeatable and left the balance open. He was never
+unbeatable — the counterplay just did not function. **No stats were tuned.**
+
+And the loop is well formed: Kazus's black magic shop sells scroll `0xE1`
+(Blizzard, spell `0x32`) for 100 gil. The cursed town sells the element that
+lifts its own curse.
+
+### `check-boss-identity` grew a second half
+
+Asserts the Djinn's record still carries the elements, that `elemMultiplier`
+gives ×2 for ice and ×0.5 for fire, and that **each of the four branches passes
+it through** — read on comment-stripped source, because these live behind battle
+state a headless harness cannot easily reach and the failure mode is a branch
+QUIETLY not passing a field. Reverting the spell branch fails it:
+
+```
+✗ a spell on the boss applies the element multiplier — that branch drops the bestiary record
+✗ a spell on the boss subtracts the boss's mdef — that branch drops the bestiary record
+```
+
+⚠ **Note for the cursed-town inversion.** Kazus's weapon, armor and inn keepers
+are the ones the curse hides; the MAGIC shop is staffed from `map-loading.js`,
+not `TOWN_NPCS`, so gating the others does not take the ice source away. Worth
+re-checking before that lands — a cursed town that hides the only ice vendor
+would deadlock the Djinn.
+
 ## 1.10.90 — 2026-08-25
 
 ### Every boss in the game was the Land Turtle

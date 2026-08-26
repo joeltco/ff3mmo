@@ -214,7 +214,11 @@ function _processEnemyFlash() {
   // battle-state.js on why the constant was the wrong answer for six versions.
   const atk = Math.floor((mon ? mon.atk : activeBossStats().atk) * _atkMult);
   const rolls = mon ? (mon.attackRoll || 1) : 1;
-  const monAtkElem = mon ? (mon.atkElem || null) : null;
+  // ⛔ The boss's attack element. `mon` is null in the boss fight, so the Djinn —
+  // whose record says `atkElem: 'fire'` and whose only listed attack IS Fire —
+  // swung an ELEMENTLESS blow, and a player in fire-resistant gear got no
+  // benefit from it. The record has the field; the boss path just never read it.
+  const monAtkElem = mon ? (mon.atkElem || null) : (activeBossStats().atkElem || null);
   // NES multi-hit: roll attackRoll times, per-hit shield/evade/hitRate checks
   function rollMultiHit(def, targetResist, shieldEvade = 0, armorEvade = 0) {
     const eMult = elemMultiplier(monAtkElem, null, targetResist);

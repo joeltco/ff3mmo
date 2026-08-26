@@ -5,7 +5,7 @@
 // legacy 1100 ms timing; captured spells (Cure, Poisona, Sight, Fire) use the
 // CAST_PHASE_MS model from cast-anim.js (~1667 ms).
 
-import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, setActiveCast, clearActiveCast } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, setActiveCast, clearActiveCast, activeBossStats } from './battle-state.js';
 import { ps } from './player-stats.js';
 import { inputSt } from './input-handler.js';
 import { SFX, playSFX } from './music.js';
@@ -602,7 +602,24 @@ function _applyEnemyEffect(idx, spell) {
       _setEnemyDmg(idx, 0, true);
       return;
     }
-    const dmg = Math.max(1, amount);
+    // ⛔ ELEMENT AND MDEF, exactly as `applyMagicDamage` does them. This branch
+    // used to be `Math.max(1, amount)` — raw spell damage — because "the boss
+    // has no monster object". It has a bestiary RECORD, which is where those
+    // fields live; `activeBossStats()` returns it.
+    //
+    // The Djinn is the case that exposed it. His record says
+    // `weakness: 'ice', resist: 'fire'`, and the cartridge tells you so out loud
+    // (script 0x07c — "The Djinn is a fire genie. It won't like the cold"). With
+    // the multiplier dropped, ice did flat damage and a fire genie took FULL
+    // damage from Fire. Measured with battle-sim at the level cap: 0% party wins
+    // without the weakness, 98.7% with it. The fight was never too hard — the
+    // counterplay just did not function.
+    //
+    // ⛔ MIRRORS combatant-cast.js#applyMagicDamage, same order, same clamp.
+    // Do not "simplify" one without the other.
+    const _boss = activeBossStats();
+    const eMult = elemMultiplier(spell.element, _boss.weakness, _boss.resist);
+    const dmg = Math.max(1, Math.floor(amount * eMult) - (_boss.mdef || 0));
     setEnemyHP(Math.max(0, getEnemyHP() - dmg));
     _setEnemyDmg(idx, dmg, false);
     battleSt.battleShakeTimer = BATTLE_SHAKE_MS;
