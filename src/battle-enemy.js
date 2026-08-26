@@ -1,7 +1,7 @@
 // Battle enemy turn update logic — extracted from game.js
 
 import { battleSt, getEnemyHP, setEnemyHP,
-         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, BOSS_ATK,
+         BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS, BOSS_PREFLASH_MS, BOSS_ATK, activeBossStats,
          setEnemyAttackerTarget } from './battle-state.js';
 import { dispatchDelta } from './deltas.js';
 import { calcDamage, elemMultiplier, BOSS_HIT_RATE, GOBLIN_HIT_RATE } from './battle-math.js';
@@ -209,7 +209,10 @@ function _processEnemyFlash() {
   // the toggle-status spells that inflict those could never land — which is
   // exactly why it went unnoticed.
   const _atkMult = (mon && mon.status) ? miniToadAtkMult(mon.status) : 1;
-  const atk = Math.floor((mon ? mon.atk : BOSS_ATK) * _atkMult);
+  // ⛔ `activeBossStats()`, not the module constant. No `mon` means this is the
+  // boss fight, and which boss that is depends on the dungeon — see the note in
+  // battle-state.js on why the constant was the wrong answer for six versions.
+  const atk = Math.floor((mon ? mon.atk : activeBossStats().atk) * _atkMult);
   const rolls = mon ? (mon.attackRoll || 1) : 1;
   const monAtkElem = mon ? (mon.atkElem || null) : null;
   // NES multi-hit: roll attackRoll times, per-hit shield/evade/hitRate checks

@@ -1,6 +1,6 @@
 // Battle turn order + turn dispatch — extracted from game.js
 
-import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, setActiveCast } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, BATTLE_SHAKE_MS, BOSS_DEF, BOSS_MAX_HP, activeBossStats, setActiveCast } from './battle-state.js';
 import { rollHits, calcPotentialHits, rollInitiative, resolveLivingTarget, elemMultiplier } from './battle-math.js';
 import { rand } from './rng.js';
 import { BATTLE_RAN_AWAY, BATTLE_CANT_ESCAPE, BATTLE_ALLY } from './data/strings.js';
@@ -367,7 +367,7 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
           ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats)
           : pvpSt.pvpOpponentStats)
       : null;
-    const targetDef = monTgt ? monTgt.def : pvpTgt ? pvpTgt.def : BOSS_DEF;
+    const targetDef = monTgt ? monTgt.def : pvpTgt ? pvpTgt.def : activeBossStats().def;
     // Unarmed = dual fists (same as player path) → 2x hits.
     // v1.7.859 — normalise first; a two-hander blanks the offhand, so the
     // per-hand ATK split below strips the right weapon out of the display sum.
@@ -943,7 +943,7 @@ function _playerTurnConsumable() {
       battleSt.itemHealAmount = heal;
     } else {
       const curHP = getEnemyHP();
-      const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : BOSS_MAX_HP;
+      const maxHP = pvpSt.isPVPBattle ? (pvpSt.pvpOpponentStats ? pvpSt.pvpOpponentStats.maxHP : 1) : activeBossStats().hp;
       const heal = Math.min(power, maxHP - curHP);
       setEnemyHP(curHP + heal); battleSt.itemHealAmount = heal; setEnemyHealNum({ value: heal, timer: 0, index: 0 });
     }

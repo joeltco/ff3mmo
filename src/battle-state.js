@@ -180,9 +180,28 @@ export function getActiveCast() {
 // Boss constants (Adamantoise — `DEFAULT_BOSS_ID`). Module-level, so these are
 // the DEFAULT boss's numbers; a per-encounter boss sets `battleSt.bossId` and the
 // reward path reads that.
+//
+// ⛔ THESE ARE THE FALLBACK, NOT THE FIGHT. Every battle-time path must go
+// through `activeBossStats()` below. Until v1.10.90 they WERE the fight:
+// `startBattle()` assigned `enemyHP = BOSS_MAX_HP` and nothing ever wrote
+// `battleSt.bossId`, so EVERY boss in the game was the Land Turtle — the Cave of
+// Seals showed the Djinn's sprite, its loading screen advertised his 480 HP off
+// the dungeon registry, and the thing you actually fought had 120. The registry
+// had carried `bossId: 0xCD` since v1.10.55 with no consumer.
 export const BOSS_ATK = _BOSS_DATA.atk;
 export const BOSS_DEF = _BOSS_DATA.def;
 export const BOSS_MAX_HP = _BOSS_DATA.hp;
+
+/**
+ * The stats of the boss THIS battle is against.
+ *
+ * `battleSt.bossId` is set per-encounter by `startBattle()` from the dungeon
+ * registry. An unknown id falls back to the default boss rather than to zeroes —
+ * a boss with 0 HP dies to the intro flash.
+ */
+export function activeBossStats() {
+  return MONSTERS.get(battleSt.bossId ?? DEFAULT_BOSS_ID) || _BOSS_DATA;
+}
 
 // Battle timing constants
 export const BATTLE_SHAKE_MS = 300;

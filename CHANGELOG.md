@@ -1,3 +1,66 @@
+## 1.10.90 — 2026-08-25
+
+### Every boss in the game was the Land Turtle
+
+`battleSt.bossId` was **read in three places and assigned in none.**
+`startBattle()` set `enemyHP = BOSS_MAX_HP`, a module constant built from
+`DEFAULT_BOSS_ID` at import time. So whichever dungeon you were in, the thing you
+fought was Adamantoise: the Cave of Seals drew the Djinn's sprite, its loading
+screen advertised his 480 HP straight off the dungeon registry, and the boss on
+the field had 120 and answered to `0xCC`.
+
+The registry has carried `bossId: 0xCD` since v1.10.55 with no consumer, and
+`data/bosses.js` had documented the intent for just as long:
+
+> "For the reward path, prefer `battleSt.bossId` — it defaults to this and is
+> what a second boss would set per-encounter."
+
+Nothing ever set it. A field decoded and not wired is not done.
+
+**It also broke the quest shipped one version ago.** `kazus_sealed_cave`'s
+objective is `{ kind: 'boss', bossId: 0xCD }`, and `noteBossDefeated` reported
+`0xCC` from inside the Djinn's own chamber, so the quest could never advance —
+the same shape of bug v1.10.89 was written to kill, one layer further down.
+
+`startBattle()` now resolves the boss from the dungeon registry and assigns it
+**every entry** (`resetBattleVars` does not clear it, so a Seals fight followed by
+an Altar Cave fight would otherwise keep the Djinn). Battle-time reads of the
+boss's HP/ATK/DEF go through a new `activeBossStats()` instead of the module
+constants, in `battle-enemy.js`, `battle-turn.js` and `input-handler.js`.
+
+### `tools/check-boss-identity.mjs`
+
+Drives the shipped `startBattle()` into each dungeon's boss chamber and checks
+the id, the HP on the field, and `activeBossStats()` against the bestiary — then
+hands the exact expression `battle-update.js` passes on boss death to the quest
+runtime and requires the objective to advance. It also guards itself: if two
+dungeons ever share a boss, it says so, because it could not tell them apart.
+
+Reverted, it fails with the consequence spelled out:
+
+```
+✗ seals: fought bossId 0xcc, registry says 0xcd
+✗ seals: boss entered the fight with 120 HP, bestiary says 480
+✗ kazus_sealed_cave/seal: beating the boss in Cave of Seals did NOT advance it
+```
+
+### ⚠ The Djinn is now unbeatable, and that is a separate decision
+
+`tools/battle-sim.js`, 200 runs each at the level cap:
+
+| boss | HP | atk | party wins | turns | damage taken/turn |
+|---|---|---|---|---|---|
+| Land Turtle `0xCC` | 120 | 9 | 100% | 2.7 | 3.3 |
+| **Djinn `0xCD`** | **480** | **16** | **0%** | 9.4 | **29.6** |
+
+Four Knights at `MAX_LEVEL` win **2%** of the time. The party gets him to roughly
+half HP and dies. `docs/CAVE-OF-SEALS-PLAN.md` said "what is left is BALANCE,
+which nothing has measured" — this measures it.
+
+**Not tuned here.** The identity wiring is correct on its own terms and the
+loading screen was already advertising these numbers; what to do about a
+ROM-statted boss in a game that caps at level 5 is a design call, not a bug fix.
+
 ## 1.10.89 — 2026-08-25
 
 ### Quests are stages now, and one of the three was dead

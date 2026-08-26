@@ -1,6 +1,6 @@
 // input-handler.js — battle, roster, and pause menu input handlers
 
-import { battleSt, getEnemyHP, setEnemyHP } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, activeBossStats } from './battle-state.js';
 import { playSFX, SFX } from './music.js';
 import { pauseSt } from './pause-menu.js';
 import { transSt } from './transitions.js';
@@ -264,7 +264,7 @@ function _battleTargetConfirm() {
             ? (pvpSt.pvpEnemyAllies[pvpSt.pvpPlayerTargetIdx] || pvpSt.pvpOpponentStats)
             : pvpSt.pvpOpponentStats)
         : null;
-      const targetDef = tgt ? tgt.def : BOSS_DEF;
+      const targetDef = tgt ? tgt.def : activeBossStats().def;
       // Wire-PvP — when attacking the main opp, halve damage if their wire-
       // delivered 'defend' action set `pvpOpponentIsDefending`. Without this
       // the sender computes the full-damage value while the receiver's

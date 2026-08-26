@@ -1,7 +1,8 @@
 // battle-update.js — battle state machine: opening, player attack, defend/item,
 // run, boss dissolve, victory, defeat, and main updateBattle() loop.
 
-import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP,
+import { dungeonForMapId } from './data/dungeons.js';
+import { battleSt, getEnemyHP, setEnemyHP, BOSS_MAX_HP, activeBossStats,
          BATTLE_SHAKE_MS, MONSTER_DEATH_MS, BATTLE_TEXT_STEPS, BATTLE_TEXT_STEP_MS,
          RUN_SLIDE_MS } from './battle-state.js';
 import { inputSt } from './input-handler.js';
@@ -163,7 +164,18 @@ export function startBattle() {
   battleSt.battleTimer = 0;
   showMsgBox(BATTLE_ROAR, () => { battleSt.battleState = 'flash-strobe'; battleSt.battleTimer = 0; playSFX(SFX.BATTLE_SWIPE); });
   resetBattleVars();
-  battleSt.enemyHP = BOSS_MAX_HP;
+  // ⭐ WHICH boss. `battleSt.bossId` is what the reward path, the quest
+  // `boss` objective and `activeBossStats()` all read, and until v1.10.90
+  // NOTHING EVER ASSIGNED IT — so every boss chamber in the game fought the
+  // Land Turtle's numbers under whatever sprite the dungeon drew, and
+  // `noteBossDefeated` reported 0xCC from the Cave of Seals. The registry has
+  // carried the right id per dungeon since v1.10.55.
+  //
+  // ⛔ ASSIGNED EVERY TIME, not once. `resetBattleVars` does not clear it, so a
+  // Seals fight followed by an Altar Cave fight would otherwise keep the Djinn.
+  const _dungeon = dungeonForMapId(mapSt.currentMapId);
+  battleSt.bossId = (_dungeon && _dungeon.bossId != null) ? _dungeon.bossId : DEFAULT_BOSS_ID;
+  battleSt.enemyHP = activeBossStats().hp;
   playSFX(SFX.EARTHQUAKE);
   // Seed party + room allies AT battle inception so they're on the field
   // during the intro instead of fading in after the player's first action.
