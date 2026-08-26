@@ -116,6 +116,7 @@ Before writing new code, read the relevant `docs/design-notes.md` section. Each 
 | A new shop or shop catalog | `design-notes#shops` | `src/data/shops.js` (counter coords + `mapId`), `src/shop.js`, `src/movement.js` (`handleAction` counter lookup). **Server-validated under `SERVER_ECONOMY` (LIVE v1.7.779)** — `economy-arbiter.js#validateShopTransaction` checks the catalog + price + mirror gil; `src/shop.js` routes through `sendNetShopTransaction` when the flag is on. See `design-notes#pve-arbiter-economy-validation`. |
 | A new battle sprite / job pose | `design-notes#battle-sprite-pattern` + PPU capture process below | `src/sprite-init.js`, `src/combatant-sprites.js` (`getJobPoseTileBundle`, `_genericBundle`), `src/data/<job>-sprites.js` |
 | A new monster or fix monster stats | `design-notes#monster-data` | Run `node tools/gen-monsters-js.js > src/data/monsters.js` — **do not hand-edit `monsters.js`** |
+| A chest / vase loot table | `docs/BEGINNER-VALLEY-LOOT-AUDIT.md` | **`src/data/loot-tables.js` is the single source.** Tables are named after the PLACE (`ur_town`, `kazus_tier`, `altar_f1..f4`, `seals_f1..f3`) and a map finds its table through `AREAS` / `DUNGEONS` — ⛔ never keyed by a bare mapId, never a hand-listed map set. `lootTableFor` / `pickLootEntry(mapId, 'chest'\|'vase')` / `resolvedPoolFor` (the server's union). These replaced SIX copies of `LOOT_POOLS[mapId] -> UR_CHEST_MAPS -> DEFAULT_LOOT` across client AND server, where `DEFAULT_LOOT` was the Altar Cave's floor-1 table — so 13 treasure tiles in Kazus and Sasune rolled the opening dungeon's loot, mimic tier included. ⭐ Chests sit **AT shop tier** (Joel, v1.10.94) — that is what FF3 does; ⛔ do NOT reintroduce "a chest never offers what a shop stocks", which was invented and is disproven by the cartridge. A boss drop is `bossDrop: {item, rate}` on the DUNGEON REGISTRY row — `monsters.js` is generated, FF3 gives bosses rate 0, and the encounter drop roll never sees a boss. Gate: `check-loot-tables` (green, not yet in deploy.sh). |
 | A chest loot pool / item drop | `design-notes#loot-drops` | `LOOT_POOLS` lives in `src/data/loot-pools.js` (Node-clean shared, exports the table + helpers). `src/map-triggers.js` imports it as of v1.7.792 (dedupe complete; client keeps its own resolver `rollLootEntry` that returns the raw `{gil:[min,max]}` tuple). Chest opens are server-validated under `SERVER_ECONOMY` (LIVE v1.7.779) via `economy-arbiter.js#validateChestOpen` — client rolls + applies locally, sends `chest-open` with claim, server checks claim is in pool, applies via mirror. **Town chest replay block** (v1.7.787): server tracks per-coord consumption in `consumed_tiles` table; second open within 24h rejects as `already-opened`. **Dungeon chests skip the gate** (v1.7.789) because the dungeon regenerates per re-entry — coord-keyed tracking false-blocks legit chests at recurring coords; the dungeon replay exploit is accepted, bounded by the `chest-open` per-kind rate cap (cap 8, refill 4 per v1.7.793). Hourly reap of stale rows wired v1.7.790. |
 | Vase / hidden-treasure search (universal) | `design-notes#hidden-treasure-vase-tiles` | `src/map-triggers.js` — `isHiddenTreasureTile(tileId)` matches `0x78-0x7B` (ROM trigger-type 2 in `map-loader.js#TRIGGER_TYPE_TABLE`, already collision-blocked by `map-renderer.js:495`). `handleHiddenTreasure(facedX, facedY)` rolls `HIDDEN_TREASURE_HIT_CHANCE` (25%) per Z; hit pulls from `LOOT_POOLS[mapId]` via `rollHiddenTreasureLoot` (Ur interiors fall back to `LOOT_POOLS[114]`, mimic tiers filtered out), stamps a 24h cooldown via `ps.consumedTilesAt`, leaves the tile unmutated. Miss → silent, no cooldown. Wired in `src/movement.js#_handleAction` right after the `0x7C` chest check. Tile renders as vase / grass / etc. (whatever the tileset puts at that metatile slot) and stays that way forever. v1.7.618. **Server-validated under `SERVER_ECONOMY` (LIVE v1.7.779)** via `economy-arbiter.js#validateVaseSearch` — claim must be in vase pool. **Town vase replay block** (v1.7.787): 24h cooldown via `consumed_tiles` table; misses don't consume. **Dungeon vases skip the gate** (v1.7.790, mirrors the chest exemption) — no dungeon places 0x78-0x7B tiles today, but the dungeon-skip prevents the v1.7.787 false-block if a future cave tileset adds vases. |
 | A dungeon floor's layout / shape | `design-notes#dungeon-floor-generation-altar-cave` | `src/dungeon-generator.js` (`generateFloor`). **Validate with `tools/floor-view.mjs` across many seeds — incl. timestamp-style, since the game seeds with `Date.now()`.** Floor 0 = two-room single continuous snake; entrance landing via the LOCKED `openEntranceLanding` (call AFTER `addOverhang`). **Floor 1 (v1.7.614)** mirrors floor 2's room primitives verbatim — 5×5 entrance room with embedded arch (`placeDeepEntrance` 3 tiles in, opening back toward corridor) → H corridor → 5×5 mid → V corridor → 7×7 trap chamber. Trap holes ARE the exit (no exit arch). Floor 1 + entrance/mid rooms register via `extraRooms` so the shared block places chests/skeletons across all three. Ceilings need 2 rocky below; chests need a 2-wall corner; count `0x44` false-ceiling as a ceiling connector when checking the snake. |
@@ -254,6 +255,28 @@ Beyond sprite capture, the same EMU tab exposes the running ROM's FF3J SRAM for 
 - **Presets** — `full-HP`, `clear-inv`. Note: SRAM-only writes; values cached at battle start won't update mid-battle.
 
 When in doubt about FF3J SRAM offsets, `src/debug/tabs/emu.js` constants (`SRAM_BASE`, `CHARS_A_OFF`, `CHARS_B_OFF`, `INV_IDS_OFF`, `INV_QTY_OFF`) are the canonical reference.
+
+## ⛔⛔ A CONSTANT IN SOURCE IS NOT BEHAVIOUR — RUN IT AND COUNT
+
+**Reading a value and reasoning forward is not analysis. It produces confident,
+specific, wrong statements.** Broken FOUR TIMES on 2026-08-26, each one shipped
+or nearly shipped, each one a single command from the truth:
+
+| what was read | what was claimed | what RUNNING it said |
+|---|---|---|
+| `FLOOR_CONFIG[2].chests: 0` | three loot tables can never fire — **a gate shipped red on it** | floors 2/3 place ~3.5 chests; `extraRooms` + the 50% corner scatter is a SECOND placement path |
+| map property byte 12, 49 "collisions" | the chest-base decode does not hold | 19 of 21 shared bases are maps with BYTE-IDENTICAL tilemaps — the decode was fine |
+| nothing at all | "a chest never offers what a valley shop stocks", written as Principle 1 and used to rank an audit finding | **INVENTED.** FF3's own Ur chests are full of Ur's shop stock |
+
+1. **Before stating what code DOES, run it.** Generate the floor, flood the map,
+   roll the table 5000 times, boot the harness.
+2. **A negative is a claim too** — self-test the instrument first. "0 chests",
+   "49 collisions" and "no source" were all broken instruments.
+3. ⛔ **NEVER invent a design rule and measure the user's game against it.** If a
+   principle is not in the ROM, the design notes, or something the user said, it
+   does not exist — ask.
+4. When a doc turns out wrong, **strike it in place** with the measurement.
+   Deleting it hides the failure mode.
 
 ## ⛔⛔ DO NOT HALF-ASS THE DATA PULL — READ EVERY FIELD
 
