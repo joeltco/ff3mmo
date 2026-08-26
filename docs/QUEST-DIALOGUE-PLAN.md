@@ -1,6 +1,34 @@
 # Quest + dialogue rebuild — plan
 
-Status: **PROPOSED, nothing built.** Written 2026-08-25 against v1.10.88.
+Status: **SHIPPED IN PART — v1.10.89.** Written 2026-08-25 against v1.10.88.
+
+| § | what | state |
+|---|---|---|
+| 5.1 | split prose out of the server's table | ⬜ **NOT DONE** — deferred, see §11 |
+| 5.2 | stages | ✅ shipped |
+| 5.3 | objective registry (`defeat`/`boss`/`talk`/`flag`) | ✅ shipped |
+| 5.4 | story flags, both halves of the save | ✅ shipped |
+| 5.5 | state-dependent dialogue | ✅ shipped |
+| 5.6 | one reward path (vehicle through the ledger) | ⬜ **NOT DONE** — see §11 |
+| 6.1 | Quest 1 — The King's Daughter → canoe | ✅ shipped |
+| 6.2 | Quest 2 — The Sealed Cave → `curse_lifted` | ✅ shipped |
+| 6.2 | the 37-NPC cursed-town inversion | ⬜ **NOT DONE** — unblocked, see §11 |
+| 8 | gates 1-4 | ✅ shipped, revert-proven |
+| 8 | gate 5 (prose/mechanics separation) | ⬜ blocked on 5.1 |
+
+⭐ **§7.3 was decided by MEASUREMENT, against this plan's own recommendation.**
+It proposed the East Tower for Sara. `MAPS=174,19,30 node
+tools/monscan/map-bundles.cjs` shows map 174 loads NINE player/battle bundles and
+NO townsfolk bundle — anybody placed there renders as tilemap noise, like map 11.
+She is in Kazus instead, which is where her ring was cut and where `0x245` has her
+going.
+
+⭐ **§7.1 also flipped, after rendering.** The plan recommended giving Sara a
+distinct bundle rather than sharing Cid's. `tools/valley-cast-sheet.mjs` (new)
+draws every bundle the valley can load: the alternative is a generic blue-cap
+villager. Dressing the princess as a townsman is worse than sharing a face with a
+man in a different room, so she wears her own — `0x1D910`, which the ROM's id→gfx
+table assigns to id 67.
 
 Replaces the quest system wholesale. The current one is not broken in the sense
 of failing its gates — `check-quests`, `check-words`, `check-word-flow`,
@@ -489,3 +517,36 @@ valley.
 - ⛔ **No new overworld NPC subsystem** — see §7.3.
 - ⛔ **The server's claim ledger is not touched** beyond adding `vehicle` to the
   validated reward shape.
+
+
+---
+
+## 11. Carried out of v1.10.89 — OPEN
+
+1. ⬜ **Prose is still in the server's table** (§5.1). `data/quests.js` remains
+   ~45% English and `economy-arbiter.js` / `api.js` still import it. Deferred so
+   the content could land first; splitting it now moves more text than it would
+   have, which is the cost of the ordering. Gate 5 is blocked on it.
+
+2. ⬜ **The vehicle grant still bypasses the claim ledger** (§5.6).
+   `quests.js#_grantVehicle` runs client-side; `validateQuestClaim` returns only
+   gil and item events. Inert as an exploit — a forged `vehicleParked` grants a
+   craft to that save and nothing else, and the gil/item half is still ledgered —
+   but it is the one payout that does not take the same road as the others.
+   **Both quests now pay a vehicle**, so this matters more than it did.
+
+3. ⬜ **The 37-NPC cursed-town inversion** (§6.2) — now UNBLOCKED and not done.
+   `curse_lifted` exists, dialogue variants exist, and `kazus_sealed_cave` sets
+   the flag. What remains is the placement work in
+   `project_ff3mmo_cursed_town_inversion`: 16 NPCs to gate on the flag, 21 ghosts
+   to place.
+
+   ⚠ **IT CLOSES KAZUS'S INN AND SHOPS FOR THE EARLY GAME.**
+   `kazus_inn_keep`, `kazus_weapon_keeper` and `kazus_armor_keeper` are all in
+   the "wrongly shown" list — the cartridge hides them until the Djinn falls. Ur
+   keeps its four shops, so the player is not stranded, but this is a real
+   balance change to the beginner valley and it is Joel's call, not a bug fix.
+
+4. ⚠ **NPC facing is still undecoded** (design-notes followup 3), so the four new
+   story poses join `MAY_IGNORE_ROM_FLAGS`. They are listed with their reasons;
+   `facedir.cjs` would let all of them come off the list.

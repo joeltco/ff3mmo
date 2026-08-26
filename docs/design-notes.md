@@ -829,6 +829,25 @@ backdrop; v1.10.79 built one and it was reverted. The overworld strip follows th
 biome under the party and crossfades on the NES palette when it changes.
 Full writeup: `docs/BATTLE-BACKDROPS.md`. Gate: `tools/check-battle-bg.mjs`.
 
+## Quests + dialogue — REBUILT v1.10.89
+
+Full design and the open items: `docs/QUEST-DIALOGUE-PLAN.md`.
+
+- **A quest is a list of STAGES**, each naming its own NPC. `ps.quests[id].s` is
+  the stage id. The old one-giver shape is why `kazus_cid_airship` was
+  unstartable on every save: two Cids, two keys, and a quest that could name only
+  one of them.
+- ⛔ **Two states of one person share ONE KEY.** The key is the identity; `when`
+  picks the costume. Swap the PERSON only when the sprite genuinely belongs to
+  somebody else.
+- **Objective kinds are a registry** (`quest-objectives.js`): `defeat`, `boss`,
+  `talk`, `flag`. The runtime names none of them.
+- **`ps.flags`** is world state, separate from quest progress, per-player,
+  validated by both halves of the save. Placement predicates take
+  `(questDone, flag)`; dialogue variants key off flags by string.
+- ⛔ **Sara is not in her tower**, and that is a measurement: map 174 loads no
+  townsfolk bundle at all.
+
 ## Followups — open as of 2026-08-25
 
 Carried out of the Ur/Kazus/shops arc. All are MEASURED and listed, none are
