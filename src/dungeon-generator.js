@@ -2824,6 +2824,13 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
           for (let dx = -2; dx <= 2; dx++) boneUsed.add(`${pos.x + dx},${pos.y + dy}`);
       }
     };
+    // ⭐ THE VAULT IS BONED FIRST, AS IT IS CHESTED FIRST. Joel, 2026-08-27:
+    // *"we need skeletons in the boulder treasure chamber."* It had none —
+    // measured at 388 of 400 seeds with zero — because this branch scattered
+    // bones through roomA, the hub and the exit room and simply never named the
+    // sealed room. Its chests came from `dropChest` and the `sealed-hoard`
+    // feature; nothing ever dressed it.
+    dropBones(vaultRoom, 2 + Math.floor(rng() * 2));
     dropBones(roomA, 2);
     dropBones(hubRoom, 3);
     dropBones(exitRoom, 2);

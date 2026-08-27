@@ -1,3 +1,35 @@
+## 1.11.12 — 2026-08-27
+
+### Skeletons in the boulder vault
+
+Joel, 2026-08-27: *"we need skeletons in the boulder treasure chamber."*
+
+It had none. Measured before the change:
+
+    seals f2 vault, 400 seeds:  chest on 400,  NO skeletons on 388
+
+The `chamber-run` branch scatters bones through three of its four rooms — the
+first chamber, the hub and the exit chamber — and simply never named the sealed
+one. Its chests came from `dropChest` and the `sealed-hoard` feature; nothing ever
+dressed it. Now boned first, as it is chested first:
+
+    skeletons per vault:  1 on 76,  2 on 268,  3 on 56  —  0 on none
+
+(The room is small and bones keep a 5x5 spacing, so a 2-3 roll lands as 1-3.)
+
+### Gate
+
+`dungeon-sweep`'s `gates: 'treasure'` role asked only whether the sealed side held
+a CHEST. It now also requires skeletons there — counted on the sealed side
+specifically (unreachable before the boulder, reachable after), not anywhere on
+the floor. Fails on revert: `the sealed chamber holds NO skeletons on 400/400`.
+
+⛔ Same shape as the empty `hub` room two versions ago: a room that existed, was
+connected, was reachable, held treasure — and had never been furnished, with every
+gate green. **Both were found by looking at the game, not by any check.**
+
+`check-floor-snapshot` moves one row, `seals/floor2`.
+
 ## 1.11.11 — 2026-08-27
 
 ### The locked door was not on the north wall — it was halfway down a side one

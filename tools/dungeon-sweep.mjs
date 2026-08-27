@@ -254,7 +254,7 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
   for (let f = 0; f < dg.floors; f++) {
     const label = `${dg.id} floor ${f}`;
     const role0 = PUZZLE_ROLE.get(`${dg.id}/${layoutForFloor(dg, f)}`) || null;
-    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0, oneSided: 0, rocksBehindWall: 0, wrongRockCount: 0 };
+    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0, oneSided: 0, rocksBehindWall: 0, wrongRockCount: 0, sealedNoBones: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
@@ -351,6 +351,18 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
             if (!adj(seen) && adj(openSeen2)) sealedChests++;
           }
           if (!sealedChests) t.sealedNoTreasure++;
+          // ⭐ AND IT HAS TO BE DRESSED, NOT JUST PAID. Joel, 2026-08-27: *"we
+          // need skeletons in the boulder treasure chamber."* It had none on 388
+          // of 400 seeds — the branch scattered bones through its other three
+          // rooms and never named the sealed one, and no gate asked, because
+          // "holds a chest" was the only thing the sealed side was checked for.
+          let sealedBones = 0;
+          for (let i = 0; i < 1024; i++) {
+            if (tm[i] !== 0x09) continue;                  // BONES
+            if (seen[i] || !openSeen2[i]) continue;        // must be on the sealed side
+            sealedBones++;
+          }
+          if (!sealedBones) t.sealedNoBones++;
         }
         // Sealed-by-design puzzle room: count it, then PROVE the switch opens it.
         t.puzzleTiles += stranded.length;
@@ -414,6 +426,9 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       }
       if (t.sealedNoTreasure) {
         hard.push(`${label}: the sealed chamber holds NO chest on ${t.sealedNoTreasure}/${t.seeds} seeds — the puzzle pays nothing`);
+      }
+      if (t.sealedNoBones) {
+        hard.push(`${label}: the sealed chamber holds NO skeletons on ${t.sealedNoBones}/${t.seeds} seeds — a room nobody has entered in an age should look like one`);
       }
     }
     rows.push(t);
