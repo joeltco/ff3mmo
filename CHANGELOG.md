@@ -1,3 +1,59 @@
+## 1.11.4 — 2026-08-27
+
+### The Konami debug DUNGEON tab previewed a repaint, not a dungeon
+
+Joel, 2026-08-21: *"lets make a dungeon generator preview in the konami debug. i
+want to be abke to see everything."* Then today: *"why isnt the Konami Debug
+dungeon menu showing what i told you to build?"*
+
+Because it was not previewing the dungeons. One line:
+
+```js
+function previewDungeon(skin) {
+  return { ...STARTING_DUNGEON, id: `preview-${skin.id}`,
+           donorMap: skin.donor, bossSkinId: skin.bossSkinId };
+}
+```
+
+It spread **Altar Cave** and swapped only the art, so pressing SEALS showed Altar
+Cave's floors in the Cave of Seals' palette. Its `layout.floors`, its corridor
+lengths, its snake ranges, its chamber weights and its five-floor shape never
+reached the preview at all — **none of the last week's work was visible in the
+tool built to look at it.**
+
+That was correct when it was written: the Cave of Seals was not a registered
+dungeon then, and the comment said so. It stopped being true the moment the
+registry gained the row, and nothing pointed at the tab.
+
+**The cave buttons ARE `DUNGEONS` now.** Floor count, floor labels and every
+carve come from the row.
+
+    ALTAR   F1 cave | F2 traps | F3 switch | F4 rooms | F5 boss
+    SEALS   F1 cave | F2 hall  | F3 switch | F4 rooms | F5 boss
+
+The report gained the row's identity — dungeon, layout, mapId, donor, corridor
+bounds — and the chambers the catalogue rolled with what each one did.
+
+⛔ **Both of the Cave of Seals' middle floors rendered as "boulder"** when the
+label was the layout name with `-chamber` stripped off. `boulder-chamber` and
+`rock-switch` are two different puzzles; a preview that calls them the same thing
+is worse than one showing a name you have to look up. Explicit label map.
+
+### The gate asserted the bug
+
+`check-debug-dungeon` drove the literals `['F1 cave','F2 traps','F3 puzzle','F4
+rooms','F5 crystal']` — **Altar Cave's floor names, hardcoded** — so it asserted
+the preview showed Altar Cave's floors no matter which cave was selected. It also
+drove a `CRYSTAL` cave button, which was never a dungeon; it was a boss skin from
+the repaint era.
+
+It now derives both from the registry, drives each cave's own floors, and fails
+if the two caves ever show the same floor list.
+
+⛔ And it looked buttons up in a snapshot taken at mount. The floor row is
+REBUILT on a cave switch — floor count is a property of the row — so the
+snapshot could not see the buttons that exist afterwards. Live lookup.
+
 ## 1.11.3 — 2026-08-27
 
 ### The Cave of Seals is Altar Cave's shape at last

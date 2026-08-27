@@ -60,6 +60,8 @@ globalThis.fetch = async () => ({ ok: false });   // no IPS in this harness; raw
 
 const fails = [];
 const tab = await import('../src/debug/tabs/dungeon.js');
+const { floorNames } = tab;
+const { DUNGEONS } = await import('../src/data/dungeons.js');
 if (typeof tab.mount !== 'function') fails.push('the tab exports no mount()');
 
 const root = el('div');
@@ -99,8 +101,12 @@ console.log('--- report ---');
 console.log(text.split('\n').slice(0, 12).join('\n'));
 
 // ── Drive every control ────────────────────────────────────────────────────
+// ⛔ LOOK THE BUTTON UP LIVE, NOT IN A SNAPSHOT. `buttons` is captured once at
+// mount, and the floor row is REBUILT when the cave changes — its floor count
+// and labels come from the registry row — so a snapshot taken before the first
+// cave switch cannot see the buttons that exist after it.
 const press = (label) => {
-  const b = buttons.find((n) => n.textContent === label);
+  const b = made.filter((n) => n.tagName === 'BUTTON').find((n) => n.textContent === label);
   if (!b) { fails.push(`no control labelled "${label}"`); return false; }
   b.click(); return true;
 };
@@ -111,8 +117,11 @@ const paintOf = () => {
   for (let i = 0; i < px.length; i += 4 * 97) seen.add(`${px[i]},${px[i + 1]},${px[i + 2]}`);
   return seen;
 };
+// ⛔ THE CAVE BUTTONS ARE THE REGISTRY'S ROWS. This drove ['ALTAR','SEALS',
+// 'CRYSTAL'] — but CRYSTAL was never a dungeon, it was a boss SKIN, back when
+// this tab previewed repaints of Altar Cave instead of real rows.
 const skinLooks = {};
-for (const skin of ['ALTAR', 'SEALS', 'CRYSTAL']) {
+for (const skin of DUNGEONS.map((d) => d.id.toUpperCase())) {
   if (!press(skin)) continue;
   skinLooks[skin] = paintOf();
   console.log(`skin ${skin.padEnd(8)} ${skinLooks[skin].size} distinct colours`);
@@ -127,7 +136,28 @@ if (skinLooks.ALTAR && skinLooks.SEALS) {
   console.log(`ALTAR vs SEALS palette overlap: ${Math.round(ratio * 100)}%`);
   if (ratio > 0.9) fails.push('the SEALS skin renders the same as ALTAR — the donor swap is not reaching paint()');
 }
-for (const f of ['F1 cave', 'F2 traps', 'F3 puzzle', 'F4 rooms', 'F5 crystal']) press(f);
+// ⛔ THE FLOOR LABELS COME FROM THE REGISTRY, NOT FROM A LIST HERE. They used to
+// be the literals ['F1 cave','F2 traps','F3 puzzle','F4 rooms','F5 crystal'] —
+// Altar Cave's floor names, hardcoded — so this gate asserted the preview showed
+// ALTAR CAVE's floors no matter which dungeon was selected. That is exactly the
+// bug the tab had: it previewed a repaint of Altar Cave rather than the real row.
+//
+// Driving them per dungeon also proves the floor row REBUILDS on a cave switch,
+// which it must, because floor count is a property of the row.
+for (const dg of DUNGEONS) {
+  press(dg.id.toUpperCase());
+  for (const name of floorNames(dg)) press(name);
+}
+// ⛔ AND THE TWO CAVES MUST NOT SHOW THE SAME FLOOR LIST. Both are five floors
+// deep and share three layout names; if the labels came out identical the row is
+// not being read per dungeon.
+{
+  const a = floorNames(DUNGEONS[0]).join('|');
+  const b = floorNames(DUNGEONS[1]).join('|');
+  console.log(`floor labels  ${DUNGEONS[0].id}: ${a}`);
+  console.log(`floor labels  ${DUNGEONS[1].id}: ${b}`);
+  if (a === b) fails.push('both dungeons show the same floor labels — the preview is not reading the registry row');
+}
 press('REROLL'); press('UNREACHED'); press('MARKS'); press('GRID');
 console.log(`drove ${buttons.length} controls without throwing`);
 

@@ -16,7 +16,7 @@
 // scales to the viewport width, and everything below it scrolls. Nothing here
 // depends on hover.
 
-import { STARTING_DUNGEON } from '../../data/dungeons.js';
+import { DUNGEONS, layoutForFloor, corridorBounds } from '../../data/dungeons.js';
 import { generateFloor } from '../../dungeon-generator.js';
 import { parseMapProperties, loadTileset, loadCHRGraphics, buildMapPalettes, loadNameTable } from '../../map-loader.js';
 import { describePlan } from '../../dungeon/plan.js';
@@ -30,41 +30,45 @@ const W = 32, TILE = 16, PX = W * TILE;   // 512
 const PASS = new Set([0x30, 0x09, 0x41, 0x49, 0x44, 0x73, 0x42, 0x68, 0x6a, 0x60]);
 const CHEST = 0x7c, BONES = 0x09, FALSE_CEILING = 0x44;
 
-const FLOOR_NAMES = ['F1 cave', 'F2 traps', 'F3 puzzle', 'F4 rooms', 'F5 crystal'];
-
-// ── Skins ─────────────────────────────────────────────────────────────────
-// A skin is the DONOR MAP we borrow CHR, palettes and tileset from — the same
-// thing `dungeon/boss-chamber.js` means by one (DUNGEON-CHAMBERS-PLAN §4c). The
-// generator is untouched: this repaints the SAME tilemap with another cave's
-// art, which is step 2 of the Cave of Seals plan — see whether our floors read
-// as that cave before building anything for it.
-// Names come from the ROM, not from me. Map property byte 2 is the location-name
-// index — the banner string is `0x100 + byte2` — and byte 5 (area) groups a
-// dungeon's floors. `node tools/map-names.mjs` prints the whole table.
+// ⛔ THIS PREVIEWED A REPAINT, NOT A DUNGEON.
 //
-// ⛔ TWO WRONG LABELS SHIPPED BEFORE THIS. v1.10.47 put a "SEALS" button on map
-// 116, which is the Subterranean Lake; before that the cave skin pointed at 111,
-// Altar Cave's OWN donor, so the swap repainted nothing. Both were inferred from
-// palettes and area bytes. Anything added here needs the name table to back it.
-const SKINS = [
-  { id: 'altar',   label: 'ALTAR',   donor: 111, bossSkinId: 'crystal' },  // "Altar Cave"   area $30, palette $78
-  { id: 'seals',   label: 'SEALS',   donor: 103, bossSkinId: 'seals'   },  // "Sealed Cave"  area $18, palette $79
-  { id: 'crystal', label: 'CRYSTAL', donor: 148, bossSkinId: 'crystal' },  // "Wind Crystal" the crystal chamber
-];
-
-// ⛔ THE BOSS FLOOR USED TO IGNORE THE SKIN ENTIRELY — it was generated from the
-// live registry (Altar Cave), so picking SEALS and stepping to F5 showed the
-// CRYSTAL ROOM, pedestal and all, labelled "ignored, floor 5 is authored". The
-// room was not authored; the skin simply never reached it. Previewing a skin
-// means GENERATING under it, not repainting a room that already has someone
-// else's altar stamped into it.
+// `previewDungeon` used to be `{ ...STARTING_DUNGEON, donorMap, bossSkinId }` —
+// it spread ALTAR CAVE and swapped only the art. So pressing SEALS showed Altar
+// Cave's floors in the Seals' palette: its `layout.floors`, its corridor
+// lengths, its snake ranges and its chamber weights never reached the preview at
+// all, and none of the last week's work was visible here.
 //
-// This is a preview row, not a registered dungeon: the Cave of Seals has no
-// encounters, loot pool or overworld mouth yet, so registering it would make a
-// broken dungeon reachable. It borrows Altar Cave's map range on purpose.
-function previewDungeon(skin) {
-  return { ...STARTING_DUNGEON, id: `preview-${skin.id}`, donorMap: skin.donor, bossSkinId: skin.bossSkinId };
+// Joel, 2026-08-21: "lets make a dungeon generator preview in the konami debug.
+// i want to be abke to see everything." Everything means the real rows.
+//
+// The dungeon buttons ARE `DUNGEONS` now. Floor count, floor labels and every
+// carve come from the row, so this shows what the game generates rather than a
+// preview of something adjacent to it.
+const CAVES = DUNGEONS;
+
+// ⛔ ONE SHORT LABEL PER LAYOUT, AND THEY MUST BE DISTINCT. Stripping "-chamber"
+// off the layout name rendered BOTH of the Cave of Seals' middle floors as
+// "boulder" — `boulder-chamber` and `rock-switch` are two different puzzles and
+// a preview that calls them the same thing is worse than one that shows a name
+// you have to look up.
+const LAYOUT_LABEL = {
+  'snake':           'cave',
+  'trap-chamber':    'traps',
+  'boulder-chamber': 'hall',
+  'rock-switch':     'switch',
+  'spine':           'rooms',
+};
+
+/** Floor labels straight off the row — never a hardcoded list. */
+export function floorNames(dg) {
+  const out = [];
+  for (let f = 0; f < dg.floors; f++) {
+    const lay = layoutForFloor(dg, f);
+    out.push(`F${f + 1} ${lay ? (LAYOUT_LABEL[lay] || lay) : 'boss'}`);
+  }
+  return out;
 }
+
 const skinCache = new Map();
 function assetsFor(rom, donor) {
   if (skinCache.has(donor)) return skinCache.get(donor);
@@ -80,7 +84,7 @@ function assetsFor(rom, donor) {
   return a;
 }
 
-let state = { floor: 3, seed: Date.now(), reach: true, marks: true, grid: false, skin: 0 };
+let state = { floor: 1, seed: Date.now(), reach: true, marks: true, grid: false, skin: 0 };
 let dom = null;
 let rom = null;
 
@@ -214,8 +218,14 @@ function report(md, seen) {
   const lines = [];
   lines.push(`seed ${state.seed}`);
   lines.push(`walkable ${walk}   unreachable ${unreach}   chests ${chests}   bones ${bones}`);
-  const sk = SKINS[state.skin];
-  lines.push(`skin ${sk.label} (donor map ${sk.donor}, boss skin ${sk.bossSkinId})`);
+  const dg = CAVES[state.skin];
+  const lay = layoutForFloor(dg, state.floor);
+  const cb = corridorBounds(dg);
+  lines.push(`${dg.name}  f${state.floor}/${dg.floors - 1}   layout ${lay || 'BOSS CHAMBER'}   map ${dg.base + state.floor}`);
+  lines.push(`donor ${dg.donorMap}   boss skin ${dg.bossSkinId}   corridors h${cb.hMin}-${cb.hMax} v${cb.vMin}-${cb.vMax}`);
+  if (md.chambers && md.chambers.length) {
+    lines.push(`chambers: ${md.chambers.map((c) => `${c.id}(${c.what})`).join('   ')}`);
+  }
   lines.push(`entrance ${md.entranceX},${md.entranceY}   tileset ${md.tileset}   fill 0x${(md.fillTile ?? 0).toString(16)}`);
 
   const exits = [];
@@ -240,7 +250,7 @@ function redraw() {
   if (!dom || !rom) return;
   let md;
   try {
-    md = generateFloor(rom, state.floor, state.seed, previewDungeon(SKINS[state.skin]));
+    md = generateFloor(rom, state.floor, state.seed, CAVES[state.skin]);
   } catch (e) {
     dom.out.textContent = `generateFloor threw:\n${e && e.stack ? e.stack : e}`;
     return;
@@ -250,8 +260,9 @@ function redraw() {
   // The floor is already generated UNDER the skin, so it carries the right
   // tileset and the right decorations. Repainting is only needed for the
   // non-boss floors, whose art comes from the dungeon's donor.
-  const skin = SKINS[state.skin];
-  const skinAssets = md.tileset === 0 ? assetsFor(rom, skin.donor) : null;
+  // The floor is generated FROM the row, so its assets are already that cave's.
+  // `assetsFor` stays only as the cheap cached path for the non-boss tileset.
+  const skinAssets = md.tileset === 0 ? assetsFor(rom, CAVES[state.skin].donorMap) : null;
   paint(c2, md, skinAssets);
   overlay(c2, md, seen);
   dom.out.textContent = report(md, seen);
@@ -272,25 +283,37 @@ export function mount(root, ctx) {
     return r;
   };
 
-  // Floors
+  // Floors. ⛔ REBUILT WHEN THE CAVE CHANGES — floor COUNT is a property of the
+  // row (Altar Cave and the Cave of Seals are both 5 today, but a third dungeon
+  // need not be) and so are the labels, which name the LAYOUT rather than a
+  // hardcoded guess at what floor 2 contains.
   const floorRow = row();
-  const floorBtns = FLOOR_NAMES.map((name, i) => {
-    const b = document.createElement('button');
-    b.textContent = name;
-    b.style.cssText = btnCss(i === state.floor);
-    tap(b, () => { state.floor = i; redraw(); });
-    floorRow.appendChild(b);
-    return b;
-  });
+  let floorBtns = [];
+  function buildFloorRow() {
+    floorRow.textContent = '';
+    const dg = CAVES[state.skin];
+    if (state.floor >= dg.floors) state.floor = dg.floors - 1;
+    floorBtns = floorNames(dg).map((name, i) => {
+      const b = document.createElement('button');
+      b.textContent = name;
+      b.style.cssText = btnCss(i === state.floor);
+      b.style.fontSize = '10px';
+      tap(b, () => { state.floor = i; redraw(); });
+      floorRow.appendChild(b);
+      return b;
+    });
+    if (dom) dom.floorBtns = floorBtns;
+  }
+  buildFloorRow();
   wrap.appendChild(floorRow);
 
   // Skin
   const skinRow = row();
-  const skinBtns = SKINS.map((sk, i) => {
+  const skinBtns = CAVES.map((dg, i) => {
     const b = document.createElement('button');
-    b.textContent = sk.label;
+    b.textContent = dg.id.toUpperCase();
     b.style.cssText = btnCss(i === state.skin);
-    tap(b, () => { state.skin = i; redraw(); });
+    tap(b, () => { state.skin = i; buildFloorRow(); redraw(); });
     skinRow.appendChild(b);
     return b;
   });
