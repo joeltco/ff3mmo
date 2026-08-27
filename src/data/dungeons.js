@@ -66,6 +66,10 @@ export const DUNGEONS = [
       // Altar Cave's secrets. The Cave of Seals has no secret corridors to
       // protect, which is exactly why it may go wider.
       snake: { top: [4, 6], bot: [18, 20], roomW: [7, 9], left: [5, 6], right: [26, 27], gap: [3, 5], tilt: [3, 5] },
+      // ⛔ A CAPABILITY IS ABOUT WHAT THE TILESET CAN DRAW, not what we want.
+      // `water` says the pond metatiles ($04 / $08) exist and read as water in
+      // this cave's donor map — measured, both caves, collision 2 (passable).
+      caps: ['water'],
     },
     bossId: 0xCC,                 // Land Turtle / Adamantoise
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
@@ -119,6 +123,12 @@ export const DUNGEONS = [
       // 29 precisely BECAUSE this cave declares no secret rooms: nothing needs
       // the void margin outside the room wall.
       snake: { top: [3, 5], bot: [19, 21], roomW: [8, 11], left: [2, 4], right: [28, 29], gap: [7, 11], tilt: [4, 7] },
+      caps: ['water'],
+      // ⭐ THE TWO CAVES FAVOUR DIFFERENT ROOMS. The Cave of Seals is the
+      // drowned one — springs and bones over vaults. Multipliers on the
+      // catalogue's base weights, so a new chamber type still reaches both caves
+      // without editing either row.
+      chambers: { spring: 2.5, 'bone-pit': 1.6, vault: 0.75 },
     },
     bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
     // ⭐ THE DJINN DROPS THE WSLAYER, 2 in 7 (28.6%). Joel, 2026-08-26.

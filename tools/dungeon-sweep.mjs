@@ -298,7 +298,14 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
     // gate that says whether it fixed anything.
     const lay = layoutForFloor(dg, f);
     const cap = WALKAROUND_CAP.get(`${dg.id}/${lay}`);
-    if (cap !== undefined && t.seeds && t.exitOpenUnpuzzled / t.seeds > cap) {
+    // ⛔ A RATE NEEDS A SAMPLE. `encounter-sim` calls this sweep with 60 seeds,
+    // where a floor sitting at a true 17.8% comes out at 15/60 = 25% often
+    // enough to fail a 20% ceiling on noise alone — which it did, on a build
+    // where nothing about that floor had regressed. Ceilings above zero are only
+    // meaningful once there are enough seeds to tell them apart; a ZERO ceiling
+    // is exact at any n, so it stays enforced always.
+    const enoughSeeds = cap === 0 || t.seeds >= 200;
+    if (cap !== undefined && enoughSeeds && t.seeds && t.exitOpenUnpuzzled / t.seeds > cap) {
       hard.push(`${label}: the way onward is reachable without the boulder on ${t.exitOpenUnpuzzled}/${t.seeds} seeds (ceiling ${Math.round(cap * 100)}%) — the false wall has stopped being the only route`);
     }
     rows.push(t);

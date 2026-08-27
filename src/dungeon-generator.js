@@ -24,6 +24,7 @@ import {
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
+import { rollChambers, chamberById } from './data/chambers.js';
 import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, drawRange } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
@@ -373,11 +374,11 @@ function findSecretWallSpot(tilemap, rng, used) {
   return candidates[Math.floor(rng() * candidates.length)];
 }
 
-function placePond(tilemap, rng, used) {
+function placePond(tilemap, rng, used, bounds = null) {
   const pw = rng() < 0.5 ? 2 : 3;
   const ph = 2;
   for (let attempt = 0; attempt < 50; attempt++) {
-    const pos = findRandomFloor(tilemap, rng, used);
+    const pos = findRandomFloor(tilemap, rng, used, bounds);
     if (!pos) return;
     let ok = true;
     for (let dy = 0; dy < ph && ok; dy++) {
@@ -398,6 +399,168 @@ function placePond(tilemap, rng, used) {
     }
     return;
   }
+}
+
+
+// ── Chamber features ───────────────────────────────────────────────────────
+
+/**
+ * How many tiles can the player reach, with `blocked` treated as solid?
+ *
+ * ⛔ THE ONE HONEST TEST FOR "MAY I PUT A ROCK HERE". A rock tile is impassable
+ * and permanent, so dropping one on a corridor tile severs the floor — v1.10.42
+ * paid for that once ("it cut 30 tiles and the exit"), and the longer corridors
+ * in v1.10.97 brought it straight back. A candidate that severs nothing costs
+ * exactly itself; anything else is a cut. No amount of looking at the tile, or
+ * at which corner it sits in, can tell you this.
+ */
+function reachableCount(tilemap, ex, ey, blocked = null) {
+  const seen = new Uint8Array(1024);
+  const start = ey * 32 + ex;
+  seen[start] = 1;
+  const q = [start];
+  let n = 0;
+  for (let h = 0; h < q.length; h++) {
+    const i = q[h]; n++;
+    const x = i % 32, y = (i - x) / 32;
+    for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+      if (blocked && blocked.has(`${nx},${ny}`)) continue;
+      const ni = ny * 32 + nx;
+      if (seen[ni]) continue;
+      const t = tilemap[ni];
+      if (t !== FLOOR && t !== BONES && t !== PASSAGE_BTM && t !== PASSAGE_ENTRY) continue;
+      seen[ni] = 1; q.push(ni);
+    }
+  }
+  return n;
+}
+
+/**
+ * A spring — a small pool the player can wade into, placed so it never cuts the
+ * room in half.
+ *
+ * ⛔ A POND IS PASSABLE IN THE GAME AND IMPASSABLE TO EVERY GATE.
+ * `MapRenderer.isPassable` blocks on `(collision & 0x07) === 3`; the pond tiles
+ * measure 2 in both caves' tilesets, so the player wades through. But
+ * `dungeon-sweep`'s PASS set is deliberately conservative and excludes them —
+ * one of the 249 tiles `encounter-sim` already records as "conservatively
+ * strict". A pond spanning a room would therefore strand its far half as far as
+ * every gate is concerned, and fail the build on something you can walk across.
+ * Placing it under the STRICTER rule keeps the gates meaningful.
+ *
+ * ⛔ SHRINK, DON'T GIVE UP. The first version handed the whole job to
+ * `placePond`, which picks one 3x2 or 2x2 spot and takes it or leaves it: in a
+ * 5-wide room with three walkable rows that almost always cuts, and the spring
+ * reverted to a plain room on 56-63% of the seeds that rolled it. Trying
+ * progressively smaller pools turns "usually nothing" into "usually something".
+ *
+ * ⛔ EXACTLY ONE `rng()` CALL, whatever it ends up placing. The scan order is
+ * rotated by that single draw so the pool is not always in the same corner, and
+ * the floor's rng stream does not depend on how many shapes were tried.
+ */
+function placeSpring(tilemap, rng, bounds, used, entranceX, entranceY) {
+  const openBefore = reachableCount(tilemap, entranceX, entranceY);
+  const x0 = Math.max(1, bounds.left), x1 = Math.min(30, bounds.right);
+  const y0 = Math.max(1, bounds.top), y1 = Math.min(30, bounds.bot);
+  const cells = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) cells.push([x, y]);
+  if (!cells.length) return 0;
+  const rot = Math.floor(rng() * cells.length);
+
+  // ⛔ $23 SHORELINE OVER $04 BODY — THE ONLY VOCABULARY THAT DRAWS AS WATER.
+  // The first version used `WATER_EDGE_POND` ($08) for the edges and, at 3x2,
+  // every tile IS an edge — so the whole pond was $08, which renders as a solid
+  // BLACK RECTANGLE in the cave tileset. Caught by looking at it, not by any
+  // gate: it was passable, severance-safe, correctly sized and completely wrong.
+  // Floor 3's pond has always used $23 on its top row and $04 below, and that is
+  // what the bright blue water on screen actually is.
+  //
+  // Two rows minimum, because a body with no shoreline is not the shape the
+  // cartridge draws. $23 is collision 3 (solid) and $04 is 2 (wadeable), which
+  // is why the severance test below — which counts BOTH as blocking — pushes the
+  // pool against a wall on its own, exactly where floor 3 puts it by hand.
+  for (const [pw, ph] of [[4, 2], [3, 2], [2, 2]]) {
+    for (let c = 0; c < cells.length; c++) {
+      const [px, py] = cells[(c + rot) % cells.length];
+      if (px + pw - 1 > x1 || py + ph - 1 > y1) continue;
+      let ok = true;
+      for (let dy = 0; dy < ph && ok; dy++) for (let dx = 0; dx < pw && ok; dx++) {
+        const nx = px + dx, ny = py + dy;
+        if (!isFloorTile(tilemap[ny * 32 + nx]) || used.has(`${nx},${ny}`)) ok = false;
+      }
+      if (!ok) continue;
+      const saved = [];
+      for (let dy = 0; dy < ph; dy++) for (let dx = 0; dx < pw; dx++) {
+        const nx = px + dx, ny = py + dy, i = ny * 32 + nx;
+        saved.push([i, tilemap[i]]);
+        tilemap[i] = (dy === 0) ? WATER_EDGE_N : WATER;
+      }
+      if (reachableCount(tilemap, entranceX, entranceY) === openBefore - saved.length) {
+        for (const [i] of saved) used.add(`${i % 32},${(i - (i % 32)) / 32}`);
+        return saved.length;
+      }
+      for (const [i, was] of saved) tilemap[i] = was;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Do whatever a chamber type says its room becomes.
+ *
+ * ⛔ EVERY `feature` ID IN `data/chambers.js` NEEDS A CASE HERE. A typo'd or
+ * unimplemented id would otherwise be a chamber that rolls, records itself in
+ * the plan, prints in the tools and does NOTHING — the most expensive kind of
+ * silent failure, because every gate reports it as present.
+ * `tools/check-chambers.mjs` walks the catalogue against this switch.
+ */
+function applyChamberFeature(feature, tilemap, rng, bounds, used, entranceX, entranceY) {
+  switch (feature) {
+    case null:
+    case undefined:
+      return 'plain';
+    case 'traps':
+      // Trap holes are placed by the shared pass from `LAYOUT_CONFIG.traps`,
+      // because their count is a property of the FLOOR (they are the descent),
+      // not of the room. Declared here so the catalogue is complete and the
+      // gate can see the id is known rather than missing.
+      return 'traps (placed by the floor)';
+    case 'bones': {
+      const n = 3 + Math.floor(rng() * 3);
+      const r = scatterRoomLoot(tilemap, rng, bounds, { skeletons: n, used });
+      return `bones x${r.skeletons.length}`;
+    }
+    case 'vault': {
+      // ⛔ CHESTS NEED SPACING OR THEY WALL EACH OTHER IN. `scatterRoomLoot`
+      // marks only the chest's own tile used, so two of them landed orthogonally
+      // adjacent — and a chest is not walkable, so the inner one had no reachable
+      // neighbour and became unopenable. The floor's own chest loop has always
+      // added a 7x7 exclusion for exactly this reason; the catalogue has to do
+      // the same. Caught by `dungeon-sweep`'s chest audit, not by looking.
+      const n = 1 + Math.floor(rng() * 2);
+      let placed = 0;
+      for (let i = 0; i < n; i++) {
+        const r = scatterRoomLoot(tilemap, rng, bounds, { chests: 1, used });
+        if (!r.chests.length) break;
+        const p = r.chests[0];
+        placed++;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) used.add(`${p.x + dx},${p.y + dy}`);
+      }
+      return `chests x${placed}`;
+    }
+    case 'pond':
+      return `pond ${placeSpring(tilemap, rng, bounds, used, entranceX, entranceY)} tiles`;
+    default:
+      throw new Error(`chamber feature '${feature}' has no implementation`);
+  }
+}
+
+function countWater(tilemap) {
+  let n = 0;
+  for (let i = 0; i < 1024; i++) if (tilemap[i] === WATER || tilemap[i] === WATER_EDGE_POND) n++;
+  return n;
 }
 
 // Find candidate spots for a secret corridor on one side of the cave.
@@ -1165,6 +1328,13 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   // branch; the shared feature-placement pass sprinkles skeletons + a chance
   // chest into each. Empty on every other branch.
   const extraRooms = [];
+  // Chambers rolled from `data/chambers.js`, with the bounds of the room they
+  // landed in. Applied at the END of the shared feature pass so a chamber
+  // feature is ADDITIVE — it cannot take a tile the floor's own chests, traps or
+  // stairs already claimed.
+  const chamberFeatures = [];
+  // What each rolled chamber actually did, for the tools and the gates.
+  const chamberLog = [];
 
   // Floors 1, 2 and 3 build every chamber through a primitive, so their plans
   // are COMPLETE. Floor 0's shape is a traced ceiling snake — one boundary, not
@@ -1441,7 +1611,11 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
     // 5×5 mid room — direct copy of floor 2's first 5×5 mid room
     // (lines 1544-1553 in the floor-2 branch).
-    planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
+    // ⭐ THE MID ROOM IS ROLLED FROM THE CATALOGUE. It was always a plain
+    // 'junction'; now it can come up a bone pit, a vault, rubble or a spring.
+    // See `data/chambers.js`.
+    const [midCh] = rollChambers(dungeon, floorIndex, ['mid'], rng);
+    planChamber(plan, tilemap, rng, midCh.role, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     // V corridor — 5-7 steps DOWN from middle of mid room.
     // Direct copy of floor 2's V corridor (lines 1557-1564).
@@ -1532,6 +1706,9 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       left: horizDir === 1 ? pathResult.endX : pathResult.endX - 4,
       right: horizDir === 1 ? pathResult.endX + 4 : pathResult.endX,
     });
+    // The rolled chamber's feature is applied to THIS room's bounds, at the end
+    // of the shared feature pass.
+    chamberFeatures.push({ ...midCh, bounds: extraRooms[extraRooms.length - 1] });
 
   } else if (LAYOUT === 'boulder-chamber') {
     // ── The Cave of Seals' floor 1 — the trap room, minus the traps ─────
@@ -1575,7 +1752,9 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
     const pathResult = { endX: pathEndX, endFloorY: midFloorY };
 
-    planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
+    // ⭐ Rolled from the catalogue, same as `trap-chamber`.
+    const [midCh] = rollChambers(dungeon, floorIndex, ['mid'], rng);
+    planChamber(plan, tilemap, rng, midCh.role, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     const vertRoll = CORR.vMin + Math.floor(rng() * vSpan);
     // ⛔ CLAMPED TO THE ROOM BUDGET, AND CLAMPED AFTER THE DRAW.
@@ -1796,6 +1975,9 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       left: horizDir === 1 ? pathResult.endX : pathResult.endX - 4,
       right: horizDir === 1 ? pathResult.endX + 4 : pathResult.endX,
     });
+    // The rolled chamber's feature is applied to THIS room's bounds, at the end
+    // of the shared feature pass.
+    chamberFeatures.push({ ...midCh, bounds: extraRooms[extraRooms.length - 1] });
 
   } else if (LAYOUT === 'rock-switch') {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
@@ -1846,8 +2028,9 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     const pathEndX = horizStartX + pathLength * horizDir;
     const pathResult = { endX: Math.max(1, Math.min(30, pathEndX)), endFloorY: midFloorY };
 
-    // 5×5 room with irregular edges
-    planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
+    // 5×5 room with irregular edges — ⭐ rolled from the catalogue.
+    const [midCh] = rollChambers(dungeon, floorIndex, ['mid'], rng);
+    planChamber(plan, tilemap, rng, midCh.role, { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
     // Vertical pathway (1 tile wide)
     const vertDir = vertDirEarly;
@@ -1982,6 +2165,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     const rm1Left = horizDir === 1 ? pathResult.endX : pathResult.endX - 4;
     const rm1Right = horizDir === 1 ? pathResult.endX + 4 : pathResult.endX;
     const rm1Bounds = { left: rm1Left, right: rm1Right, top: startFloorY - 2, bot: startFloorY + 2 };
+    chamberFeatures.push({ ...midCh, bounds: rm1Bounds });
     for (let i = 0; i < 1; i++) {
       const pos = findCornerFloor(tilemap, rng, chestUsed, rm1Bounds);
       if (pos) {
@@ -2262,8 +2446,13 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       turnY: rightPathY, rng, wobble: CORRIDOR_WOBBLE,
     });
 
+    // ⭐ THE TWO WINGS ARE ROLLED FROM THE CATALOGUE. Both are drawn in one
+    // call so the pair honours `maxPerFloor` between them — two vaults on one
+    // floor is a decision, not an accident of drawing twice.
+    const [wingL, wingR] = rollChambers(dungeon, floorIndex, ['side', 'side'], rng);
+
     // Left side room — organic carving (keep right edge full at path row)
-    planOrganicRoom(plan, tilemap, rng, 'side-left', {
+    planOrganicRoom(plan, tilemap, rng, wingL.role, {
       left: leftRoomLeft, right: leftRoomRight, top: leftTop, bot: leftBot,
       keepEdge: (y) => (y === leftPathY ? 'right' : null),   // the path meets it here
     });
@@ -2273,7 +2462,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     }
 
     // Right side room — organic carving (keep left edge full at path row)
-    planOrganicRoom(plan, tilemap, rng, 'side-right', {
+    planOrganicRoom(plan, tilemap, rng, wingR.role, {
       left: rightRoomLeft, right: rightRoomRight, top: rightTop, bot: rightBot,
       keepEdge: (y) => (y === rightPathY ? 'left' : null),
     });
@@ -2281,6 +2470,9 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     if (rng() < 0.6) {
       carveBottomBump(tilemap, rng, { left: rightRoomLeft, right: rightRoomRight, row: rightBot + 1 });
     }
+
+    chamberFeatures.push({ ...wingL, bounds: { left: leftRoomLeft, right: leftRoomRight, top: leftTop, bot: leftBot } });
+    chamberFeatures.push({ ...wingR, bounds: { left: rightRoomLeft, right: rightRoomRight, top: rightTop, bot: rightBot } });
 
     // Branch alcoves off corridor — horizontal paths with fat stretches, chests at ends
     const branchChestPos = [];
@@ -2394,15 +2586,6 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
         for (let y = pondBot + 1; y <= pondBot + 5; y++) {
           if (y < 32) tilemap[y * 32 + innerX] = WATER;
         }
-      }
-    }
-
-    // Collect pond tile positions for Z-action healing trigger
-    pondTiles = new Set();
-    for (let i = 0; i < 1024; i++) {
-      const t = tilemap[i];
-      if (t === WATER || t === WATER_EDGE_N) {
-        pondTiles.add(`${i % 32},${(i - i % 32) / 32}`);
       }
     }
 
@@ -2759,6 +2942,49 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       }
     }
 
+    // ⛔ PROTECT EVERY WAY IN AND OUT, AND THE TILES YOU STAND ON TO USE IT.
+    //
+    // Doors, staircases and passage blocks are not walkable — you stand BESIDE
+    // them and face them — so anything that takes their approach tile seals the
+    // floor while every tile-count still looks right. Nothing needed this before:
+    // the `spine` layout carries `chests: 0`, so the shared pass never placed
+    // anything on the floor whose exit is a $70 door. The moment the catalogue
+    // could roll a vault onto its side rooms, chests started walling in the door
+    // to the crystal room — 9 seeds in 400, each one an unfinishable dungeon.
+    //
+    // Seeded before the features so it protects them AND the generic scatter
+    // that follows, rather than being a special case for one of them.
+    for (let i = 0; i < 1024; i++) {
+      const t = tilemap[i];
+      // ⛔ CHESTS TOO. `rock-switch` places its own chests INSIDE its branch,
+      // before this pass runs — so a rubble field dropped a rock on a chest's
+      // only approach and made it unopenable. Every one of these tiles is
+      // something you stand BESIDE and face; none of them is walkable; all of
+      // them are sealed by anything that takes the tile you stand on.
+      if (t !== DOOR && t !== STAIRS_DOWN && t !== EXIT_PREV && t !== CHEST
+          && t !== PASSAGE_ENTRY && t !== PASSAGE_BTM && t !== STAIR_ARCH) continue;
+      const x = i % 32, y = (i - x) / 32;
+      for (const [dx, dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && nx < 32 && ny >= 0 && ny < 32) used.add(`${nx},${ny}`);
+      }
+    }
+
+    // ⭐ CHAMBER FEATURES — what each rolled room BECOMES.
+    //
+    // ⛔ BEFORE THE FLOOR'S GENERIC SCATTER, NOT AFTER. `used` at this point
+    // holds exactly the tiles a room may not touch — the entrance column, the
+    // exit block, the boulder and its approach — and nothing else. Running the
+    // features after the chest loop instead starved them: that loop adds a 7x7
+    // exclusion around EVERY chest it places, which covers a whole 5x5 mid room,
+    // so a vault placed 0 chests and a bone pit placed 1 of its 3-5. A chamber's
+    // feature is the room's identity; the floor's generic dressing is what
+    // should work around it.
+    for (const ch of chamberFeatures) {
+      const what = applyChamberFeature(ch.feature, tilemap, rng, ch.bounds, used, entranceX, entranceY);
+      chamberLog.push({ id: ch.id, role: ch.role, feature: ch.feature, what, bounds: ch.bounds });
+    }
+
     // Chests in corners first (need specific corner positions, place before traps)
     const chestCount = Array.isArray(config.chests)
       ? config.chests[0] + Math.floor(rng() * (config.chests[1] - config.chests[0] + 1))
@@ -2851,10 +3077,12 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       }
     }
 
-    // Ponds
+    // Ponds — the FLOOR's own pond budget. Still 0 everywhere; a pond now
+    // arrives as a `spring` chamber rolled from the catalogue instead.
     for (let i = 0; i < config.ponds; i++) {
       placePond(tilemap, rng, used);
     }
+
 
     // Bones scattered (chamber only when bounds exist)
     // Separate exclusion set — bones only avoid each other + actual feature tiles, not chest spacing
@@ -3115,11 +3343,51 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   // ⛔ FLOOR MUST NEVER TOUCH VOID — the cartridge always walls it. Runs after
   // every shaping and placement pass, since the entrance frame is what mostly
   // leaves floor hanging over black. See `tools/tile-grammar.mjs`.
+  // ⛔ EVERY POND HEALS, WHEREVER IT CAME FROM. This scan used to live INSIDE the
+  // spine branch, so `pondTiles` was populated for floor 3's hand-carved pool and
+  // nothing else. The moment the catalogue could roll a `spring` chamber onto any
+  // floor, that water was decoration: correct tiles, correct collision, and no
+  // healing trigger, because the only code that registered one was in another
+  // branch. One scan, run after every placement, so the water on screen and the
+  // water the Z-action knows about cannot disagree.
+  {
+    const pt = new Set();
+    for (let i = 0; i < 1024; i++) {
+      const t = tilemap[i];
+      if (t === WATER || t === WATER_EDGE_N) pt.add(`${i % 32},${(i - i % 32) / 32}`);
+    }
+    pondTiles = pt.size ? pt : null;
+  }
+
   sealFloorToVoid(tilemap);
 
   // Last pass on the tilemap — AFTER the trap swap, so the map it walks is the
   // one the player gets. `dungeon-sweep.mjs` gates the result at 0.
   sealTinyPockets(tilemap, entranceX, entranceY, triggerMap);
+
+  // ⛔ NO ROCK LEFT HANGING OVER CEILING. Rock exists to hang BELOW a ceiling
+  // lip; the cartridge has zero `ROCK over CEIL` pairs across all five of its
+  // cave maps, and `tools/tile-grammar.mjs` gates that. But `sealTinyPockets`
+  // converts an unreachable FLOOR tile to CEILING and does not look up — so the
+  // two rocky tiles that were hanging over it are left stranded, rock above
+  // ceiling, an arrangement that reads as a floating lump of wall.
+  //
+  // It took a chest moving one tile to surface: one instance in 240 floors, on a
+  // build where nothing about the shape passes had changed. Repeated until
+  // stable because a band is two deep, so clearing the lower rock exposes the
+  // upper one.
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    for (let y = 0; y < 31; y++) {
+      for (let x = 0; x < 32; x++) {
+        if (tilemap[y * 32 + x] !== WALL_ROCKY) continue;
+        if (tilemap[(y + 1) * 32 + x] !== CEILING) continue;
+        tilemap[y * 32 + x] = CEILING;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
 
   const entranceData = new Uint8Array(16);
 
@@ -3146,6 +3414,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     falseWalls,
     lockedDoors,
     rockSwitch: typeof rockSwitch !== 'undefined' ? rockSwitch : null,
+    chambers: chamberLog,
     warpTile,
     pondTiles,
     plan,

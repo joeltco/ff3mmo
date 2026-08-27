@@ -90,7 +90,9 @@ const SEALS = {
   rosterPrefix: 'probe', bossRosterLoc: 'probe-boss',
   encounterZonePrefix: 'probe_cave',
   romFloorMaps: [103, 104, 105, 106],   // one ROM map per floor — see romMapForFloor
-  layout: { floors: ['snake', 'trap-chamber', 'rock-switch'] },  // floors - 1
+  // Same layouts AND same catalogue inputs as Altar Cave — see the shape
+  // assertion near the end of this file for why both halves matter.
+  layout: { floors: ['snake', 'trap-chamber', 'rock-switch'], caps: ['water'] },
   lockedRooms: [{ mapId: 3010, floor: 1 }],
   secretRooms: [{ mapId: 3020, floor: 0 }],
 };
@@ -280,8 +282,20 @@ const altarF1 = generateFloor(rom, 1, seed, DUNGEONS[0]);
 const sealsF1 = generateFloor(rom, 1, seed, SEALS);
 const pal = (r) => JSON.stringify(r.palettes);
 ok(pal(altarF1) !== pal(sealsF1), 'seals floor 1 uses ALTAR CAVE palettes — the donor is not reaching loadRomAssets');
+// ⛔ SHAPE IDENTITY NOW REQUIRES IDENTICAL LAYOUT **AND** IDENTICAL CATALOGUE
+// INPUTS. This used to read "same seed + floor should carve the same SHAPE
+// regardless of dungeon (only art differs)" — which was true when every dungeon
+// was a clone, and is exactly the behaviour v1.10.96-99 exist to end. Two rows
+// naming the same layout can legitimately diverge now, because `layout.caps` and
+// `layout.chambers` change which chambers are in the mid-slot pool.
+//
+// The assertion it was protecting is still worth keeping — a donor that never
+// reaches the asset loader (v1.10.47's "SEALS" skin repainting Altar Cave onto
+// itself) — so the probe declares the SAME catalogue inputs as Altar Cave, and
+// the shapes must then match exactly. If they diverge, something other than the
+// declared data is driving the carve.
 ok(JSON.stringify([...altarF1.tilemap]) === JSON.stringify([...sealsF1.tilemap]),
-   'same seed + floor should carve the same SHAPE regardless of dungeon (only art differs)');
+   'a dungeon declaring the same layout AND the same catalogue inputs as Altar Cave carved a DIFFERENT shape — something undeclared is driving the generator');
 
 // boss chambers must differ in art too
 const altarBoss = generateFloor(rom, 4, seed, DUNGEONS[0]);

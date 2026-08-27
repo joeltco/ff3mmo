@@ -1,3 +1,129 @@
+## 1.10.99 — 2026-08-27
+
+### The chamber catalogue — a room is data now, not an `if` branch
+
+Joel, 2026-08-20: *"we gotta treat this like a real dungeon generator, and not a
+same floor cloner... i want this to be a roguelike."* I answered that with a
+catalogue plan, shipped phases 1-3 of the plumbing, and never built the
+catalogue. v1.10.96 renamed the branch conditions from a floor index to a layout
+name — better plumbing for the same structure. Every interesting chamber still
+belonged to exactly one floor and appeared there every single time.
+
+**`src/data/chambers.js`** is the catalogue: a leaf, imports nothing, twelve
+entries. A chamber declares `slot`, `weight`, `minDepth`, `maxPerFloor`,
+`requires` and a `feature`; `rollChambers` draws one per slot under those
+constraints. The layout still owns the floor's SKELETON — how many rooms, where,
+what joins them. The catalogue owns **what each room is**. Keeping those separate
+is what lets a spring appear on a floor that has never had one without moving a
+wall.
+
+    junction  w10        the plain baseline, deliberately the commonest
+    bone-pit  w5         thick with bones
+    vault     w4  d>=1   extra chests — held off depth 0 so the first room of a
+                         dungeon is never the richest
+    spring    w4  d>=1   a pool that restores HP/MP — requires `water`
+    side-plain / side-bones / side-vault    the spine's two wings
+
+Both caves roll from it — Altar Cave 7 chamber types, the Cave of Seals 4 — and
+they favour different rooms through `layout.chambers` multipliers on the row:
+the Seals is the drowned one, `spring x2.5`, `bone-pit x1.6`, `vault x0.75`.
+
+### `placePond` finally runs
+
+It has existed since the generator was written and **never once executed** —
+every `FLOOR_CONFIG` said `ponds: 0`. A pond now arrives as a `spring` chamber.
+
+⛔ **`pondTiles` was collected INSIDE the spine branch**, so the Z-action healing
+trigger only existed for floor 3's hand-carved pool. The first springs were
+correct tiles, correct collision, and pure decoration. One scan after every
+placement now, so the water on screen and the water the game knows about cannot
+disagree.
+
+### Six bugs, five caught by gates and one only by looking
+
+⛔ **The spring rendered as a solid BLACK RECTANGLE.** It used
+`WATER_EDGE_POND` ($08) for edges — and at 3x2 every tile is an edge, so the
+whole pond was $08, which does not draw as water in the cave tileset. It was
+passable, severance-safe, correctly sized and completely wrong. **No gate can see
+this.** Floor 3 has always used $23 shoreline over $04 body; that is what the
+bright blue water actually is, and the spring uses it now.
+
+⛔ **The spring reverted to a plain room on 56-63% of the seeds that rolled it.**
+`placePond` picks one 3x2 spot and takes it or leaves it, which in a 5-wide room
+with three walkable rows almost always cuts the room. `placeSpring` tries
+progressively smaller pools instead — 0 dry springs across 300 seeds.
+
+⛔ **A vault walled in its own chest.** `scatterRoomLoot` marks only the chest's
+tile used, so two landed orthogonally adjacent and the inner one had no reachable
+neighbour. The floor's own chest loop has always kept a 7x7 exclusion for exactly
+this reason.
+
+⛔ **THE `rubble` CHAMBER WAS BUILT AND THEN REMOVED — the cave tileset cannot
+express it.** Fallen rock inside a room first broke the cartridge's wall-depth
+rule (`addOverhang` lays exactly two rocky tiles under every ceiling and the ROM
+never does three; altar f1 went 0 -> 27 such ceilings). Requiring open floor
+directly above each block fixed that and immediately produced **48 `FLOOR over
+ROCK` and 12 `ROCK over CEIL`** pairs — arrangements `tools/tile-grammar.mjs`
+proves the cartridge never uses. The two constraints cannot both be satisfied.
+
+Scanning ROM maps 111/112/113/22/115 for any tile the cartridge surrounds with
+floor on three or more sides returns **exactly one across all five maps**, a lone
+trap hole. There is no standalone-obstacle vocabulary in this tileset. I invented
+the chamber; the grammar gate caught it. Removed, with the measurement recorded
+next to the gap in `data/chambers.js` so it does not come back on a hunch.
+
+⛔ **Rock left hanging over ceiling.** `sealTinyPockets` converts an unreachable
+floor tile to ceiling and does not look up, stranding the two rocky tiles that
+were hanging over it — a floating lump of wall, and a `ROCK over CEIL` pair the
+ROM has zero of. It took a chest moving one tile to surface: one instance in 240
+floors, on a build where nothing about the shape passes had changed. Cleared
+after every placement, repeated until stable because a band is two deep.
+
+⛔ **Chests sealed the door to the crystal room.** The `spine` layout carries
+`chests: 0`, so nothing had ever placed anything on the floor whose exit is a
+`$70` door — and the moment a vault could roll onto its side rooms, 9 seeds in
+400 became unfinishable dungeons. Doors, staircases, passage blocks and chests
+are all things you stand BESIDE; the shared pass now protects every one of their
+approach tiles before any placement runs.
+
+### New gate — `check-chambers`, wired into deploy
+
+A catalogue is the easiest thing here to fake. Every assertion is about what got
+GENERATED: every rollable chamber appears, every feature actually changes its
+room, `minDepth` / `maxPerFloor` / `requires` hold on the floors that rolled
+them, the observed distribution matches the declared weights, and both caves draw
+from it. Proven by mutation — a weight of 0.0001 and a vault that places nothing
+both fail it.
+
+⛔ **A gate that asserted the clone behaviour.** `check-dungeon-registry` carried
+*"same seed + floor should carve the same SHAPE regardless of dungeon (only art
+differs)"* — true when every dungeon was a copy, and exactly what v1.10.96-99
+exist to end. It survived only because the probe fixture happened to declare
+Altar Cave's layouts. Shape identity now requires identical layout **and**
+identical catalogue inputs, since `layout.caps` and `layout.chambers` change
+which chambers are in the pool; the assertion it was really protecting — a donor
+that never reaches the asset loader — is kept and stated as such.
+
+⛔ Also fixed a gate of my own making: the walk-around ceiling added in v1.10.97
+fired on `encounter-sim`'s 60-seed sweep, where a floor at a true 17.8% comes out
+at 25% on noise alone. Ratio ceilings above zero now require 200+ seeds; a zero
+ceiling is exact at any n and stays enforced always.
+
+### What this cost Altar Cave
+
+Joel: *"try to keep altar as it is, but if it has to change a little, thats
+fine."* Measured against the previous build, 120 seeds per floor:
+
+    altar f0   unchanged 106/120     mean 31 tiles when it moves
+    altar f1   unchanged   0/120     mean 79 tiles  (of 1024)
+    altar f2   unchanged   0/120     mean 120 tiles
+    altar f3   unchanged   0/120     mean 79 tiles
+    altar f4   unchanged 120/120     the boss chamber is authored, untouched
+
+Floors 1-3 change on every seed, by roughly 8-12% of their tiles — that is the
+mid room rolling a chamber type, which is the feature. The boss chamber is
+byte-identical and floor 0 is unchanged on 88% of seeds.
+
 ## 1.10.98 — 2026-08-27
 
 ### The Cave of Seals gets its own entry floor — and a real bug on it
