@@ -127,6 +127,39 @@ for (const dg of DUNGEONS) {
   CARVED.set(`${dg.id}/f${f}`, { h: med(runs.h), v: med(runs.v) });
  }
 }
+// ⛔ NO TWO DUNGEONS MAY GENERATE THE SAME MAP.
+//
+// The strongest form of "these should be two different dungeons", and the only
+// one that cannot be satisfied by paperwork: compare the TILEMAPS. Sharing a
+// layout name is fine — `snake` and `rock-switch` are used by both caves — but
+// two rows that carve the same tiles from the same seed are one dungeon wearing
+// two names. Floor 0 was in exactly that state: 83 of 200 seeds pixel-identical,
+// the rest differing by ONE tile.
+{
+  const CMP = 60;
+  for (let i = 0; i < DUNGEONS.length; i++) {
+    for (let j = i + 1; j < DUNGEONS.length; j++) {
+      const A = DUNGEONS[i], B = DUNGEONS[j];
+      for (let f = 0; f < Math.min(A.floors, B.floors); f++) {
+        if (layoutForFloor(A, f) === null || layoutForFloor(B, f) === null) continue;  // boss chambers are authored
+        let identical = 0, diffSum = 0;
+        for (let k = 0; k < CMP; k++) {
+          const seed = BASE + k * 7919;
+          const ta = generateFloor(rom, f, seed, A).tilemap;
+          const tb = generateFloor(rom, f, seed, B).tilemap;
+          let d = 0;
+          for (let t = 0; t < 1024; t++) if (ta[t] !== tb[t]) d++;
+          if (d === 0) identical++;
+          diffSum += d;
+        }
+        const mean = Math.round(diffSum / CMP);
+        console.log(`${A.id} f${f} vs ${B.id} f${f}: ${identical}/${CMP} identical, mean ${mean} tiles differ`);
+        if (identical > 0) fails.push(`${A.id} and ${B.id} generate the SAME floor ${f} map on ${identical}/${CMP} seeds — one dungeon wearing two names`);
+        else if (mean < 50) fails.push(`${A.id} and ${B.id} floor ${f} differ by only ${mean} tiles on average — not meaningfully different caves`);
+      }
+    }
+  }
+}
 // ⛔ THE TWO CAVES MUST NOT WALK THE SAME LENGTH OF CORRIDOR. Joel asked for the
 // Cave of Seals to have longer runs than Altar Cave, and a `corridor` block that
 // is read but never reaches a carve would leave both identical while every other

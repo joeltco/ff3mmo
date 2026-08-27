@@ -59,6 +59,13 @@ export const DUNGEONS = [
     layout: {
       floors: ['snake', 'trap-chamber', 'rock-switch', 'spine'],
       corridor: { hMin: 4, hMax: 6, vMin: 5, vMax: 7 },
+      // Altar Cave's historical floor-0 sampling, written down. ⛔ `left` MUST
+      // NOT go below 5 and `right` NOT above 27 here: `findCorridorCandidates`
+      // hunts this cave's secret corridor in columns 3-7 and needs four void
+      // columns outside the room wall. Widening these would quietly delete
+      // Altar Cave's secrets. The Cave of Seals has no secret corridors to
+      // protect, which is exactly why it may go wider.
+      snake: { top: [4, 6], bot: [18, 20], roomW: [7, 9], left: [5, 6], right: [26, 27], gap: [3, 5], tilt: [3, 5] },
     },
     bossId: 0xCC,                 // Land Turtle / Adamantoise
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
@@ -102,6 +109,16 @@ export const DUNGEONS = [
     layout: {
       floors: ['snake', 'boulder-chamber', 'rock-switch'],
       corridor: { hMin: 8, hMax: 12, vMin: 9, vMax: 13 },
+      // ⭐ ITS OWN ENTRY FLOOR. Both caves used to open on the same map — 83 of
+      // 200 seeds pixel-identical, the rest differing by ONE tile (Altar Cave's
+      // secret doorway). `snake` has no corridors, so the corridor block could
+      // not touch it.
+      //
+      // Wider than Altar Cave's, with a longer neck between the two rooms — the
+      // same "make the run longer" the corridors got. It can reach columns 2 and
+      // 29 precisely BECAUSE this cave declares no secret rooms: nothing needs
+      // the void margin outside the room wall.
+      snake: { top: [3, 5], bot: [19, 21], roomW: [8, 11], left: [2, 4], right: [28, 29], gap: [7, 11], tilt: [4, 7] },
     },
     bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
     // ⭐ THE DJINN DROPS THE WSLAYER, 2 in 7 (28.6%). Joel, 2026-08-26.
@@ -255,6 +272,37 @@ export const LAYOUTS = new Set([
   'rock-switch',      // boulder + false wall + exit room, entered from a fall.
   'spine',            // long fattening spine up to side rooms. Altar Cave only.
 ]);
+
+/**
+ * Floor-0 (`snake`) sampling ranges for this dungeon, each an inclusive
+ * `[min, max]` pair drawn with a single `rng()` call.
+ *
+ * ⛔ THESE WERE SEVEN LITERALS IN THE SNAKE BRANCH, so both caves opened on the
+ * same map. The default is Altar Cave's historical set, so a row that says
+ * nothing carves exactly what it always did.
+ *
+ * ⛔ `left` / `right` ARE NOT FREE FOR A CAVE WITH SECRET ROOMS.
+ * `findCorridorCandidates` needs four void columns outside the room wall to
+ * place a secret corridor, which is why Altar Cave's left edge may not go below
+ * 5. A dungeon declaring no secret rooms has no such constraint — see
+ * `placeSecretPath`, which now returns before carving anything for one.
+ */
+export function snakeBounds(dungeon) {
+  const d = (dungeon && dungeon.layout && dungeon.layout.snake) || null;
+  const pick = (k, dflt) => (d && Array.isArray(d[k]) ? d[k] : dflt);
+  return {
+    top:   pick('top',   [4, 6]),
+    bot:   pick('bot',   [18, 20]),
+    roomW: pick('roomW', [7, 9]),
+    left:  pick('left',  [5, 6]),
+    right: pick('right', [26, 27]),
+    gap:   pick('gap',   [3, 5]),
+    tilt:  pick('tilt',  [3, 5]),
+  };
+}
+
+/** One `rng()` draw from an inclusive `[min, max]` pair. */
+export function drawRange(rng, [lo, hi]) { return lo + Math.floor(rng() * (hi - lo + 1)); }
 
 /**
  * Corridor run lengths for this dungeon, in steps.

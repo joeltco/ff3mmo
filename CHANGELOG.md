@@ -1,3 +1,82 @@
+## 1.10.98 — 2026-08-27
+
+### The Cave of Seals gets its own entry floor — and a real bug on it
+
+⛔ **FIRST, A CORRECTION I OWED.** v1.10.97 reported Altar Cave's floor 2 as
+letting you walk around its boulder on 17% of seeds, and it read as a finding
+about Altar Cave. Joel asked whether I had changed it. **I had not**, and the
+proof is not an assertion: checking out `0ef1db64` — the tree before any of this
+arc — into a detached worktree and running a self-contained probe that imports
+nothing I wrote gives **69/400**, the same number as today. Altar Cave's floor-2
+snapshot digest is `7545e4903484f8f7`, set in `a6f9fa18` long before this work and
+unchanged through every deploy since.
+
+The defect is as old as the `rock-switch` floor. What was new in v1.10.96 was
+that anything **looked**. A new check lighting up an existing wart on its first
+run is the check working; saying so as though it were a discovery about the cave
+was my error, not the gate's.
+
+### ⛔ Secret corridors that led nowhere — 218 of 400 seeds
+
+`placeSecretPath` carved first and consulted the registry only at the WIRING
+step, where `_secretIds[_secretIdx++]` came back undefined and `break`. The
+corridor was already cut by then.
+
+The Cave of Seals declares `secretRooms: []` deliberately — the registry says so
+in a comment. So on **54% of its floor-0 seeds** it carved a passage running out
+of the room into the void, ending at a disguised `FALSE_CEILING` doorway wired to
+**nothing**. Dungeon floors set `skipRoomClip`, so the whole thing is drawn: the
+player walks a corridor to the map edge and finds a tile that looks like wall and
+does nothing.
+
+That is the shape v1.10.33 was reverted for — *"a disguised tile in a corridor
+reads as a stray wall tile"* — except here it is not even hiding anything.
+`placeSecretPath` now returns before drawing anything for a dungeon with no
+secret rooms. **218/400 -> 0/400.** Altar Cave declares two rooms, never takes
+that path, and is untouched.
+
+### Floor 0 stops being Altar Cave's floor 0
+
+Both caves opened on the same map: **83 of 200 seeds pixel-identical**, the rest
+differing by ONE tile — Altar Cave's secret doorway. `snake` has no corridors, so
+v1.10.97's corridor block could not reach it.
+
+Seven more literals move onto the row as `layout.snake`, drawn through
+`drawRange` — one `rng()` call per value, same order, so Altar Cave's declared
+ranges reproduce its literals exactly:
+
+    altar   top[4,6]  bot[18,20] roomW[7,9]   left[5,6] right[26,27] gap[3,5]  tilt[3,5]
+    seals   top[3,5]  bot[19,21] roomW[8,11]  left[2,4] right[28,29] gap[7,11] tilt[4,7]
+
+⛔ **`left`/`right` ARE NOT FREE FOR A CAVE WITH SECRET ROOMS.**
+`findCorridorCandidates` needs four void columns outside the room wall, which is
+why Altar Cave's left edge may not go below 5 — widening it would quietly delete
+that cave's secrets. The Cave of Seals may reach columns 2 and 29 precisely
+BECAUSE it declares no secret rooms. The constraint is now written next to the
+data it constrains instead of in a comment above a literal.
+
+Result: two tall chambers joined by a long thin neck, against Altar Cave's chunky
+rooms and thick middle. Walkable tiles 118 -> 141. **0 of 200 seeds identical**,
+mean 316 tiles differing. Looked at side by side before shipping.
+
+### New gate — no two dungeons may generate the same map
+
+The strongest form of "these should be two different dungeons", and the only one
+that cannot be satisfied by paperwork: compare the **tilemaps**, not the layout
+names. Sharing a layout is fine — both caves use `snake` and `rock-switch` — but
+two rows carving the same tiles from the same seed are one dungeon wearing two
+names, which is exactly what floor 0 was.
+
+    altar f0 vs seals f0:  0/60 identical, mean 304 tiles differ
+    altar f1 vs seals f1:  0/60 identical, mean 231 tiles differ
+    altar f2 vs seals f2:  0/60 identical, mean 244 tiles differ
+
+Proven by reverting the seals row to Altar Cave's snake ranges: 2/60 seeds go
+identical and the gate fails.
+
+**Altar Cave is byte-identical through all of it** — five floors and three side
+maps, snapshot green with no `--update`.
+
 ## 1.10.97 — 2026-08-26
 
 ### Longer corridors in the Cave of Seals — and they fixed the boulder walk-around

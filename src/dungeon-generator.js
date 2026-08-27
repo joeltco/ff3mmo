@@ -24,7 +24,7 @@ import {
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
-import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds } from './data/dungeons.js';
+import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, drawRange } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
@@ -530,6 +530,27 @@ function carveCorridor(tilemap, candidates, goLeft, isFalse, rng) {
 function placeSecretPath(tilemap, startRow, endRow, floorIndex, rng, exitX, dungeon = STARTING_DUNGEON) {
   const falseWalls = new Map();
   if (floorIndex !== 0) return falseWalls;
+
+  // ⛔ NO SECRET ROOMS DECLARED, NO SECRET CORRIDORS CARVED.
+  //
+  // This used to carve regardless and only consult the registry at the WIRING
+  // step, where `_secretIds[_secretIdx++]` came back undefined and `break`. The
+  // corridor was already cut by then. On the Cave of Seals — which declares
+  // `secretRooms: []` deliberately — that left a corridor running out of the
+  // room into the void, ending at a disguised `FALSE_CEILING` doorway wired to
+  // NOTHING, on 218 of 400 seeds. Dungeon floors set `skipRoomClip`, so the
+  // whole thing is drawn: the player walks a passage to the map edge and finds a
+  // tile that looks like wall and does nothing.
+  //
+  // That is precisely the shape v1.10.33 was reverted for — "a disguised tile in
+  // a corridor reads as a stray wall tile" — and here it is not even hiding
+  // anything. The registry's `secretRooms: []` is a statement; this is the
+  // generator finally reading it.
+  //
+  // ⛔ THE RETURN IS BEFORE THE DRAWS, ON PURPOSE. It changes the rng stream for
+  // a dungeon with no secret rooms, which is the point; Altar Cave declares two
+  // and never takes this path, so its floors are untouched.
+  if (secretRoomMapIds(dungeon).length === 0) return falseWalls;
 
   const hasSecond = rng() < 0.5;
   const primaryLeft = rng() < 0.5;
@@ -1186,12 +1207,17 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // less. Widening the rooms toward the map edge would quietly delete the
     // floor's secrets, so the sampling ranges are bounded by that, not by what
     // fits on the map — and `check-floor-variety` now gates the resulting rate.
-    var roomTop = 4 + Math.floor(rng() * 3);        // 4-6
-    var roomBot = 18 + Math.floor(rng() * 3);       // 18-20
+    // ⭐ SAMPLED FROM THE DUNGEON ROW. These were seven literals, so both caves
+    // opened on the same map. `drawRange` is one `rng()` call per value, in the
+    // same order, and Altar Cave's row declares exactly the ranges these
+    // literals had — so its floor 0 is byte-identical.
+    const SN = snakeBounds(dungeon);
+    var roomTop = drawRange(rng, SN.top);
+    var roomBot = drawRange(rng, SN.bot);
     var aOnRight = rng() < 0.5;
-    const ROOM_W = 7 + Math.floor(rng() * 3);       // 7-9
-    const leftL = 5 + Math.floor(rng() * 2);        // 5-6  (never 4 — see above)
-    const rightR = 26 + Math.floor(rng() * 2);      // 26-27
+    const ROOM_W = drawRange(rng, SN.roomW);
+    const leftL = drawRange(rng, SN.left);          // see the note above re: secrets
+    const rightR = drawRange(rng, SN.right);
     // ⛔ THE TWO HALVES MUST NOT OVERLAP, and the gap must be derived rather
     // than hoped for. v1.10.31 sampled a fixed half-width of 9-11 columns from
     // each end independently: of the 12 resulting combinations **5 overlapped**
@@ -1199,7 +1225,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // and the symptom is not a malformed room — it is room B ending up a
     // SEPARATE CAVE with its own arch and chests that nothing can reach. Caught
     // on floor 0 seed 1811002716217, which took a third seed base to surface.
-    const gap = 3 + Math.floor(rng() * 3);          // 3-5 columns of rock between
+    const gap = drawRange(rng, SN.gap);             // columns of rock between
     const halfW = Math.floor((rightR - leftL - gap) / 2);
     const LEFT_HALF = [leftL, leftL + halfW];
     const RIGHT_HALF = [rightR - halfW, rightR];
@@ -1224,7 +1250,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // the lowest row and quietly cut room A out of those scans.
     const topology = rng() < 0.5 ? 'level' : 'tilted';
     plan.topology = topology;
-    const tilt = topology === 'tilted' ? 3 + Math.floor(rng() * 3) : 0;   // 3-5
+    const tilt = topology === 'tilted' ? drawRange(rng, SN.tilt) : 0;
     const aTop = roomTop, aBot = roomBot;
     const bTop = roomTop + tilt;
     const bBot = Math.min(24, roomBot + tilt);   // leave rows for B's overhang
