@@ -203,11 +203,41 @@ export function exitAudit(r, seen) {
  * the puzzle is back on the critical path), and the sealed region must actually
  * hold treasure (otherwise solving it pays nothing). Both are exact, so neither
  * needs a sample-size guard.
+ *
+ * ⭐ HOW MANY BOULDERS FOLLOWS FROM WHAT THE WALL GATES. Joel, 2026-08-27:
+ * *"if a boulder puzzle ever leads to an exit, it needs two boulders. one on
+ * each side of the wall, like its built in altar f2. but if its a treasure room,
+ * pond room, or any other chamber that doesn't leave the floor, it won't need a
+ * 2nd boulder."*
+ *
+ * So it is not a per-layout count — it is a consequence of `gates`, and it is
+ * checked as the property rather than as a number:
+ *
+ *   `gates: 'exit'`     — if opening the wall reveals a sealed region, at least
+ *     one boulder must sit against THAT region, or a player standing on the far
+ *     side has nothing to reopen it with. `oneSidedCap` is how often that may
+ *     fail. Altar Cave measures 71/400 (17.8%) and is pinned just above: its
+ *     second boulder goes in the exit room by corner search, and on the ~18% of
+ *     seeds where part of that room is reachable by another route the boulder
+ *     lands on the reachable part. Same standing wart as `walkaroundCap`, same
+ *     treatment — pinned so it cannot grow, not fixed, because fixing it moves
+ *     Altar Cave's maps.
+ *
+ *   `gates: 'treasure'` — NO boulder may be behind the wall. The chamber is a
+ *     dead end; you never stand on the far side needing a way out, so a boulder
+ *     over there is one nothing can ever reach. Exact, no ceiling.
+ *
+ * ⛔ `rocks` IS THE COUNT, AND IT IS EXACT ON EVERY SEED. Joel, 2026-08-27:
+ * *"altar f2 has to have 100% 2 boulders."* Separate from `oneSidedCap`, which
+ * asks WHERE they are — a floor can carry two and still have both on the same
+ * side, because on the walk-around seeds the wall seals a single tile and there
+ * is no other side to put one on. The count is the thing that was asked for and
+ * the count admits no ceiling.
  */
 const PUZZLE_ROLE = new Map([
-  ['altar/rock-switch',     { gates: 'exit', walkaroundCap: 0.20 }],
-  ['seals/rock-switch',     { gates: 'exit', walkaroundCap: 0 }],
-  ['seals/boulder-chamber', { gates: 'exit', walkaroundCap: 0 }],
+  ['altar/rock-switch',     { gates: 'exit', rocks: 2, walkaroundCap: 0.20, oneSidedCap: 0.20 }],
+  ['seals/boulder-chamber', { gates: 'exit', rocks: 2, walkaroundCap: 0,    oneSidedCap: 0 }],
+  ['seals/chamber-run',     { gates: 'treasure', rocks: 1 }],
 ]);
 
 export function sweepFloors(rom, n = 150, base = 1754900000000) {
@@ -219,7 +249,8 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
   for (const dg of DUNGEONS) {
   for (let f = 0; f < dg.floors; f++) {
     const label = `${dg.id} floor ${f}`;
-    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0 };
+    const role0 = PUZZLE_ROLE.get(`${dg.id}/${layoutForFloor(dg, f)}`) || null;
+    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0, oneSided: 0, rocksBehindWall: 0, wrongRockCount: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
@@ -265,6 +296,13 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         // is solved, and it is supposed to be. Asserting every boulder failed 633
         // of 2000 Altar Cave seeds on the first run of this check — the gate was
         // wrong, not the floor.
+        // ⭐ HOW MANY, EXACTLY. Counted per seed rather than averaged: a floor
+        // that ships one boulder on 1 seed in 400 averages to 2.00 and is still
+        // a floor with no way to reopen its wall.
+        {
+          const want = role0 && role0.rocks;
+          if (want != null && r.rockSwitch.rocks.length !== want) t.wrongRockCount++;
+        }
         const reachableRocks = r.rockSwitch.rocks.filter((rk) =>
           [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
             const nx = rk.x + dx, ny = rk.y + dy;
@@ -284,6 +322,20 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         {
           const openTm2 = applyRockSwitch(tm, r.rockSwitch);
           const openSeen2 = reachableFrom(openTm2, r.entranceX, r.entranceY);
+          // ⭐ WHICH SIDE OF THE WALL EACH BOULDER IS ON. The far side is the
+          // region the wall was hiding: unreachable now, reachable after.
+          {
+            const far = new Uint8Array(1024);
+            let farTiles = 0;
+            for (let i = 0; i < 1024; i++) if (!seen[i] && openSeen2[i]) { far[i] = 1; farTiles++; }
+            const touches = (m, rk) => [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dy]) => {
+              const nx = rk.x + dx, ny = rk.y + dy;
+              return nx >= 0 && nx < 32 && ny >= 0 && ny < 32 && !!m[ny * 32 + nx];
+            });
+            const farRocks = r.rockSwitch.rocks.filter((rk) => touches(far, rk));
+            if (farTiles && !farRocks.length) t.oneSided++;
+            if (farRocks.length) t.rocksBehindWall++;
+          }
           let sealedChests = 0;
           for (let i = 0; i < 1024; i++) {
             if (tm[i] !== CHEST) continue;
@@ -324,6 +376,9 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
     // gate that says whether it fixed anything.
     const lay = layoutForFloor(dg, f);
     const role = PUZZLE_ROLE.get(`${dg.id}/${lay}`);
+    if (role && role.rocks != null && t.wrongRockCount) {
+      hard.push(`${label}: ${t.wrongRockCount}/${t.seeds} seeds do not carry exactly ${role.rocks} boulder(s)`);
+    }
     if (role && role.gates === 'exit') {
       // ⛔ A RATE NEEDS A SAMPLE. `encounter-sim` calls this sweep with 60 seeds,
       // where a floor sitting at a true 17.8% comes out at 15/60 = 25% often
@@ -336,7 +391,20 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       if (enoughSeeds && t.seeds && t.exitOpenUnpuzzled / t.seeds > cap) {
         hard.push(`${label}: the way onward is reachable without the boulder on ${t.exitOpenUnpuzzled}/${t.seeds} seeds (ceiling ${Math.round(cap * 100)}%) — the false wall has stopped being the only route`);
       }
+      // ⭐ ONE ON EACH SIDE. A wall that leads OFF the floor has to open from
+      // whichever side the player is standing on.
+      const oCap = role.oneSidedCap;
+      const oEnough = oCap === 0 || t.seeds >= 200;
+      if (oEnough && t.seeds && t.oneSided / t.seeds > oCap) {
+        hard.push(`${label}: the sealed side has NO boulder of its own on ${t.oneSided}/${t.seeds} seeds (ceiling ${Math.round(oCap * 100)}%) — a wall that leads off the floor needs one on each side`);
+      }
+      if (t.oneSided) soft.push(`${label}: ${t.oneSided}/${t.seeds} seeds put no boulder on the sealed side`);
     } else if (role && role.gates === 'treasure') {
+      // ⭐ AND A DEAD END NEEDS ONLY ONE. Nothing ever stands behind this wall
+      // needing a way out, so a boulder over there is one nothing can reach.
+      if (t.rocksBehindWall) {
+        hard.push(`${label}: a boulder sits BEHIND the wall on ${t.rocksBehindWall}/${t.seeds} seeds — a treasure chamber is a dead end, so that boulder can never be reached or needed`);
+      }
       if (t.seeds && t.exitOpenUnpuzzled !== t.seeds) {
         hard.push(`${label}: the way onward is BEHIND THE BOULDER on ${t.seeds - t.exitOpenUnpuzzled}/${t.seeds} seeds — a boulder puzzle opens treasure, never an exit`);
       }

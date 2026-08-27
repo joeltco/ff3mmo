@@ -41,6 +41,9 @@ const CEIL = 0x00, ROCK = 0x01;
 // call from pinning a new one honestly.
 const DEEP_LIMIT = new Map([
   ['snake', 5], ['trap-chamber', 25], ['boulder-chamber', 0], ['rock-switch', 20], ['spine', 30],
+  // Pinned at ZERO because it MEASURES zero, the same standard `boulder-chamber`
+  // is held to: 10,000 floors across five seed bases, not one band off depth 2.
+  ['chamber-run', 0],
 ]);
 
 function depths(tm) {

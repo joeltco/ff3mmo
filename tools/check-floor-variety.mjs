@@ -54,6 +54,11 @@ const LIMITS = new Map([
   ['boulder-chamber', { jaccard: 0.40, always: 20, entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
   ['rock-switch',     { jaccard: 0.30, always: 10, entrances: 40, secretRate: 0, lockedRate: 0.35, flatBand: 0.58, topologies: 2 }],
   ['spine',           { jaccard: 0.35, always: 15, entrances: 12, topologies: 4, secretRate: 0, lockedRate: 0, flatBand: 0.58 }],
+  // Its sibling's limits, and it clears every one of them with room: measured
+  // over 200 seeds at jaccard 0.133 (limit 0.30), 0 always-tiles (limit 10) and
+  // 62 distinct entrances (floor 40). It declares no secret and no locked room,
+  // so neither rate is enforced (`sideRoomRates`) — and neither is carved.
+  ['chamber-run',     { jaccard: 0.30, always: 10, entrances: 40, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
   [null,              null],   // boss chamber — authored, Jaccard 1.000 is correct
 ]);
 

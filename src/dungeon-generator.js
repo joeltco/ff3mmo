@@ -24,7 +24,7 @@ import {
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
-import { rollChambers } from './data/chambers.js';
+import { rollChambers, chamberById } from './data/chambers.js';
 import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, drawRange } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
@@ -880,6 +880,10 @@ const LAYOUT_CONFIG = {
   // chamber behind the false wall instead. Joel, 2026-08-26.
   'boulder-chamber': { stairs: 0, traps: 0,      chests: [4, 6], ponds: 0, skeletons: 9,       secrets: 0 },
   'rock-switch':     { stairs: 0, traps: 0,      chests: 0,      ponds: 0, skeletons: 0,       secrets: 0, rockPuzzle: true },
+  // Same deal as `rock-switch` — the branch places its own chests and bones,
+  // because the shared pass cannot see which side of the false wall a tile is
+  // on and will happily wall in the vault it opens.
+  'chamber-run':     { stairs: 0, traps: 0,      chests: 0,      ponds: 0, skeletons: 0,       secrets: 0, rockPuzzle: true },
   'spine':           { stairs: 0, traps: 0,      chests: 0,      ponds: 0, skeletons: [4, 6],  secrets: 0 },
 };
 
@@ -1881,6 +1885,67 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       rockSwitch = { rocks: [{ x: rock.x, y: rock.y }], wallTiles };
     }
 
+    // ⭐ A BOULDER ON EACH SIDE, BECAUSE THIS WALL LEADS OFF THE FLOOR.
+    //
+    // Joel, 2026-08-27: *"if a boulder puzzle ever leads to an exit, it needs
+    // two boulders. one on each side of the wall, like its built in altar f2.
+    // but if its a treasure room, pond room, or any other chamber that doesn't
+    // leave the floor, it won't need a 2nd boulder."*
+    //
+    // Altar Cave's `rock-switch` has always had two — one in the hall, one in
+    // the room beyond the wall, so the wall opens from either side. This floor
+    // shipped with ONE and its wall gates the way DOWN, so a player standing on
+    // the far side had nothing to reopen it with. Counted before the fix:
+    // 2 boulders on 399 of 400 altar f2 seeds, 1 on 400 of 400 here.
+    //
+    // ⛔ THE FAR SIDE IS UNREACHABLE UNTIL THE WALL OPENS, so the severance test
+    // has to run on the OPENED map — `floodSize` above floods the shut one, where
+    // every tile over there costs nothing because none of it is reachable anyway.
+    if (rockSwitch) {
+      const openedTm = Uint8Array.from(tilemap);
+      for (const w of wallTiles) openedTm[w.y * 32 + w.x] = w.newTile;
+      const openFull = reachableCount(openedTm, entranceX, entranceY);
+      // Everything you stand BESIDE to use — the passage down, chests — plus its
+      // own neighbours, so the second boulder cannot wall in the staircase it
+      // shares a room with.
+      const rockUsed = new Set();
+      for (let i = 0; i < 1024; i++) {
+        const t = tilemap[i];
+        if (t !== CHEST && t !== PASSAGE_ENTRY && t !== PASSAGE_BTM && t !== STAIR_ARCH
+            && t !== STAIRS_DOWN && t !== EXIT_PREV) continue;
+        const x = i % 32, y = (i - x) / 32;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) rockUsed.add(`${x + dx},${y + dy}`);
+      }
+      const farBounds = {
+        left:  exitDir === 1 ? exitPathEndX : exitPathEndX - 4,
+        right: exitDir === 1 ? exitPathEndX + 4 : exitPathEndX,
+        top: exitPathFloorY - 2, bot: exitPathFloorY + 2,
+      };
+      const farSafe = (p) => reachableCount(openedTm, entranceX, entranceY,
+        new Set([`${p.x},${p.y}`])) === openFull - 1;
+      let far = findCornerFloor(tilemap, rng, rockUsed, farBounds);
+      if (far && !farSafe(far)) far = null;
+      // ⛔ A CORNER IS NOT GUARANTEED IN A 5x5 WITH A STAIRCASE IN IT. Fall back
+      // to any safe floor tile in the room rather than shipping a one-sided exit
+      // puzzle, which is the whole defect being fixed.
+      if (!far) {
+        for (let y = farBounds.top; y <= farBounds.bot && !far; y++) {
+          for (let x = farBounds.left; x <= farBounds.right; x++) {
+            if (x < 1 || x > 30 || y < 0 || y >= 32) continue;
+            if (tilemap[y * 32 + x] !== FLOOR) continue;
+            if (rockUsed.has(`${x},${y}`)) continue;
+            if (!farSafe({ x, y })) continue;
+            far = { x, y }; break;
+          }
+        }
+      }
+      if (far) {
+        tilemap[far.y * 32 + far.x] = 0x0B;
+        rockSwitch.rocks.push({ x: far.x, y: far.y });
+      }
+    }
+
     var exitXForSecret = null;
     var startRowForSecret = 7;
     var endRowForSecret = 27;
@@ -2172,9 +2237,33 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       }
     }
 
-    // Exit room rock — opens false wall from the other side (return trip)
+    // ── The far-side boulder — opens the false wall from the other side.
+    //
+    // ⛔ IT HAS TO BE IN THE REGION THE WALL SEALS, NOT MERELY IN THE EXIT ROOM.
+    // Joel, 2026-08-27: *"altar f2 has to have 100% 2 boulders."*
+    //
+    // This was `findCornerFloor(tilemap, rng, rockUsed, rm2Bounds)` — a corner of
+    // the exit ROOM, on the SHUT map, with no test of which side of the wall it
+    // landed on. Two ways that came up short, both measured over 2,000 seeds:
+    //
+    //   * On 16.3% of seeds part of the exit room is already reachable by another
+    //     route (the same walk-around `walkaroundCap` pins), so the corner it
+    //     picked was on the reachable side. The boulder existed; it was not on
+    //     the far side of anything, and a player standing in the sealed part had
+    //     nothing to push.
+    //   * On ~1 seed in 400 the room offered no corner at all and the floor
+    //     shipped with ONE boulder.
+    //
+    // Both fixed the same way: derive the sealed region — unreachable now,
+    // reachable once the wall opens — and take the boulder FROM it. Corners
+    // first, so it still reads as placed rather than dropped; any safe tile in
+    // the region if the room has no free corner, because one boulder is the
+    // defect being fixed and a plain tile is not.
+    //
+    // ⛔ AND THE SEVERANCE TEST RUNS ON THE OPENED MAP. Flooding the shut one
+    // says every tile over there costs nothing, because none of it is reachable
+    // anyway — the test would pass a boulder dropped straight onto the doorway.
     if (rockSwitch) {
-      // Tight exclusion: just the exit block + chest tiles (not the wide chestUsed radius)
       const rockUsed = new Set();
       for (let i = 0; i < 1024; i++) {
         const t = tilemap[i];
@@ -2185,10 +2274,70 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
               rockUsed.add(`${x + dx},${y + dy}`);
         }
       }
-      const exitRockPos = findCornerFloor(tilemap, rng, rockUsed, rm2Bounds);
-      if (exitRockPos) {
-        tilemap[exitRockPos.y * 32 + exitRockPos.x] = 0x0B;
-        rockSwitch.rocks.push({ x: exitRockPos.x, y: exitRockPos.y });
+      const openedTm = Uint8Array.from(tilemap);
+      for (const w of wallTiles) openedTm[w.y * 32 + w.x] = w.newTile;
+      const shutMask = reachableFloorMask(tilemap, entranceX, entranceY);
+      const openMask = reachableFloorMask(openedTm, entranceX, entranceY);
+      const openFull = reachableCount(openedTm, entranceX, entranceY);
+      const sealed = [];
+      for (let i = 0; i < 1024; i++) {
+        if (shutMask[i] || !openMask[i]) continue;
+        if (tilemap[i] !== FLOOR) continue;
+        const x = i % 32, y = (i - x) / 32;
+        if (rockUsed.has(`${x},${y}`)) continue;
+        if (reachableCount(openedTm, entranceX, entranceY, new Set([`${x},${y}`])) !== openFull - 1) continue;
+        sealed.push({ x, y });
+      }
+      // A corner is a tile with a wall on each axis — the same shape
+      // `findCornerFloor` looks for, asked of the sealed region instead of a
+      // rectangle. Prefer them; fall back to the whole region.
+      const isCorner = (p) => {
+        const f = (x, y) => (x >= 0 && x < 32 && y >= 0 && y < 32 && isFloorTile(tilemap[y * 32 + x]));
+        const wL = !f(p.x - 1, p.y), wR = !f(p.x + 1, p.y);
+        const wU = !f(p.x, p.y - 1), wD = !f(p.x, p.y + 1);
+        return (wL !== wR) && (wU !== wD);
+      };
+      // ⛔ AND IT IS PLACED EVEN WHEN THERE IS NO FAR SIDE TO PLACE IT ON.
+      // Joel, 2026-08-27: *"altar f2 has to have 100% 2 boulders."*
+      //
+      // On the seeds this floor lets you walk around the wall, the region the
+      // wall seals is exactly ONE TILE — the wall's own opening. Measured: 71 of
+      // 400, sealed region size 1, tile $00. There is no other side to stand on,
+      // so "one on each side" has nothing to attach to, and a first pass that
+      // required the sealed region simply placed no second boulder at all: it
+      // took the count from 399/400 DOWN to 329/400.
+      //
+      // So the sealed region is a PREFERENCE, not a condition. The exit room is
+      // the fallback, which is where this boulder always used to go — the count
+      // is what was asked for and the count is now exact.
+      //
+      // ⛔ The 71 seeds are the walk-around wart (`walkaroundCap`), seen a third
+      // way. Closing THAT is what would make "one on each side" reach 100% here;
+      // it is a different change and it moves this floor again.
+      const roomFloor = [];
+      for (let y = rm2Bounds.top; y <= rm2Bounds.bot; y++) {
+        for (let x = rm2Bounds.left; x <= rm2Bounds.right; x++) {
+          if (x < 1 || x > 30 || y < 0 || y >= 32) continue;
+          if (tilemap[y * 32 + x] !== FLOOR) continue;
+          if (rockUsed.has(`${x},${y}`)) continue;
+          if (reachableCount(openedTm, entranceX, entranceY, new Set([`${x},${y}`])) !== openFull - 1) continue;
+          roomFloor.push({ x, y });
+        }
+      }
+      const sealedCorners = sealed.filter(isCorner);
+      const roomCorners = roomFloor.filter(isCorner);
+      // Best available, in order: a corner of the sealed region, any tile of it,
+      // a corner of the exit room, any tile of the exit room.
+      const pool = sealedCorners.length ? sealedCorners
+                 : sealed.length ? sealed
+                 : roomCorners.length ? roomCorners
+                 : roomFloor;
+      // ⛔ ONE DRAW, ALWAYS — `findCornerFloor` made zero when it found nothing,
+      // so the number of rng calls depended on whether the room had a corner.
+      const pick = pool.length ? pool[Math.floor(rng() * pool.length)] : (rng(), null);
+      if (pick) {
+        tilemap[pick.y * 32 + pick.x] = 0x0B;
+        rockSwitch.rocks.push({ x: pick.x, y: pick.y });
       }
     }
 
@@ -2294,6 +2443,384 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
         lockedDoors.add(`${doorPos.x},${doorPos.y}`);
       }
     }
+
+  } else if (LAYOUT === 'chamber-run') {
+    // ── A RUN OF CHAMBERS, WITH THE BOULDER OPENING A VAULT ─────────────
+    //
+    // Joel, 2026-08-27: *"f2 is gonna be random chambers. entrance chamber to
+    // exit chamber. Boulder puzzles will only be to open treasure chambers.
+    // not an exit."*
+    //
+    // ⛔ THE WAY ONWARD IS NEVER BEHIND THE WALL. That is the whole difference
+    // from `rock-switch`, which puts its false wall in the middle of the run to
+    // the exit chamber and makes the boulder the only way off the floor. Here
+    // the run is open end to end; the wall seals a DEAD-END alcove instead.
+    // `dungeon-sweep` pins this layout as `gates: 'treasure'`, which inverts
+    // every assertion: the exit must be reachable without touching the boulder
+    // on EVERY seed, and the sealed side must actually hold a chest.
+    //
+    // ⛔ THE HUB IS FIVE WIDE, NOT SEVEN. The giant hall belongs to floor 1
+    // (`boulder-chamber`); this floor spends its rows on two branches leaving
+    // one hub, and a 7-wide hall leaves no room for the second.
+    //
+    // Shape — a T lying on its side, the run doubling back over itself:
+    //
+    //     [entrance] --------- corridor ---------> [chamber A]
+    //                                                   |
+    //                                               vertical
+    //                                                   |
+    //        [ VAULT ] === wall === stub --------- [ hub + boulder ]
+    //                                                   |
+    //                       [exit chamber] <-- corridor -+
+    //
+    // Chamber A and the hub are both ROLLED from `data/chambers.js`; the
+    // entrance, the exit and the vault are fixed, because what they are is what
+    // the floor is for.
+
+    // ── Columns. Drawn first, then the hub is placed where both branches fit.
+    const runDir   = rng() < 0.5 ? 1 : -1;   // hub -> exit chamber
+    const vaultDir = -runDir;                // hub -> vault alcove
+    const horizDir = vaultDir;               // entrance -> chamber A, over the exit run
+    const exitDir  = runDir;
+
+    const vaultLen = 3 + Math.floor(rng() * 3);              // 3-5: an alcove, not a run
+    const hubJit   = Math.floor(rng() * 3);                  // 0-2
+    const exitRoll = CORR.hMin + Math.floor(rng() * hSpan);
+    const pathRoll = CORR.hMin + Math.floor(rng() * hSpan);
+    const entrBaseW = 2 + Math.floor(rng() * 2);
+
+    // ⛔ CLAMPED AFTER THE DRAW, NEVER BEFORE. Narrowing a range before it is
+    // rolled changes the distribution; clamping the result only trims the tail
+    // that would not have fitted anyway. Same rule the corridor bounds follow.
+    //
+    // The hub sits `HUB_HALF_W + vaultLen + 5` columns clear of the vault-side
+    // edge, which is the least the alcove can occupy, and everything left over
+    // goes to the run onward. The two expressions are exact mirrors (x -> 31-x).
+    const HUB_HALF_W = 2;
+    // Read as if the run went RIGHT, then mirrored (x -> 31-x) if it does not,
+    // so the two hands of this floor are exact reflections and only one budget
+    // has to be reasoned about.
+    //   `8 + vaultLen`  the least the alcove can occupy on the far side
+    //   `23 - exitRoll` the most the hub can sit right and still give the run
+    //                   onward its full drawn length
+    // The jitter moves the hub between them; where they cross, the alcove wins
+    // and the run onward is the thing that gets trimmed — a short main corridor
+    // is a worse floor than a short dead-end stub.
+    const hubMin = 8 + vaultLen;
+    const hubRight = Math.max(hubMin, Math.min(hubMin + hubJit, 23 - exitRoll));
+    const hubX = runDir === 1 ? hubRight : 31 - hubRight;
+    const exitLen   = Math.max(4, Math.min(exitRoll, runDir === 1 ? 23 - hubX : hubX - 8));
+    const pathLength = Math.max(4, Math.min(pathRoll, runDir === 1 ? 25 - hubX : hubX - 6));
+
+    // ── Rows. Same top/bottom entry split `rock-switch` uses.
+    const vertDir = rng() < 0.5 ? -1 : 1;
+    const startFloorY = vertDir === -1
+      ? 23 + Math.floor(rng() * 3)                 // 23-25, climbing
+      : 7 + Math.floor(rng() * 3);                 // 7-9,   descending
+    const topology = rng() < 0.5 ? 'chain' : 'zigzag';
+    plan.topology = topology;
+    const midFloorY = topology === 'zigzag' ? startFloorY - vertDir * 2 : startFloorY;
+    const vertRoll = CORR.vMin + Math.floor(rng() * vSpan);
+    // Both branches and the hub carve the same seven rows, and the exit block
+    // reaches one row above them — so the whole floor fits inside vertY-5..vertY+2.
+    const vertLength = Math.max(4, Math.min(vertRoll, vertDir === -1
+      ? midFloorY - 8                              // climbing:   keep vertY-5 >= 0
+      : 25 - midFloorY));                          // descending: keep vertY+2 <= 29
+
+    // ── Carve.
+    const pathEndX = hubX - HUB_HALF_W * horizDir;          // chamber A's near edge
+    entranceX = horizDir === 1
+      ? pathEndX - pathLength - entrBaseW
+      : pathEndX + pathLength;
+    planBoxChamber(plan, tilemap, 'entrance', { x: entranceX, y: startFloorY, w: entrBaseW });
+
+    const horizStartX = horizDir === 1 ? entranceX + entrBaseW : entranceX;
+    planElbow(plan, tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
+
+    // ⭐ BOTH MIDDLE ROOMS ARE ROLLED. `rock-switch` rolls one and hard-codes
+    // its hall as 'puzzle'; "random chambers" means the hub is drawn from the
+    // pool too, and the boulder is placed in whatever it turned out to be.
+    const [midCh, hubCh] = rollChambers(dungeon, floorIndex, ['mid', 'mid'], rng);
+    planChamber(plan, tilemap, rng, midCh.role, { x: pathEndX, y: midFloorY, dir: horizDir });
+
+    const vertY0 = vertDir === -1 ? midFloorY - 2 : midFloorY + 2;
+    const vertY = planVLink(plan, tilemap, { x: hubX, y0: vertY0, dir: vertDir, steps: vertLength }).endY;
+
+    const hubDyMin = -4, hubDyMax = 2;
+    // ⭐ BOTH BRANCHES LEAVE THE SAME ROW, IN OPPOSITE DIRECTIONS. The hub is a T.
+    const exitFloorY = vertY, vaultFloorY = vertY;
+    planWideChamber(plan, tilemap, rng, hubCh.role, {
+      x: hubX, y: vertY, dyMin: hubDyMin, dyMax: hubDyMax, halfW: HUB_HALF_W,
+    });
+    // ⛔ `keepClear` IS NOT ENOUGH TO GUARANTEE A MOUTH, AND IT ONLY HOLDS ONE
+    // SIDE PER ROW — this hub needs both.
+    //
+    // It holds a row's JITTER, and the thing that actually closes a mouth is
+    // `addOverhang`, which lays two rows of rock under every ceiling. Jitter one
+    // row of the room's top edge inward and the ceiling it leaves hangs its band
+    // over the row BELOW — so a mouth held open at its own row was walled anyway
+    // by the row above it. Measured on the first build of this layout: the vault
+    // was cut off from the hub, wall and stub both intact, on 69 of 200 seeds.
+    //
+    // Holding the top five rows at full width puts the ceiling at vertY-5 and
+    // the rock band at vertY-4..vertY-3, which is two clear rows above the
+    // branch row. The bottom two rows keep their jitter, so the room still ends
+    // ragged rather than rectangular.
+    for (let dy = hubDyMin + 1; dy <= 0; dy++) {
+      const y = vertY + dy;
+      if (y < 0 || y >= 32) continue;
+      for (let x = hubX - HUB_HALF_W; x <= hubX + HUB_HALF_W; x++) {
+        if (x >= 1 && x <= 30) tilemap[y * 32 + x] = FLOOR;
+      }
+    }
+
+    // The run onward — OPEN. No wall anywhere along it.
+    const exitPathStartX = hubX + HUB_HALF_W * exitDir;
+    for (let s = 1; s <= exitLen; s++) {
+      const ex = exitPathStartX + s * exitDir;
+      if (ex < 1 || ex > 30) break;
+      for (let dy = -2; dy <= 0; dy++) {
+        const ey = exitFloorY + dy;
+        if (ey >= 0 && ey < 32) tilemap[ey * 32 + ex] = FLOOR;
+      }
+    }
+    const exitPathEndX = exitPathStartX + exitLen * exitDir;
+    planChamber(plan, tilemap, rng, 'exit', { x: exitPathEndX, y: exitFloorY, dir: exitDir });
+
+    // The vault alcove — a stub off the hub, ending in a room with no other way in.
+    const vaultStartX = hubX + HUB_HALF_W * vaultDir;
+    for (let s = 1; s <= vaultLen; s++) {
+      const vx = vaultStartX + s * vaultDir;
+      if (vx < 1 || vx > 30) break;
+      for (let dy = -2; dy <= 0; dy++) {
+        const vy = vaultFloorY + dy;
+        if (vy >= 0 && vy < 32) tilemap[vy * 32 + vx] = FLOOR;
+      }
+    }
+    const vaultEndX = vaultStartX + vaultLen * vaultDir;
+    planChamber(plan, tilemap, rng, 'hoard', { x: vaultEndX, y: vaultFloorY, dir: vaultDir });
+
+    finishCaveShape(tilemap);
+
+    // The way down, in the exit chamber.
+    const exitBlockX = exitPathEndX + 3 * exitDir;
+    const exitBaseRow = exitFloorY - 5;
+    placeDeepEntrance(tilemap, exitBlockX, -exitDir, exitBaseRow);
+    var rockExitX = exitBlockX, rockExitY = exitBaseRow + 1;   // PASSAGE_ENTRY
+    enforceMinCeilingGap(tilemap);
+
+    // The way in. This floor is always ENTERED ON FOOT — floor 1's boulder
+    // chamber leaves through a passage, not a trap hole — so it always gets an
+    // arrival arch. ⛔ At the far edge of the entrance room from the corridor:
+    // `placeDeepEntrance` lays rock on the arch's closed side, and from the
+    // middle of the room that wall lands across the corridor mouth.
+    const archX = Math.max(2, Math.min(29, horizDir === 1 ? entranceX : entranceX + entrBaseW));
+    const archBase = startFloorY - 5;
+    placeDeepEntrance(tilemap, archX, horizDir, archBase);
+    enforceMinCeilingGap(tilemap);
+    entranceX = archX;
+    entranceY = archBase + 1;
+
+    // ── The false wall, across the middle of the vault stub. Two rocky rows
+    // and one floor row, so it reads as ordinary rock until the boulder opens
+    // it — the shape `handleRockPuzzle` restores tile by tile.
+    const wallStep = Math.max(1, Math.floor(vaultLen / 2));
+    const wallX = vaultStartX + wallStep * vaultDir;
+    const wallTiles = [];
+    for (let dy = -2; dy <= 0; dy++) {
+      const wy = vaultFloorY + dy;
+      if (wy >= 0 && wy < 32) {
+        tilemap[wy * 32 + wallX] = CEILING;
+        wallTiles.push({ x: wallX, y: wy, newTile: dy <= -1 ? WALL_ROCKY : FLOOR });
+      }
+    }
+
+    // ── The boulder, in the hub. Nearest floor tile to a random corner, then
+    // the severance test: a boulder is impassable and permanent, so a candidate
+    // that costs the flood more than itself is a cut, not a puzzle piece.
+    const hubX1 = hubX - HUB_HALF_W, hubX2 = hubX + HUB_HALF_W;
+    const hubY1 = vertY + hubDyMin, hubY2 = vertY + hubDyMax;
+    const cornerPts = [[hubX1, hubY1], [hubX2, hubY1], [hubX1, hubY2], [hubX2, hubY2]];
+    for (let i = cornerPts.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [cornerPts[i], cornerPts[j]] = [cornerPts[j], cornerPts[i]];
+    }
+    const rockCandidates = [];
+    for (const [cx, cy] of cornerPts) {
+      let best = null, bestD = Infinity;
+      for (let y = hubY1; y <= hubY2; y++) {
+        for (let x = hubX1; x <= hubX2; x++) {
+          if (x < 1 || x > 30 || y < 0 || y >= 32) continue;
+          if (tilemap[y * 32 + x] !== FLOOR) continue;
+          const d = Math.abs(x - cx) + Math.abs(y - cy);
+          if (d < bestD) { bestD = d; best = { x, y }; }
+        }
+      }
+      if (best) rockCandidates.push(best);
+    }
+    // ⛔ THE TEST HAS TO BE RUN ON THE FLOOR THE PUZZLE LEAVES BEHIND, TOO.
+    //
+    // Blocking-and-reflooding the SHUT map is not enough here, and this is the
+    // difference between a wall that gates the exit and a wall that gates a
+    // vault. With the wall shut the alcove is already unreachable, so a boulder
+    // dropped in its MOUTH costs the flood exactly one tile and passes — and
+    // then the player pushes it, the wall opens, and the way into the vault is
+    // blocked by the very boulder that opened it. 15 of 200 seeds, and the
+    // sweep's own "still stranded after the rock switch" check is what caught
+    // it. A candidate has to be free of consequence on BOTH maps.
+    const openedTm = Uint8Array.from(tilemap);
+    for (const w of wallTiles) openedTm[w.y * 32 + w.x] = w.newTile;
+    const shutSize = reachableCount(tilemap, entranceX, entranceY);
+    const openSize = reachableCount(openedTm, entranceX, entranceY);
+    const isSafeRock = (c) => {
+      const blocked = new Set([`${c.x},${c.y}`]);
+      return reachableCount(tilemap,   entranceX, entranceY, blocked) === shutSize - 1
+          && reachableCount(openedTm,  entranceX, entranceY, blocked) === openSize - 1;
+    };
+    const safeRocks = rockCandidates.filter(isSafeRock);
+    // ⛔ NO BOULDER MEANS A VAULT NOTHING CAN EVER OPEN — chests included. If
+    // every corner is a cut, take any safe tile in the hub rather than shipping
+    // a floor whose puzzle has no piece.
+    if (safeRocks.length === 0) {
+      for (let y = hubY1; y <= hubY2 && safeRocks.length === 0; y++) {
+        for (let x = hubX1; x <= hubX2; x++) {
+          if (x < 1 || x > 30 || y < 0 || y >= 32) continue;
+          if (tilemap[y * 32 + x] !== FLOOR) continue;
+          if (isSafeRock({ x, y })) { safeRocks.push({ x, y }); break; }
+        }
+      }
+    }
+
+    var rockSwitch = null;
+    if (safeRocks.length > 0) {
+      const rock = safeRocks[Math.floor(rng() * safeRocks.length)];
+      tilemap[rock.y * 32 + rock.x] = 0x0B;
+      rockSwitch = { rocks: [{ x: rock.x, y: rock.y }], wallTiles };
+    }
+
+    // ── Room bounds, for the chest / bone passes and the catalogue features.
+    const spanOf = (nearX, dir) => (dir === 1
+      ? { left: nearX, right: nearX + 4 }
+      : { left: nearX - 4, right: nearX });
+    const roomA = { ...spanOf(pathEndX, horizDir), top: midFloorY - 2, bot: midFloorY + 2 };
+    const hubRoom = { left: hubX1, right: hubX2, top: vertY + hubDyMin + 2, bot: vertY + hubDyMax };
+    const exitRoom = { ...spanOf(exitPathEndX, exitDir), top: exitFloorY - 2, bot: exitFloorY + 2 };
+    const vaultRoom = { ...spanOf(vaultEndX, vaultDir), top: vaultFloorY - 2, bot: vaultFloorY + 2 };
+
+    // ⛔ THIS LAYOUT PLACES ITS OWN LOOT (`LAYOUT_CONFIG` gives it 0 chests and
+    // 0 skeletons), because the shared pass cannot see the sealed side. Its
+    // corner search falls back to "any corner anywhere" when a room has none
+    // free, and a chest dropped on the vault stub walls in the room the puzzle
+    // exists to open — the same class of bug as a chest on the boulder's only
+    // approach, one step further along.
+    const chestUsed = new Set();
+    chestUsed.add(`${entranceX},${entranceY}`);
+    if (rockSwitch) {
+      for (const r of rockSwitch.rocks) {
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++) chestUsed.add(`${r.x + dx},${r.y + dy}`);
+      }
+    }
+    for (let dy = -3; dy <= 3; dy++)
+      for (let dx = -2; dx <= 2; dx++) chestUsed.add(`${exitBlockX + dx},${exitBaseRow + dy}`);
+    // The wall's own tiles and everything beside them: the stub is one tile
+    // wide, so anything standing in it is standing in the doorway.
+    for (const w of wallTiles) {
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) chestUsed.add(`${w.x + dx},${w.y + dy}`);
+    }
+    for (let s = 0; s <= vaultLen; s++) {
+      const vx = vaultStartX + s * vaultDir;
+      for (let dy = -2; dy <= 0; dy++) chestUsed.add(`${vx},${vaultFloorY + dy}`);
+    }
+
+    const dropChest = (bounds) => {
+      const pos = findCornerFloor(tilemap, rng, chestUsed, bounds)
+        || findRandomFloor(tilemap, rng, chestUsed, bounds);
+      if (!pos) return null;
+      tilemap[pos.y * 32 + pos.x] = CHEST;
+      for (let dy = -3; dy <= 3; dy++)
+        for (let dx = -3; dx <= 3; dx++) chestUsed.add(`${pos.x + dx},${pos.y + dy}`);
+      return pos;
+    };
+
+    // ⭐ THE VAULT IS SERVED FIRST. Everything else competes for what is left —
+    // the sealed room is the reason the boulder is here at all.
+    //
+    // ⛔ NOT THE ONLY THING PUTTING TREASURE IN THERE, and the measurement says
+    // so: with this line removed the `sealed-hoard` feature still fills the vault
+    // on all 400 seeds. It is here to make the hoard a hoard — measured at 2 or 3
+    // chests behind the wall on every seed, never fewer — not because the gate
+    // catches its absence. What the gate DOES catch is an empty vault: remove
+    // this AND the feature and `sealedNoTreasure` fires on 400/400.
+    dropChest(vaultRoom);
+    dropChest(roomA);
+    for (let i = 0; i < 1 + Math.floor(rng() * 2); i++) dropChest(hubRoom);
+    dropChest(exitRoom);
+
+    const boneUsed = new Set();
+    boneUsed.add(`${entranceX},${entranceY}`);
+    for (let dy = -3; dy <= 1; dy++) if (entranceY + dy >= 0) boneUsed.add(`${entranceX},${entranceY + dy}`);
+    if (rockSwitch) {
+      for (const r of rockSwitch.rocks) {
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++) boneUsed.add(`${r.x + dx},${r.y + dy}`);
+      }
+    }
+    for (let i = 0; i < 1024; i++) {
+      const t = tilemap[i];
+      if (t === CHEST || t === PASSAGE_ENTRY || t === PASSAGE_BTM || t === STAIRS_DOWN || t === EXIT_PREV) {
+        const x = i % 32, y = (i - x) / 32;
+        for (const [dx, dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]) boneUsed.add(`${x + dx},${y + dy}`);
+      }
+    }
+    for (const w of wallTiles) boneUsed.add(`${w.x},${w.y}`);
+    const dropBones = (bounds, n) => {
+      for (let i = 0; i < n; i++) {
+        const pos = findRandomFloor(tilemap, rng, boneUsed, bounds);
+        if (!pos) break;
+        tilemap[pos.y * 32 + pos.x] = BONES;
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++) boneUsed.add(`${pos.x + dx},${pos.y + dy}`);
+      }
+    };
+    dropBones(roomA, 2);
+    dropBones(hubRoom, 3);
+    dropBones(exitRoom, 2);
+
+    // ⭐ WHAT EACH ROLLED ROOM BECOMES, applied at the end of the shared pass so
+    // a feature can only ever ADD to what is already placed.
+    chamberFeatures.push({ ...midCh, bounds: roomA });
+    chamberFeatures.push({ ...hubCh, bounds: hubRoom });
+    chamberFeatures.push({ ...chamberById('sealed-hoard'), bounds: vaultRoom });
+
+    // ⛔ THE SHARED FEATURE PASS HAS TO BE TOLD ABOUT THE BRANCHES.
+    //
+    // A rolled chamber's feature runs at the end of that pass against the shared
+    // `used` set — which is seeded from the entrance, the boulder and the tiles
+    // you stand on to use a door, and knows nothing about this floor's shape. A
+    // hub that rolled `vault` scattered its chests anywhere inside the hub,
+    // including the mouth of the alcove: 1 seed in 400 where the boulder opened
+    // the wall onto a doorway with a chest standing in it.
+    //
+    // Both mouths and the whole stub, so the reservation does not depend on
+    // where the wall happened to land along it.
+    var reservedTiles = [];
+    for (let s = 0; s <= vaultLen + 1; s++) {
+      const vx = vaultStartX + s * vaultDir;
+      for (let dy = -2; dy <= 0; dy++) reservedTiles.push(`${vx},${vaultFloorY + dy}`);
+    }
+    for (let s = 0; s <= 1; s++) {
+      const ex = exitPathStartX + s * exitDir;
+      for (let dy = -2; dy <= 0; dy++) reservedTiles.push(`${ex},${exitFloorY + dy}`);
+    }
+
+    var exitXForSecret = null;
+    var startRowForSecret = 7;
+    var endRowForSecret = 27;
+    var exitXForUsed = exitBlockX;
+    var endRowForUsed = exitBaseRow;
+    var chamberBounds = hubRoom;
 
   } else if (LAYOUT === 'spine') {
     // ── Floor 4: Long corridor up → 5×5 room → paths left/right to side rooms ──
@@ -2868,6 +3395,12 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
         }
       }
     }
+    // Tiles a floor branch has claimed for itself — a doorway, a one-wide stub,
+    // the mouth of a corridor. Empty on every layout that does not set it, so
+    // this changes nothing for the floors that came before it.
+    if (typeof reservedTiles !== 'undefined' && reservedTiles) {
+      for (const k of reservedTiles) used.add(k);
+    }
     // The snake layout: keep chests (and traps) out of the entrance block + its
     // landing in Room A — no chest should sit right where you walk in.
     if (LAYOUT === 'snake') {
@@ -3304,11 +3837,18 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   //   v1.10.33 — a disguised doorway into a tunnel. The whole tilemap is drawn,
   //     so the passage and its chest were visible and the disguised tile read as
   //     a stray wall blocking an open corridor.
-  //   v1.10.42 — floor 2's boulder switch placed a second time, opening a sealed
-  //     side chamber. Mechanically sound and fully gated; still rejected on look.
+  //   v1.10.42 — floor 2's boulder switch placed a SECOND time, opening a sealed
+  //     side chamber IN ADDITION to the one gating the exit. Mechanically sound
+  //     and fully gated; still rejected on look.
   // Floor 2 keeps its rock puzzle and floor 0 keeps its void-carved corridors,
   // because those are shipped and accepted. Do not add a third variation without
   // an explicit design call — the two that exist were not rejected for bugs.
+  //
+  // ⭐ AND `chamber-run` IS THAT EXPLICIT DESIGN CALL, not a fourth variation.
+  // Joel, 2026-08-27: *"Boulder puzzles will only be to open treasure chambers.
+  // not an exit."* What v1.10.42 added was a boulder on TOP of the exit puzzle —
+  // two mechanisms on one floor. What this is, is the floor's ONE boulder having
+  // one job. Read the rejection as "no second secret", not as "no vault".
 
   // ⛔ FLOOR MUST NEVER TOUCH VOID — the cartridge always walls it. Runs after
   // every shaping and placement pass, since the entrance frame is what mostly

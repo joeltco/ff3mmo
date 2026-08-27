@@ -37,6 +37,7 @@ const COMPLETE = new Map([
   ['trap-chamber',    true],
   ['boulder-chamber', true],
   ['rock-switch',     true],
+  ['chamber-run',     true],
   ['spine',           true],
   [null,              false],   // the boss chamber — authored, no layout
 ]);
@@ -117,7 +118,7 @@ for (const dg of DUNGEONS) {
   // and `snake` traces a boundary with no corridors at all — neither reads the
   // corridor block, and asserting against it flagged 22 legitimate floor-3 runs
   // on the first run of this check.
-  const CHAIN = new Set(['trap-chamber', 'boulder-chamber', 'rock-switch']);
+  const CHAIN = new Set(['trap-chamber', 'boulder-chamber', 'rock-switch', 'chamber-run']);
   const cb = corridorBounds(dg);
   if (CHAIN.has(lay)) for (const [axis, arr] of [['h', runs.h], ['v', runs.v]]) {
     const lim = axis === 'h' ? cb.hMax : cb.vMax;

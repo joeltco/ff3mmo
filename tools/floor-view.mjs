@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 import { generateFloor } from '../src/dungeon-generator.js';
+import { DUNGEONS, STARTING_DUNGEON } from '../src/data/dungeons.js';
 import { reachableFrom } from './dungeon-sweep.mjs';
 import { describePlan } from '../src/dungeon/plan.js';
 
@@ -57,6 +58,7 @@ const GLYPH = {
   0x74: 'T',   // trap hole (usually swapped to floor before return)
   0x04: '~',   // water center
   0x08: '~',   // water edge
+  0x0b: 'O',   // the boulder
 };
 // Tiles the player can walk on (for connectivity flood-fill).
 const PASS = new Set([0x30, 0x09, 0x41, 0x49, 0x44, 0x73, 0x42, 0x68, 0x6a, 0x60]);
@@ -70,11 +72,28 @@ function glyph(t) { return GLYPH[t] ?? t.toString(16).padStart(2, '0')[0]; }
 // see that function's note for what that cost. v1.7.865.
 
 const SHOW_PLAN = process.argv.includes('--plan');
+// ⛔ WHICH CAVE. This viewer called `generateFloor(rom, floor, seed)` with no
+// dungeon argument, so every picture it has ever drawn was Altar Cave's — the
+// same defect `dungeon-sweep` and `check-floor-snapshot` carried until v1.11.x.
+// The Cave of Seals has its own layouts, and there was no way to LOOK at them.
+const _dgArg = (() => {
+  const i = process.argv.indexOf('--dungeon');
+  return i >= 0 ? process.argv[i + 1] : null;
+})();
+const DG = _dgArg ? DUNGEONS.find((d) => d.id === _dgArg) : STARTING_DUNGEON;
+if (_dgArg && !DG) {
+  console.error(`unknown dungeon '${_dgArg}' — known: ${DUNGEONS.map((d) => d.id).join(', ')}`);
+  process.exit(1);
+}
+// The boulder's wall, opened — so a sealed vault can be LOOKED at both ways.
+const OPEN_WALL = process.argv.includes('--open');
 
 function render(floor, seed) {
-  const r = generateFloor(rom, floor, seed);
+  const r = generateFloor(rom, floor, seed, DG);
   if (SHOW_PLAN && r.plan) console.log('\n' + describePlan(r.plan));
   const tm = r.tilemap;
+  if (OPEN_WALL && r.rockSwitch) for (const w of r.rockSwitch.wallTiles) tm[w.y * 32 + w.x] = w.newTile;
+  if (r.rockSwitch) for (const rk of r.rockSwitch.rocks) tm[rk.y * 32 + rk.x] = 0x0B;
   const seen = reachableFrom(tm, r.entranceX, r.entranceY);
 
   let chests = 0, bones = 0, floorTiles = 0, stairsAt = -1;
@@ -110,5 +129,6 @@ function render(floor, seed) {
 const floor = parseInt(process.argv[2] ?? '0', 10);
 const seed0 = parseInt(process.argv[3] ?? '1', 10);
 const count = parseInt(process.argv[4] ?? '1', 10);
+console.log(`\ncave: ${DG.id}  layout: ${(DG.layout && DG.layout.floors && DG.layout.floors[floor]) || '(boss)'}${OPEN_WALL ? '  [WALL OPENED]' : ''}`);
 for (let s = seed0; s < seed0 + count; s++) render(floor, s);
 console.log('\nlegend: . floor  , bones  # ceiling  % rock  + secret-pass  C chest  > exit  n arch  ^ entrance-arch  E/e entry  : ; passage  ~ water  I=entrance  !=unreachable\n');

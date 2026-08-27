@@ -56,6 +56,7 @@ const LAYOUT_LABEL = {
   'trap-chamber':    'traps',
   'boulder-chamber': 'hall',
   'rock-switch':     'switch',
+  'chamber-run':     'vault',
   'spine':           'rooms',
 };
 

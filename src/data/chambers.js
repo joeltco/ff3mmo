@@ -51,14 +51,17 @@ export const CHAMBERS = [
     note: 'the 7x7 whose trap holes ARE the descent — Altar Cave floor 1' },
   { id: 'boulder-hall', slot: SLOTS.BIG, role: 'puzzle', weight: 0, feature: null,
     note: 'the hall holding the boulder that opens the false wall' },
-  // ⛔ NO `sealed-hoard` YET. A treasure chamber behind a boulder-opened wall is
-  // floor 2's design (Joel, 2026-08-27: *"f2 is gonna be random chambers...
-  // Boulder puzzles will only be to open treasure chambers. not an exit"*), and
-  // floor 2 has not been built. It was added and removed the same day because I
-  // applied that rule to floor 1 as well, which was never asked for — floor 1's
-  // boulder gates its EXIT and always has. Re-add it with the layout that places
-  // it, not before: a weight-0 entry no layout uses reads exactly like a working
-  // chamber from the outside.
+  // ⭐ THE VAULT BEHIND THE BOULDER. Joel, 2026-08-27: *"Boulder puzzles will
+  // only be to open treasure chambers. not an exit."* Placed by `chamber-run`
+  // (the Cave of Seals' floor 2) on a dead-end alcove sealed by the false wall.
+  //
+  // ⛔ IT IS A REAL CHAMBER NOW, WHICH IS THE ONLY REASON IT IS BACK. It was
+  // added and removed the same day in v1.10.99 because I applied the rule to
+  // floor 1, which was never asked for — floor 1's boulder gates its EXIT and
+  // always has. A weight-0 entry that no layout places reads exactly like a
+  // working chamber from the outside, so it stays out until a layout uses it.
+  { id: 'sealed-hoard', slot: SLOTS.BIG, role: 'hoard', weight: 0, feature: 'vault',
+    note: 'the dead-end vault behind a boulder-opened wall — chamber-run only' },
 
   // ── Rolled. This is the catalogue proper.
   { id: 'junction', slot: SLOTS.MID, role: 'junction', weight: 10, minDepth: 0,

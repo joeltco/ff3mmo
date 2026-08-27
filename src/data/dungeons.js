@@ -121,9 +121,13 @@ export const DUNGEONS = [
     // tiles after the overhang ate the band, which is what made this cave read
     // as a string of rooms rather than a cave.
     layout: {
-      // Altar Cave's four walkable layouts, with ONE substitution: floor 1 is a
-      // giant boulder puzzle instead of a trap room (Joel, 2026-08-26/27).
-      floors: ['snake', 'boulder-chamber', 'rock-switch', 'spine'],
+      // Altar Cave's four walkable layouts with TWO substitutions, both Joel's:
+      //   f1  `trap-chamber` -> `boulder-chamber` — no trap holes; a boulder in
+      //       the big room opens the false wall the way down sits behind.
+      //   f2  `rock-switch`  -> `chamber-run`     — entrance chamber to exit
+      //       chamber, and the boulder opens a VAULT rather than the stairs.
+      // Floor 0 and floor 3 keep Altar Cave's shapes.
+      floors: ['snake', 'boulder-chamber', 'chamber-run', 'spine'],
       corridor: { hMin: 8, hMax: 12, vMin: 9, vMax: 13 },
       // ⭐ ITS OWN ENTRY FLOOR. Both caves used to open on the same map — 83 of
       // 200 seeds pixel-identical, the rest differing by ONE tile (Altar Cave's
@@ -301,6 +305,15 @@ export const LAYOUTS = new Set([
   'boulder-chamber',  // ends in a 7x7 room with a boulder; the way down is a
                       // small exit chamber behind the false wall it opens.
   'rock-switch',      // boulder + false wall + exit room, entered from a fall.
+  // ⭐ THE BOULDER OPENS A VAULT, NOT THE WAY OUT. Joel, 2026-08-27: *"f2 is
+  // gonna be random chambers. entrance chamber to exit chamber. Boulder puzzles
+  // will only be to open treasure chambers. not an exit."* Same skeleton as
+  // `rock-switch` — arrival room, corridor, rolled chamber, corridor, rolled
+  // hub, corridor, exit chamber — with two differences that are the whole
+  // point: the run from the hub to the exit chamber is OPEN, and the false wall
+  // moves onto a dead-end alcove hanging off the vertical corridor. Pushing the
+  // boulder pays treasure; it never unblocks the stairs.
+  'chamber-run',      // entrance -> rolled chambers -> exit, boulder gates a vault.
   'spine',            // long fattening spine up to side rooms. Altar Cave only.
 ]);
 

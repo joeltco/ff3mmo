@@ -1,3 +1,161 @@
+## 1.11.6 — 2026-08-27
+
+### The Cave of Seals floor 2 — `chamber-run`: the boulder opens a VAULT
+
+Joel, 2026-08-27: *"f2 is gonna be random chambers. entrance chamber to exit
+chamber. Boulder puzzles will only be to open treasure chambers. not an exit."*
+
+That was said on the 26th and floor 2 shipped as `rock-switch` anyway — the
+layout whose boulder is the ONLY way off the floor. Worse, `dungeon-sweep`
+pinned it as `gates: 'exit', walkaroundCap: 0`, a gate that **fails the build if
+the exit is ever reachable without pushing the boulder.** The instruction was not
+merely missed; its opposite was enforced.
+
+**New layout `chamber-run`, and floor 2 is it.** Same registry mechanism as every
+other floor — one name in `layout.floors`, no floor-index branching.
+
+    seals  layout.floors: ['snake', 'boulder-chamber', 'chamber-run', 'spine']
+
+The floor is a T lying on its side, the run doubling back over itself:
+
+    [entrance] --------- corridor ---------> [chamber A]
+                                                  |
+                                              vertical
+                                                  |
+       [ VAULT ] === wall === stub --------- [ hub + boulder ]
+                                                  |
+                      [exit chamber] <-- corridor -+
+
+* **Entrance chamber to exit chamber, open end to end.** No wall anywhere on the
+  way onward. Measured: the exit is reachable without touching the boulder on
+  **2000 of 2000 seeds**.
+* **The boulder opens a dead-end vault.** Measured at **2 or 3 chests behind the
+  wall on every seed**, never fewer.
+* **Both middle rooms are ROLLED** from `data/chambers.js` — `rock-switch` rolls
+  one and hard-codes its hall. seals f2 now rolls junction / bone-pit / vault
+  into two slots plus the fixed `sealed-hoard`.
+* **The hub is five wide, not seven.** The giant hall belongs to floor 1; this
+  floor spends its rows on two branches leaving one hub.
+* Corridors keep the Cave of Seals' declared lengths — main run 8-12 (median 10),
+  vertical 9-13 (median 11), both drawing their full range. The run from the hub
+  to the exit chamber is 8-12 but skews short (median 10, 12 on 22/400) because
+  the alcove has first claim on the columns.
+
+`sealed-hoard` is back in the catalogue — it was added and removed the same day in
+v1.10.99 because the rule got applied to floor 1, which was never asked for. A
+weight-0 entry no layout places reads exactly like a working chamber; it stays out
+until a layout uses it, and now one does.
+
+### Three defects found by measuring, not by looking
+
+Each was caught by a gate and each is pinned by a mutation test.
+
+1. **`keepClear` cannot guarantee a mouth.** It holds a row's JITTER; what
+   actually closes a mouth is `addOverhang`, which lays two rows of rock under
+   every ceiling — so a mouth held open at its own row was walled by the row
+   ABOVE it. The vault was cut off from the hub, wall and stub both intact, on
+   **69 of 200 seeds**. Fixed by holding the hub's top rows at full width, which
+   puts the rock band two clear rows above the branch row.
+
+2. **A severance test on the SHUT map is not enough when the wall gates
+   treasure.** With the wall shut the alcove is already unreachable, so a boulder
+   dropped in its MOUTH costs the flood exactly one tile and passes — then the
+   player pushes it, the wall opens, and the way in is blocked by the boulder that
+   opened it. **15 of 200 seeds.** A candidate is now tested against both the
+   shut map and the opened one.
+
+3. **The shared feature pass did not know the floor had branches.** A hub that
+   rolled `vault` scattered chests through the shared `used` set, which knows
+   about the entrance, the boulder and doorways — and put one in the vault's
+   mouth. **1 seed in 400.** Branches now hand the pass a `reservedTiles` list;
+   it is empty on every layout that does not set one, so nothing older moves.
+
+### A boulder on each side — but only when the wall leads off the floor
+
+Joel, 2026-08-27: *"if a boulder puzzle ever leads to an exit, it needs two
+boulders. one on each side of the wall, like its built in altar f2. but if its a
+treasure room, pond room, or any other chamber that doesn't leave the floor, it
+won't need a 2nd boulder."*
+
+Counted first, 400 seeds per floor:
+
+| floor | wall gates | boulders/seed | one each side |
+|---|---|---|---|
+| altar f2 `rock-switch` | the exit | 2 on 399/400 | 329/400 |
+| seals f1 `boulder-chamber` | **the exit** | **1 on 400/400** | **0/400** |
+| seals f2 `chamber-run` | a vault | 1 on 400/400 | n/a |
+
+**Seals f1 gated the way DOWN with a single boulder.** Cross the wall and there
+was nothing on the far side to reopen it. Fixed: a second boulder in the exit
+chamber, matching Altar Cave's — **one on each side on 2000 of 2000 seeds**.
+
+**And Altar Cave f2 now carries two on 2000 of 2000.** Joel: *"altar f2 has to
+have 100% 2 boulders. fix it."* Its far boulder was `findCornerFloor` over the
+exit room on the SHUT map, with no test of which side of the wall it landed on
+and no fallback — so ~1 seed in 400 offered no free corner and shipped with one.
+It now takes the boulder from the region the wall actually seals, prefers a
+corner of it, and falls back through the exit room rather than placing nothing.
+
+⛔ **The sealed region is a preference, not a condition, and that distinction is
+the whole fix.** A first pass that REQUIRED it took the count from 399/400 down
+to **329/400** — because on the seeds this floor lets you walk around the wall,
+the region the wall seals is exactly **one tile: the wall's own opening** (71/400
+measured, size 1, tile `$00`). There is no other side to stand on there, so
+"one on each side" has nothing to attach to and the pass placed nothing at all.
+
+⛔ The severance test for it runs on the **opened** map. The far side is
+unreachable until the wall opens, so flooding the shut map says every tile over
+there costs nothing, because none of it is reachable anyway.
+
+The count is not written per layout — it is a consequence of `gates`, and the
+sweep checks the property rather than the number:
+
+* `rocks` — the COUNT, exact, per seed, no ceiling. 2 for both exit puzzles, 1
+  for the vault. Counted per seed rather than averaged: a floor shipping one
+  boulder on 1 seed in 400 averages to 2.00 and is still a floor that cannot
+  reopen its wall.
+* `gates: 'exit'` — if opening the wall reveals a sealed region, a boulder must
+  sit against **that region**. `oneSidedCap`: seals f1 **0**, Altar Cave pinned at
+  20% against a measured 16.2% (324/2000). ⛔ That is a different question from
+  the count, and Altar still misses it on those seeds — not because a boulder is
+  absent but because the wall seals one tile and there is no far side. Closing it
+  means closing the walk-around (`walkaroundCap`), which is a further change to
+  this floor and was not asked for.
+* `gates: 'treasure'` — **no** boulder may be behind the wall. A dead end is never
+  something you stand behind needing a way out, so a boulder there is one nothing
+  can reach. Exact, no ceiling.
+
+Both halves fail on revert: drop seals f1's second boulder and the sweep reports
+400/400; put one inside the f2 vault and it reports 400/400 the other way.
+
+### Gates
+
+* `dungeon-sweep` — `seals/chamber-run` pinned `gates: 'treasure'`. Inverts every
+  assertion: the way onward must be reachable WITHOUT the boulder on every seed,
+  and the sealed region must hold a chest. Both exact, no sample guard needed.
+* `check-floor-shape` — depth limit **0**, the standard `boulder-chamber` is held
+  to. Measured over 10,000 floors across five seed bases: zero bands off depth 2.
+* `check-floor-variety` — its sibling's limits, cleared with room (jaccard 0.133
+  vs 0.30, 0 always-tiles vs 10, 62 entrances vs a floor of 40).
+* `check-floor-plan` — complete plan; added to `CHAIN` so its corridors are held
+  to the lengths the registry declares.
+* `tools/floor-view.mjs` gained **`--dungeon <id>`** and **`--open`**. It had no
+  dungeon argument, so every picture it ever drew was Altar Cave's — the same
+  defect the sweep and the snapshot carried. `--open` applies the boulder's wall
+  so a sealed vault can be looked at both ways.
+* Debug DUNGEON tab labels it `F3 vault`.
+
+`check-floor-snapshot` moves exactly three rows and no others: `seals/floor2`
+(the new layout), `seals/floor1` (its second boulder) and `altar/floor2` (its far
+boulder's new placement). Altar f0 / f1 / f3 / f4 and seals f0 / f3 are
+byte-identical.
+
+### Still open
+
+* **seals f3 is still an exact clone of Altar's `spine`** — 60/60 seeds
+  identical, pinned as `CLONE_PENDING` so it warns every run. Joel: *"stand by
+  for the floor after that."*
+
 ## 1.11.5 — 2026-08-27
 
 ### Holes in the cave wall — a chest was invisible to `sealFloorToVoid`

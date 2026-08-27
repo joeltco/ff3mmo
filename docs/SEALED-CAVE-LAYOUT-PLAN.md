@@ -13,10 +13,22 @@
 > **v1.10.98** gave floor 0 its own sampling and removed the dead secret
 > corridors the Cave of Seals was carving on 54% of its entry-floor seeds.
 >
-> **Still open:** the seals player meets a boulder on f1 and another on f2, back
-> to back. Altar Cave keeps the 17% walk-around — **measured as pre-existing**
-> (69/400 on the pre-arc tree at `0ef1db64`), pinned at a ceiling, not fixed,
-> because fixing it changes Altar Cave's maps.
+> **FLOOR 2 REBUILT IN v1.11.6 — `chamber-run`.** Joel, 2026-08-27: *"f2 is gonna
+> be random chambers. entrance chamber to exit chamber. Boulder puzzles will only
+> be to open treasure chambers. not an exit."* Floor 2 was `rock-switch` — the
+> boulder was the only way off the floor, and the sweep enforced that. It is now
+> a run of rolled chambers, open end to end, with the false wall moved onto a
+> dead-end alcove: the exit is reachable without the boulder on **2000/2000**
+> seeds and the vault holds **2-3 chests on every seed**. Pinned in the sweep as
+> `gates: 'treasure'`, which asserts both.
+>
+> The player still meets a boulder on f1 and another on f2, but they no longer do
+> the same job: f1's opens the way down, f2's opens treasure.
+>
+> **Still open:** Altar Cave keeps the 17% walk-around — **measured as
+> pre-existing** (69/400 on the pre-arc tree at `0ef1db64`), pinned at a ceiling,
+> not fixed, because fixing it changes Altar Cave's maps. And **seals f3 is still
+> an exact clone of Altar's `spine`**, pinned as `CLONE_PENDING`.
 
 **Status: PLAN. Phases 1 and 3 are now shipped — see the banner above.** Joel, 2026-08-26: *"we gotta make sealed
 cave a little different. corridors need to be longer. trap room needs to be
