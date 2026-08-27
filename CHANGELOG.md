@@ -1,3 +1,49 @@
+## 1.11.5 — 2026-08-27
+
+### Holes in the cave wall — a chest was invisible to `sealFloorToVoid`
+
+Joel, from a phone: *"im seeing missing tiles. what is that??"*
+
+He was right, and no gate could see it. Floor 0 is the only floor filled with
+`FILL_VOID` instead of ceiling, so its cave outline is all that separates
+walkable ground from black. `sealFloorToVoid` walls floor against that void, and
+its predicate was:
+
+```js
+const isFl = (t) => t === FLOOR || t === BONES;
+```
+
+**A CHEST is neither.** So a chest sitting on the cave's outline left the void
+beside it unwalled, and in the game that renders as a hole punched through the
+wall — exactly "a missing tile".
+
+    seals f0   33 of 200 seeds, one tile each
+    altar f0..f3, seals f1..f3   0
+
+⛔ **Only the Cave of Seals' floor 0, and only because of a change I made.**
+v1.10.98 widened its snake rooms to columns 2-4 and 28-29 — far enough out that a
+corner chest lands ON the outline. Altar Cave's rooms stop at 5-6 / 26-27 and
+never reach it, which is why this bug could exist in `sealFloorToVoid` since the
+pass was written and never once show.
+
+A chest is a thing standing ON cave floor; void beside it is the same violation
+as void beside floor. `isFl` says so now. **Altar Cave is byte-identical** — it
+measured 0 before the fix, so there was nothing there to change. Only
+`seals/floor0` moved.
+
+### The gate that should have caught it
+
+`tile-grammar` checked which ARRANGEMENTS the cartridge uses — pairs of adjacent
+tiles — and a chest beside void is not an arrangement question, it is a question
+about one tile's neighbourhood. So nothing looked.
+
+It does now: **no floor, bones or chest tile may touch VOID**, across every
+dungeon and every walkable floor. Proven by reverting `isFl` — 5 tiles at 60
+seeds, and the gate fails.
+
+⛔ Worth stating plainly: the phone found this before the eight dungeon gates
+did. Gates check what they were written to check.
+
 ## 1.11.4 — 2026-08-27
 
 ### The Konami debug DUNGEON tab previewed a repaint, not a dungeon

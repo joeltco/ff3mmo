@@ -340,7 +340,14 @@ export function sealFloorToVoid(tilemap) {
         if (nx < 0 || nx > 31 || ny < 0 || ny > 31) return -1;
         return tilemap[ny * 32 + nx];
       };
-      const isFl = (t) => t === FLOOR || t === BONES;
+      // ⛔ A CHEST COUNTS. It is a thing standing ON cave floor, so void beside it
+      // is the same violation as void beside floor — but this predicate was
+      // `FLOOR || BONES`, so a chest at the cave's outline left the void next to
+      // it unwalled and it rendered as a hole in the wall. 33 of 200 seeds of the
+      // Cave of Seals' floor 0, which is the only floor whose rooms reach far
+      // enough out for a corner chest to land on the outline; Altar Cave measures
+      // 0 on every floor, so this changes nothing there.
+      const isFl = (t) => t === FLOOR || t === BONES || t === CHEST;
       const floorBelow = isFl(at(0, 1));
       const floorAbove = isFl(at(0, -1));
       const touches = floorBelow || floorAbove || isFl(at(-1, 0)) || isFl(at(1, 0));

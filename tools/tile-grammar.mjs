@@ -17,6 +17,7 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { loadMap } = await import('../src/map-loader.js');
 const { generateFloor } = await import('../src/dungeon-generator.js');
+const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
 
 const i = process.argv.indexOf('--seeds');
 const SEEDS = i > 0 ? parseInt(process.argv[i + 1], 10) : 120;
@@ -112,8 +113,51 @@ console.log(`── LOOK-ALIKE VIOLATIONS (a tile drawn as a structural one, arr
 if (!extra.length) console.log('  none');
 for (const [k, n] of extra) console.log(`  ${String(n).padStart(7)}  ${k}`);
 
+// ⛔ NOTHING YOU STAND ON, OR STAND BESIDE, MAY TOUCH THE VOID.
+//
+// `sealFloorToVoid` walls floor against the black — floor 0 is filled with VOID,
+// so its cave outline is all that separates walkable ground from nothing. Its
+// predicate was `FLOOR || BONES`, which skipped straight over a CHEST: a chest
+// on the cave's outline left the void beside it unwalled, and in the game that
+// renders as a hole punched through the wall. Joel saw it on a phone before any
+// gate did — 33 of 200 seeds of the Cave of Seals' floor 0, the only floor whose
+// rooms reach far enough out for a corner chest to land on the outline.
+//
+// Checked here rather than in the pair census because it is about ONE tile's
+// neighbourhood, not about which arrangements the cartridge uses.
+let voidHoles = 0;
+{
+  const VOID = 0x5f, FLOOR_T = 0x30, BONES_T = 0x09, CHEST_T = 0x7c;
+  let first = null;
+  for (const dg of DUNGEONS) {
+    for (let f = 0; f < dg.floors; f++) {
+      if (layoutForFloor(dg, f) === null) continue;
+      for (let k = 0; k < SEEDS; k++) {
+        const seed = BASE + k * 7919;
+        const tm = generateFloor(rom, f, seed, dg).tilemap;
+        for (let i = 0; i < 1024; i++) {
+          const t = tm[i];
+          if (t !== FLOOR_T && t !== BONES_T && t !== CHEST_T) continue;
+          const x = i % 32, y = (i - x) / 32;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+            if (tm[ny * 32 + nx] === VOID) {
+              voidHoles++;
+              if (!first) first = `${dg.id} f${f} seed ${seed} tile 0x${t.toString(16)} at ${x},${y}`;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  console.log(`\n── FLOOR OR CHEST TOUCHING VOID (a hole in the cave wall) ──`);
+  console.log(voidHoles ? `  ${voidHoles} tile(s) — first: ${first}` : '  none');
+}
+
 if (process.argv.includes('--check')) {
-  const bad = vLaw.length + hLaw.length + extra.length;
+  const bad = vLaw.length + hLaw.length + extra.length + voidHoles;
   if (bad) { console.log(`\nFAIL: ${bad} arrangement(s) the cartridge never uses`); process.exit(1); }
   console.log('\nevery tile arrangement is one the cartridge uses');
 }
