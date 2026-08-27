@@ -1,3 +1,79 @@
+## 1.10.97 — 2026-08-26
+
+### Longer corridors in the Cave of Seals — and they fixed the boulder walk-around
+
+Joel: *"make the corridors longer. that should fix the boulder walk around."*
+**It did, and that is measured, not assumed.**
+
+Corridor lengths were five literals in the generator — `4 + rng()*3` and
+`5 + rng()*3`, written out once per branch — so every dungeon walked the same
+four-tile neck between rooms. They move onto the dungeon row as
+`layout.corridor`, read through `corridorBounds()`:
+
+    altar   { hMin: 4,  hMax: 6,  vMin: 5,  vMax: 7  }   <- unchanged, its historical pair
+    seals   { hMin: 8,  hMax: 12, vMin: 9,  vMax: 13 }
+
+Measured over 300 seeds, carved runs (not config):
+
+    altar f1   h 4-6   v 5-7    corridor tiles 30   longest walk 31
+    seals f1   h 8-12  v 9-13   corridor tiles 54   longest walk 42
+    seals f2   h 8-12  v 9-13   corridor tiles 49   longest walk 35   (was 34 / 24)
+
+⛔ **THE DRAW STAYS ONE `rng()` CALL.** `hMin + Math.floor(rng() * (hMax - hMin
++ 1))` is byte-for-byte the old expression for 4..6. Reading a bound draws
+nothing. **Altar Cave is byte-identical** through all of it — five floors and
+three side maps, snapshot green with no `--update`.
+
+### Why it fixed the walk-around
+
+A boulder that opens a wall you could already walk around is decoration, and
+`rock-switch` was in that state on **69 of 400 seeds (17%)**, reported in
+v1.10.96. Rendering a failing seed showed why: entrance and exit both ended up on
+the same side of the map while the boulder and its wall sat off on the other, and
+a room the chain had already visited linked both branches. The false wall was
+spanning a redundant edge — it was never a cut vertex.
+
+Long runs push the rooms far enough apart that the wall becomes the only link.
+**Seals floor 2: 69/400 -> 0/400. Seals floor 1: 0/400.** Altar Cave keeps its
+short corridors and therefore keeps the defect, now pinned at a ceiling rather
+than left as a note.
+
+Proven causally, not by correlation: reverting the seals row to Altar Cave's
+corridor bounds brings the walk-around straight back (38/200) and fails the new
+gate; restoring them returns it to 0.
+
+### Two bugs the longer runs woke up
+
+⛔ **The 7×7 chamber fell off the bottom of the map.** It hangs below the
+vertical run, so 9-13 steps put its far edge on rows 30-32, taking its chests and
+the exit with it — 41 of 400 seeds. Clamped to the row the chamber's far edge may
+not pass, clamped **after** the draw. `rock-switch` needed the same cap in both
+directions, since it climbs from the bottom or descends from the top and the
+chamber hangs off whichever end.
+
+⛔ **The boulder plugged the corridor it was supposed to open.** With longer
+runs the vertical corridor now ends INSIDE the chamber's top row, so "nearest
+floor tile to a corner" was frequently the corridor mouth itself — the chamber
+below stranded, the exit unreachable. This is v1.10.42's second bug returning
+("the rock is impassable and permanent... on a corridor tile it severs the
+floor"), and that entry already named the only honest test: **block it and
+re-flood.** A safe candidate costs exactly itself. No amount of looking at the
+tile can tell you, and a corner is not safe by construction.
+
+### Two new gates, both proven by reverting
+
+- **`check-floor-plan`** — no corridor may exceed the length its row declares
+  (they may come out shorter; the clamp is real), and the Cave of Seals' median
+  carved run must be strictly LONGER than Altar Cave's. A `corridor` block that
+  is read but never reaches a carve would leave both caves identical with every
+  other check green. Scoped to the three room-chain layouts: `spine` builds its
+  verticals with `carveFatteningVRun` and `snake` has no corridors, and asserting
+  against them flagged 22 legitimate floor-3 runs on the first run.
+- **`dungeon-sweep`** — a walk-around ceiling pinned per dungeon+layout, from the
+  measurement: `seals/*` at 0, `altar/rock-switch` at 20% just above its standing
+  17%. The wart does not fail the build; growth does, and the day Altar Cave's
+  corridors change this is the gate that says whether it helped.
+
 ## 1.10.96 — 2026-08-26
 
 ### The Cave of Seals stops being a copy of Altar Cave

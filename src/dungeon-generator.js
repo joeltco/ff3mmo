@@ -24,7 +24,7 @@ import {
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
-import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor } from './data/dungeons.js';
+import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
@@ -1115,6 +1115,12 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   // why swapping the whole dispatch from floor index to layout name leaves Altar
   // Cave byte-identical (`check-floor-snapshot`).
   const LAYOUT = layoutForFloor(dungeon, floorIndex);
+  // Corridor run lengths for THIS dungeon. `hSpan`/`vSpan` keep the draw to one
+  // `rng()` call apiece — for Altar Cave's 4..6 / 5..7 that is byte-for-byte the
+  // `4 + Math.floor(rng() * 3)` these replace.
+  const CORR = corridorBounds(dungeon);
+  const hSpan = CORR.hMax - CORR.hMin + 1;
+  const vSpan = CORR.vMax - CORR.vMin + 1;
   const fillTile = (LAYOUT === 'snake') ? FILL_VOID : CEILING;
   const tilemap = new Uint8Array(1024).fill(fillTile);
 
@@ -1401,7 +1407,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // (lines 1533-1540 in the floor-2 branch).
     const horizStartX = entrCornerX;
     const horizFloorY = entrFloorY;
-    const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
+    const pathLength = CORR.hMin + Math.floor(rng() * hSpan);
     // Straight when `midFloorY` matches (the `chain` topology), an L otherwise.
     planElbow(plan, tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
     const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
@@ -1413,7 +1419,16 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
     // V corridor — 5-7 steps DOWN from middle of mid room.
     // Direct copy of floor 2's V corridor (lines 1557-1564).
-    const vertLength = 5 + Math.floor(rng() * 3);
+    const vertRoll = CORR.vMin + Math.floor(rng() * vSpan);
+    // ⛔ CLAMPED TO THE ROOM BUDGET, AND CLAMPED AFTER THE DRAW.
+    //
+    // The chamber hangs off the BOTTOM of this run, so a long vertical push its
+    // far edge off the map: at 9-13 steps the 7x7 landed on rows 30-32 and took
+    // its chests and the exit with it — 41 of 400 seeds, chests unopenable and
+    // the way down stranded. The cap is the row the chamber's far edge may not
+    // pass; drawing first and clamping second leaves the rng stream untouched,
+    // and Altar Cave's 5-7 never reaches the cap, so it is unaffected.
+    const vertLength = Math.min(vertRoll, 21 - pathResult.endFloorY);
     const vertX = pathResult.endX + 2 * horizDir;
     let vertY = pathResult.endFloorY + 2;
     vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
@@ -1529,14 +1544,23 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
     const horizStartX = entrCornerX;
     const horizFloorY = entrFloorY;
-    const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
+    const pathLength = CORR.hMin + Math.floor(rng() * hSpan);
     planElbow(plan, tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
     const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
     const pathResult = { endX: pathEndX, endFloorY: midFloorY };
 
     planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
 
-    const vertLength = 5 + Math.floor(rng() * 3);
+    const vertRoll = CORR.vMin + Math.floor(rng() * vSpan);
+    // ⛔ CLAMPED TO THE ROOM BUDGET, AND CLAMPED AFTER THE DRAW.
+    //
+    // The chamber hangs off the BOTTOM of this run, so a long vertical push its
+    // far edge off the map: at 9-13 steps the 7x7 landed on rows 30-32 and took
+    // its chests and the exit with it — 41 of 400 seeds, chests unopenable and
+    // the way down stranded. The cap is the row the chamber's far edge may not
+    // pass; drawing first and clamping second leaves the rng stream untouched,
+    // and Altar Cave's 5-7 never reaches the cap, so it is unaffected.
+    const vertLength = Math.min(vertRoll, 21 - pathResult.endFloorY);
     const vertX = pathResult.endX + 2 * horizDir;
     let vertY = pathResult.endFloorY + 2;
     vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
@@ -1557,7 +1581,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // Z-shaped exit path out of the chamber — 1 walkable row after overhang,
     // no jitter. Carved OPEN; the false wall goes in after the seal below.
     const exitPathWidth = 1;
-    const exitPathRoll = 4 + Math.floor(rng() * 3); // 4-6 steps
+    const exitPathRoll = CORR.hMin + Math.floor(rng() * hSpan);
     const exitPathStartX = vertX + 3 * exitDir;
     // ⛔ CLAMPED TO WHAT ACTUALLY FITS, AND CLAMPED **AFTER** THE DRAW.
     //
@@ -1671,9 +1695,45 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       }
       if (best) rockCandidates.push(best);
     }
+    // ⛔ A BOULDER IS IMPASSABLE AND PERMANENT, SO IT MUST NOT SEVER THE FLOOR.
+    //
+    // v1.10.42 paid for this once already ("it cut 30 tiles and the exit to the
+    // crystal room on one floor-3 seed") and the longer corridors brought it
+    // straight back: the vertical run now ends INSIDE the chamber's top row, so
+    // "nearest floor tile to the top corner" is frequently the corridor mouth
+    // itself. The boulder plugged the passage it was supposed to open — the
+    // chamber below it stranded, the exit unreachable, on 41 of 400 seeds.
+    //
+    // A corner is not a safe place by construction, and no amount of looking at
+    // the tile can tell you. The only honest test is the one that entry names:
+    // BLOCK IT AND RE-FLOOD. A safe candidate costs exactly itself.
+    const floodSize = (blockX, blockY) => {
+      const seenR = new Uint8Array(1024);
+      const q = [entranceY * 32 + entranceX];
+      seenR[q[0]] = 1;
+      let n = 0;
+      for (let h = 0; h < q.length; h++) {
+        const i = q[h]; n++;
+        const x = i % 32, y = (i - x) / 32;
+        for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+          if (nx === blockX && ny === blockY) continue;
+          const ni = ny * 32 + nx;
+          if (seenR[ni]) continue;
+          const t = tilemap[ni];
+          if (t !== FLOOR && t !== BONES && t !== PASSAGE_BTM && t !== PASSAGE_ENTRY) continue;
+          seenR[ni] = 1; q.push(ni);
+        }
+      }
+      return n;
+    };
+    const openSize = floodSize(-1, -1);
+    const safeRocks = rockCandidates.filter((c) => floodSize(c.x, c.y) === openSize - 1);
+
     var rockSwitch = null;
-    if (rockCandidates.length > 0) {
-      const rock = rockCandidates[Math.floor(rng() * rockCandidates.length)];
+    if (safeRocks.length > 0) {
+      const rock = safeRocks[Math.floor(rng() * safeRocks.length)];
       tilemap[rock.y * 32 + rock.x] = 0x0B;
       rockSwitch = { rocks: [{ x: rock.x, y: rock.y }], wallTiles };
     }
@@ -1754,7 +1814,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
     // Short horizontal pathway (1 walkable row after overhang)
     const horizDir = entranceX > 15 ? -1 : entranceX < 15 ? 1 : (rng() < 0.5 ? -1 : 1);
-    const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
+    const pathLength = CORR.hMin + Math.floor(rng() * hSpan);
     const horizStartX = horizDir === 1 ? entranceX + 2 : entranceX;
     planElbow(plan, tilemap, { x0: horizStartX, y: startFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
     const pathEndX = horizStartX + pathLength * horizDir;
@@ -1765,7 +1825,14 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
     // Vertical pathway (1 tile wide)
     const vertDir = vertDirEarly;
-    const vertLength = 5 + Math.floor(rng() * 3); // 5-7 steps
+    const vertRoll = CORR.vMin + Math.floor(rng() * vSpan);
+    // ⛔ SAME CLAMP, BOTH DIRECTIONS. This floor runs UP from the bottom or DOWN
+    // from the top, and the 7x7 hangs off whichever end — `roomDyMin/-8` above
+    // when climbing, `roomDyMax/+6` below when descending. Altar Cave's 5-7 never
+    // reaches either cap, so its floors are unchanged.
+    const vertLength = Math.min(vertRoll, vertDirEarly === -1
+      ? midFloorY - 12               // climbing: keep vertY-8 on the map
+      : 21 - midFloorY);             // descending: keep vertY+6 on the map
     const vertX = pathResult.endX + 2 * horizDir; // middle of 5×5 room
     let vertY = vertDir === -1 ? pathResult.endFloorY - 2 : pathResult.endFloorY + 2;
     vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
@@ -1783,7 +1850,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
     // Exit pathway from 7×7 room — the Z-shape (1 tile wide, NO jitter)
     const exitPathWidth = 1;
-    const exitPathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
+    const exitPathLength = CORR.hMin + Math.floor(rng() * hSpan);
     const exitPathStartX = vertX + 3 * exitDir;
     for (let s = 1; s <= exitPathLength; s++) {
       const ex = exitPathStartX + s * exitDir;

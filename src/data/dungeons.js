@@ -54,7 +54,12 @@ export const DUNGEONS = [
     ending: ENDING_CRYSTAL,
     // ⭐ WHAT EACH WALKABLE FLOOR IS SHAPED LIKE. One name per floor, boss floor
     // excluded (its shape comes from `bossSkinId`). See `layoutForFloor`.
-    layout: { floors: ['snake', 'trap-chamber', 'rock-switch', 'spine'] },
+    // `corridor` is Altar Cave's historical run lengths, written down rather
+    // than left as literals in the generator. Changing them changes this cave.
+    layout: {
+      floors: ['snake', 'trap-chamber', 'rock-switch', 'spine'],
+      corridor: { hMin: 4, hMax: 6, vMin: 5, vMax: 7 },
+    },
     bossId: 0xCC,                 // Land Turtle / Adamantoise
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
     rosterPrefix: 'cave',         // roster loc 'cave-0'.. ; boss floor -> 'crystal'
@@ -90,7 +95,14 @@ export const DUNGEONS = [
     // room, and the way down behind a false wall — Altar Cave keeps its trap
     // room. Joel, 2026-08-26: "remove the traps from the trap room, add a random
     // boulder, add the smaller exit with wall chamber".
-    layout: { floors: ['snake', 'boulder-chamber', 'rock-switch'] },
+    // ⭐ LONGER RUNS THAN ALTAR CAVE. Joel, 2026-08-26: "corridors need to be
+    // longer." Roughly double: the neck between two rooms was four walkable
+    // tiles after the overhang ate the band, which is what made this cave read
+    // as a string of rooms rather than a cave.
+    layout: {
+      floors: ['snake', 'boulder-chamber', 'rock-switch'],
+      corridor: { hMin: 8, hMax: 12, vMin: 9, vMax: 13 },
+    },
     bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
     // ⭐ THE DJINN DROPS THE WSLAYER, 2 in 7 (28.6%). Joel, 2026-08-26.
     //
@@ -243,6 +255,30 @@ export const LAYOUTS = new Set([
   'rock-switch',      // boulder + false wall + exit room, entered from a fall.
   'spine',            // long fattening spine up to side rooms. Altar Cave only.
 ]);
+
+/**
+ * Corridor run lengths for this dungeon, in steps.
+ *
+ * ⛔ THESE WERE FIVE LITERALS IN TWO GENERATOR BRANCHES — `4 + rng()*3` and
+ * `5 + rng()*3`, written out once per branch — so every dungeon walked the same
+ * four-tile neck between rooms and there was no way to give one cave longer runs
+ * than another. The default is Altar Cave's historical pair, so a row that says
+ * nothing carves exactly what it always did.
+ *
+ * ⛔ THE DRAW MUST STAY ONE `rng()` CALL. Callers do
+ * `hMin + Math.floor(rng() * (hMax - hMin + 1))`, which for 4..6 is the old
+ * `4 + Math.floor(rng() * 3)` exactly. Reading a bound draws nothing; splitting
+ * it into two draws would re-roll every floor below it.
+ */
+export function corridorBounds(dungeon) {
+  const c = (dungeon && dungeon.layout && dungeon.layout.corridor) || null;
+  return {
+    hMin: c && c.hMin != null ? c.hMin : 4,
+    hMax: c && c.hMax != null ? c.hMax : 6,
+    vMin: c && c.vMin != null ? c.vMin : 5,
+    vMax: c && c.vMax != null ? c.vMax : 7,
+  };
+}
 
 /**
  * What shape is this dungeon's floor N?

@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import { generateFloor, generateSecretRoomMap } from '../src/dungeon-generator.js';
 import { generateLockedRoomMap } from '../src/dungeon-locked-room.js';
-import { DUNGEONS, isBossFloor } from '../src/data/dungeons.js';
+import { DUNGEONS, isBossFloor, layoutForFloor } from '../src/data/dungeons.js';
 
 /**
  * Tiles treated as walkable when flooding a generated floor.
@@ -186,6 +186,21 @@ export function exitAudit(r, seen) {
  * Still counted rather than failed: floors 1 / 2 / 4 have no `0x73` staircase
  * (trap holes, a rock-switch passage, and the boss chamber respectively).
  */
+/**
+ * How often may a boulder floor let you reach the way onward WITHOUT the boulder?
+ *
+ * Measured, not chosen. `seals/rock-switch` and `seals/boulder-chamber` are 0 of
+ * 400 because their corridors are long enough to push the rooms apart;
+ * `altar/rock-switch` is 69 of 400 (17%) on the short runs it has always had.
+ * The ceiling above it is deliberately just above the measurement, so a
+ * regression shows and the existing wart does not fail the build.
+ */
+const WALKAROUND_CAP = new Map([
+  ['altar/rock-switch',     0.20],
+  ['seals/rock-switch',     0],
+  ['seals/boulder-chamber', 0],
+]);
+
 export function sweepFloors(rom, n = 150, base = 1754900000000) {
   const rows = []; const hard = []; const soft = [];
   // ⛔ EVERY DUNGEON, not the default one. This walked `[0,1,2,3,4]` through
@@ -273,6 +288,19 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
     }
     if (t.puzzleTiles) soft.push(`${label}: ${t.puzzleTiles} tiles sealed behind the rock switch — all ${t.seeds} seeds open fully when it is pulled`);
     if (t.exitOpenUnpuzzled) soft.push(`${label}: ${t.exitOpenUnpuzzled}/${t.seeds} seeds let you reach the way onward WITHOUT touching the boulder — the false wall is not on the only route`);
+    // ⛔ PINNED PER DUNGEON+LAYOUT, BECAUSE THE TWO CAVES GENUINELY DIFFER.
+    // A boulder that opens a wall you could already walk around is decoration,
+    // and this is how the Cave of Seals' floor 2 read on 69 of 400 seeds until
+    // its corridors were lengthened — long runs push the rooms far enough apart
+    // that the false wall becomes the only link. Altar Cave keeps its short
+    // corridors and therefore keeps the defect; its ceiling records that, so the
+    // number cannot quietly grow, and the day its corridors change this is the
+    // gate that says whether it fixed anything.
+    const lay = layoutForFloor(dg, f);
+    const cap = WALKAROUND_CAP.get(`${dg.id}/${lay}`);
+    if (cap !== undefined && t.seeds && t.exitOpenUnpuzzled / t.seeds > cap) {
+      hard.push(`${label}: the way onward is reachable without the boulder on ${t.exitOpenUnpuzzled}/${t.seeds} seeds (ceiling ${Math.round(cap * 100)}%) — the false wall has stopped being the only route`);
+    }
     rows.push(t);
   }
   }

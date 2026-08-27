@@ -18,7 +18,7 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { PASS, reachableFrom } = await import('./dungeon-sweep.mjs');
-const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
+const { DUNGEONS, layoutForFloor, corridorBounds } = await import('../src/data/dungeons.js');
 
 const SEEDS = parseInt(process.argv[2] || '150', 10);
 const BASE = 1754900000000;
@@ -62,16 +62,23 @@ function footprint(c) {
 
 let checkedChambers = 0, checkedLinks = 0;
 const seenLayouts = new Set();
+const CARVED = new Map();
+const med = (a) => (a.length ? [...a].sort((x, y) => x - y)[a.length >> 1] : 0);
 for (const dg of DUNGEONS) {
  for (let f = 0; f < dg.floors; f++) {
   const lay = layoutForFloor(dg, f);
   if (!COMPLETE.has(lay)) { fails.push(`${dg.id} floor ${f}: layout '${lay}' has no completeness expectation — add one on purpose`); continue; }
   const shouldBeComplete = COMPLETE.get(lay);
   seenLayouts.add(lay);
+  const runs = { h: [], v: [] };
   for (let k = 0; k < SEEDS; k++) {
     const seed = BASE + k * 7919;
     const r = generateFloor(rom, f, seed, dg);
     const plan = r.plan;
+    for (const l of plan?.links || []) {
+      if (l.kind === 'elbow' || l.kind === 'h') runs.h.push(l.steps);
+      else if (l.kind === 'v') runs.v.push(l.steps);
+    }
     if (!plan) { fails.push(`${dg.id} floor ${f} seed ${seed}: no plan on the returned mapData`); continue; }
 
     if (plan.complete !== shouldBeComplete) {
@@ -100,7 +107,37 @@ for (const dg of DUNGEONS) {
         fails.push(`${dg.id} floor ${f} seed ${seed}: link '${l.kind}' has an off-map endpoint (${xs.join(',')} / ${ys.join(',')})`);
     }
   }
+  // ⛔ A CORRIDOR MUST NOT EXCEED THE LENGTH ITS DUNGEON DECLARES. The runs are
+  // clamped after the draw so they may come out SHORTER — the chamber has to fit
+  // on the map — but longer than declared means a literal has been left behind
+  // in a branch and that dungeon's `corridor` block is not actually driving it.
+  //
+  // ⛔ ONLY THE ROOM-CHAIN LAYOUTS. `spine` builds its verticals with
+  // `carveFatteningVRun`, whose length comes from the floor's own room spacing,
+  // and `snake` traces a boundary with no corridors at all — neither reads the
+  // corridor block, and asserting against it flagged 22 legitimate floor-3 runs
+  // on the first run of this check.
+  const CHAIN = new Set(['trap-chamber', 'boulder-chamber', 'rock-switch']);
+  const cb = corridorBounds(dg);
+  if (CHAIN.has(lay)) for (const [axis, arr] of [['h', runs.h], ['v', runs.v]]) {
+    const lim = axis === 'h' ? cb.hMax : cb.vMax;
+    const over = arr.filter((n) => n > lim);
+    if (over.length) fails.push(`${dg.id} floor ${f}: ${over.length} ${axis}-corridor(s) longer than the row declares (max ${lim}, saw ${Math.max(...over)})`);
+  }
+  CARVED.set(`${dg.id}/f${f}`, { h: med(runs.h), v: med(runs.v) });
  }
+}
+// ⛔ THE TWO CAVES MUST NOT WALK THE SAME LENGTH OF CORRIDOR. Joel asked for the
+// Cave of Seals to have longer runs than Altar Cave, and a `corridor` block that
+// is read but never reaches a carve would leave both identical while every other
+// check stayed green. Compare what got CARVED, not what was declared.
+{
+  const a = CARVED.get('altar/f1'), b = CARVED.get('seals/f1');
+  if (a && b) {
+    if (!(b.h > a.h)) fails.push(`seals f1 median h-corridor ${b.h} is not longer than altar f1's ${a.h} — the corridor block is not driving the carve`);
+    if (!(b.v > a.v)) fails.push(`seals f1 median v-corridor ${b.v} is not longer than altar f1's ${a.v} — the corridor block is not driving the carve`);
+    console.log(`corridor runs (median steps): altar f1 h${a.h}/v${a.v}  ->  seals f1 h${b.h}/v${b.v}`);
+  }
 }
 // ⛔ EVERY DECLARED LAYOUT MUST ACTUALLY GET GENERATED. A layout named in
 // `LAYOUTS` that no dungeon row uses is dead code this gate would silently skip.
