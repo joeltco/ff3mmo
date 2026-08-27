@@ -53,7 +53,7 @@ const LIMITS = new Map([
   ['trap-chamber',    { jaccard: 0.40, always: 20, entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
   ['boulder-chamber', { jaccard: 0.40, always: 20, entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
   ['rock-switch',     { jaccard: 0.30, always: 10, entrances: 40, secretRate: 0, lockedRate: 0.35, flatBand: 0.58, topologies: 2 }],
-  ['spine',           { jaccard: 0.35, always: 15, entrances: 12, topologies: 4, secretRate: 0, lockedRate: 0, flatBand: 0.58 }],
+  ['spine',           { jaccard: 0.35, always: 15, entrances: 12, topologies: 4, secretRate: 0, lockedRate: 0.35, flatBand: 0.58 }],
   // Its sibling's limits, and it clears every one of them with room: measured
   // over 200 seeds at jaccard 0.133 (limit 0.30), 0 always-tiles (limit 10) and
   // 62 distinct entrances (floor 40). It declares no secret and no locked room,
@@ -106,12 +106,13 @@ for (const dg of DUNGEONS) {
     if (r.plan?.topology) topos.set(r.plan.topology, (topos.get(r.plan.topology) || 0) + 1);
     // Floor 0 records secrets as `falseWalls`; the slab floors record rock
     // tunnels in the plan. Both count as "this floor has a secret".
-    // ⛔ `secretWalls` COUNTS TOO. This read `falseWalls` (floor 0's void-carved
-    // corridors) and plan links only, so the Cave of Seals' floor 3 reported
-    // "secret path 0/200 (0%)" on a floor that hides a room behind a secret door
-    // on 40% of its seeds. A metric that reports zero for a shipped feature is
-    // worse than no metric.
-    if (r.falseWalls?.size || r.secretWalls?.size || r.plan?.links?.some(l => l.kind === 'secret')) secretSeeds++;
+    // ⛔ NOT `secretWalls`. v1.11.8 added it here for a carved secret room that
+    // no longer exists, and it would quietly WEAKEN this gate: `snake`'s 45%
+    // secretRate was calibrated on `falseWalls` alone, and floor 0 places a
+    // rocky `secretWalls` tile on every seed — so counting both makes the rate
+    // trivially satisfiable. A metric is only a gate while it measures the thing
+    // its threshold was measured from.
+    if (r.falseWalls?.size || r.plan?.links?.some(l => l.kind === 'secret')) secretSeeds++;
     if (lim?.flatBand != null) flatSum += bandFlatness(r.tilemap);
     if (r.lockedDoors?.size) lockedSeeds++;
     const m = new Set();
@@ -168,15 +169,20 @@ for (const dg of DUNGEONS) {
     // floor is the declared chance discounted for the topologies that cannot
     // carry one (`hub` already has that room in the open) and for the seeds that
     // offer no throat — measured at 37% against a declared 0.5.
-    // ⛔ SCOPED TO THE FLOOR THAT CAN CARRY ONE. `spineBounds` is a DUNGEON-level
-    // value, so without the layout test this fired on the Cave of Seals' floors
-    // 0, 1 and 2 as well — three failures on floors that have never had a secret
-    // door and were never asked to. A registry value is not a floor's property
-    // just because the floor's dungeon declares it.
-    const ns = lay === 'spine' ? spineBounds(dg).northSecret : 0;
+    // ⛔ A DECLARED CHANCE THAT NEVER FIRES IS A SILENT FAILURE. `lockedDoor` is
+    // a number on a registry row; nothing else in the build would notice if the
+    // centre chamber's wall stopped offering a spot and it quietly went to zero.
+    //
+    // ⛔ SCOPED TO THE FLOOR THAT CAN CARRY ONE, and read off the LOCKED-DOOR
+    // rate rather than the secret-path one. `spineBounds` is a DUNGEON-level
+    // value: without the layout test this fired on the Cave of Seals' floors 0,
+    // 1 and 2 — floors that have never had one and were never asked for one. A
+    // registry value is not a floor's property just because its dungeon declares
+    // it.
+    const ns = lay === 'spine' ? spineBounds(dg).lockedDoor : 0;
     if (ns > 0) {
-      const floorRate = ns * 0.5;
-      if (sr < floorRate) fails.push(`${label}: a secret door on only ${Math.round(sr * 100)}% of seeds against a declared chance of ${Math.round(ns * 100)}% (floor ${Math.round(floorRate * 100)}%) — the geometry has stopped admitting one`);
+      const floorRate = ns * 0.7;
+      if (lr < floorRate) fails.push(`${label}: a locked door on only ${Math.round(lr * 100)}% of seeds against a declared chance of ${Math.round(ns * 100)}% (floor ${Math.round(floorRate * 100)}%) — the chamber wall has stopped offering a spot`);
     }
   }
   if (lim.topologies) {

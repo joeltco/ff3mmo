@@ -139,7 +139,7 @@ export const DUNGEONS = [
       // rooms give up the columns to pay for it: a 5-7 wide centre and 5-7 wide
       // wings against Altar's 7-9. `extent` 14 keeps two entrance positions;
       // Altar Cave's own 15 leaves one and is why its entrance barely moves.
-      spine: { halfW: [2, 3], gap: [8, 10], sideW: [2, 3], extent: 14, northSecret: 0.5 },
+      spine: { halfW: [2, 3], gap: [8, 10], sideW: [2, 3], extent: 14, lockedDoor: 0.5 },
       // ⭐ ITS OWN ENTRY FLOOR. Both caves used to open on the same map — 83 of
       // 200 seeds pixel-identical, the rest differing by ONE tile (Altar Cave's
       // secret doorway). `snake` has no corridors, so the corridor block could
@@ -194,7 +194,13 @@ export const DUNGEONS = [
     // ⛔ NO SIDE ROOMS. The locked/secret rooms are Altar Cave content; giving
     // this dungeon empty arrays is a statement, not an oversight — the generator
     // hands out ids from `secretRoomMapIds` and would otherwise invent some.
-    lockedRooms: [],
+    // ⭐ ONE LOCKED ROOM, ON FLOOR 3. Joel, 2026-08-27: *"add a secret door
+    // chance on the wall of the north center chamber... DOORS THAT REQUIRE
+    // FUCKING KEYS."* The door goes on the centre chamber's wall and leads to a
+    // standalone map, so nothing about it is drawn on the floor itself.
+    lockedRooms: [
+      { mapId: 1012, floor: 3 },
+    ],
     secretRooms: [],
   },
 ];
@@ -384,9 +390,10 @@ export function spineBounds(dungeon) {
     // How many columns either side the floor may use. Altar Cave's own maximum,
     // so its clamp never bites and its maps do not move.
     extent: (d && d.extent != null) ? d.extent : 15,
-    // Chance of a secret door on the centre chamber's wall. 0 = never, which is
-    // every dungeon that does not ask for one.
-    northSecret: (d && d.northSecret != null) ? d.northSecret : 0,
+    // Chance of a LOCKED DOOR on the centre chamber's wall — a `$70` chamber
+    // door wired to this dungeon's standalone locked room, needing the Magic
+    // Key. 0 = never, which is every dungeon that does not ask for one.
+    lockedDoor: (d && d.lockedDoor != null) ? d.lockedDoor : 0,
   };
 }
 

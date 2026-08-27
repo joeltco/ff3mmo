@@ -1,6 +1,6 @@
-## 1.11.8 — 2026-08-27
+## 1.11.9 — 2026-08-27
 
-### The Cave of Seals floor 3 stops being a clone — longer corridors + a secret door
+### The Cave of Seals floor 3 stops being a clone — longer corridors + a locked door
 
 Joel, 2026-08-27: *"make the corridors longer in seals f3. add a secret door
 chance on the wall of the north center chamber."*
@@ -12,7 +12,7 @@ run. It now differs by a **mean of 237 tiles**, and that pin is deleted.
 **Longer corridors.** A new per-dungeon `layout.spine` block, the same shape as
 `corridor` and `snake`:
 
-    seals  spine: { halfW: [2,3], gap: [8,10], sideW: [2,3], extent: 14, northSecret: 0.5 }
+    seals  spine: { halfW: [2,3], gap: [8,10], sideW: [2,3], extent: 14, lockedDoor: 0.5 }
 
     side-corridor steps    altar f3  4-6 (median 5)  ->  seals f3  7-9 (median 8)
 
@@ -21,72 +21,77 @@ is how many columns the floor uses either side of its spine, and the entrance ca
 only move in what is left (`1 + extent .. 30 - extent`). Push the corridor out
 without pulling the rooms in and the floor stops having a position at all —
 `check-floor-variety` counts distinct entrances and fails at 12. So the wings pay
-for the corridor: a 5-7 wide centre and 5-7 wide wings against Altar's 7-9. That
-is a real trade on a 32-column map, not a tuning oversight, and `spineBounds`
-says so where the next person will read it.
+for the corridor: a 5-7 wide centre and 5-7 wide wings against Altar's 7-9. A
+real trade on a 32-column map, not a tuning oversight.
 
-**A secret door on the centre chamber's wall**, on 161 of 400 seeds (40%).
+**A locked door on the centre chamber's wall**, on 191 of 400 seeds (48%).
 
-⛔ **It is the `hub` topology's own north room, with one spoke tile sealed.**
-Nothing here is a new mechanism: the room and its shaft are the two calls `hub`
-already makes, and the seal is `secretWalls` — face the rocky tile, press A, it
-opens for good — which floor 0 has shipped for a year and `handleSecretWall`
-persists through `consumedTiles`. `hub` seeds are skipped: a secret door onto a
-room you can already walk into is not a secret.
+⛔ **v1.11.8 SHIPPED THE WRONG THING AND THIS REPLACES IT.** That version carved
+a hidden room into the floor above the centre chamber and sealed it with a
+`secretWalls` tile. Joel: *"it shouldn't be drawn, we have a secret door system.
+why aren't you using it? DOORS THAT REQUIRE FUCKING KEYS."*
 
-### Four things the measurements said and reasoning would not have
+The carved room, its shaft and its `secretWalls` seal are **removed**, and so are
+the two gate pieces written for them: a `dungeon-sweep` branch that now nothing
+reaches (an untested gate is worse than none), and `secretWalls` counting in
+`check-floor-variety`, which would have quietly WEAKENED that gate —
+`snake`'s 45% secretRate was calibrated on `falseWalls` alone, and floor 0 places
+a rocky secret tile on every seed.
 
-1. **The flood never left the staircase.** `reachableCount` walks FLOOR / BONES /
-   passage tiles; `STAIRS_DOWN` is in none of them, and this layout's entrance IS
-   the staircase. It returned **1** on every seed, so every candidate row
-   compared as "costs nothing" and the throat search found a door on **0 of 400**.
-   Flooding from the centre chamber instead fixed it.
+Dungeon floors set `skipRoomClip`, so **anything carved on the map is drawn** — a
+hidden room cut into this floor is visible from the moment you walk in, which
+makes it a room you can see and cannot reach rather than a secret. The game has
+had the right answer since v1.7.649 and I walked past it: a chamber door (`$70`)
+wired to a STANDALONE MAP. Nothing is drawn on the floor; the room does not exist
+here at all. `lockedDoors` blocks it with "Locked." until the player has the
+Magic Key (`$98`), and the unlock persists through `consumedTiles`.
 
-2. **The shaft is not one tile wide by the time the seal runs.** `carveVRun`
-   carves one column and then `enforceMinCeilingGap` widens it — a one-tile gap
-   between two ceilings is exactly what that pass removes. The door is chosen as
-   a ROW of the shaft, not a tile.
+Three existing calls — `placeChamberDoor`, `lockedRoomDoors`, `lockedDoors` —
+exactly as Altar Cave's floors 0 and 2 use them. The only new part is WHERE it
+looks: the centre chamber's own wall rather than anywhere on the map. The
+registry gained `seals.lockedRooms: [{ mapId: 1012, floor: 3 }]`.
 
-3. **Two rows of clearance is not enough.** `hub` puts its room at
-   `roomTopCarve - 2`, one row clear of the centre chamber — fine for a room
-   meant to be open, but with organic edges the two merge sideways and no tile is
-   the only way in: **45 of 161 rooms had no throat and stayed open.** At
-   `roomTopCarve - 3` it is **161 of 161**, every door a single tile.
+### ⛔ The locked door would have broken the floor's exits, and nearly shipped that way
 
-4. **A registry value is not a floor's property.** The new `northSecret` gate read
-   `spineBounds(dg)` without testing the layout, so it failed the Cave of Seals'
-   floors 0, 1 and 2 — floors that have never had a secret door and were never
-   asked for one.
+`spine` wired its destinations by TRIGGER ID:
+
+```js
+dungeonDestinations.set('1:0', { mapId: bossFloorMapId(dungeon) }); // door
+dungeonDestinations.set('1:1', { goBack: true });                   // stairs
+```
+
+**A trigId is not stable.** `processTriggerTiles` numbers each type in scan
+order, so one more type-1 tile renumbers every type-1 trigger after it. Adding a
+second `$70` door does exactly that. Measured over the 191 seeds that get one:
+
+    boss door mis-wired        16/191   (the door to the Djinn returned you a floor)
+    entrance stairs mis-wired  191/191  (step off and back on -> warped to the boss)
+
+That second number is the whole floor skipped, on every seed with a door — and it
+is the SAME failure the note at the bottom of `dungeon-generator.js` already
+records from v1.7.691, in the same shape. Destinations a branch knows are now
+registered by COORDINATE (`coordDestinations`) and resolved against the freshly
+built triggerMap. 0/400 mis-wired on both caves; fails on revert.
 
 ### Gates
 
-* `dungeon-sweep` — a floor carrying `secretWalls` has its sealed region treated
-  as by-design, then proved: **opening a SINGLE faced tile** must leave nothing
-  stranded and every chest openable, and the room behind must hold a chest.
-  Checked the way the game plays it — `handleSecretWall` opens one tile, so a
-  door where all three must go would pass an open-everything test and still be a
-  room you cannot enter. 10,136 tiles sealed across 2,000 seeds, all opening.
-* `check-floor-variety` — `secretWalls` now counts toward the secret-path metric.
-  It read `falseWalls` and plan links only, so this floor reported **"secret path
-  0/200 (0%)"** while hiding a room on 40% of its seeds. A metric that reports
-  zero for a shipped feature is worse than no metric. A declared `northSecret`
-  chance that stops producing doors now fails the build.
+* `dungeon-sweep` and `check-floor-snapshot` walked **`[1010, 1011]`** — Altar
+  Cave's two locked rooms, as literals — so the room behind a new dungeon's door
+  was swept and hashed by nothing. Both now read `DUNGEONS`, and both pass the
+  owning dungeon to `generateLockedRoomMap`, which otherwise defaults to Altar
+  Cave's art rather than the room `map-loading.js` actually builds. Same defect
+  the floor sweep carried until v1.11.0, in the same shape.
+  `locked 1012` audits clean: 150 seeds, 26 reachable tiles, 0 stranded.
+* `check-floor-variety` — `spine`'s `lockedRate` pinned at 35% against a measured
+  51%, and a declared `lockedDoor` chance that stops producing doors now fails
+  the build. ⛔ Scoped to the floor that can carry one: read straight off
+  `spineBounds(dg)` it failed seals f0 / f1 / f2, floors that have never had a
+  door. A registry value is not a floor's property just because its dungeon
+  declares it.
 * `check-floor-plan` — `CLONE_PENDING` is empty.
-* `tools/floor-view.mjs --dungeon seals --plan` shows the `north-secret` chamber
-  and its spoke.
 
-`check-floor-snapshot` moves exactly one row, `seals/floor3`. Altar Cave and
-seals f0 / f1 / f2 are byte-identical.
-
-### Note for Joel
-
-⛔ The room behind the door is **drawn**, like every sealed region on these floors
-(`skipRoomClip`) — you can see it above the centre chamber before you find the
-way in, the same as the floor 2 vault. v1.10.33's disguised doorway was reverted
-on sight for looking like "a stray wall tile blocking an open corridor"; this one
-sits on the chamber's own wall with a two-tile neck behind it rather than mid-
-corridor. **Look at it and say if it reads wrong** — moving it to a side wall is
-a small change.
+`check-floor-snapshot` moves exactly one floor, `seals/floor3`, and adds
+`locked1012`. Altar Cave and seals f0 / f1 / f2 are byte-identical.
 
 ## 1.11.7 — 2026-08-27
 

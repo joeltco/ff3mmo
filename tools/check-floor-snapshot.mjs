@@ -78,10 +78,16 @@ for (const dg of DUNGEONS) {
   for (const goLeft of [true, false]) h.update(digestOf(generateSecretRoomMap(rom, goLeft)));
   rows.secretRooms = h.digest('hex').slice(0, 16);
 }
-for (const mapId of [1010, 1011]) {
-  const h = crypto.createHash('sha256');
-  for (let k = 0; k < SEEDS; k++) h.update(digestOf(generateLockedRoomMap(rom, ((BASE + k * 7919) | 0) ^ mapId | 0)));
-  rows[`locked${mapId}`] = h.digest('hex').slice(0, 16);
+// ⛔ FROM THE REGISTRY, AND WITH ITS OWN DUNGEON. Hardcoding `[1010, 1011]`
+// meant a new dungeon's locked room was hashed by nothing, and calling
+// `generateLockedRoomMap` without a dungeon meant it was hashed wearing Altar
+// Cave's art rather than the one `map-loading.js` actually builds.
+for (const dg of DUNGEONS) {
+  for (const { mapId } of dg.lockedRooms || []) {
+    const h = crypto.createHash('sha256');
+    for (let k = 0; k < SEEDS; k++) h.update(digestOf(generateLockedRoomMap(rom, ((BASE + k * 7919) | 0) ^ mapId | 0, dg)));
+    rows[`locked${mapId}`] = h.digest('hex').slice(0, 16);
+  }
 }
 
 const payload = { _what: 'Structural digest of every generated dungeon map. Phase-1 refactors must not change it. Regenerate with --update ONLY for an intentional change, and say so in the changelog.', seeds: SEEDS, base: BASE, rows };
