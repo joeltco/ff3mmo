@@ -215,13 +215,17 @@ export function exitAudit(r, seen) {
  *
  *   `gates: 'exit'`     — if opening the wall reveals a sealed region, at least
  *     one boulder must sit against THAT region, or a player standing on the far
- *     side has nothing to reopen it with. `oneSidedCap` is how often that may
- *     fail. Altar Cave measures 71/400 (17.8%) and is pinned just above: its
- *     second boulder goes in the exit room by corner search, and on the ~18% of
- *     seeds where part of that room is reachable by another route the boulder
- *     lands on the reachable part. Same standing wart as `walkaroundCap`, same
- *     treatment — pinned so it cannot grow, not fixed, because fixing it moves
- *     Altar Cave's maps.
+ *     side has nothing to reopen it with. BOTH CAVES ARE PINNED AT ZERO.
+ *
+ *     ⛔ Altar Cave used to sit at 17.8% here and carried a `walkaroundCap` of
+ *     0.20 to match, described for three releases as a standing wart that could
+ *     not be fixed without moving its maps. It was neither a boulder problem nor
+ *     unfixable: this floor's chain doubles back, so its exit chamber lands over
+ *     the room the player walked in through, and both are carved seven rows
+ *     tall. Within two rows they MERGE and the exit is reachable without the
+ *     wall. Measured 2,000 seeds: separation 1 -> 182/219 walk around,
+ *     separation 2 -> 142/181, separation 3 or more -> 0 of 1,600. A minimum
+ *     separation of 3 took both numbers to zero.
  *
  *   `gates: 'treasure'` — NO boulder may be behind the wall. The chamber is a
  *     dead end; you never stand on the far side needing a way out, so a boulder
@@ -235,7 +239,7 @@ export function exitAudit(r, seen) {
  * the count admits no ceiling.
  */
 const PUZZLE_ROLE = new Map([
-  ['altar/rock-switch',     { gates: 'exit', rocks: 2, walkaroundCap: 0.20, oneSidedCap: 0.20 }],
+  ['altar/rock-switch',     { gates: 'exit', rocks: 2, walkaroundCap: 0,    oneSidedCap: 0 }],
   ['seals/boulder-chamber', { gates: 'exit', rocks: 2, walkaroundCap: 0,    oneSidedCap: 0 }],
   ['seals/chamber-run',     { gates: 'treasure', rocks: 1 }],
 ]);

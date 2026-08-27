@@ -1,3 +1,47 @@
+## 1.11.7 — 2026-08-27
+
+### The 17% walk-around was never a boulder problem — Altar f2 is now 100%
+
+v1.11.6 gave Altar Cave floor 2 two boulders on every seed. That was the COUNT.
+**One on each side of the wall** — the arrangement Joel actually described — was
+still only 84%, and I shipped it saying so and offering to fix it. Joel:
+*"...... i told you to fucking fix 1"*. He is right; the count was never the ask.
+
+`walkaroundCap` has pinned this floor at 17% since v1.10.15 and every note about
+it, mine included, called it a standing wart that could not be fixed without
+moving Altar Cave's maps. It is neither — and no amount of looking at where the
+boulders went would ever have said so, because **two rooms were merging**.
+
+This floor's chain doubles back on itself, so the exit chamber lands directly
+over the room the player walked in through, and both are carved SEVEN ROWS TALL.
+Come within two rows and they join: the exit is reachable without ever opening
+the wall, the region the wall seals shrinks to its own opening tile, and the far
+boulder has nothing to sit against.
+
+Measured over 2,000 seeds, and the signal is absolute:
+
+| row separation | seeds | walk around |
+|---|---|---|
+| 1 | 219 | 182 |
+| 2 | 181 | 142 |
+| **3 or more** | **1600** | **0** |
+
+A minimum separation of 3 — expressed as the vertical run needed to reach it,
+clamped both ways so the map cap still wins — takes **both** numbers to zero:
+
+    altar f2   exitOpenUnpuzzled  326/2000 -> 0/2000
+               one-sided          324/2000 -> 0/2000
+               boulders per seed  2 on 2000/2000
+
+`walkaroundCap` and `oneSidedCap` are now **0 for both caves**. The ceilings that
+existed to tolerate this are deleted, not raised. Fails on revert: drop the clamp
+and the sweep reports 71/400 on both counts.
+
+⛔ **A rate pinned "because fixing it would move the maps" is a hypothesis, not a
+finding.** This one survived three releases on that sentence. What it needed was
+one table — the defect's rate against a candidate cause — and the cause turned
+out to have nothing to do with the mechanism the wart was filed under.
+
 ## 1.11.6 — 2026-08-27
 
 ### The Cave of Seals floor 2 — `chamber-run`: the boulder opens a VAULT

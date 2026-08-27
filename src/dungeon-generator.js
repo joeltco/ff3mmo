@@ -2042,7 +2042,37 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // from the top, and the 7x7 hangs off whichever end — `roomDyMin/-8` above
     // when climbing, `roomDyMax/+6` below when descending. Altar Cave's 5-7 never
     // reaches either cap, so its floors are unchanged.
-    const vertLength = Math.min(vertRoll, vertDirEarly === -1
+    // ⭐ AND FAR ENOUGH THAT THE EXIT CHAMBER DOES NOT TOUCH THE ENTRANCE ROOM.
+    //
+    // Joel, 2026-08-27, on this floor's second boulder: *"altar f2 has to have
+    // 100% 2 boulders."* Two was the count; the arrangement he described is one
+    // on each side of the wall, and that was stuck at 84% for a reason that has
+    // nothing to do with boulders.
+    //
+    // THE WALK-AROUND IS TWO ROOMS MERGING. The chain doubles back on itself, so
+    // the exit chamber lands above (or below) the room the player walked in
+    // through — and both are carved SEVEN ROWS TALL. When their carves come
+    // within two rows they join, and the exit room is reachable without ever
+    // opening the wall. The boulder then has no far side to sit on, because the
+    // region the wall seals is just the wall's own opening.
+    //
+    // Measured over 2,000 seeds, and the signal is absolute:
+    //
+    //     row separation   seeds   walk around
+    //         1             219        182
+    //         2             181        142
+    //         3+           1600          0
+    //
+    // So the fix is a minimum separation of 3, expressed as the vertical run
+    // this floor needs to reach it. This is the 17% wart `walkaroundCap` has
+    // pinned since v1.10.15 — it was never a boulder-placement problem and no
+    // amount of looking at where the boulders went would have said so.
+    //
+    // ⛔ CLAMPED BOTH WAYS, AND THE MAP CAP STILL WINS. Raising a run is as able
+    // to walk a chamber off the edge as lengthening one is.
+    const rowGap = topology === 'zigzag' ? -vertDirEarly * 2 : 0;   // midFloorY - startFloorY
+    const vertNeed = vertDirEarly === -1 ? 5 + rowGap : 3 - rowGap;
+    const vertLength = Math.min(Math.max(vertRoll, vertNeed), vertDirEarly === -1
       ? midFloorY - 12               // climbing: keep vertY-8 on the map
       : 21 - midFloorY);             // descending: keep vertY+6 on the map
     const vertX = pathResult.endX + 2 * horizDir; // middle of 5×5 room
