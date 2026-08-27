@@ -18,14 +18,28 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { PASS, reachableFrom } = await import('./dungeon-sweep.mjs');
+const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
 
 const SEEDS = parseInt(process.argv[2] || '150', 10);
 const BASE = 1754900000000;
 const fails = [];
 
-// Which floors record EVERY chamber. Pinned so a coverage change is deliberate
+// Which LAYOUTS record EVERY chamber. Pinned so a coverage change is deliberate
 // and shows up here rather than silently turning a partial plan into a claim.
-const COMPLETE = new Map([[0, false], [1, true], [2, true], [3, true], [4, false]]);
+//
+// ⛔ KEYED BY LAYOUT, AND WALKED PER DUNGEON. This was `new Map([[0,false],
+// [1,true],...])` over floor indices, run against the default dungeon only — so
+// the Cave of Seals' floors were checked by nothing, and a floor's completeness
+// was pinned to WHERE it sits rather than WHAT it is. `boulder-chamber` is floor
+// 1 in one cave and could be floor 2 in the next.
+const COMPLETE = new Map([
+  ['snake',           false],   // a traced ceiling boundary, not a chamber list
+  ['trap-chamber',    true],
+  ['boulder-chamber', true],
+  ['rock-switch',     true],
+  ['spine',           true],
+  [null,              false],   // the boss chamber — authored, no layout
+]);
 
 function footprint(c) {
   if (c.kind === 'room') {
@@ -47,20 +61,26 @@ function footprint(c) {
 }
 
 let checkedChambers = 0, checkedLinks = 0;
-for (const [f, shouldBeComplete] of COMPLETE) {
+const seenLayouts = new Set();
+for (const dg of DUNGEONS) {
+ for (let f = 0; f < dg.floors; f++) {
+  const lay = layoutForFloor(dg, f);
+  if (!COMPLETE.has(lay)) { fails.push(`${dg.id} floor ${f}: layout '${lay}' has no completeness expectation — add one on purpose`); continue; }
+  const shouldBeComplete = COMPLETE.get(lay);
+  seenLayouts.add(lay);
   for (let k = 0; k < SEEDS; k++) {
     const seed = BASE + k * 7919;
-    const r = generateFloor(rom, f, seed);
+    const r = generateFloor(rom, f, seed, dg);
     const plan = r.plan;
-    if (!plan) { fails.push(`floor ${f} seed ${seed}: no plan on the returned mapData`); continue; }
+    if (!plan) { fails.push(`${dg.id} floor ${f} seed ${seed}: no plan on the returned mapData`); continue; }
 
     if (plan.complete !== shouldBeComplete) {
-      fails.push(`floor ${f}: plan.complete is ${plan.complete}, expected ${shouldBeComplete} — coverage changed, update this check on purpose`);
+      fails.push(`${dg.id} floor ${f} (${lay}): plan.complete is ${plan.complete}, expected ${shouldBeComplete} — coverage changed, update this check on purpose`);
       break;
     }
     // A complete plan must not be carrying "some of this is still inline" notes.
     if (plan.complete && plan.chambers.some(c => c.kind === 'inline')) {
-      fails.push(`floor ${f} seed ${seed}: plan claims complete but records an inline note`);
+      fails.push(`${dg.id} floor ${f} seed ${seed}: plan claims complete but records an inline note`);
     }
     for (const c of plan.chambers) {
       const fp = footprint(c);
@@ -70,16 +90,22 @@ for (const [f, shouldBeComplete] of COMPLETE) {
       for (let y = Math.max(0, fp.y0); y <= Math.min(31, fp.y1); y++)
         for (let x = Math.max(0, fp.x0); x <= Math.min(31, fp.x1); x++)
           if (PASS.has(r.tilemap[y * 32 + x])) walkable++;
-      if (walkable === 0) fails.push(`floor ${f} seed ${seed}: chamber '${c.role}' (${c.kind}) at ${c.x},${c.y} has NO walkable tile in its footprint — the plan describes a room that was not carved`);
+      if (walkable === 0) fails.push(`${dg.id} floor ${f} seed ${seed}: chamber '${c.role}' (${c.kind}) at ${c.x},${c.y} has NO walkable tile in its footprint — the plan describes a room that was not carved`);
     }
     for (const l of plan.links) {
       checkedLinks++;
       const xs = [l.x0, l.x, l.endX].filter(v => v != null);
       const ys = [l.y, l.y0, l.endY, l.yFrom, l.yTo].filter(v => v != null);
       if (xs.some(v => v < 0 || v > 31) || ys.some(v => v < 0 || v > 31))
-        fails.push(`floor ${f} seed ${seed}: link '${l.kind}' has an off-map endpoint (${xs.join(',')} / ${ys.join(',')})`);
+        fails.push(`${dg.id} floor ${f} seed ${seed}: link '${l.kind}' has an off-map endpoint (${xs.join(',')} / ${ys.join(',')})`);
     }
   }
+ }
+}
+// ⛔ EVERY DECLARED LAYOUT MUST ACTUALLY GET GENERATED. A layout named in
+// `LAYOUTS` that no dungeon row uses is dead code this gate would silently skip.
+for (const lay of COMPLETE.keys()) {
+  if (lay !== null && !seenLayouts.has(lay)) fails.push(`layout '${lay}' is expected here but no dungeon row uses it — dead layout, or a row lost it`);
 }
 // ── Floor 0's ceiling must be ONE perimeter ───────────────────────────────
 // Floor 0's shape is a single traced boundary — the "snake" — and everything

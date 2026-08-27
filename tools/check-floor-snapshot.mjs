@@ -15,6 +15,13 @@
 // digest. ROM-derived assets (chrTiles, metatiles, palettes) are not — they are
 // cached, identical by construction, and huge.
 //
+// ⛔ IT WALKS EVERY ROW IN `DUNGEONS`, NOT THE DEFAULT ONE. It used to call
+// `generateFloor(rom, f, seed)` with no dungeon argument, so every digest in the
+// fixture was Altar Cave's — and the Cave of Seals, which has its own registry
+// row and (since the layout block) its own floor layouts, was hashed by nothing.
+// Altar Cave's rows keep their historical `floorN` keys so the existing fixture
+// values still verify; every other dungeon is `<id>/floorN`.
+//
 //   node tools/check-floor-snapshot.mjs            # verify against the fixture
 //   node tools/check-floor-snapshot.mjs --update   # re-baseline (INTENTIONAL changes only)
 //   node tools/check-floor-snapshot.mjs --seeds 50 # fewer seeds while iterating
@@ -28,6 +35,7 @@ const rom = new Uint8Array(fs.readFileSync(ROM));
 
 const { generateFloor, generateSecretRoomMap } = await import('../src/dungeon-generator.js');
 const { generateLockedRoomMap } = await import('../src/dungeon-locked-room.js');
+const { DUNGEONS, STARTING_DUNGEON } = await import('../src/data/dungeons.js');
 
 const args = process.argv.slice(2);
 const UPDATE = args.includes('--update');
@@ -55,10 +63,15 @@ function digestOf(r) {
 }
 
 const rows = {};
-for (const f of [0, 1, 2, 3, 4]) {
-  const h = crypto.createHash('sha256');
-  for (let k = 0; k < SEEDS; k++) h.update(digestOf(generateFloor(rom, f, BASE + k * 7919)));
-  rows[`floor${f}`] = h.digest('hex').slice(0, 16);
+for (const dg of DUNGEONS) {
+  // Altar Cave keeps the bare `floorN` key it has always had, so its committed
+  // digests stay comparable across this change.
+  const key = (f) => (dg === STARTING_DUNGEON ? `floor${f}` : `${dg.id}/floor${f}`);
+  for (let f = 0; f < dg.floors; f++) {
+    const h = crypto.createHash('sha256');
+    for (let k = 0; k < SEEDS; k++) h.update(digestOf(generateFloor(rom, f, BASE + k * 7919, dg)));
+    rows[key(f)] = h.digest('hex').slice(0, 16);
+  }
 }
 {
   const h = crypto.createHash('sha256');

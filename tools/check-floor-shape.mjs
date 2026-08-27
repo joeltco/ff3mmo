@@ -25,12 +25,23 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { loadMap } = await import('../src/map-loader.js');
+const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
 
 const SEEDS = parseInt(process.argv[2] || '200', 10);
 const BASE = 1761000000000;
 const CEIL = 0x00, ROCK = 0x01;
 // Deep bands allowed per SEEDS floors. Measured residual is well under each.
-const DEEP_LIMIT = new Map([[0, 5], [1, 25], [2, 20], [3, 30]]);
+// ⛔ KEYED BY LAYOUT, MEASURED PER DUNGEON. Was `[[0,5],[1,25],[2,20],[3,30]]`
+// over floor indices against the default dungeon, so the Cave of Seals was never
+// checked and a limit belonged to a POSITION rather than to a carve.
+// `boulder-chamber` is pinned at ZERO because it MEASURES zero: 2,000 seeds
+// across five bases, not one three-deep band. A limit of 25 next to a measured 0
+// is not a gate, it is a comment. Its sibling `trap-chamber` also measures 0 and
+// keeps its historical 25 — tightening a shipped floor's limit is a separate
+// call from pinning a new one honestly.
+const DEEP_LIMIT = new Map([
+  ['snake', 5], ['trap-chamber', 25], ['boulder-chamber', 0], ['rock-switch', 20], ['spine', 30],
+]);
 
 function depths(tm) {
   const hist = {};
@@ -54,18 +65,25 @@ for (const id of [111, 113, 22, 115]) {
 console.log(`ROM caves: ${romTwo} bands at depth 2, ${romOther} at any other depth`);
 if (romOther !== 0) fails.push(`the ROM itself shows ${romOther} bands off depth 2 — the rule this gate defends is wrong, re-derive it before trusting this file`);
 
-console.log(`floor  depth1  depth2  depth3+  limit`);
-for (const [f, limit] of DEEP_LIMIT) {
-  const tot = {};
-  for (let k = 0; k < SEEDS; k++) {
-    const h = depths(generateFloor(rom, f, BASE + k * 7919).tilemap);
-    for (const [d, n] of Object.entries(h)) tot[d] = (tot[d] || 0) + n;
+console.log(`floor                    depth1  depth2  depth3+  limit`);
+for (const dg of DUNGEONS) {
+  for (let f = 0; f < dg.floors; f++) {
+    const lay = layoutForFloor(dg, f);
+    if (lay === null) continue;                 // boss chamber — authored
+    const limit = DEEP_LIMIT.get(lay);
+    if (limit === undefined) { fails.push(`layout '${lay}' has no depth limit — pin one from a measurement`); continue; }
+    const label = `${dg.id} f${f} ${lay}`;
+    const tot = {};
+    for (let k = 0; k < SEEDS; k++) {
+      const h = depths(generateFloor(rom, f, BASE + k * 7919, dg).tilemap);
+      for (const [d, n] of Object.entries(h)) tot[d] = (tot[d] || 0) + n;
+    }
+    const one = tot[1] || 0;
+    let deep = 0;
+    for (const [d, n] of Object.entries(tot)) if (+d >= 3) deep += n;
+    console.log(`${label.padEnd(25)}${String(one).padStart(6)}${String(tot[2] || 0).padStart(8)}${String(deep).padStart(9)}${String(limit).padStart(7)}`);
+    if (deep > limit) fails.push(`${label}: ${deep} ceilings with THREE OR MORE rocky tiles below (limit ${limit}) — the cartridge never does this`);
   }
-  const one = tot[1] || 0, two = tot[2] || 0;
-  let deep = 0;
-  for (const [d, n] of Object.entries(tot)) if (+d >= 3) deep += n;
-  console.log(`${String(f).padEnd(7)}${String(one).padStart(6)}${String(two).padStart(8)}${String(deep).padStart(9)}${String(limit).padStart(7)}`);
-  if (deep > limit) fails.push(`floor ${f}: ${deep} ceilings with THREE OR MORE rocky tiles below (limit ${limit}) — the cartridge never does this`);
 }
 
 if (fails.length) { console.log('\nFAIL:'); for (const f of fails) console.log('  ' + f); process.exit(1); }

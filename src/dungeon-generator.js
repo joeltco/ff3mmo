@@ -24,7 +24,7 @@ import {
 } from './dungeon/plan.js';
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
-import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds } from './data/dungeons.js';
+import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
@@ -751,12 +751,25 @@ function placeEntrance(tilemap, x, y, floorIndex) {
 const CORRIDOR_WOBBLE = 0.3;
 
 
-const FLOOR_CONFIG = [
-  { stairs: 1, traps: 0, chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 }, // floor 0 (two rooms)
-  { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9, secrets: 0 }, // floor 1
-  { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: 0, secrets: 0, rockPuzzle: true }, // floor 2
-  { stairs: 0, traps: 0, chests: 0, ponds: 0, skeletons: [4, 6], secrets: 0 },             // floor 3
-];
+// ⛔ KEYED BY LAYOUT NAME, NOT FLOOR INDEX. As `FLOOR_CONFIG[floorIndex]` this
+// was shared by every dungeon: the Cave of Seals' floor 1 got Altar Cave's
+// `traps: [3,5]` because it was floor 1, and there was no way to give one cave
+// a trap room and the other a boulder room. See `data/dungeons.js` -> LAYOUTS.
+//
+// ⛔ A NUMBER AND A [min,max] PAIR ARE NOT INTERCHANGEABLE HERE. An array draws
+// from `rng`; a bare number does not. `boulder-chamber` uses `traps: 0`, which
+// skips a draw `trap-chamber` makes — a deliberate divergence between the two
+// caves' RNG streams, and the reason altar stays byte-identical while seals does
+// not.
+const LAYOUT_CONFIG = {
+  'snake':           { stairs: 1, traps: 0,      chests: [2, 4], ponds: 0, skeletons: [6, 10], secrets: 1 },
+  'trap-chamber':    { stairs: 0, traps: [3, 5], chests: [4, 6], ponds: 0, skeletons: 9,       secrets: 0 },
+  // Same room, same chest budget, NO trap holes — the way down is the exit
+  // chamber behind the false wall instead. Joel, 2026-08-26.
+  'boulder-chamber': { stairs: 0, traps: 0,      chests: [4, 6], ponds: 0, skeletons: 9,       secrets: 0 },
+  'rock-switch':     { stairs: 0, traps: 0,      chests: 0,      ponds: 0, skeletons: 0,       secrets: 0, rockPuzzle: true },
+  'spine':           { stairs: 0, traps: 0,      chests: 0,      ponds: 0, skeletons: [4, 6],  secrets: 0 },
+};
 
 // LOCKED — Place exit on the south/bottom wall of the cave. DO NOT CHANGE.
 // Stairs sit directly on the snake's bottom edge (y = endRow).
@@ -1038,9 +1051,15 @@ export function generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNG
       if (visited.size >= 60) return result; // enough walkable space
       continue; // retry — chamber got eaten
     }
-    // Floor 2 (rock puzzle): stairs are behind false wall (unreachable by design).
-    // Validate rock is adjacent to a reachable tile instead.
-    if (floorIndex === 2 && result.rockSwitch) {
+    // A boulder floor's stairs are behind a false wall — unreachable by design
+    // until the switch is pulled. Validate that the ROCK is adjacent to a
+    // reachable tile instead.
+    //
+    // ⛔ KEYED ON `result.rockSwitch`, NOT ON THE FLOOR INDEX. It was
+    // `floorIndex === 2`, which is exactly equivalent while floor 2 is the only
+    // floor with a rock — and silently wrong the moment a second layout grows
+    // one, because the normal stairs BFS below would reject every seed of it.
+    if (result.rockSwitch) {
       const rv = new Set();
       const rq = [result.entranceY * 32 + result.entranceX];
       rv.add(rq[0]);
@@ -1090,7 +1109,13 @@ export function generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNG
 function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   const assets = assetsForFloor(romData, dungeon, floorIndex);
   const rng = mulberry32(seed + floorIndex);
-  const fillTile = (floorIndex === 0) ? FILL_VOID : CEILING;
+  // ⭐ WHAT SHAPE THIS FLOOR IS. Null on the boss chamber, whose shape comes from
+  // `bossSkinId` — every branch below tests `isBossFloor` first, so null never
+  // reaches a layout comparison. Reading it draws nothing from `rng`, which is
+  // why swapping the whole dispatch from floor index to layout name leaves Altar
+  // Cave byte-identical (`check-floor-snapshot`).
+  const LAYOUT = layoutForFloor(dungeon, floorIndex);
+  const fillTile = (LAYOUT === 'snake') ? FILL_VOID : CEILING;
   const tilemap = new Uint8Array(1024).fill(fillTile);
 
   let entranceX, entranceY;
@@ -1119,14 +1144,17 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   // a set of rooms — and floor 4's chamber is authored, so neither is a chamber
   // list. `complete: false` says so rather than letting a partial plan read as
   // whole.
-  const plan = createPlan(floorIndex, floorIndex >= 1 && floorIndex <= 3);
+  // Complete = every chamber on the floor went through a plan primitive. The
+  // `snake` layout traces a ceiling boundary rather than placing rooms, and the
+  // boss chamber is authored, so neither is a chamber list.
+  const plan = createPlan(floorIndex, LAYOUT !== null && LAYOUT !== 'snake');
 
   if (isBossFloor(dungeon, floorIndex)) {
     const pos = generateBossRoom(tilemap, dungeon);
     entranceX = pos.entranceX;
     entranceY = pos.entranceY;
     warpTile = pos.warpTile;
-  } else if (floorIndex === 0) {
+  } else if (LAYOUT === 'snake') {
     // ── Floor 0: two rooms (left/right) joined by a corridor — traced as ONE
     // continuous ceiling perimeter (snake) so ceilings NEVER disconnect. ──
     // Built like the deeper-floor boundary mode: assemble one inside-shape mask
@@ -1327,7 +1355,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // collide with the room-to-be either way (room interior + door land in
     // the free corner the cave never spawns features in).
 
-  } else if (floorIndex === 1) {
+  } else if (LAYOUT === 'trap-chamber') {
     // ── Floor 1: floor-2 architecture, trap-chamber half only ──────────
     // Copies floor 2's room/corridor primitives (5×5 + H corridor + 5×5 +
     // V corridor + 7×7) verbatim. The entrance arch reuses floor 2's
@@ -1464,7 +1492,226 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       right: horizDir === 1 ? pathResult.endX + 4 : pathResult.endX,
     });
 
-  } else if (floorIndex === 2) {
+  } else if (LAYOUT === 'boulder-chamber') {
+    // ── The Cave of Seals' floor 1 — the trap room, minus the traps ─────
+    //
+    // Joel, 2026-08-26: "remove the traps from the trap room, add a random
+    // boulder, add the smaller exit with wall chamber."
+    //
+    // Same head as `trap-chamber` (entrance arch, elbow, junction, drop into a
+    // 7×7) and the same tail as `rock-switch` (boulder, Z-shaped exit path with
+    // a false wall across it, small exit chamber, passage down). What it is NOT
+    // is a trap floor: `LAYOUT_CONFIG['boulder-chamber']` sets `traps: 0`, so
+    // the shared feature pass places none and the way down is the exit block
+    // behind the wall the boulder opens.
+    //
+    // ⛔ THE BFS-SEAL RUNS WHILE THE WALL IS STILL OPEN. The `trap-chamber` head
+    // ends by converting every FLOOR tile unreachable from the entrance landing
+    // into CEILING — which, if the false wall were already carved, would ERASE
+    // the entire exit chamber and the passage down with it. Carve the wall
+    // after the seal, never before. This floor has no other guard against it:
+    // every tile gate would report a perfectly connected floor with no exit.
+
+    entranceX = 5 + Math.floor(rng() * 22); // 5-26
+    const horizDir = entranceX > 16 ? -1 : entranceX < 16 ? 1 : (rng() < 0.5 ? -1 : 1);
+    const vertDir = 1;
+
+    const topology = rng() < 0.5 ? 'chain' : 'zigzag';
+    plan.topology = topology;
+
+    const entrFarDir = -horizDir;
+    const entrCornerX = entranceX;
+    const entrFloorY = 7;
+    const midFloorY = topology === 'zigzag'
+      ? entrFloorY + 2 + Math.floor(rng() * 3)   // 9-11
+      : entrFloorY;
+    planChamber(plan, tilemap, rng, 'entrance', { x: entrCornerX, y: entrFloorY, dir: entrFarDir });
+
+    const horizStartX = entrCornerX;
+    const horizFloorY = entrFloorY;
+    const pathLength = 4 + Math.floor(rng() * 3); // 4-6 steps
+    planElbow(plan, tilemap, { x0: horizStartX, y: horizFloorY, dir: horizDir, steps: pathLength, turnY: midFloorY });
+    const pathEndX = Math.max(1, Math.min(30, horizStartX + pathLength * horizDir));
+    const pathResult = { endX: pathEndX, endFloorY: midFloorY };
+
+    planChamber(plan, tilemap, rng, 'junction', { x: pathResult.endX, y: pathResult.endFloorY, dir: horizDir });
+
+    const vertLength = 5 + Math.floor(rng() * 3);
+    const vertX = pathResult.endX + 2 * horizDir;
+    let vertY = pathResult.endFloorY + 2;
+    vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
+
+    // The 7×7 boulder chamber. `keepClear` holds a lane open on the exit side so
+    // the jitter cannot close the mouth of the passage out — same call the
+    // `rock-switch` layout makes for the same reason.
+    const roomDyMin = -2;
+    const roomDyMax = 6;
+    const exitDir = -horizDir;
+    const exitPathFloorY = vertY + 2;
+    const exitPathDy = exitPathFloorY - vertY;
+    planWideChamber(plan, tilemap, rng, 'puzzle', {
+      x: vertX, y: vertY, dyMin: roomDyMin, dyMax: roomDyMax,
+      keepClear: (dy) => (Math.abs(dy - exitPathDy) <= 1 ? (exitDir === -1 ? 'left' : 'right') : null),
+    });
+
+    // Z-shaped exit path out of the chamber — 1 walkable row after overhang,
+    // no jitter. Carved OPEN; the false wall goes in after the seal below.
+    const exitPathWidth = 1;
+    const exitPathRoll = 4 + Math.floor(rng() * 3); // 4-6 steps
+    const exitPathStartX = vertX + 3 * exitDir;
+    // ⛔ CLAMPED TO WHAT ACTUALLY FITS, AND CLAMPED **AFTER** THE DRAW.
+    //
+    // The exit path doubles BACK toward the side of the map the entrance came
+    // from, and this floor's head is longer than `rock-switch`'s, so near either
+    // edge the tail runs out of columns. Unclamped it failed in two ways at once,
+    // both silent: the carve loop `break`s at the edge while `exitPathEndX` is
+    // computed as if it had not, so the exit chamber and its passage were placed
+    // in solid rock — 12 of 200 seeds, exits stranded at x=2..9 and x=25..32.
+    // Caught by `dungeon-sweep` only because it re-floods the OPENED map.
+    //
+    // The room spans `exitPathEndX .. exitPathEndX + 4*exitDir`, so that far edge
+    // is what has to stay on the map. Drawing first and clamping second keeps the
+    // rng stream identical to an unclamped draw — clamping the BOUNDS instead
+    // would move the draw and change every floor below it.
+    const exitSpan = exitDir === 1 ? (26 - exitPathStartX) : (exitPathStartX - 5);
+    const exitPathLength = Math.min(exitPathRoll, exitSpan);
+    for (let s = 1; s <= exitPathLength; s++) {
+      const ex = exitPathStartX + s * exitDir;
+      for (let dy = -(exitPathWidth + 1); dy <= 0; dy++) {
+        const ey = exitPathFloorY + dy;
+        if (ey >= 0 && ey < 32) tilemap[ey * 32 + ex] = FLOOR;
+      }
+    }
+    const exitPathEndX = exitPathStartX + exitPathLength * exitDir;
+
+    // The smaller exit chamber.
+    planChamber(plan, tilemap, rng, 'exit', { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
+
+    finishCaveShape(tilemap);
+
+    // Entrance arch — as `trap-chamber`: 3 tiles into the room from the corridor
+    // side, opening back toward the corridor.
+    const archX = entrCornerX + 3 * entrFarDir;
+    const archBaseRow = entrFloorY - 5;
+    placeDeepEntrance(tilemap, archX, -entrFarDir, archBaseRow);
+    entranceX = archX;
+    entranceY = archBaseRow + 1; // PASSAGE_ENTRY row
+
+    // The way down, in the exit chamber — the same block `rock-switch` places.
+    const exitBlockX = exitPathEndX + 3 * exitDir;
+    const exitBaseRow = exitPathFloorY - 5;
+    placeDeepEntrance(tilemap, exitBlockX, -exitDir, exitBaseRow);
+    // ⛔ THIS IS WHAT WIRES THE PASSAGE TO THE NEXT FLOOR. `PASSAGE_ENTRY` ($6a)
+    // sits in the skipped trigger range, so `processTriggerTiles` never registers
+    // it; the late pass keyed on `typeof rockExitX !== 'undefined'` adds the
+    // type-4 trigger and points it at `dungeon.base + floorIndex + 1`. Without
+    // these two lines the floor generates perfectly, the boulder opens the wall,
+    // the staircase is drawn — and standing on it does nothing.
+    var rockExitX = exitBlockX, rockExitY = exitBaseRow + 1; // PASSAGE_ENTRY position
+    enforceMinCeilingGap(tilemap);
+
+    // ⛔ SEAL FIRST, WALL SECOND. See the header note.
+    const reachable = new Set();
+    const startIdx = (archBaseRow + 3) * 32 + archX;
+    reachable.add(startIdx);
+    const bfsQ = [[archX, archBaseRow + 3]];
+    while (bfsQ.length) {
+      const [cx, cy] = bfsQ.shift();
+      for (const [dx, dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || nx > 31 || ny < 0 || ny > 31) continue;
+        const idx = ny * 32 + nx;
+        if (reachable.has(idx)) continue;
+        const t = tilemap[idx];
+        if (t === FLOOR || t === PASSAGE_BTM || t === PASSAGE_ENTRY || t === BONES) {
+          reachable.add(idx);
+          bfsQ.push([nx, ny]);
+        }
+      }
+    }
+    for (let i = 0; i < 1024; i++) {
+      if (!reachable.has(i) && tilemap[i] === FLOOR) tilemap[i] = CEILING;
+    }
+
+    // The false wall across the middle of the exit path. Two rocky rows and one
+    // floor row, so it reads as ordinary rock until the boulder opens it — the
+    // shape `rock-switch` uses and `handleRockPuzzle` restores tile by tile.
+    const wallStep = Math.floor(exitPathLength / 2);
+    const wallX = exitPathStartX + wallStep * exitDir;
+    const wallTiles = [];
+    for (let dy = -(exitPathWidth + 1); dy <= 0; dy++) {
+      const wy = exitPathFloorY + dy;
+      if (wy >= 0 && wy < 32) {
+        tilemap[wy * 32 + wallX] = CEILING;
+        const newTile = (dy <= -exitPathWidth) ? WALL_ROCKY : FLOOR;
+        wallTiles.push({ x: wallX, y: wy, newTile });
+      }
+    }
+
+    // The boulder — nearest floor tile to a randomly chosen corner of the 7×7,
+    // which is where `rock-switch` puts its own. It has to be on the ENTRANCE
+    // side of the wall, and it is: the whole chamber is.
+    const roomX1 = vertX - 3, roomX2 = vertX + 3;
+    const roomY1 = vertY + roomDyMin, roomY2 = vertY + roomDyMax;
+    const cornerPts = [[roomX1,roomY1],[roomX2,roomY1],[roomX1,roomY2],[roomX2,roomY2]];
+    for (let i = cornerPts.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [cornerPts[i], cornerPts[j]] = [cornerPts[j], cornerPts[i]];
+    }
+    const rockCandidates = [];
+    for (const [cx, cy] of cornerPts) {
+      let best = null, bestD = Infinity;
+      for (let y = roomY1; y <= roomY2; y++) {
+        for (let x = roomX1; x <= roomX2; x++) {
+          if (x < 1 || x > 30 || y < 0 || y >= 32) continue;
+          if (tilemap[y * 32 + x] !== FLOOR) continue;
+          const d = Math.abs(x - cx) + Math.abs(y - cy);
+          if (d < bestD) { bestD = d; best = { x, y }; }
+        }
+      }
+      if (best) rockCandidates.push(best);
+    }
+    var rockSwitch = null;
+    if (rockCandidates.length > 0) {
+      const rock = rockCandidates[Math.floor(rng() * rockCandidates.length)];
+      tilemap[rock.y * 32 + rock.x] = 0x0B;
+      rockSwitch = { rocks: [{ x: rock.x, y: rock.y }], wallTiles };
+    }
+
+    var exitXForSecret = null;
+    var startRowForSecret = 7;
+    var endRowForSecret = 27;
+    // ⛔ TELL THE SHARED FEATURE PASS WHERE THE EXIT BLOCK IS. It seeds its
+    // exclusion set from the ENTRANCE only, and its corner-chest search falls
+    // back to "any corner anywhere" when the chamber has none free — so it put a
+    // chest on the landing tile of the passage down. A chest is not walkable, so
+    // the way to floor 2 was sealed by treasure: 12 of 400 seeds, and every tile
+    // gate reported a perfectly connected floor. `rock-switch` never hits this
+    // because it places its own chests and excludes the block by hand.
+    var exitXForUsed = exitBlockX;
+    var endRowForUsed = exitBaseRow;
+    // Chest scatter targets the boulder chamber, as the trap room's did.
+    var chamberBounds = {
+      top: vertY + roomDyMin,
+      bot: vertY + roomDyMax,
+      left: vertX - 3,
+      right: vertX + 3,
+    };
+
+    extraRooms.push({
+      top: entrFloorY - 2,
+      bot: entrFloorY + 2,
+      left: entrFarDir === 1 ? entrCornerX : entrCornerX - 4,
+      right: entrFarDir === 1 ? entrCornerX + 4 : entrCornerX,
+    });
+    extraRooms.push({
+      top: pathResult.endFloorY - 2,
+      bot: pathResult.endFloorY + 2,
+      left: horizDir === 1 ? pathResult.endX : pathResult.endX - 4,
+      right: horizDir === 1 ? pathResult.endX + 4 : pathResult.endX,
+    });
+
+  } else if (LAYOUT === 'rock-switch') {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
     // Step 1: just a small room for the trap landing
 
@@ -1801,7 +2048,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       }
     }
 
-  } else if (floorIndex === 3) {
+  } else if (LAYOUT === 'spine') {
     // ── Floor 4: Long corridor up → 5×5 room → paths left/right to side rooms ──
     // Entrance at bottom (placeDeepExit — same staircase block as floor 1 exit).
 
@@ -2347,15 +2594,37 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   // ── Feature placement (shared across all cave floors) ──────────────
   let hiddenTraps = new Set();
   if (!isBossFloor(dungeon, floorIndex)) {
-    const config = FLOOR_CONFIG[floorIndex] || FLOOR_CONFIG[0];
+    const config = LAYOUT_CONFIG[LAYOUT] || LAYOUT_CONFIG['snake'];
     const used = new Set();
     used.add(`${entranceX},${entranceY}`);
     for (let dy = -3; dy <= 1; dy++) {
       if (entranceY + dy >= 0) used.add(`${entranceX},${entranceY + dy}`);
     }
-    // Floor 0: keep chests (and traps) out of the entrance block + its landing
-    // in Room A — no chest should sit right where you walk in.
-    if (floorIndex === 0) {
+    // ⛔ A CHEST ON THE BOULDER'S ONLY APPROACH SEALS THE FLOOR.
+    //
+    // The boulder goes in the nearest floor tile to a random chamber CORNER, and
+    // the chest search wants corners too — so on 69 of 2000 seeds a chest landed
+    // on the one walkable tile beside the boulder. A chest is not walkable, so
+    // the boulder could never be touched, the wall never opened, and the way to
+    // the next floor never unsealed. Every tile-reachability gate passed it: the
+    // chamber is fully connected, the chest is openable, and the sealed half is
+    // sealed *by design* right up until you notice nothing can unseal it.
+    //
+    // This is v1.10.42's third bug seen from the other side — there a rock took a
+    // chest's only approach, here a chest takes the rock's. `rock-switch` excludes
+    // its own rocks inline before placing its own chests; layouts that lean on
+    // this shared pass need the same exclusion, and it has to be in `used`
+    // BEFORE the chest loop reads it.
+    if (typeof rockSwitch !== 'undefined' && rockSwitch) {
+      for (const rk of rockSwitch.rocks) {
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) used.add(`${rk.x + dx},${rk.y + dy}`);
+        }
+      }
+    }
+    // The snake layout: keep chests (and traps) out of the entrance block + its
+    // landing in Room A — no chest should sit right where you walk in.
+    if (LAYOUT === 'snake') {
       for (let yy = 0; yy <= 7; yy++) {
         for (let xx = entranceX - 2; xx <= entranceX + 2; xx++) {
           if (xx >= 0 && xx < 32) used.add(`${xx},${yy}`);
@@ -2363,15 +2632,24 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       }
     }
 
-    // Stairs down — floor 0 uses exit block, deeper floors use farthest floor
+    // Stairs down — the snake layout uses its exit block, deeper layouts use the
+    // farthest floor tile.
     const nextMapId = dungeon.base + floorIndex + 1;
-    if (floorIndex === 0 && exitXForUsed !== null) {
+    //
+    // ⛔ THE EXCLUSION IS NOT SNAKE-ONLY. It used to be `LAYOUT === 'snake' &&
+    // exitXForUsed !== null`; every other layout left `exitXForUsed` null, so the
+    // extra condition was invisible — until a layout placed its own exit block
+    // and got a chest dropped on the landing. Altar Cave is unaffected: its three
+    // deep layouts all leave `exitXForUsed` null, so this arm does not run for
+    // them and the stairs arm below runs exactly as it did.
+    if (exitXForUsed !== null) {
       for (let dy = 0; dy <= 4; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           used.add(`${exitXForUsed + dx},${endRowForUsed + dy}`);
         }
       }
-    } else if (floorIndex > 0) {
+    }
+    if (LAYOUT !== 'snake') {
       for (let i = 0; i < config.stairs; i++) {
         // Entrance at top → south wall exit, entrance at bottom → north wall exit
         const southWall = entranceY <= 10;
@@ -2548,7 +2826,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // Secret path (floor 0 only)
     falseWalls = placeSecretPath(tilemap, startRowForSecret, endRowForSecret, floorIndex, rng, exitXForSecret, dungeon);
 
-    if (floorIndex === 0) {
+    if (LAYOUT === 'snake') {
       // Secret corridors can open ceiling gaps — reclose + reconnect.
       enforceMinCeilingGap(tilemap);
       ensureCeilingConnectivity(tilemap);

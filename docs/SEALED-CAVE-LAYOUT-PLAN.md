@@ -1,6 +1,20 @@
 # Cave of Seals — make it its own cave
 
-**Status: PLAN. Nothing here is built.** Joel, 2026-08-26: *"we gotta make sealed
+> ## ✅ PHASES 1 AND 3 SHIPPED IN v1.10.96
+>
+> The `layout` block, the per-dungeon gates and the `boulder-chamber` floor are
+> **live**. What §5 describes as a many-vein room was cut down to what Joel
+> actually asked for: **one boulder, one false wall, one small exit chamber** —
+> the shipped `rock-switch` chamber grafted onto floor 1 with the traps removed.
+> The multi-switch version in §5 is NOT built and was not ordered.
+>
+> **Still open:** §4 (longer corridors) and the floor-2 question in §5 — the
+> seals player now meets a boulder on f1 and another on f2, back to back.
+>
+> **Found while building:** the shipped `rock-switch` layout lets you reach the
+> way onward WITHOUT touching its boulder on 17% of seeds. Reported, not fixed.
+
+**Status: PLAN. Phases 1 and 3 are now shipped — see the banner above.** Joel, 2026-08-26: *"we gotta make sealed
 cave a little different. corridors need to be longer. trap room needs to be
 turned into a giant puzzle boulder room."*
 

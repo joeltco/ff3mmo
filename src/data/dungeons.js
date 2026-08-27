@@ -52,6 +52,9 @@ export const DUNGEONS = [
     tileset: 0,
     bossSkinId: 'crystal',        // -> BOSS_SKINS.crystal (donor 148, tileset 2)
     ending: ENDING_CRYSTAL,
+    // ⭐ WHAT EACH WALKABLE FLOOR IS SHAPED LIKE. One name per floor, boss floor
+    // excluded (its shape comes from `bossSkinId`). See `layoutForFloor`.
+    layout: { floors: ['snake', 'trap-chamber', 'rock-switch', 'spine'] },
     bossId: 0xCC,                 // Land Turtle / Adamantoise
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
     rosterPrefix: 'cave',         // roster loc 'cave-0'.. ; boss floor -> 'crystal'
@@ -82,6 +85,12 @@ export const DUNGEONS = [
     tileset: 0,
     bossSkinId: 'seals',          // the dais from ROM map 106 — no crystal
     ending: ENDING_BOSS,          // ⛔ NOT a crystal dungeon. Altar Cave is.
+    // ⭐ THIS IS WHERE THE TWO CAVES STOP BEING THE SAME CAVE. Floor 1 is
+    // `boulder-chamber`, not `trap-chamber`: no trap holes, a boulder in the big
+    // room, and the way down behind a false wall — Altar Cave keeps its trap
+    // room. Joel, 2026-08-26: "remove the traps from the trap room, add a random
+    // boulder, add the smaller exit with wall chamber".
+    layout: { floors: ['snake', 'boulder-chamber', 'rock-switch'] },
     bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
     // ⭐ THE DJINN DROPS THE WSLAYER, 2 in 7 (28.6%). Joel, 2026-08-26.
     //
@@ -146,6 +155,18 @@ export function buildRegistry(rows) {
     if (d.romFloorMaps && d.romFloorMaps.length !== d.floors) {
       throw new Error(`dungeon '${d.id}': romFloorMaps has ${d.romFloorMaps.length} entries, floors is ${d.floors}`);
     }
+    // ⛔ A MISSING OR SHORT `layout` FAILS SILENTLY AND CATASTROPHICALLY. The
+    // generator dispatches on the layout name; an undefined name matches no
+    // branch, so the floor falls through every carve and the player gets a solid
+    // slab of rock with an entrance in it. Length is `floors - 1` because the
+    // boss chamber is shaped by `bossSkinId`, not by a layout.
+    const _lay = d.layout && d.layout.floors;
+    if (!Array.isArray(_lay) || _lay.length !== d.floors - 1) {
+      throw new Error(`dungeon '${d.id}': layout.floors must have ${d.floors - 1} entries (floors minus the boss chamber), got ${Array.isArray(_lay) ? _lay.length : typeof _lay}`);
+    }
+    if (_lay.some((n) => !LAYOUTS.has(n))) {
+      throw new Error(`dungeon '${d.id}': unknown floor layout(s) ${_lay.filter((n) => !LAYOUTS.has(n)).join(', ')} — known: ${[...LAYOUTS].join(', ')}`);
+    }
   }
 
   for (const d of rows) {
@@ -200,6 +221,40 @@ export function buildRegistry(rows) {
     endingKindFor, rosterLocFor, dungeonForWorldEntrance,
     isCrystalChamber: (mapId) => endingKindFor(mapId) === ENDING_CRYSTAL,
   };
+}
+
+// ── Floor layouts ──────────────────────────────────────────────────────────
+//
+// ⛔ THE GENERATOR USED TO BRANCH ON THE BARE FLOOR INDEX. `_generateFloor` took
+// the dungeon row and never consulted it for SHAPE — every branch was
+// `floorIndex === N` — so the Cave of Seals' three floors were byte-identical to
+// Altar Cave's first three for the same seed, and editing one edited both. This
+// is the same "fourteen hardcoded axes" problem the rest of this registry
+// exists to end, and it gets the same fix: the row says what it is.
+//
+// A name here is a CARVE, not a theme. `trap-chamber` and `boulder-chamber`
+// share a head (entrance room, elbow, junction, drop) and differ in what the
+// big room at the bottom is and how you leave it.
+export const LAYOUTS = new Set([
+  'snake',            // two-room ceiling snake, stairs out. Both caves' floor 0.
+  'trap-chamber',     // ends in a 7x7 room whose TRAP HOLES are the way down.
+  'boulder-chamber',  // ends in a 7x7 room with a boulder; the way down is a
+                      // small exit chamber behind the false wall it opens.
+  'rock-switch',      // boulder + false wall + exit room, entered from a fall.
+  'spine',            // long fattening spine up to side rooms. Altar Cave only.
+]);
+
+/**
+ * What shape is this dungeon's floor N?
+ *
+ * Returns null for the boss chamber (which has no layout — see `bossSkinId`)
+ * and for any out-of-range index. `buildRegistry` rejects a row whose
+ * `layout.floors` is missing, the wrong length, or names an unknown layout, so
+ * a non-null return is always one of `LAYOUTS`.
+ */
+export function layoutForFloor(dungeon, floorIndex) {
+  const l = dungeon && dungeon.layout && dungeon.layout.floors;
+  return (l && l[floorIndex] != null) ? l[floorIndex] : null;
 }
 
 // ── Row-shape helpers (pure, no index needed) ──────────────────────────────

@@ -1,3 +1,101 @@
+## 1.10.96 — 2026-08-26
+
+### The Cave of Seals stops being a copy of Altar Cave
+
+Joel: *"we gotta make sealed cave a little different... remove the traps from the
+trap room, add a random boulder, add the smaller exit with wall chamber."*
+
+⛔ **THE GENERATOR BRANCHED ON THE BARE FLOOR INDEX.** `_generateFloor` took the
+dungeon row and never consulted it for SHAPE — every branch was
+`floorIndex === N` — so the two caves' floors were byte-identical for the same
+seed and editing one edited both. Same "fourteen hardcoded axes" problem the
+dungeon registry exists to end, so it gets the same fix: **the row says what it
+is.** A `layout` block on each row names one carve per walkable floor, the
+generator dispatches on the name, and `FLOOR_CONFIG[floorIndex]` becomes
+`LAYOUT_CONFIG[layout]`.
+
+    altar  ['snake', 'trap-chamber',    'rock-switch', 'spine']
+    seals  ['snake', 'boulder-chamber', 'rock-switch']
+
+Altar Cave is **byte-identical** through all of it — all five floors and the
+three side maps, verified by `check-floor-snapshot` passing with no `--update`
+across the layout dispatch, the `LAYOUT_CONFIG` swap and the shared-pass
+restructure. Only `seals/floor1` moved, and that is the whole point.
+
+### `boulder-chamber` — the trap room, minus the traps
+
+`trap-chamber`'s head (entrance arch, elbow, junction, drop into a 7×7) with
+`rock-switch`'s tail (a boulder, a false wall across the exit path, a small exit
+chamber, the passage down). `traps: 0`, so the way onward is no longer a hole in
+the floor — it is behind the wall the boulder opens.
+
+Measured over 300 seeds: **entrance → boulder 30 steps, entrance → exit 39 once
+the wall is open** (the trap room's hole was reached at 29). Walkable tiles 86 →
+112. Chests unchanged at 5.8. Trap holes 3.1 → 0.
+
+### Four bugs, every one caught by a gate
+
+⛔ **The exit chamber was placed in solid rock on 12 of 400 seeds.** The exit
+path doubles back toward the map edge and this floor's head is longer than
+`rock-switch`'s, so the carve loop `break`s at the boundary while `exitPathEndX`
+is computed as if it had not — the exact silent-truncation mode. Clamped to the
+span that fits, and clamped **after** the draw so the rng stream is unmoved.
+
+⛔ **A chest sealed the way down.** The shared feature pass seeds its exclusion
+set from the entrance only, and its corner-chest search falls back to "any corner
+anywhere" — so it put a chest on the landing tile of the passage. A chest is not
+walkable. The layout now declares its exit block through `exitXForUsed`, and that
+exclusion is no longer snake-only.
+
+⛔ **A chest sealed the BOULDER — 69 of 2000 seeds.** Boulder and chests both
+want corners, so a chest landed on the boulder's one walkable neighbour: the
+boulder could never be touched, the wall never opened, the floor had no way out.
+Every tile gate passed it — the chamber is connected, the chest opens, and the
+sealed half is sealed *by design* right until you notice nothing can unseal it.
+This is v1.10.42's third bug from the other side, and the fix is the same
+exclusion `rock-switch` already does inline.
+
+⛔ **The first version of the new gate was wrong, not the floor.** Asserting every
+boulder is reachable failed 633 Altar Cave seeds — `rock-switch` deliberately
+puts a second boulder *inside* the sealed room for the return trip. The
+invariant is at-least-one.
+
+### Every dungeon gate walked Altar Cave only
+
+`check-floor-snapshot`, `dungeon-sweep`, `check-floor-plan`, `check-floor-shape`
+and `check-floor-variety` all called `generateFloor` with no dungeon argument.
+The Cave of Seals had **no layout gate of any kind**. All five now walk every row
+in `DUNGEONS`, and the three that carried per-floor-index thresholds carry
+per-layout ones instead — a limit belongs to a carve, not to a position.
+
+Two limits are dungeon-dependent, not layout-dependent, and are now conditional
+on the registry: `secretRate` and `lockedRate` are only demanded where the row
+actually declares that side room. The Cave of Seals declares none on purpose.
+
+New in `dungeon-sweep`: **at least one boulder must be reachable with the wall
+still shut.** Proven by reverting the chest exclusion — 14 hard failures with it
+out, 0 with it in. `boulder-chamber`'s band-depth limit is pinned at **0**,
+because it measures 0 across 2,000 seeds and five bases; a limit of 25 beside a
+measured 0 is a comment, not a gate.
+
+### ⚠️ Reported, not fixed: the shipped rock puzzle is optional 1 run in 6
+
+The sweep now counts whether the way onward is reachable **without touching the
+boulder**. `rock-switch` — both caves' floor 2 — lets you walk around its false
+wall on **69 of 400 seeds (17%)**. The new `boulder-chamber` is 0 of 400. This
+predates today's work and is left as a soft count; fixing it is a change to
+shipped Altar Cave content and is Joel's call.
+
+### Also
+
+`tools/floor-png.mjs` gains `--dungeon <id>`. Every render before it used Altar
+Cave's donor map no matter which cave was meant; the Cave of Seals draws from
+103. Default unchanged, verified byte-identical.
+
+`docs/SEALED-CAVE-LAYOUT-PLAN.md` records the plan, the measurements behind it,
+and the two halves not built yet: longer corridors, and whether floor 2 should
+keep a second boulder floor immediately after this one.
+
 ## 1.10.95 — 2026-08-26
 
 ### Retraction: `seals_f3` was never dead

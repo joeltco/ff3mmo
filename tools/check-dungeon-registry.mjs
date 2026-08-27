@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import { buildRegistry, isBossFloor, bossFloorMapId, normalFloorMapIds, romMapForFloor,
          lockedRoomMapIdForFloor, secretRoomMapIds, DUNGEONS,
-         ENDING_BOSS, ENDING_CRYSTAL } from '../src/data/dungeons.js';
+         ENDING_BOSS, ENDING_CRYSTAL, LAYOUTS, layoutForFloor } from '../src/data/dungeons.js';
 import { resolveBossSkin, resolveDungeonDonor } from '../src/dungeon/boss-chamber.js';
 import { generateFloor, clearDungeonCache } from '../src/dungeon-generator.js';
 
@@ -90,6 +90,7 @@ const SEALS = {
   rosterPrefix: 'probe', bossRosterLoc: 'probe-boss',
   encounterZonePrefix: 'probe_cave',
   romFloorMaps: [103, 104, 105, 106],   // one ROM map per floor — see romMapForFloor
+  layout: { floors: ['snake', 'trap-chamber', 'rock-switch'] },  // floors - 1
   lockedRooms: [{ mapId: 3010, floor: 1 }],
   secretRooms: [{ mapId: 3020, floor: 0 }],
 };
@@ -212,6 +213,38 @@ ok(DUNGEONS.every((d) => d.romFloorMaps && d.romFloorMaps.length === d.floors),
   try { buildRegistry([{ ...SEALS, id: 'short', base: 4000, romFloorMaps: [103, 104] }]); }
   catch { threw = true; }
   ok(threw, 'buildRegistry must reject a romFloorMaps shorter than floors');
+}
+
+// ⛔ THE FLOOR LAYOUT LIST IS WHAT THE GENERATOR DISPATCHES ON. An unknown or
+// missing name matches no carve branch, so the floor falls through every carve
+// and the player is dropped into a solid slab of rock with an entrance in it —
+// generated, connected-looking to every tile gate, and unplayable. Three ways it
+// can be wrong, all rejected at construction.
+ok(DUNGEONS.every((d) => layoutForFloor(d, d.floors - 1) === null),
+   'a boss chamber must have no layout — its shape comes from bossSkinId');
+ok(DUNGEONS.every((d) => d.layout.floors.every((n) => LAYOUTS.has(n))),
+   'a shipped dungeon names a layout that does not exist');
+{
+  const cases = [
+    ['missing',    { ...SEALS, id: 'nolay', base: 4100, layout: undefined }],
+    ['short',      { ...SEALS, id: 'shortlay', base: 4200, layout: { floors: ['snake'] } }],
+    ['unknown',    { ...SEALS, id: 'badlay', base: 4300, layout: { floors: ['snake', 'nope', 'rock-switch'] } }],
+  ];
+  for (const [why, row] of cases) {
+    let t = false;
+    try { buildRegistry([row]); } catch { t = true; }
+    ok(t, `buildRegistry must reject a ${why} layout.floors`);
+  }
+}
+
+// ⛔ THE TWO SHIPPED CAVES MUST NOT BE THE SAME CAVE. This is the whole point of
+// the layout block: before it, `_generateFloor` branched on the bare floor index
+// and the Cave of Seals was byte-identical to Altar Cave for the same seed.
+{
+  const a = DUNGEONS.find((d) => d.id === 'altar').layout.floors;
+  const s2 = DUNGEONS.find((d) => d.id === 'seals').layout.floors;
+  const shared = s2.filter((n, i) => a[i] === n).length;
+  ok(shared < s2.length, 'altar and seals declare the SAME layout for every floor — they are still one cave');
 }
 
 // duplicate ids must be rejected — see the note in buildRegistry

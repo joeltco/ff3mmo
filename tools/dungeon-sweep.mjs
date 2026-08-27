@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import { generateFloor, generateSecretRoomMap } from '../src/dungeon-generator.js';
 import { generateLockedRoomMap } from '../src/dungeon-locked-room.js';
+import { DUNGEONS, isBossFloor } from '../src/data/dungeons.js';
 
 /**
  * Tiles treated as walkable when flooding a generated floor.
@@ -187,19 +188,25 @@ export function exitAudit(r, seen) {
  */
 export function sweepFloors(rom, n = 150, base = 1754900000000) {
   const rows = []; const hard = []; const soft = [];
-  for (const f of [0, 1, 2, 3, 4]) {
-    const t = { floor: f, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0 };
+  // ⛔ EVERY DUNGEON, not the default one. This walked `[0,1,2,3,4]` through
+  // `generateFloor(rom, f, seed)` with no dungeon argument, so it swept Altar
+  // Cave five times and the Cave of Seals never — including the floor whose way
+  // onward is sealed behind a boulder.
+  for (const dg of DUNGEONS) {
+  for (let f = 0; f < dg.floors; f++) {
+    const label = `${dg.id} floor ${f}`;
+    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
-      try { r = generateFloor(rom, f, seed); }
-      catch (e) { hard.push(`floor ${f} seed ${seed} threw: ${e.message}`); continue; }
+      try { r = generateFloor(rom, f, seed, dg); }
+      catch (e) { hard.push(`${label} seed ${seed} threw: ${e.message}`); continue; }
       t.seeds++;
       const tm = r.tilemap;
       const seen = reachableFrom(tm, r.entranceX, r.entranceY);
       let reach = 0;
       for (let i = 0; i < 1024; i++) if (seen[i]) reach++;
-      if (reach < 20) { hard.push(`floor ${f} seed ${seed}: only ${reach} reachable tiles`); continue; }
+      if (reach < 20) { hard.push(`${label} seed ${seed}: only ${reach} reachable tiles`); continue; }
 
       // Exits, from the engine's own wiring. On a rock-puzzle floor the way
       // onward is behind the switch by design, so audit the OPENED map.
@@ -207,9 +214,9 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         ? reachableFrom(applyRockSwitch(tm, r.rockSwitch), r.entranceX, r.entranceY)
         : seen;
       const ex = exitAudit(r, exSeen);
-      if (f !== 4 && ex.onward === 0) hard.push(`floor ${f} seed ${seed}: no way onward — nothing wired to map ${1000 + f + 1}`);
-      if (ex.unreachable.length) hard.push(`floor ${f} seed ${seed}: unreachable exit ${ex.unreachable.join(' ')}`);
-      if (ex.entranceWiredForward) hard.push(`floor ${f} seed ${seed}: ENTRANCE wired as a forward exit (${ex.entranceWiredForward}) — step off and back on skips the floor`);
+      if (!isBossFloor(dg, f) && ex.onward === 0) hard.push(`${label} seed ${seed}: no way onward — nothing wired to map ${dg.base + f + 1}`);
+      if (ex.unreachable.length) hard.push(`${label} seed ${seed}: unreachable exit ${ex.unreachable.join(' ')}`);
+      if (ex.entranceWiredForward) hard.push(`${label} seed ${seed}: ENTRANCE wired as a forward exit (${ex.entranceWiredForward}) — step off and back on skips the floor`);
       t.exits += ex.onward;
 
       const stranded = strandedTiles(tm, seen);
@@ -217,24 +224,57 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       t.chests += chests.total;
 
       if (r.rockSwitch) {
+        // ⛔ THE BOULDER MUST BE REACHABLE WITH THE WALL STILL SHUT. It is the
+        // only thing that opens the wall, so a boulder you cannot walk up to is
+        // a floor with no way onward — and NOTHING else here sees it: the
+        // chamber is fully connected, every chest opens, and the sealed half
+        // reads as sealed-by-design. It happened on 69 of 2000 seeds of the
+        // Cave of Seals' floor 1, from a chest landing on the boulder's one
+        // approach tile.
+        //
+        // A boulder tile is impassable, so "reachable" means an orthogonal
+        // neighbour is — the same rule `chestAudit` uses, for the same reason.
+        //
+        // ⛔ AT LEAST ONE, NOT EVERY ONE. `rock-switch` deliberately places a
+        // SECOND boulder inside the sealed room so the wall can be opened from
+        // the far side on the way back; that one is unreachable until the puzzle
+        // is solved, and it is supposed to be. Asserting every boulder failed 633
+        // of 2000 Altar Cave seeds on the first run of this check — the gate was
+        // wrong, not the floor.
+        const reachableRocks = r.rockSwitch.rocks.filter((rk) =>
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+            const nx = rk.x + dx, ny = rk.y + dy;
+            if (nx < 0 || nx > 31 || ny < 0 || ny > 31) return false;
+            return !!seen[ny * 32 + nx];
+          }));
+        if (reachableRocks.length === 0) {
+          hard.push(`${label} seed ${seed}: NO boulder is reachable (${r.rockSwitch.rocks.map((rk) => `${rk.x},${rk.y}`).join(' ')}) — the wall can never be opened and the floor has no way onward`);
+        }
+        // Is the way onward actually SEALED before the boulder is touched? A
+        // boulder that opens a wall you could already walk around is decoration.
+        // Counted, not failed: the shipped `rock-switch` layout leaves the exit
+        // reachable on ~18% of seeds and that predates this check.
+        if (exitAudit(r, seen).unreachable.length === 0) t.exitOpenUnpuzzled++;
         // Sealed-by-design puzzle room: count it, then PROVE the switch opens it.
         t.puzzleTiles += stranded.length;
         const openTm = applyRockSwitch(tm, r.rockSwitch);
         const openSeen = reachableFrom(openTm, r.entranceX, r.entranceY);
         const left = strandedTiles(openTm, openSeen);
         const lockedChests = chestAudit(openTm, openSeen).sealed;
-        if (left.length) hard.push(`floor ${f} seed ${seed}: ${left.length} tiles STILL stranded after the rock switch (${left.slice(0, 6).join(' ')})`);
-        if (lockedChests.length) hard.push(`floor ${f} seed ${seed}: chest at ${lockedChests.join(' ')} unopenable even after the rock switch`);
+        if (left.length) hard.push(`${label} seed ${seed}: ${left.length} tiles STILL stranded after the rock switch (${left.slice(0, 6).join(' ')})`);
+        if (lockedChests.length) hard.push(`${label} seed ${seed}: chest at ${lockedChests.join(' ')} unopenable even after the rock switch`);
       } else {
         if (stranded.length) {
           t.stranded += stranded.length; t.strandedSeeds++;
-          hard.push(`floor ${f} seed ${seed}: ${stranded.length} sealed pocket tiles (${stranded.slice(0, 6).join(' ')})`);
+          hard.push(`${label} seed ${seed}: ${stranded.length} sealed pocket tiles (${stranded.slice(0, 6).join(' ')})`);
         }
-        if (chests.sealed.length) hard.push(`floor ${f} seed ${seed}: chest at ${chests.sealed.join(' ')} has no reachable neighbour`);
+        if (chests.sealed.length) hard.push(`${label} seed ${seed}: chest at ${chests.sealed.join(' ')} has no reachable neighbour`);
       }
     }
-    if (t.puzzleTiles) soft.push(`floor ${f}: ${t.puzzleTiles} tiles sealed behind the rock switch — all ${t.seeds} seeds open fully when it is pulled`);
+    if (t.puzzleTiles) soft.push(`${label}: ${t.puzzleTiles} tiles sealed behind the rock switch — all ${t.seeds} seeds open fully when it is pulled`);
+    if (t.exitOpenUnpuzzled) soft.push(`${label}: ${t.exitOpenUnpuzzled}/${t.seeds} seeds let you reach the way onward WITHOUT touching the boulder — the false wall is not on the only route`);
     rows.push(t);
+  }
   }
   return { hard, soft, rows };
 }
@@ -297,9 +337,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const { hard, soft, rows } = sweepFloors(rom, n, base);
   console.log(`dungeon-sweep — ${n} timestamp-style seeds per floor (base ${base})\n`);
-  console.log('floor   seeds  exitsWired  strandedSeeds  strandedTiles  chests');
+  console.log('floor             seeds  exitsWired  strandedSeeds  strandedTiles  chests');
   for (const r of rows) {
-    console.log(String(r.floor).padEnd(8) + String(r.seeds).padStart(5) + String(r.exits).padStart(12)
+    console.log(String(r.floor).padEnd(18) + String(r.seeds).padStart(5) + String(r.exits).padStart(12)
       + String(r.strandedSeeds).padStart(15) + String(r.stranded).padStart(15) + String(r.chests).padStart(8));
   }
 

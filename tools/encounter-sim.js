@@ -143,6 +143,7 @@ try {
   _romLoaded = true;
 } catch { /* no ROM in this checkout — the ROM-dependent tests report themselves skipped */ }
 const { sweepFloors, PASS } = await import('./dungeon-sweep.mjs');
+const { DUNGEONS: _SWEPT_DUNGEONS } = await import('../src/data/dungeons.js');
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
 const { elemMultiplier } = await import('../src/battle-math.js');
@@ -1634,7 +1635,14 @@ const tests = [
     // all traversable" and PASS. Verified by mutation. Pin the shape of the
     // sweep, not just its silence.
     const seeds = rows.reduce((a, r) => a + r.seeds, 0);
-    const WANT_FLOORS = 5, WANT_SEEDS = WANT_FLOORS * 60;
+    // ⛔ DERIVED FROM THE REGISTRY, NOT THE LITERAL 5. `sweepFloors` walks every
+    // row in `DUNGEONS` since v1.10.96 — it used to sweep the default dungeon's
+    // five floors and nothing else, so the Cave of Seals was covered by neither
+    // this liveness pin nor the sweep it guards. A hardcoded 5 would have to be
+    // hand-edited for every dungeon added, and the failure mode of forgetting is
+    // this gate going red on a correct change (which is exactly what it did).
+    const WANT_FLOORS = _SWEPT_DUNGEONS.reduce((a, d) => a + d.floors, 0);
+    const WANT_SEEDS = WANT_FLOORS * 60;
     if (rows.length !== WANT_FLOORS || seeds !== WANT_SEEDS) {
       return { pass: false, name,
         reason: `swept ${rows.length} floors / ${seeds} maps, expected ${WANT_FLOORS} / ${WANT_SEEDS} `

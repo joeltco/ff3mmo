@@ -31,6 +31,7 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { reachableFrom } = await import('./dungeon-sweep.mjs');
+const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
 
 const REPORT = process.argv.includes('--report');
 const SEEDS = parseInt(process.argv.find(a => /^\d+$/.test(a)) || '200', 10);
@@ -38,13 +39,31 @@ const BASE = 1761000000000;
 
 // Per floor: [max mean pairwise Jaccard, max tiles present in >=90% of seeds,
 //             min distinct entrance positions]. null = exempt (authored).
+// ⛔ KEYED BY LAYOUT, WALKED PER DUNGEON. Was keyed by floor index against the
+// default dungeon, so the Cave of Seals had no variety gate at all.
+//
+// ⛔ `secretRate` AND `lockedRate` ARE NOT PROPERTIES OF THE LAYOUT. They depend
+// on whether THAT DUNGEON declares a secret or locked room on that floor —
+// Altar Cave does, the Cave of Seals declares none on purpose. Demanding a
+// locked-door rate from a dungeon with no locked rooms would fail a row for
+// being what it says it is, so both rates are enforced only where the registry
+// says the room exists (see `sideRoomRates` below).
 const LIMITS = new Map([
-  [0, { jaccard: 0.40, always: 20,  entrances: 6, secretRate: 0.45, lockedRate: 0.35, topologies: 2 }],  // v1.10.31/37: was 0.610 / 72 / 2 / 1 shape
-  [1, { jaccard: 0.40, always: 20,  entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],   // no secrets on this floor (v1.10.40)
-  [2, { jaccard: 0.30, always: 10,  entrances: 40, secretRate: 0, lockedRate: 0.35, flatBand: 0.58, topologies: 2 }],   // no secrets on this floor (v1.10.40)  // v1.10.36: was 2 entrances
-  [3, { jaccard: 0.35, always: 15,  entrances: 12, topologies: 4, secretRate: 0, lockedRate: 0, flatBand: 0.58 }],   // no secrets on this floor (v1.10.40)  // v1.10.29-32: was 0.749 / 85 / 1
-  [4, null],
+  ['snake',           { jaccard: 0.40, always: 20, entrances: 6,  secretRate: 0.45, lockedRate: 0.35, topologies: 2 }],
+  ['trap-chamber',    { jaccard: 0.40, always: 20, entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
+  ['boulder-chamber', { jaccard: 0.40, always: 20, entrances: 15, secretRate: 0, lockedRate: 0, flatBand: 0.58, topologies: 2 }],
+  ['rock-switch',     { jaccard: 0.30, always: 10, entrances: 40, secretRate: 0, lockedRate: 0.35, flatBand: 0.58, topologies: 2 }],
+  ['spine',           { jaccard: 0.35, always: 15, entrances: 12, topologies: 4, secretRate: 0, lockedRate: 0, flatBand: 0.58 }],
+  [null,              null],   // boss chamber — authored, Jaccard 1.000 is correct
 ]);
+
+/** Does this dungeon actually put a secret / locked room on this floor? */
+function sideRoomRates(dg, f) {
+  return {
+    secret: (dg.secretRooms || []).some((r) => r.floor === f),
+    locked: (dg.lockedRooms || []).some((r) => r.floor === f),
+  };
+}
 
 // How flat is the top edge of the rocky band? For each column carrying a band,
 // find its topmost rocky row and ask how often a neighbouring column's is level.
@@ -63,14 +82,20 @@ function bandFlatness(tm) {
 }
 
 const fails = [];
-console.log(`floor  walkTiles  jaccard  alwaysTiles  entrances   limits`);
-for (const [f, lim] of LIMITS) {
+console.log(`floor                    walkTiles  jaccard  alwaysTiles  entrances   limits`);
+for (const dg of DUNGEONS) {
+ for (let f = 0; f < dg.floors; f++) {
+  const lay = layoutForFloor(dg, f);
+  if (!LIMITS.has(lay)) { fails.push(`${dg.id} floor ${f}: layout '${lay}' has no variety limits — pin them from a measurement`); continue; }
+  const lim = LIMITS.get(lay);
+  const label = `${dg.id} f${f} ${lay ?? 'boss'}`;
+  const rates = sideRoomRates(dg, f);
   const masks = []; const count = new Uint16Array(1024); const ents = new Set();
   const topos = new Map();
   let secretSeeds = 0, lockedSeeds = 0, flatSum = 0;
   let tot = 0;
   for (let k = 0; k < SEEDS; k++) {
-    const r = generateFloor(rom, f, BASE + k * 7919);
+    const r = generateFloor(rom, f, BASE + k * 7919, dg);
     const seen = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
     ents.add(`${r.entranceX},${r.entranceY}`);
     if (r.plan?.topology) topos.set(r.plan.topology, (topos.get(r.plan.topology) || 0) + 1);
@@ -95,14 +120,14 @@ for (const [f, lim] of LIMITS) {
     if (uni) { js += inter / uni; n++; }
   }
   const jac = n ? js / n : 0;
-  const line = String(f).padEnd(7) + String(Math.round(tot / SEEDS)).padStart(9)
+  const line = label.padEnd(25) + String(Math.round(tot / SEEDS)).padStart(9)
     + jac.toFixed(3).padStart(9) + String(always).padStart(13) + String(ents.size).padStart(11)
     + '   ' + (lim ? `j<=${lim.jaccard} a<=${lim.always} e>=${lim.entrances}` : 'exempt (authored)');
   console.log(line);
   if (!lim) continue;
-  if (jac > lim.jaccard)        fails.push(`floor ${f}: two seeds share ${(jac * 100).toFixed(0)}% of their walkable tiles (limit ${(lim.jaccard * 100).toFixed(0)}%) — it is the same map every run`);
-  if (always > lim.always)      fails.push(`floor ${f}: ${always} tiles are walkable in >=90% of seeds (limit ${lim.always}) — that much of the floor is fixed`);
-  if (ents.size < lim.entrances) fails.push(`floor ${f}: only ${ents.size} distinct entrance position(s) across ${SEEDS} seeds (need ${lim.entrances})`);
+  if (jac > lim.jaccard)        fails.push(`${label}: two seeds share ${(jac * 100).toFixed(0)}% of their walkable tiles (limit ${(lim.jaccard * 100).toFixed(0)}%) — it is the same map every run`);
+  if (always > lim.always)      fails.push(`${label}: ${always} tiles are walkable in >=90% of seeds (limit ${lim.always}) — that much of the floor is fixed`);
+  if (ents.size < lim.entrances) fails.push(`${label}: only ${ents.size} distinct entrance position(s) across ${SEEDS} seeds (need ${lim.entrances})`);
   if (lim.flatBand != null) {
     const flat = flatSum / SEEDS;
     console.log(`         band contour: ${Math.round(flat * 100)}% of adjacent band tops level (ROM caves 42-63%, limit ${Math.round(lim.flatBand * 100)}%)`);
@@ -125,16 +150,17 @@ for (const [f, lim] of LIMITS) {
   if (lim.secretRate != null) {
     const sr = secretSeeds / SEEDS, lr = lockedSeeds / SEEDS;
     console.log(`         features: secret path ${secretSeeds}/${SEEDS} (${Math.round(sr * 100)}%), locked door ${lockedSeeds}/${SEEDS} (${Math.round(lr * 100)}%)`);
-    if (sr < lim.secretRate) fails.push(`floor ${f}: secret path in only ${Math.round(sr * 100)}% of seeds (need ${Math.round(lim.secretRate * 100)}%) — a geometry change has made secrets harder to place`);
-    if (lr < lim.lockedRate) fails.push(`floor ${f}: locked door in only ${Math.round(lr * 100)}% of seeds (need ${Math.round(lim.lockedRate * 100)}%)`);
+    if (rates.secret && sr < lim.secretRate) fails.push(`${label}: secret path in only ${Math.round(sr * 100)}% of seeds (need ${Math.round(lim.secretRate * 100)}%) — a geometry change has made secrets harder to place`);
+    if (rates.locked && lr < lim.lockedRate) fails.push(`${label}: locked door in only ${Math.round(lr * 100)}% of seeds (need ${Math.round(lim.lockedRate * 100)}%)`);
   }
   if (lim.topologies) {
     const spread = [...topos.entries()].map(([k, v]) => `${k} ${v}`).join(', ');
     console.log(`         topologies: ${spread || '(none recorded)'}`);
-    if (topos.size < lim.topologies) fails.push(`floor ${f}: only ${topos.size} topology/topologies across ${SEEDS} seeds (need ${lim.topologies}) — the shape itself is not varying, only its measurements`);
+    if (topos.size < lim.topologies) fails.push(`${label}: only ${topos.size} topology/topologies across ${SEEDS} seeds (need ${lim.topologies}) — the shape itself is not varying, only its measurements`);
     // A topology that shows up once in a blue moon is not really in the game.
-    for (const [k, v] of topos) if (v / SEEDS < 0.15) fails.push(`floor ${f}: topology '${k}' appears in only ${v}/${SEEDS} seeds — too rare to count as variety`);
+    for (const [k, v] of topos) if (v / SEEDS < 0.15) fails.push(`${label}: topology '${k}' appears in only ${v}/${SEEDS} seeds — too rare to count as variety`);
   }
+ }
 }
 
 if (REPORT) { console.log('\n(--report: measured only, never fails)'); process.exit(0); }
