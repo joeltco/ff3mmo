@@ -51,7 +51,12 @@ export const CHAMBERS = [
   { id: 'trap-hall',    slot: SLOTS.BIG, role: 'trap',   weight: 0, feature: 'traps',
     note: 'the 7x7 whose trap holes ARE the descent — Altar Cave floor 1' },
   { id: 'boulder-hall', slot: SLOTS.BIG, role: 'puzzle', weight: 0, feature: null,
-    note: 'the 7x7 holding the boulder that opens the false wall' },
+    note: 'the hall holding the boulder that opens the false wall' },
+  { id: 'sealed-hoard', slot: SLOTS.BIG, role: 'treasure', weight: 0, feature: 'hoard',
+    note: 'the chamber behind a boulder-opened wall. ⛔ A BOULDER PUZZLE OPENS '
+        + 'TREASURE, NEVER AN EXIT (Joel, 2026-08-27) — so nothing the player '
+        + 'needs to finish the dungeon may ever be placed in here. That is what '
+        + 'makes the puzzle optional and the reward worth solving it for.' },
 
   // ── Rolled. This is the catalogue proper.
   { id: 'junction', slot: SLOTS.MID, role: 'junction', weight: 10, minDepth: 0,

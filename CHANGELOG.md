@@ -1,3 +1,66 @@
+## 1.11.0 — 2026-08-27
+
+### A boulder puzzle opens treasure, never an exit — Cave of Seals
+
+Joel, 2026-08-27: *"Boulder puzzles will only be to open treasure chambers. not
+an exit."* and *"f1 needs to be a boulder room, but we gotta double the size of
+the room."*
+
+⛔ **THE RULE IS THE CAVE OF SEALS', NOT ALTAR CAVE'S** — Joel's call, asked and
+answered. Altar Cave's `rock-switch` keeps its boulder-gated exit exactly as
+shipped, and its snapshot digests are unchanged. The two caves now follow
+different puzzle rules on purpose, and `dungeon-sweep` records which is which.
+
+**Floor 1's hall is doubled.** 7 wide x 9 tall -> 11 x 11, measured as walkable
+tiles rather than declared: **37.3 -> 79.1, a factor of 2.12.**
+
+**The boulder is off the critical path.** The chamber behind the false wall is
+now a `sealed-hoard` — 2-3 chests — and the way down is an ordinary passage
+placed in the hall itself, on the side away from the wall. A player who never
+works the puzzle out can still finish the dungeon; one who does gets paid.
+
+### The gate now encodes the rule, in both directions
+
+`WALKAROUND_CAP` became `PUZZLE_ROLE`, because the two caves genuinely differ:
+
+    altar/rock-switch      gates: 'exit'      walkaround ceiling 20%
+    seals/rock-switch      gates: 'exit'      walkaround ceiling 0%
+    seals/boulder-chamber  gates: 'treasure'
+
+For `gates: 'treasure'` every assertion inverts and both halves are exact, so
+neither needs a sample-size guard:
+
+- the way onward must be reachable **without** touching the boulder on EVERY
+  seed — otherwise the puzzle is back on the critical path;
+- the sealed region must actually hold a chest — otherwise solving it pays
+  nothing.
+
+Proven by mutation: putting the exit back behind the wall fails 200/200, and a
+hoard that places nothing fails 19/200.
+
+### Three bugs, all mine, all caught by gates
+
+⛔ **A `replace(..., 1)` patched the wrong branch.** `trap-chamber` and
+`boulder-chamber` carry byte-identical `chamberBounds` blocks — they were copied
+from each other — so a first-occurrence replace aimed at the boulder hall landed
+in **Altar Cave's floor 1**, which then threw `HALL_HALF_W is not defined` on
+every seed. When two branches share a literal block, anchor the edit on
+something only one of them has, and grep which branch the line number is in.
+
+⛔ **The exit block ran off the map.** `vertX - (HALL_HALF_W-1)*exitDir` is
+unbounded, so on a hall near either edge the way down wired to columns **-2 and
+34** — unreachable on every one of those seeds. Clamped to 2..29.
+
+⛔ **The vertical clamp was stale.** `19 -` instead of `21 -`: doubling the hall
+moved its far edge two rows down, and the cap written for `dyMax: 6` let it run
+off the bottom of the map.
+
+### Also
+
+`sealed-hoard` joins the catalogue as a weight-0 entry — placed by the layout,
+never rolled — with the rule written on it: nothing the player needs to finish
+the dungeon may ever go inside one.
+
 ## 1.10.99 — 2026-08-27
 
 ### The chamber catalogue — a room is data now, not an `if` branch

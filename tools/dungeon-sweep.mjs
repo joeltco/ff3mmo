@@ -187,18 +187,27 @@ export function exitAudit(r, seen) {
  * (trap holes, a rock-switch passage, and the boss chamber respectively).
  */
 /**
- * How often may a boulder floor let you reach the way onward WITHOUT the boulder?
+ * WHAT A BOULDER PUZZLE GATES, per dungeon+layout.
  *
- * Measured, not chosen. `seals/rock-switch` and `seals/boulder-chamber` are 0 of
- * 400 because their corridors are long enough to push the rooms apart;
- * `altar/rock-switch` is 69 of 400 (17%) on the short runs it has always had.
- * The ceiling above it is deliberately just above the measurement, so a
- * regression shows and the existing wart does not fail the build.
+ * ⛔ THE TWO CAVES FOLLOW DIFFERENT RULES AND BOTH ARE DELIBERATE.
+ *
+ * `gates: 'exit'` — the false wall is on the critical path; the boulder is how
+ * you leave the floor. Altar Cave's `rock-switch` has always worked this way.
+ * `walkaroundCap` is how often the wall may fail to be the only route: measured
+ * at 69/400 (17%) on the pre-catalogue tree and pinned just above, so the
+ * standing wart does not fail the build but growth does.
+ *
+ * `gates: 'treasure'` — Joel, 2026-08-27: *"Boulder puzzles will only be to open
+ * treasure chambers. not an exit."* The rule inverts every assertion: the way
+ * onward must be reachable WITHOUT touching the boulder on EVERY seed (otherwise
+ * the puzzle is back on the critical path), and the sealed region must actually
+ * hold treasure (otherwise solving it pays nothing). Both are exact, so neither
+ * needs a sample-size guard.
  */
-const WALKAROUND_CAP = new Map([
-  ['altar/rock-switch',     0.20],
-  ['seals/rock-switch',     0],
-  ['seals/boulder-chamber', 0],
+const PUZZLE_ROLE = new Map([
+  ['altar/rock-switch',     { gates: 'exit', walkaroundCap: 0.20 }],
+  ['seals/rock-switch',     { gates: 'exit', walkaroundCap: 0 }],
+  ['seals/boulder-chamber', { gates: 'treasure' }],
 ]);
 
 export function sweepFloors(rom, n = 150, base = 1754900000000) {
@@ -210,7 +219,7 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
   for (const dg of DUNGEONS) {
   for (let f = 0; f < dg.floors; f++) {
     const label = `${dg.id} floor ${f}`;
-    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0 };
+    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
@@ -270,6 +279,23 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         // Counted, not failed: the shipped `rock-switch` layout leaves the exit
         // reachable on ~18% of seeds and that predates this check.
         if (exitAudit(r, seen).unreachable.length === 0) t.exitOpenUnpuzzled++;
+        // Does the region the boulder opens actually contain treasure? A chest
+        // counts as sealed when it is unreachable now and reachable after.
+        {
+          const openTm2 = applyRockSwitch(tm, r.rockSwitch);
+          const openSeen2 = reachableFrom(openTm2, r.entranceX, r.entranceY);
+          let sealedChests = 0;
+          for (let i = 0; i < 1024; i++) {
+            if (tm[i] !== CHEST) continue;
+            const x = i % 32, y = (i - x) / 32;
+            const adj = (m) => [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dy]) => {
+              const nx = x + dx, ny = y + dy;
+              return nx >= 0 && nx < 32 && ny >= 0 && ny < 32 && !!m[ny * 32 + nx];
+            });
+            if (!adj(seen) && adj(openSeen2)) sealedChests++;
+          }
+          if (!sealedChests) t.sealedNoTreasure++;
+        }
         // Sealed-by-design puzzle room: count it, then PROVE the switch opens it.
         t.puzzleTiles += stranded.length;
         const openTm = applyRockSwitch(tm, r.rockSwitch);
@@ -297,16 +323,26 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
     // number cannot quietly grow, and the day its corridors change this is the
     // gate that says whether it fixed anything.
     const lay = layoutForFloor(dg, f);
-    const cap = WALKAROUND_CAP.get(`${dg.id}/${lay}`);
-    // ⛔ A RATE NEEDS A SAMPLE. `encounter-sim` calls this sweep with 60 seeds,
-    // where a floor sitting at a true 17.8% comes out at 15/60 = 25% often
-    // enough to fail a 20% ceiling on noise alone — which it did, on a build
-    // where nothing about that floor had regressed. Ceilings above zero are only
-    // meaningful once there are enough seeds to tell them apart; a ZERO ceiling
-    // is exact at any n, so it stays enforced always.
-    const enoughSeeds = cap === 0 || t.seeds >= 200;
-    if (cap !== undefined && enoughSeeds && t.seeds && t.exitOpenUnpuzzled / t.seeds > cap) {
-      hard.push(`${label}: the way onward is reachable without the boulder on ${t.exitOpenUnpuzzled}/${t.seeds} seeds (ceiling ${Math.round(cap * 100)}%) — the false wall has stopped being the only route`);
+    const role = PUZZLE_ROLE.get(`${dg.id}/${lay}`);
+    if (role && role.gates === 'exit') {
+      // ⛔ A RATE NEEDS A SAMPLE. `encounter-sim` calls this sweep with 60 seeds,
+      // where a floor sitting at a true 17.8% comes out at 15/60 = 25% often
+      // enough to fail a 20% ceiling on noise alone — which it did, on a build
+      // where nothing about that floor had regressed. Ceilings above zero are
+      // only meaningful once there are enough seeds to tell them apart; a ZERO
+      // ceiling is exact at any n, so it stays enforced always.
+      const cap = role.walkaroundCap;
+      const enoughSeeds = cap === 0 || t.seeds >= 200;
+      if (enoughSeeds && t.seeds && t.exitOpenUnpuzzled / t.seeds > cap) {
+        hard.push(`${label}: the way onward is reachable without the boulder on ${t.exitOpenUnpuzzled}/${t.seeds} seeds (ceiling ${Math.round(cap * 100)}%) — the false wall has stopped being the only route`);
+      }
+    } else if (role && role.gates === 'treasure') {
+      if (t.seeds && t.exitOpenUnpuzzled !== t.seeds) {
+        hard.push(`${label}: the way onward is BEHIND THE BOULDER on ${t.seeds - t.exitOpenUnpuzzled}/${t.seeds} seeds — a boulder puzzle opens treasure, never an exit`);
+      }
+      if (t.sealedNoTreasure) {
+        hard.push(`${label}: the sealed chamber holds NO chest on ${t.sealedNoTreasure}/${t.seeds} seeds — the puzzle pays nothing`);
+      }
     }
     rows.push(t);
   }

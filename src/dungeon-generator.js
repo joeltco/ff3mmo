@@ -550,6 +550,21 @@ function applyChamberFeature(feature, tilemap, rng, bounds, used, entranceX, ent
       }
       return `chests x${placed}`;
     }
+    case 'hoard': {
+      // A sealed treasure chamber is worth more than a `vault`, because you had
+      // to solve something to reach it. Same spacing rule — a chest with no
+      // reachable neighbour is not treasure.
+      const n = 2 + Math.floor(rng() * 2);
+      let placed = 0;
+      for (let i = 0; i < n; i++) {
+        const r = scatterRoomLoot(tilemap, rng, bounds, { chests: 1, used });
+        if (!r.chests.length) break;
+        const p = r.chests[0];
+        placed++;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) used.add(`${p.x + dx},${p.y + dy}`);
+      }
+      return `hoard x${placed}`;
+    }
     case 'pond':
       return `pond ${placeSpring(tilemap, rng, bounds, used, entranceX, entranceY)} tiles`;
     default:
@@ -1765,21 +1780,29 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // the way down stranded. The cap is the row the chamber's far edge may not
     // pass; drawing first and clamping second leaves the rng stream untouched,
     // and Altar Cave's 5-7 never reaches the cap, so it is unaffected.
-    const vertLength = Math.min(vertRoll, 21 - pathResult.endFloorY);
+    // ⛔ THE CAP FOLLOWS THE HALL'S HEIGHT. Doubling the hall moved its far edge
+    // two rows down, so the `21 -` cap written for `dyMax: 6` let it run off the
+    // bottom of the map.
+    const vertLength = Math.min(vertRoll, 19 - pathResult.endFloorY);
     const vertX = pathResult.endX + 2 * horizDir;
     let vertY = pathResult.endFloorY + 2;
     vertY = planVLink(plan, tilemap, { x: vertX, y0: vertY, dir: vertDir, steps: vertLength }).endY;
 
-    // The 7×7 boulder chamber. `keepClear` holds a lane open on the exit side so
-    // the jitter cannot close the mouth of the passage out — same call the
-    // `rock-switch` layout makes for the same reason.
+    // `keepClear` holds a lane open on the sealed-chamber side so the jitter
+    // cannot close the mouth of the passage the boulder opens.
+    // ⭐ DOUBLE-SIZED BOULDER HALL. Joel, 2026-08-27: "f1 needs to be a boulder
+    // room, but we gotta double the size of the room." Was 7 wide x 9 tall (63
+    // tiles); now 11 x 11 (121). `halfW` is the only knob `carveWideChamber`
+    // needs for the width; the extra height comes off `dyMax`, downward, because
+    // the corridor enters through the top.
     const roomDyMin = -2;
-    const roomDyMax = 6;
+    const roomDyMax = 8;
+    const HALL_HALF_W = 5;
     const exitDir = -horizDir;
     const exitPathFloorY = vertY + 2;
     const exitPathDy = exitPathFloorY - vertY;
     planWideChamber(plan, tilemap, rng, 'puzzle', {
-      x: vertX, y: vertY, dyMin: roomDyMin, dyMax: roomDyMax,
+      x: vertX, y: vertY, dyMin: roomDyMin, dyMax: roomDyMax, halfW: HALL_HALF_W,
       keepClear: (dy) => (Math.abs(dy - exitPathDy) <= 1 ? (exitDir === -1 ? 'left' : 'right') : null),
     });
 
@@ -1787,7 +1810,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // no jitter. Carved OPEN; the false wall goes in after the seal below.
     const exitPathWidth = 1;
     const exitPathRoll = CORR.hMin + Math.floor(rng() * hSpan);
-    const exitPathStartX = vertX + 3 * exitDir;
+    const exitPathStartX = vertX + HALL_HALF_W * exitDir;
     // ⛔ CLAMPED TO WHAT ACTUALLY FITS, AND CLAMPED **AFTER** THE DRAW.
     //
     // The exit path doubles BACK toward the side of the map the entrance came
@@ -1813,8 +1836,13 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     }
     const exitPathEndX = exitPathStartX + exitPathLength * exitDir;
 
-    // The smaller exit chamber.
-    planChamber(plan, tilemap, rng, 'exit', { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
+    // ⭐ THE SMALL CHAMBER BEHIND THE WALL IS TREASURE, NOT THE WAY OUT.
+    // Joel, 2026-08-27: "Boulder puzzles will only be to open treasure chambers.
+    // not an exit." So the boulder stops being on the critical path — solving it
+    // is optional and pays, and a player who never works it out can still finish
+    // the dungeon.
+    const hoardCh = chamberById('sealed-hoard');
+    planChamber(plan, tilemap, rng, hoardCh.role, { x: exitPathEndX, y: exitPathFloorY, dir: exitDir });
 
     finishCaveShape(tilemap);
 
@@ -1826,10 +1854,16 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     entranceX = archX;
     entranceY = archBaseRow + 1; // PASSAGE_ENTRY row
 
-    // The way down, in the exit chamber — the same block `rock-switch` places.
-    const exitBlockX = exitPathEndX + 3 * exitDir;
-    const exitBaseRow = exitPathFloorY - 5;
-    placeDeepEntrance(tilemap, exitBlockX, -exitDir, exitBaseRow);
+    // ⭐ THE WAY DOWN SITS IN THE HALL ITSELF, on the side AWAY from the sealed
+    // chamber, so it is reachable the moment you walk in. Nothing the player
+    // needs is behind the false wall any more.
+    // ⛔ CLAMPED ONTO THE MAP. `vertX` sits wherever the chain landed, so on a
+    // hall near either edge `vertX - (HALL_HALF_W-1)*exitDir` fell outside the
+    // tilemap entirely — the exit wired to columns -2 and 34, unreachable on
+    // every one of those seeds.
+    const exitBlockX = Math.max(2, Math.min(29, vertX - (HALL_HALF_W - 1) * exitDir));
+    const exitBaseRow = vertY + roomDyMax - 3;
+    placeDeepEntrance(tilemap, exitBlockX, exitDir, exitBaseRow);
     // ⛔ THIS IS WHAT WIRES THE PASSAGE TO THE NEXT FLOOR. `PASSAGE_ENTRY` ($6a)
     // sits in the skipped trigger range, so `processTriggerTiles` never registers
     // it; the late pass keyed on `typeof rockExitX !== 'undefined'` adds the
@@ -1880,7 +1914,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // The boulder — nearest floor tile to a randomly chosen corner of the 7×7,
     // which is where `rock-switch` puts its own. It has to be on the ENTRANCE
     // side of the wall, and it is: the whole chamber is.
-    const roomX1 = vertX - 3, roomX2 = vertX + 3;
+    const roomX1 = vertX - HALL_HALF_W, roomX2 = vertX + HALL_HALF_W;
     const roomY1 = vertY + roomDyMin, roomY2 = vertY + roomDyMax;
     const cornerPts = [[roomX1,roomY1],[roomX2,roomY1],[roomX1,roomY2],[roomX2,roomY2]];
     for (let i = cornerPts.length - 1; i > 0; i--) {
@@ -1978,6 +2012,12 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // The rolled chamber's feature is applied to THIS room's bounds, at the end
     // of the shared feature pass.
     chamberFeatures.push({ ...midCh, bounds: extraRooms[extraRooms.length - 1] });
+    // ...and the sealed chamber gets its hoard.
+    chamberFeatures.push({ ...hoardCh, bounds: {
+      top: exitPathFloorY - 2, bot: exitPathFloorY + 2,
+      left: exitDir === 1 ? exitPathEndX : exitPathEndX - 4,
+      right: exitDir === 1 ? exitPathEndX + 4 : exitPathEndX,
+    } });
 
   } else if (LAYOUT === 'rock-switch') {
     // ── Floor 2: Rock puzzle — building incrementally ───────────────────
