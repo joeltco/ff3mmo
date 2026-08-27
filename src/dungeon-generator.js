@@ -3322,12 +3322,39 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // nothing — measured at 43 of 120 floors when that check was missing.
     if (SPN.lockedDoor > 0 && rng() < SPN.lockedDoor) {
       const _lockedId3 = lockedRoomMapIdForFloor(dungeon, floorIndex);
-      // A door is a rocky tile with rock above and to both sides (and both upper
-      // diagonals) and FLOOR beneath — you stand in the chamber and face it.
-      // Bounded to the centre chamber's columns and the two wall rows over it.
+      // ⛔ THE NORTH WALL IS ONE ROW PER COLUMN, NOT A BAND.
+      //
+      // Joel, 2026-08-27, with a screenshot: *"if theres a chamber and a door,
+      // the door should be in there on the north wall."* This scanned
+      // `roomTopCarve - 1 .. roomTopCarve + 2` — FOUR rows — which reaches past
+      // the overhang band into the chamber's interior, so any rocky pocket in
+      // its east or west side passed the 5-rock test. Measured: the door landed
+      // at (18,9) on a chamber spanning cols 12-18 rows 7-13 — its east edge,
+      // halfway down.
+      //
+      // The wall row is derived per column instead of assumed: walk down that
+      // column until floor appears, and the tile immediately above it is the
+      // wall you face standing on the room's top row. No dependence on where
+      // `addOverhang` happened to leave the band.
+      //
+      // ⛔ AND IT GOES IN THE NORTHERNMOST CHAMBER. On a `hub` seed there is a
+      // room ABOVE the centre; a door in the centre's north wall then sits in
+      // the same wall the spoke passes through, which is what the screenshot
+      // shows and what "the door should be in THERE" rules out.
+      const _tgt = (topology === 'hub')
+        ? { left: Math.max(1, entranceX - 3), right: Math.min(30, entranceX + 3),
+            top: roomTopCarve - 7, bot: roomTopCarve - 2 }
+        : { left: roomLeft, right: roomRight, top: roomTopCarve, bot: roomBotCarve };
       const cands = [];
-      for (let y = Math.max(2, roomTopCarve - 1); y <= roomTopCarve + 2; y++) {
-        for (let x = roomLeft; x <= roomRight; x++) {
+      for (let x = _tgt.left; x <= _tgt.right; x++) {
+        // First floor tile down this column inside the room; the wall is above it.
+        let fy = -1;
+        for (let yy = Math.max(1, _tgt.top); yy <= _tgt.bot; yy++) {
+          if (x >= 0 && x < 32 && tilemap[yy * 32 + x] === FLOOR) { fy = yy; break; }
+        }
+        if (fy < 2) continue;
+        {
+          const y = fy - 1;
           if (x < 1 || x > 30 || y < 1 || y > 29) continue;
           if (tilemap[y * 32 + x] !== WALL_ROCKY) continue;
           if (tilemap[y * 32 + x - 1] !== WALL_ROCKY) continue;

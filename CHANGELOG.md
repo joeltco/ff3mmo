@@ -1,3 +1,58 @@
+## 1.11.11 — 2026-08-27
+
+### The locked door was not on the north wall — it was halfway down a side one
+
+Joel, 2026-08-27, with a screenshot: *"this shouldn't be happening. if theres a
+chamber and a door, the door should be in there on the north wall. how did this
+chamber even get added?!"*
+
+Two separate faults, both mine, both in v1.11.9's door placement.
+
+**1. The candidate scan was a four-row BAND, and the north wall is one row.**
+
+    for (let y = roomTopCarve - 1; y <= roomTopCarve + 2; y++)
+
+That reaches past the overhang into the chamber's interior, so any rocky pocket
+in its east or west side passed the 5-rock surround test. Measured on the seed in
+the screenshot: chamber spanning cols 12-18 rows 7-13, door at **(18,9)** — its
+east edge, halfway down.
+
+The wall row is now DERIVED per column instead of assumed: walk down that column
+until something walkable appears, and the door is the tile directly above it. No
+dependence on where `addOverhang` happened to leave the band.
+
+**2. On a `hub` seed it was the wrong chamber entirely.** That topology puts a
+room ABOVE the centre, so a door in the centre's north wall sits in the same wall
+the spoke passes through — a chamber up there and a door somewhere else, which is
+exactly what the screenshot shows and what *"the door should be in THERE"* rules
+out. The door now goes in the **northernmost** chamber: the north room on a hub
+seed, the centre chamber otherwise.
+
+    196/196 doors on the host chamber's north wall, inside its columns
+
+### And the chamber itself
+
+*"how did this chamber even get added?!"* — that is `spine`'s `hub` topology, one
+of its four, carving a fourth room due north since **v1.10.30**. It is not new.
+What is new is that it is no longer EMPTY: v1.11.10 gave it a rolled chamber, so
+it now holds bones and a chest and reads as a room worth walking to. Before that
+it was a bare box, which is why it never drew attention.
+
+### Gate
+
+`check-floor-plan` now checks it off the MAP, not the code: for every `spine`
+floor, the locked door must sit inside the northernmost chamber's columns and be
+the tile directly above the first walkable one in that column. Fails on revert —
+pointing hub seeds at the centre chamber reports `13/71 locked doors are NOT on
+the northernmost chamber's north wall`.
+
+⛔ Worth keeping: **v1.11.9 shipped with every dungeon gate green.** None of them
+asked where a door was, only that the floor stayed connected — and a door on the
+wrong wall connects exactly as well as a door on the right one. Joel found it on
+a phone.
+
+`check-floor-snapshot` moves one row, `seals/floor3`.
+
 ## 1.11.10 — 2026-08-27
 
 ### The empty room above the centre chamber — carved since v1.10.30, never filled

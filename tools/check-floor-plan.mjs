@@ -128,6 +128,47 @@ for (const dg of DUNGEONS) {
   CARVED.set(`${dg.id}/f${f}`, { h: med(runs.h), v: med(runs.v) });
  }
 }
+// ⛔ A LOCKED DOOR SITS ON THE NORTHERNMOST CHAMBER'S NORTH WALL.
+//
+// Joel, 2026-08-27, with a screenshot: *"if theres a chamber and a door, the
+// door should be in there on the north wall."*
+//
+// The first build scanned a FOUR-ROW band over the centre chamber, which reaches
+// past the overhang into the room's interior — so any rocky pocket in its east
+// or west side passed the surround test and the door landed halfway down a side
+// wall. And on a `hub` seed there is a room ABOVE the centre, so the centre's
+// north wall is the wrong wall entirely.
+//
+// Checked off the MAP: walk down the host chamber's column until something
+// walkable appears; the door must be the tile directly above it, inside that
+// chamber's columns. No assumption about where `addOverhang` left the band.
+{
+  const walkable = (t) => t === 0x30 || t === 0x09 || t === 0x7c;
+  for (const dg of DUNGEONS) {
+    for (let f = 0; f < dg.floors; f++) {
+      if (layoutForFloor(dg, f) !== 'spine') continue;
+      let doors = 0, wrong = 0, first = null;
+      for (let k = 0; k < SEEDS; k++) {
+        const seed = BASE + k * 7919;
+        const r = generateFloor(rom, f, seed, dg);
+        if (!r.lockedDoors || !r.lockedDoors.size) continue;
+        doors++;
+        const [dx, dy] = [...r.lockedDoors][0].split(',').map(Number);
+        const host = r.plan.topology === 'hub'
+          ? r.plan.chambers.find((c) => c.role === 'north')
+          : r.plan.chambers.find((c) => c.role === 'centre');
+        if (!host) { wrong++; continue; }
+        let fy = -1;
+        for (let y = host.top; y <= host.bot; y++) if (walkable(r.tilemap[y * 32 + dx])) { fy = y; break; }
+        const ok = dx >= host.left && dx <= host.right && fy > 0 && dy === fy - 1;
+        if (!ok) { wrong++; if (!first) first = `seed ${seed} [${r.plan.topology}] door ${dx},${dy} vs host cols ${host.left}..${host.right}, first walkable row ${fy}`; }
+      }
+      if (doors) console.log(`${dg.id} f${f}: ${doors}/${SEEDS} seeds carry a locked door, ${doors - wrong} on the host chamber's north wall`);
+      if (wrong) fails.push(`${dg.id} floor ${f}: ${wrong}/${doors} locked doors are NOT on the northernmost chamber's north wall — ${first}`);
+    }
+  }
+}
+
 // ⛔ NO TWO DUNGEONS MAY GENERATE THE SAME MAP.
 //
 // The strongest form of "these should be two different dungeons", and the only
