@@ -1,3 +1,54 @@
+## 1.11.10 — 2026-08-27
+
+### The empty room above the centre chamber — carved since v1.10.30, never filled
+
+Joel, 2026-08-27: *"im seeing rolls where theres an open chamber above the center
+chamber. what's going on there? it has nothing in it."*
+
+He is right, and it is older than this week's work. `spine`'s `hub` topology has
+carved a fourth room due north of the centre since **v1.10.30** and given it
+nothing ever since: `spine` pushes nothing into `extraRooms`, and only the two
+WINGS ever reached `chamberFeatures`. Walked over the map rather than read off
+the code:
+
+    room                    rooms  empty
+    altar f3 centre           200      0    0%
+    altar f3 side             221      0    0%
+    altar f3 side-bones       111      0    0%
+    altar f3 side-vault        68      0    0%
+    altar f3 north             57     57  100%     <-- both caves, every seed
+
+The wings sit at 0-1% because they get a rolled chamber. The north room got one
+line less attention when the topology was added, and it is a bare box at the end
+of a spoke — a detour that pays nothing.
+
+**Fixed:** on a `hub` seed the trio is rolled in ONE `rollChambers` call
+(`['side','side','side']`) so it honours `maxPerFloor` between them — three
+vaults on one floor would be a decision, not an accident of drawing twice — and
+the north room now gets what the wings get: its rolled feature, plus the shared
+pass's per-room skeletons and 50% corner chest.
+
+    north room, 99 hub seeds per cave:   0 empty,  ~0.7 chests + 3 bones each
+
+### The gate that could not have caught it, and the one that now does
+
+Every existing catalogue check asks what **rolls**. This room rolled nothing — it
+was carved directly and never reached `chamberFeatures` — so it was invisible to
+all of them while every one stayed green.
+
+`check-chambers` now asks the question of the **MAP** instead: walk every carved
+room in every floor of every dungeon and count what is standing in it. A room
+type empty on more than 5% of its instances fails the build. (The allowance is
+for `side-plain` on a small wing where the scatter finds no free tile — measured
+at 1%.) Fails on revert: `altar f3 north: EMPTY on 57/57 rooms (100%)`.
+
+⛔ Worth keeping: **a gate that reads the catalogue cannot see a room the
+catalogue never touched.** Three separate chamber gates were green across every
+seed of a floor with a permanently empty room in it.
+
+`check-floor-snapshot` moves two rows — `floor3` and `seals/floor3`, the two
+`spine` floors — on their `hub` seeds only. Every other floor is byte-identical.
+
 ## 1.11.9 — 2026-08-27
 
 ### The Cave of Seals floor 3 stops being a clone — longer corridors + a locked door

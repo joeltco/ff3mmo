@@ -2996,7 +2996,23 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // ⭐ THE TWO WINGS ARE ROLLED FROM THE CATALOGUE. Both are drawn in one
     // call so the pair honours `maxPerFloor` between them — two vaults on one
     // floor is a decision, not an accident of drawing twice.
-    const [wingL, wingR] = rollChambers(dungeon, floorIndex, ['side', 'side'], rng);
+    // ⛔ THREE ON A `hub` SEED, BECAUSE THAT TOPOLOGY HAS A THIRD ROOM.
+    //
+    // Joel, 2026-08-27: *"im seeing rolls where theres an open chamber above the
+    // center chamber. what's going on there? it has nothing in it."*
+    //
+    // `hub`'s north room has been carved since v1.10.30 and given NOTHING ever
+    // since: `spine` pushes nothing into `extraRooms`, and only the two wings
+    // reached `chamberFeatures`. Measured on both caves — **99 of 99 hub seeds,
+    // 0 chests, 0 bones**, an empty box at the end of a spoke. The wings sit at
+    // 1% empty because they get a rolled chamber; the north room got one line
+    // less attention when the topology was added.
+    //
+    // Rolled in the SAME call as the wings so the trio honours `maxPerFloor`
+    // between them — three vaults on one floor would be a decision, not an
+    // accident of drawing twice.
+    const [wingL, wingR, wingN] = rollChambers(dungeon, floorIndex,
+      topology === 'hub' ? ['side', 'side', 'side'] : ['side', 'side'], rng);
 
     // Left side room — organic carving (keep right edge full at path row)
     planOrganicRoom(plan, tilemap, rng, wingL.role, {
@@ -3071,6 +3087,15 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       });
       // Spoke: centre room's top up to the north room's bottom.
       planVLink(plan, tilemap, { x: entranceX, y0: roomTopCarve, dir: -1, steps: roomTopCarve - hubBot });
+      // ⭐ AND IT GETS WHAT THE WINGS GET. Feature from the catalogue, plus the
+      // shared pass's per-room skeletons and its 50% corner chest — a room at
+      // the end of a detour has to be worth the detour.
+      const nb = {
+        left: Math.max(1, entranceX - hubHalf), right: Math.min(30, entranceX + hubHalf),
+        top: hubTop, bot: hubBot,
+      };
+      chamberFeatures.push({ ...wingN, bounds: nb });
+      extraRooms.push(nb);
     }
 
     // Cleanup + overhang

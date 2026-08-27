@@ -164,6 +164,58 @@ for (const dg of DUNGEONS) {
   }
 }
 
+// ── 5. A ROOM THE PLAYER WALKS TO MUST HOLD SOMETHING ──────────────────────
+//
+// Joel, 2026-08-27: *"im seeing rolls where theres an open chamber above the
+// center chamber. what's going on there? it has nothing in it."*
+//
+// `spine`'s `hub` topology carved a fourth room from v1.10.30 and never gave it
+// anything — 99 of 99 hub seeds, 0 chests, 0 bones, in BOTH caves. It was
+// invisible to every gate here because the catalogue checks ask what ROLLS, and
+// that room rolled nothing: it was carved directly and never reached
+// `chamberFeatures`. So the question has to be asked of the MAP, not the
+// catalogue — walk each carved room and count what is standing in it.
+//
+// The 5% allowance is for `side-plain` on a small wing where the scatter finds
+// no free tile; measured at 1%. A room type that is empty far more often than
+// that is a room nobody finished.
+console.log('');
+{
+  const SEEDS = 200;
+  const tally = new Map();
+  for (const dg of DUNGEONS) {
+    for (let f = 0; f < dg.floors; f++) {
+      for (let k = 0; k < SEEDS; k++) {
+        const r = generateFloor(rom, f, BASE + k * 7919, dg);
+        for (const c of r.plan?.chambers || []) {
+          if (c.kind !== 'organic' && c.kind !== 'room' && c.kind !== 'wide') continue;
+          const b = c.kind === 'organic'
+            ? { left: c.left, right: c.right, top: c.top, bot: c.bot } : null;
+          if (!b) continue;   // only the span-form rooms have bounds in the plan
+          let n = 0;
+          for (let y = b.top; y <= b.bot; y++) {
+            for (let x = b.left; x <= b.right; x++) {
+              if (x < 0 || x > 31 || y < 0 || y > 31) continue;
+              const t = r.tilemap[y * 32 + x];
+              if (t === 0x7c || t === 0x09) n++;      // chest or bones
+            }
+          }
+          const key = `${dg.id} f${f} ${c.role}`;
+          const e = tally.get(key) || { n: 0, empty: 0 };
+          e.n++; if (!n) e.empty++;
+          tally.set(key, e);
+        }
+      }
+    }
+  }
+  console.log('room                          rooms  empty');
+  for (const [k, v] of [...tally.entries()].sort()) {
+    const pct = v.empty / v.n;
+    console.log(`${k.padEnd(30)}${String(v.n).padStart(5)}${String(v.empty).padStart(7)}  ${(pct * 100).toFixed(0)}%`);
+    if (pct > 0.05) fails.push(`${k}: EMPTY on ${v.empty}/${v.n} rooms (${Math.round(pct * 100)}%) — a room the player walks to has to hold something`);
+  }
+}
+
 if (fails.length) {
   console.log(`\nFAIL (${fails.length}):`);
   for (const f of fails.slice(0, 20)) console.log('  ' + f);
