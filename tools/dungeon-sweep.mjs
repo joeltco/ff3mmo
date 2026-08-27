@@ -254,7 +254,7 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
   for (let f = 0; f < dg.floors; f++) {
     const label = `${dg.id} floor ${f}`;
     const role0 = PUZZLE_ROLE.get(`${dg.id}/${layoutForFloor(dg, f)}`) || null;
-    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0, oneSided: 0, rocksBehindWall: 0, wrongRockCount: 0 };
+    const t = { floor: label, seeds: 0, exits: 0, stranded: 0, strandedSeeds: 0, chests: 0, puzzleTiles: 0, exitOpenUnpuzzled: 0, sealedNoTreasure: 0, oneSided: 0, rocksBehindWall: 0, wrongRockCount: 0, secretTiles: 0, secretNoTreasure: 0 };
     for (let k = 0; k < n; k++) {
       const seed = base + k * 7919;
       let r;
@@ -360,6 +360,50 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         const lockedChests = chestAudit(openTm, openSeen).sealed;
         if (left.length) hard.push(`${label} seed ${seed}: ${left.length} tiles STILL stranded after the rock switch (${left.slice(0, 6).join(' ')})`);
         if (lockedChests.length) hard.push(`${label} seed ${seed}: chest at ${lockedChests.join(' ')} unopenable even after the rock switch`);
+      } else if (r.secretWalls && r.secretWalls.size && stranded.length) {
+        // ⭐ A SECRET DOOR SEALS BY DESIGN, AND THE SAME THREE THINGS HAVE TO BE
+        // TRUE OF IT AS OF A BOULDER'S WALL.
+        //
+        // `handleSecretWall` (map-triggers.js) turns ONE faced rocky tile into
+        // floor and persists it, so this is checked the way the game plays it:
+        // open a SINGLE tile, not the whole set. A door of three tiles where all
+        // three must go would look identical to a working one under an
+        // open-everything test, and be a room you cannot enter.
+        t.secretTiles += stranded.length;
+        const doors = [...r.secretWalls].map((k) => k.split(',').map(Number));
+        let bestLeft = null, bestChests = null;
+        for (const [dx, dy] of doors) {
+          const openTm = Uint8Array.from(tm);
+          openTm[dy * 32 + dx] = 0x30;
+          const openSeen = reachableFrom(openTm, r.entranceX, r.entranceY);
+          const left = strandedTiles(openTm, openSeen);
+          const sealedChests = chestAudit(openTm, openSeen).sealed;
+          if (bestLeft === null || left.length < bestLeft.length) { bestLeft = left; bestChests = sealedChests; }
+        }
+        if (bestLeft && bestLeft.length) {
+          hard.push(`${label} seed ${seed}: ${bestLeft.length} tiles STILL stranded after opening a secret wall (${bestLeft.slice(0, 6).join(' ')}) — one tile has to be a way through`);
+        }
+        if (bestChests && bestChests.length) {
+          hard.push(`${label} seed ${seed}: chest at ${bestChests.join(' ')} unopenable even after the secret wall`);
+        }
+        // Does the room behind it hold anything? A secret that pays nothing is
+        // a worse room than no room.
+        {
+          const openTm = Uint8Array.from(tm);
+          for (const [dx, dy] of doors) openTm[dy * 32 + dx] = 0x30;
+          const openSeen = reachableFrom(openTm, r.entranceX, r.entranceY);
+          let paid = 0;
+          for (let i = 0; i < 1024; i++) {
+            if (tm[i] !== CHEST) continue;
+            const x = i % 32, y = (i - x) / 32;
+            const adj = (mk) => [[1,0],[-1,0],[0,1],[0,-1]].some(([ax, ay]) => {
+              const nx = x + ax, ny = y + ay;
+              return nx >= 0 && nx < 32 && ny >= 0 && ny < 32 && !!mk[ny * 32 + nx];
+            });
+            if (!adj(seen) && adj(openSeen)) paid++;
+          }
+          if (!paid) t.secretNoTreasure++;
+        }
       } else {
         if (stranded.length) {
           t.stranded += stranded.length; t.strandedSeeds++;
@@ -369,6 +413,8 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       }
     }
     if (t.puzzleTiles) soft.push(`${label}: ${t.puzzleTiles} tiles sealed behind the rock switch — all ${t.seeds} seeds open fully when it is pulled`);
+    if (t.secretTiles) soft.push(`${label}: ${t.secretTiles} tiles sealed behind a secret door — every one opens on a SINGLE faced tile`);
+    if (t.secretNoTreasure) hard.push(`${label}: the room behind the secret door holds NO chest on ${t.secretNoTreasure}/${t.seeds} seeds — a secret that pays nothing is worse than no secret`);
     if (t.exitOpenUnpuzzled) soft.push(`${label}: ${t.exitOpenUnpuzzled}/${t.seeds} seeds let you reach the way onward WITHOUT touching the boulder — the false wall is not on the only route`);
     // ⛔ PINNED PER DUNGEON+LAYOUT, BECAUSE THE TWO CAVES GENUINELY DIFFER.
     // A boulder that opens a wall you could already walk around is decoration,

@@ -31,7 +31,7 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { reachableFrom } = await import('./dungeon-sweep.mjs');
-const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
+const { DUNGEONS, layoutForFloor, spineBounds } = await import('../src/data/dungeons.js');
 
 const REPORT = process.argv.includes('--report');
 const SEEDS = parseInt(process.argv.find(a => /^\d+$/.test(a)) || '200', 10);
@@ -106,7 +106,12 @@ for (const dg of DUNGEONS) {
     if (r.plan?.topology) topos.set(r.plan.topology, (topos.get(r.plan.topology) || 0) + 1);
     // Floor 0 records secrets as `falseWalls`; the slab floors record rock
     // tunnels in the plan. Both count as "this floor has a secret".
-    if (r.falseWalls?.size || r.plan?.links?.some(l => l.kind === 'secret')) secretSeeds++;
+    // ⛔ `secretWalls` COUNTS TOO. This read `falseWalls` (floor 0's void-carved
+    // corridors) and plan links only, so the Cave of Seals' floor 3 reported
+    // "secret path 0/200 (0%)" on a floor that hides a room behind a secret door
+    // on 40% of its seeds. A metric that reports zero for a shipped feature is
+    // worse than no metric.
+    if (r.falseWalls?.size || r.secretWalls?.size || r.plan?.links?.some(l => l.kind === 'secret')) secretSeeds++;
     if (lim?.flatBand != null) flatSum += bandFlatness(r.tilemap);
     if (r.lockedDoors?.size) lockedSeeds++;
     const m = new Set();
@@ -157,6 +162,22 @@ for (const dg of DUNGEONS) {
     console.log(`         features: secret path ${secretSeeds}/${SEEDS} (${Math.round(sr * 100)}%), locked door ${lockedSeeds}/${SEEDS} (${Math.round(lr * 100)}%)`);
     if (rates.secret && sr < lim.secretRate) fails.push(`${label}: secret path in only ${Math.round(sr * 100)}% of seeds (need ${Math.round(lim.secretRate * 100)}%) — a geometry change has made secrets harder to place`);
     if (rates.locked && lr < lim.lockedRate) fails.push(`${label}: locked door in only ${Math.round(lr * 100)}% of seeds (need ${Math.round(lim.lockedRate * 100)}%)`);
+    // ⛔ A DECLARED CHANCE THAT NEVER FIRES IS A SILENT FAILURE. `northSecret` is
+    // a number on a registry row; nothing else in the build would notice if the
+    // geometry stopped admitting a secret door and it quietly went to zero. The
+    // floor is the declared chance discounted for the topologies that cannot
+    // carry one (`hub` already has that room in the open) and for the seeds that
+    // offer no throat — measured at 37% against a declared 0.5.
+    // ⛔ SCOPED TO THE FLOOR THAT CAN CARRY ONE. `spineBounds` is a DUNGEON-level
+    // value, so without the layout test this fired on the Cave of Seals' floors
+    // 0, 1 and 2 as well — three failures on floors that have never had a secret
+    // door and were never asked to. A registry value is not a floor's property
+    // just because the floor's dungeon declares it.
+    const ns = lay === 'spine' ? spineBounds(dg).northSecret : 0;
+    if (ns > 0) {
+      const floorRate = ns * 0.5;
+      if (sr < floorRate) fails.push(`${label}: a secret door on only ${Math.round(sr * 100)}% of seeds against a declared chance of ${Math.round(ns * 100)}% (floor ${Math.round(floorRate * 100)}%) — the geometry has stopped admitting one`);
+    }
   }
   if (lim.topologies) {
     const spread = [...topos.entries()].map(([k, v]) => `${k} ${v}`).join(', ');

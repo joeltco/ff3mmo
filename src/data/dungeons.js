@@ -129,6 +129,17 @@ export const DUNGEONS = [
       // Floor 0 and floor 3 keep Altar Cave's shapes.
       floors: ['snake', 'boulder-chamber', 'chamber-run', 'spine'],
       corridor: { hMin: 8, hMax: 12, vMin: 9, vMax: 13 },
+      // ⭐ ITS OWN FLOOR 3. Joel, 2026-08-27: *"make the corridors longer in
+      // seals f3. add a secret door chance on the wall of the north center
+      // chamber."* Until now this floor was an EXACT clone of Altar Cave's —
+      // 60 of 60 seeds pixel-identical, pinned as `CLONE_PENDING` in
+      // `check-floor-plan` so it warned on every run.
+      //
+      // The side corridors run 7-9 steps against Altar Cave's 4-6, and the
+      // rooms give up the columns to pay for it: a 5-7 wide centre and 5-7 wide
+      // wings against Altar's 7-9. `extent` 14 keeps two entrance positions;
+      // Altar Cave's own 15 leaves one and is why its entrance barely moves.
+      spine: { halfW: [2, 3], gap: [8, 10], sideW: [2, 3], extent: 14, northSecret: 0.5 },
       // ⭐ ITS OWN ENTRY FLOOR. Both caves used to open on the same map — 83 of
       // 200 seeds pixel-identical, the rest differing by ONE tile (Altar Cave's
       // secret doorway). `snake` has no corridors, so the corridor block could
@@ -342,6 +353,40 @@ export function snakeBounds(dungeon) {
     right: pick('right', [26, 27]),
     gap:   pick('gap',   [3, 5]),
     tilt:  pick('tilt',  [3, 5]),
+  };
+}
+
+/**
+ * `spine` geometry for this dungeon, each an inclusive `[min, max]` pair drawn
+ * with a single `rng()` call.
+ *
+ * ⛔ THE THREE ARE ONE BUDGET, NOT THREE KNOBS. `halfW + gap + sideW` is how
+ * many columns the floor uses EITHER SIDE of its spine, and the entrance can
+ * only move within what is left: `1 + extent .. 30 - extent`. Altar Cave's set
+ * already reaches 15 at its widest, which pins the entrance to a single column
+ * on those seeds. Push the corridor out without pulling the rooms in and the
+ * floor stops having a position at all — `check-floor-variety` counts distinct
+ * entrances and fails at 12.
+ *
+ * So a cave that wants longer side corridors pays for them in room width. That
+ * is a real trade on a 32-column map, not a tuning oversight.
+ *
+ * The default is Altar Cave's historical set, so a row that says nothing carves
+ * exactly what it always did.
+ */
+export function spineBounds(dungeon) {
+  const d = (dungeon && dungeon.layout && dungeon.layout.spine) || null;
+  const pick = (k, dflt) => (d && Array.isArray(d[k]) ? d[k] : dflt);
+  return {
+    halfW:  pick('halfW',  [3, 4]),
+    gap:    pick('gap',    [5, 7]),
+    sideW:  pick('sideW',  [3, 4]),
+    // How many columns either side the floor may use. Altar Cave's own maximum,
+    // so its clamp never bites and its maps do not move.
+    extent: (d && d.extent != null) ? d.extent : 15,
+    // Chance of a secret door on the centre chamber's wall. 0 = never, which is
+    // every dungeon that does not ask for one.
+    northSecret: (d && d.northSecret != null) ? d.northSecret : 0,
   };
 }
 

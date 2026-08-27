@@ -138,7 +138,12 @@ for (const dg of DUNGEONS) {
 // the rest differing by ONE tile.
 {
   // Floors that are still an intentional clone, awaiting their own design.
-  const CLONE_PENDING = new Set(['altar/seals/f3']);
+  // ⛔ EMPTY, AND IT STAYS EMPTY UNTIL A FLOOR IS DELIBERATELY PARKED AS A
+  // CLONE AGAIN. `altar/seals/f3` sat here from v1.11.0: the Cave of Seals'
+  // floor 3 was pixel-identical to Altar Cave's on 60 of 60 seeds. v1.11.8 gave
+  // it its own `spine` block — longer side corridors, narrower rooms, and a
+  // secret door — and it now differs by a mean of 237 tiles.
+  const CLONE_PENDING = new Set();
   const CMP = 60;
   for (let i = 0; i < DUNGEONS.length; i++) {
     for (let j = i + 1; j < DUNGEONS.length; j++) {

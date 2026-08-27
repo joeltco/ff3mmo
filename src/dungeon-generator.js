@@ -25,7 +25,7 @@ import {
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
 import { rollChambers, chamberById } from './data/chambers.js';
-import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, drawRange } from './data/dungeons.js';
+import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, spineBounds, drawRange } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
@@ -2868,9 +2868,19 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // values that is 13, so the layout filled columns 3..29 and `entranceX`
     // could not move at all without falling off the map. Rolling the widths
     // first is what creates room for the position to vary.
-    const halfW = 3 + Math.floor(rng() * 2);       // centre room half-width 3-4
-    const gap = 5 + Math.floor(rng() * 3);         // corridor to side room 5-7
-    const sideW = 3 + Math.floor(rng() * 2);       // side room half-span 3-4
+    // ⛔ ONE `rng()` DRAW EACH, VIA `drawRange`. For Altar Cave's [3,4] / [5,7] /
+    // [3,4] those are byte-for-byte the `3 + rng()*2`, `5 + rng()*3` and
+    // `3 + rng()*2` they replace, which is what keeps its floors identical.
+    const SPN = spineBounds(dungeon);
+    const halfW = drawRange(rng, SPN.halfW);       // centre room half-width
+    const gapRoll = drawRange(rng, SPN.gap);       // corridor to side room
+    const sideW = drawRange(rng, SPN.sideW);       // side room half-span
+    // ⛔ CLAMPED AFTER THE DRAW, AND THE CORRIDOR IS WHAT GIVES. The three
+    // together decide how many columns are left for the entrance to move in;
+    // trimming the rooms instead would make a cave's declared room width a
+    // suggestion. Altar Cave's `extent` is its own maximum, so this never bites
+    // for it.
+    const gap = Math.max(2, Math.min(gapRoll, SPN.extent - halfW - sideW));
     const extent = halfW + gap + sideW;            // columns used either side
     const exLo = 1 + extent, exHi = 30 - extent;
     entranceX = exLo + Math.floor(rng() * Math.max(1, exHi - exLo + 1));
@@ -2899,7 +2909,31 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // ⛔ `hub` puts a whole room ABOVE the centre, so the centre has to sit low
     // enough to leave rows for it: its top is `roomCenterY - 3`, and the north
     // room needs six rows clear above that. 7 would leave one.
-    const roomCenterY = topology === 'hub'
+    // ⭐ A SECRET DOOR ON THE CENTRE CHAMBER'S NORTH WALL. Joel, 2026-08-27:
+    // *"add a secret door chance on the wall of the north center chamber."*
+    //
+    // ⛔ IT IS THE `hub` TOPOLOGY'S OWN NORTH ROOM, WITH ONE SPOKE TILE SEALED.
+    // Nothing here is a new mechanism: the room and its spoke are built by the
+    // same two calls `hub` already makes, and the seal is `secretWalls` — face
+    // a rocky tile, press A, it opens for good — which floor 0 has shipped
+    // since v1.7.x and `handleSecretWall` persists through `consumedTiles`.
+    //
+    // Reusing hub's construction is also what keeps it from repeating v1.10.33,
+    // the disguised doorway that was reverted on sight: what was wrong there was
+    // a single odd tile mid-CORRIDOR with an open tunnel drawn behind it. What
+    // is behind this one is a ROOM, walled off, which is how this cave already
+    // presents the boulder vault.
+    //
+    // ⛔ THE DRAW IS SKIPPED ENTIRELY WHEN A DUNGEON DOES NOT ASK FOR ONE, so
+    // Altar Cave's rng stream — and every floor it carves — is untouched.
+    // `topology === 'hub'` already has that room in the open; a secret door onto
+    // a room you can walk into is not a secret.
+    const wantsNorthSecret = SPN.northSecret > 0 && topology !== 'hub'
+      && rng() < SPN.northSecret;
+    // ⛔ The room needs six rows above the centre's top edge, which is why `hub`
+    // sits low. A secret one needs exactly the same rows, so it takes exactly
+    // the same band.
+    const roomCenterY = (topology === 'hub' || wantsNorthSecret)
       ? 10 + Math.floor(rng() * 2)      // 10-11
       : 7 + Math.floor(rng() * 5);      // 7-11
     const roomTopCarve = roomCenterY - 3;
@@ -3051,6 +3085,26 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
       });
       // Spoke: centre room's top up to the north room's bottom.
       planVLink(plan, tilemap, { x: entranceX, y0: roomTopCarve, dir: -1, steps: roomTopCarve - hubBot });
+    }
+
+    // ── The same room and spoke, walled off behind a secret door.
+    var northSecretSpoke = null;
+    if (wantsNorthSecret) {
+      // ⛔ ONE ROW FURTHER UP THAN `hub` PUTS ITS ROOM. Hub's north room sits at
+      // `roomTopCarve - 2`, one row clear of the centre chamber's carve — fine
+      // for a room that is meant to be open, but with organic edges and
+      // `enforceMinCeilingGap` the two merge sideways often enough that no tile
+      // of the shaft is the only way in. Measured at 2: 45 of 161 rooms had no
+      // throat to seal and stayed open. Two rows clear fixes it.
+      const nBot = roomTopCarve - 3;
+      const nTop = nBot - 4;
+      const nHalf = 2 + Math.floor(rng() * 2);
+      planOrganicRoom(plan, tilemap, rng, 'north-secret', {
+        left: Math.max(1, entranceX - nHalf), right: Math.min(30, entranceX + nHalf),
+        top: nTop, bot: nBot,
+      });
+      planVLink(plan, tilemap, { x: entranceX, y0: roomTopCarve, dir: -1, steps: roomTopCarve - nBot });
+      northSecretSpoke = { x: entranceX, yFrom: nBot, yTo: roomTopCarve };
     }
 
     // Cleanup + overhang
@@ -3247,6 +3301,84 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     }
     for (let i = 0; i < 1024; i++) {
       if (!reachable.has(i) && (tilemap[i] === FLOOR || tilemap[i] === CHEST)) tilemap[i] = CEILING;
+    }
+
+    // ── Seal the north spoke behind a secret door.
+    //
+    // ⛔ AFTER THE UNREACHABLE-FLOOR SWEEP ABOVE, NOT BEFORE. That pass turns
+    // every floor tile it cannot reach into ceiling — seal the spoke first and
+    // it erases the entire room the secret is for, leaving a rocky tile in front
+    // of nothing.
+    //
+    // ⛔ AND THE TILE HAS TO ACTUALLY BE THE ONLY WAY IN. `addOverhang` decides
+    // which spoke rows survive as floor, so which one is the throat is not
+    // knowable from the carve — it is knowable by BLOCKING IT AND REFLOODING.
+    // Take the lowest spoke tile that severs the room: lowest so the door sits
+    // on the centre chamber's wall, where Joel asked for it, rather than up
+    // inside the shaft.
+    var northSecretRoom = null;
+    if (northSecretSpoke) {
+      // ⛔ THE SHAFT IS NOT ONE TILE WIDE BY THE TIME THIS RUNS, so there is no
+      // single throat to seal. `carveVRun` carves one column, and then
+      // `enforceMinCeilingGap` widens it — a one-tile gap between two ceilings
+      // is exactly what that pass exists to remove. Measured: searching for a
+      // single severing tile found one on 0 of 400 seeds.
+      //
+      // So the door is the ROW, not a tile: every floor tile of the shaft on
+      // one row, sealed together. `handleSecretWall` opens whichever tile the
+      // player faces, and one opened tile is a way through — the rest stay rock
+      // and can be opened too. It also reads better than a lone odd tile, which
+      // is what got v1.10.33 reverted: a row of rock across a shaft is a wall.
+      // ⛔ NOT FROM `entranceX, entranceY`. This layout's entrance IS the
+      // staircase, and `reachableCount` walks FLOOR / BONES / passage tiles —
+      // `STAIRS_DOWN` is in none of them, so the flood starts on the stairs and
+      // cannot step off. It returned 1 on every seed, every row compared as
+      // "costs nothing", and the search found a throat on 0 of 400. Flood from
+      // the centre chamber, which is what the door is being cut into anyway.
+      let fx = -1, fy = -1;
+      for (let y = roomBotCarve; y >= roomTopCarve && fx < 0; y--) {
+        for (let x = roomLeft; x <= roomRight; x++) {
+          if (tilemap[y * 32 + x] === FLOOR) { fx = x; fy = y; break; }
+        }
+      }
+      const openSize = fx < 0 ? 0 : reachableCount(tilemap, fx, fy);
+      const shaftCols = [northSecretSpoke.x - 1, northSecretSpoke.x, northSecretSpoke.x + 1];
+      let door = null;
+      for (let y = northSecretSpoke.yTo; y >= northSecretSpoke.yFrom && !door; y--) {
+        const row = shaftCols
+          .filter((x) => x >= 1 && x <= 30 && tilemap[y * 32 + x] === FLOOR)
+          .map((x) => ({ x, y }));
+        if (!row.length) continue;
+        const blocked = new Set(row.map((p) => `${p.x},${p.y}`));
+        // A throat costs the flood the room behind it, not just its own tiles.
+        if (reachableCount(tilemap, fx, fy, blocked) < openSize - row.length) {
+          door = row;
+        }
+      }
+      if (door) {
+        for (const p of door) {
+          tilemap[p.y * 32 + p.x] = WALL_ROCKY;
+          secretWalls.add(`${p.x},${p.y}`);
+        }
+        northSecretRoom = {
+          top: northSecretSpoke.yFrom - 4, bot: northSecretSpoke.yFrom,
+          left: Math.max(1, northSecretSpoke.x - 3), right: Math.min(30, northSecretSpoke.x + 3),
+        };
+        // ⭐ A SECRET PAYS. This layout's config places no chests at all
+        // (`chests: 0` — its treasure comes from its wings and its branch), and
+        // a room you have to find that holds nothing is worse than no room.
+        const nUsed = new Set();
+        for (const p of door)
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) nUsed.add(`${p.x + dx},${p.y + dy}`);
+        const nPos = findCornerFloor(tilemap, rng, nUsed, northSecretRoom)
+          || findRandomFloor(tilemap, rng, nUsed, northSecretRoom);
+        if (nPos) tilemap[nPos.y * 32 + nPos.x] = CHEST;
+      } else {
+        // Nothing to seal means the room is open to the floor anyway — leave it
+        // open rather than wall a shaft that hides nothing.
+        northSecretSpoke = null;
+      }
     }
 
     var exitXForSecret = null;
