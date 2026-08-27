@@ -1,3 +1,78 @@
+## 1.11.3 — 2026-08-27
+
+### The Cave of Seals is Altar Cave's shape at last
+
+Joel, 2026-08-27: *"CLONE ALTAR CAVE OVER TO SEALS, MAKE THE FUCKING CORRIDORS
+LONGER, MAKE THE TRAP ROOM A GIANT BOULDER PUZZLE THAT OPENS TO AN EXIT CHAMBER,
+HAVE THAT GO TO THE NEXT FLOOR IN AN ENTRANCE CHAMBER, AND STAND BY FOR THE
+FLOOR AFTER THAT."*
+
+⛔ **IT WAS ONE WALKABLE FLOOR SHORT AND HAD BEEN SINCE IT SHIPPED.** `floors: 4`
+gave it f0, f1, f2 and then the Djinn, while Altar Cave runs f0..f3 with **f3
+holding the DOOR to its boss room**. He told me on 2026-08-26 that this cave is a
+clone of Altar Cave; I never checked that the clone had the same number of
+floors, and spent days differentiating floors of a cave that was missing one.
+
+    Cave of Seals   floors=5   (was 4)
+      f0  snake             arrive: entrance block   exit: stairs   -> 2001
+      f1  boulder-chamber   arrive: ENTRANCE CHAMBER exit: passage  -> 2002
+      f2  rock-switch       arrive: ENTRANCE CHAMBER exit: passage  -> 2003
+      f3  spine             arrive: staircase        exit: DOOR     -> 2004
+      f4  = the Djinn's room
+
+**Altar Cave is byte-identical** — all five floors and three side maps, snapshot
+green with no `--update` on any altar row.
+
+### Arriving in an entrance chamber
+
+⛔ `rock-switch` was written for a floor you FALL onto — that is why its entrance
+is a bare box room with no staircase, and it is correct for Altar Cave, whose
+floor 1 keeps its trap holes. The Cave of Seals' floor 1 is a boulder puzzle
+whose exit is a PASSAGE, so its player walked down a staircase and arrived
+standing on plain floor with nothing behind them.
+
+The arrival mode is derived from the layout ABOVE — you fell iff the floor above
+is a `trap-chamber` — so it stays true if floors are ever reordered, and Altar
+Cave's floor 2 keeps its bare landing untouched.
+
+⛔ **The arch has to go at the room's FAR EDGE from the corridor.**
+`placeDeepEntrance` lays WALL_ROCKY on the arch's closed side, and from the
+middle of the room that wall landed across the corridor mouth and severed it —
+one stranded tile, one seed in three hundred, invisible to everything but the
+sweep's pocket check.
+
+### Data the new floor needed
+
+- `romFloorMaps: [103, 104, 105, 106, 106]` — **106 twice on purpose**: our
+  fourth walkable floor and the boss room are both the cartridge's B3F.
+- `seals_cave_f4` was the boss chamber's zone at rate 0; it is a WALKABLE floor
+  now, at the cartridge's own rate of 6. The boss chamber moved to
+  `seals_cave_f5`.
+- `seals_f4` loot table. Without one a new floor falls back to the STARTING
+  dungeon's — the exact failure that put Altar Cave's opening loot on 13 Kazus
+  and Sasune tiles in v1.10.9x.
+- `check-dungeon-registry` still called 2003 the boss floor. It is an ordinary
+  floor now and the boss is 2004; that fixture was the only thing that noticed.
+
+### Ponds: floor 3, both caves
+
+`WATER_FLOORS` is `altar -> {3}`, `seals -> {3}`. It is the same pond in both —
+the hand-carved pool in the `spine` branch. The Seals had nowhere to put one
+before because it had no walkable floor 3; **that was the shape being wrong, not
+the rule.**
+
+### ⚠ Floor 3 is still an exact clone, and the gate says so every run
+
+*"STAND BY FOR THE FLOOR AFTER THAT."* Floor 3 has not been designed, so it is
+deliberately still Altar Cave's `spine`, identical on 60/60 seeds. Pinned in
+`check-floor-plan` as `CLONE_PENDING` rather than skipped, so it prints a warning
+on every run until it is dealt with:
+
+    altar f0 vs seals f0:  0/60 identical, mean 300 tiles differ
+    altar f1 vs seals f1:  0/60 identical, mean 257 tiles differ
+    altar f2 vs seals f2:  0/60 identical, mean 244 tiles differ
+    altar f3 vs seals f3: 60/60 identical  ⚠ awaiting its own design
+
 ## 1.11.2 — 2026-08-27
 
 ### Altar Cave has ONE pond and it is on floor 3

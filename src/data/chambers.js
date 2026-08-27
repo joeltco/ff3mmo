@@ -37,7 +37,6 @@ export const SLOTS = {
  *               chamber that the layout places directly (entrance, exit, big).
  * `minDepth`    earliest floor index it may appear on. Depth 0 is the entry floor.
  * `maxPerFloor` how many of this type one floor may hold.
- * `requires`    dungeon capabilities that must be present (see `dungeonCaps`).
  * `feature`     what the generator DOES to the room once carved. `null` = a plain
  *               room. Every feature id must have a case in `applyChamberFeature`;
  *               `check-chambers` fails the build on one that does not.
@@ -89,10 +88,20 @@ export const CHAMBERS = [
   // Do not re-add it with a different tile without ROM evidence that the
   // cartridge draws a standalone obstacle in a room. It does not.
 
-  { id: 'spring', slot: SLOTS.MID, role: 'pond', weight: 4, minDepth: 1,
-    maxPerFloor: 1, requires: ['water'], feature: 'pond',
-    note: 'a pool that restores HP/MP. `placePond` has existed and been switched '
-        + 'off since the generator was written — every FLOOR_CONFIG said ponds: 0.' },
+  // ⛔ NO `spring` CHAMBER, AND NO POND ANYWHERE THE CATALOGUE CAN REACH.
+  // Joel, 2026-08-27, twice: "ALTAR SHOULD ONLY HAVE A POND ON F3" and then
+  // "ponds need to be on f3. how many times do I need to tell you?"
+  //
+  // A pond belongs to FLOOR 3 — the hand-carved pool in the `spine` branch. That
+  // is the pond this game has always had and the only one it wants. Making it a
+  // rollable mid chamber put water on Altar Cave's f1/f2 (15-17% of seeds) and
+  // on the Cave of Seals' f1/f2 (31%, on a "drowned cave" flavour claim I made
+  // up). The Cave of Seals has no walkable floor 3 at all — its f3 is the boss
+  // chamber — so it gets no pond, and that is the correct answer, not an
+  // oversight.
+  //
+  // `placePond` stays dead, as it was for the whole life of this generator
+  // before v1.10.99. Do not revive it as a chamber without being asked.
 
   // ── The spine's wings. Same catalogue, narrower slot.
   { id: 'side-plain', slot: SLOTS.SIDE, role: 'side', weight: 10, minDepth: 0,
@@ -111,18 +120,15 @@ export function chamberById(id) { return BY_ID.get(id) || null; }
 /** Every chamber that can be ROLLED into a slot (weight > 0). */
 export function rollableFor(slot) { return CHAMBERS.filter((c) => c.slot === slot && c.weight > 0); }
 
-/**
- * What a dungeon can support.
- *
- * ⛔ A CAPABILITY IS NOT A PREFERENCE. `water` is here because the pond tiles
- * ($04 / $08) must exist in that dungeon's tileset — a spring in a cave whose
- * donor map has no water metatile draws as garbage. Weighting lives in
- * `layout.chambers` on the dungeon row; this is about what is POSSIBLE.
- */
-export function dungeonCaps(dungeon) {
-  const c = (dungeon && dungeon.layout && dungeon.layout.caps) || null;
-  return new Set(Array.isArray(c) ? c : []);
-}
+// ⛔ THE `requires` / `caps` CAPABILITY SYSTEM IS GONE WITH THE SPRING. It was
+// added in v1.10.99 for exactly one chamber and had exactly one capability
+// ('water'), and with that chamber removed a `requires` field no entry declares
+// is the same trap as a weight-0 entry no layout places: it reads as a working
+// mechanism. Re-add it with the chamber that needs it.
+//
+// It also encoded the wrong idea. A capability answers "can this tileset draw
+// it"; I used it to decide "should this cave have it", which is not the same
+// question and does not have the same owner.
 
 /** Per-dungeon weight multipliers, so two caves can favour different rooms. */
 function weightFor(dungeon, entry) {
@@ -147,7 +153,6 @@ function weightFor(dungeon, entry) {
  * @returns {object[]} one chamber entry per slot, never null
  */
 export function rollChambers(dungeon, depth, slots, rng) {
-  const caps = dungeonCaps(dungeon);
   const taken = new Map();     // id -> count already placed on this floor
   const out = [];
   for (const slot of slots) {
@@ -155,7 +160,6 @@ export function rollChambers(dungeon, depth, slots, rng) {
       if (depth < (c.minDepth ?? 0)) return false;
       if (c.maxDepth != null && depth > c.maxDepth) return false;
       if ((taken.get(c.id) || 0) >= (c.maxPerFloor ?? 1)) return false;
-      for (const need of c.requires || []) if (!caps.has(need)) return false;
       return true;
     });
     const weights = pool.map((c) => weightFor(dungeon, c));

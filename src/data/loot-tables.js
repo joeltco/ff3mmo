@@ -36,7 +36,7 @@
 //
 // A table is named after the PLACE, not numbered after a map:
 //
-//     ur_town, ur_interior, kazus_town, sasune, altar_f1..f4, seals_f1..f3
+//     ur_town, ur_interior, kazus_town, sasune, altar_f1..f4, seals_f1..f4
 //
 // and a map finds its table through the registries that ALREADY say where a map
 // belongs — `AREAS` for towns, `DUNGEONS` for floors. Nothing is keyed by a bare
@@ -194,6 +194,18 @@ export const LOOT_TABLES = {
     { weight:  5, pool: [0xE3, 0xE1] },
     { weight: 12, monster: true },
   ],
+  // ⛔ THE DEEPEST WALKABLE FLOOR, added with it in v1.11.3. Without a table of
+  // its own a new floor falls back to the STARTING dungeon's — which is how 13
+  // Kazus and Sasune tiles ended up rolling the Altar Cave's opening loot in
+  // v1.10.9x. Contents follow `seals_f3`'s shape one step richer; they are the
+  // plumbing, not a balance pass.
+  seals_f4: [
+    { weight:  3, pool: [0xA6] },
+    { weight: 30, pool: [GIL(380, 800)] },
+    { weight: 24, pool: [0x27, 0x07] },
+    { weight:  6, pool: [0xE3, 0xE1] },
+    { weight: 12, monster: true },
+  ],
 };
 
 // ── Which place owns which table ──────────────────────────────────────────
@@ -215,7 +227,7 @@ export const AREA_LOOT = {
 /** Dungeon id -> its per-floor table names, shallowest first. */
 export const DUNGEON_LOOT = {
   altar: ['altar_f1', 'altar_f2', 'altar_f3', 'altar_f4'],
-  seals: ['seals_f1', 'seals_f2', 'seals_f3'],
+  seals: ['seals_f1', 'seals_f2', 'seals_f3', 'seals_f4'],
 };
 
 // mapId -> table name, built once from the registries above.

@@ -107,7 +107,7 @@ const R = buildRegistry([...DUNGEONS, SEALS]);
 ok(R.dungeonForMapId(3000)?.id === 'probe', 'floor mapId 2000 does not resolve to probe');
 ok(R.floorIndexForMapId(3002) === 2, 'floor index for 2002 should be 2');
 ok(R.dungeonForMapId(1004)?.id === 'altar', 'adding a dungeon broke altar lookup');
-ok(R.floorIndexForMapId(3004) === null, '2004 is past seals (4 floors) and must not resolve');
+ok(R.floorIndexForMapId(3004) === null, '3004 is past the probe (4 floors) and must not resolve');
 ok(R.isDungeonMapId(3010) && R.sideRoomForMapId(3010)?.kind === 'locked', 'probe locked room 3010 not registered');
 ok(R.sideRoomForMapId(3020)?.kind === 'secret', 'probe secret room 3020 not registered');
 ok(R.dungeonForWorldEntrance(107)?.id === 'probe', 'overworld mouth 103 does not map to seals');
@@ -119,9 +119,14 @@ ok(R.endingKindFor(3003) === ENDING_BOSS,    'probe boss floor must have a plain
 ok(R.endingKindFor(1004) === ENDING_CRYSTAL, 'altar boss floor must still be a crystal ending');
 ok(R.isCrystalChamber(3003) === false,       'probe boss chamber must not be a crystal chamber');
 // ⭐ and the REAL Cave of Seals, now that it ships, must also be crystal-free.
-ok(R.endingKindFor(2003) === ENDING_BOSS, 'the shipped Cave of Seals boss floor must not be a crystal ending');
-ok(R.isCrystalChamber(2003) === false,    'the shipped Cave of Seals must not be a crystal chamber');
-ok(R.rosterLocFor(2003) === 'seals-boss', `shipped seals boss roster loc was ${R.rosterLocFor(2003)}`);
+// ⛔ 2004, NOT 2003. The Cave of Seals gained a fourth walkable floor in
+// v1.11.3 to match Altar Cave's shape, so its boss chamber moved from 2003 to
+// 2004 and 2003 became an ordinary floor. This fixture was the only thing that
+// noticed.
+ok(R.endingKindFor(2004) === ENDING_BOSS, 'the shipped Cave of Seals boss floor must not be a crystal ending');
+ok(R.isCrystalChamber(2004) === false,    'the shipped Cave of Seals must not be a crystal chamber');
+ok(R.rosterLocFor(2004) === 'seals-boss', `shipped seals boss roster loc was ${R.rosterLocFor(2004)}`);
+ok(R.rosterLocFor(2003) === 'seals-3',    `2003 is a walkable floor now, roster loc was ${R.rosterLocFor(2003)}`);
 
 ok(R.rosterLocFor(3001) === 'probe-1',    `roster loc for 2001 was ${R.rosterLocFor(3001)}`);
 ok(R.rosterLocFor(3003) === 'probe-boss', `roster loc for seals boss was ${R.rosterLocFor(3003)}`);

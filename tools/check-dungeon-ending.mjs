@@ -32,7 +32,7 @@ const { endingKindFor, isCrystalChamber, ENDING_CRYSTAL, ENDING_BOSS, WIND_CRYST
 // ── 1. what each dungeon map's ending is ───────────────────────────────────
 const crystal = [];
 const plain = [];
-for (const id of [1000, 1001, 1002, 1003, 1004, 1010, 1011, 1020, 1021, 2000, 2003]) {
+for (const id of [1000, 1001, 1002, 1003, 1004, 1010, 1011, 1020, 1021, 2000, 2003, 2004]) {
   (endingKindFor(id) === ENDING_CRYSTAL ? crystal : plain).push(id);
 }
 console.log(`crystal endings: ${crystal.join(', ') || '(none)'}`);

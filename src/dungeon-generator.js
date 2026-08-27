@@ -438,76 +438,6 @@ function reachableCount(tilemap, ex, ey, blocked = null) {
 }
 
 /**
- * A spring — a small pool the player can wade into, placed so it never cuts the
- * room in half.
- *
- * ⛔ A POND IS PASSABLE IN THE GAME AND IMPASSABLE TO EVERY GATE.
- * `MapRenderer.isPassable` blocks on `(collision & 0x07) === 3`; the pond tiles
- * measure 2 in both caves' tilesets, so the player wades through. But
- * `dungeon-sweep`'s PASS set is deliberately conservative and excludes them —
- * one of the 249 tiles `encounter-sim` already records as "conservatively
- * strict". A pond spanning a room would therefore strand its far half as far as
- * every gate is concerned, and fail the build on something you can walk across.
- * Placing it under the STRICTER rule keeps the gates meaningful.
- *
- * ⛔ SHRINK, DON'T GIVE UP. The first version handed the whole job to
- * `placePond`, which picks one 3x2 or 2x2 spot and takes it or leaves it: in a
- * 5-wide room with three walkable rows that almost always cuts, and the spring
- * reverted to a plain room on 56-63% of the seeds that rolled it. Trying
- * progressively smaller pools turns "usually nothing" into "usually something".
- *
- * ⛔ EXACTLY ONE `rng()` CALL, whatever it ends up placing. The scan order is
- * rotated by that single draw so the pool is not always in the same corner, and
- * the floor's rng stream does not depend on how many shapes were tried.
- */
-function placeSpring(tilemap, rng, bounds, used, entranceX, entranceY) {
-  const openBefore = reachableCount(tilemap, entranceX, entranceY);
-  const x0 = Math.max(1, bounds.left), x1 = Math.min(30, bounds.right);
-  const y0 = Math.max(1, bounds.top), y1 = Math.min(30, bounds.bot);
-  const cells = [];
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) cells.push([x, y]);
-  if (!cells.length) return 0;
-  const rot = Math.floor(rng() * cells.length);
-
-  // ⛔ $23 SHORELINE OVER $04 BODY — THE ONLY VOCABULARY THAT DRAWS AS WATER.
-  // The first version used `WATER_EDGE_POND` ($08) for the edges and, at 3x2,
-  // every tile IS an edge — so the whole pond was $08, which renders as a solid
-  // BLACK RECTANGLE in the cave tileset. Caught by looking at it, not by any
-  // gate: it was passable, severance-safe, correctly sized and completely wrong.
-  // Floor 3's pond has always used $23 on its top row and $04 below, and that is
-  // what the bright blue water on screen actually is.
-  //
-  // Two rows minimum, because a body with no shoreline is not the shape the
-  // cartridge draws. $23 is collision 3 (solid) and $04 is 2 (wadeable), which
-  // is why the severance test below — which counts BOTH as blocking — pushes the
-  // pool against a wall on its own, exactly where floor 3 puts it by hand.
-  for (const [pw, ph] of [[4, 2], [3, 2], [2, 2]]) {
-    for (let c = 0; c < cells.length; c++) {
-      const [px, py] = cells[(c + rot) % cells.length];
-      if (px + pw - 1 > x1 || py + ph - 1 > y1) continue;
-      let ok = true;
-      for (let dy = 0; dy < ph && ok; dy++) for (let dx = 0; dx < pw && ok; dx++) {
-        const nx = px + dx, ny = py + dy;
-        if (!isFloorTile(tilemap[ny * 32 + nx]) || used.has(`${nx},${ny}`)) ok = false;
-      }
-      if (!ok) continue;
-      const saved = [];
-      for (let dy = 0; dy < ph; dy++) for (let dx = 0; dx < pw; dx++) {
-        const nx = px + dx, ny = py + dy, i = ny * 32 + nx;
-        saved.push([i, tilemap[i]]);
-        tilemap[i] = (dy === 0) ? WATER_EDGE_N : WATER;
-      }
-      if (reachableCount(tilemap, entranceX, entranceY) === openBefore - saved.length) {
-        for (const [i] of saved) used.add(`${i % 32},${(i - (i % 32)) / 32}`);
-        return saved.length;
-      }
-      for (const [i, was] of saved) tilemap[i] = was;
-    }
-  }
-  return 0;
-}
-
-/**
  * Do whatever a chamber type says its room becomes.
  *
  * ⛔ EVERY `feature` ID IN `data/chambers.js` NEEDS A CASE HERE. A typo'd or
@@ -550,8 +480,6 @@ function applyChamberFeature(feature, tilemap, rng, bounds, used, entranceX, ent
       }
       return `chests x${placed}`;
     }
-    case 'pond':
-      return `pond ${placeSpring(tilemap, rng, bounds, used, entranceX, entranceY)} tiles`;
     default:
       throw new Error(`chamber feature '${feature}' has no implementation`);
   }
@@ -2094,6 +2022,37 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     var rockExitX = exitBlockX, rockExitY = exitBaseRow + 1; // PASSAGE_ENTRY position
     enforceMinCeilingGap(tilemap);
 
+    // ⭐ HOW YOU ARRIVE DEPENDS ON HOW THE FLOOR ABOVE LET YOU LEAVE.
+    //
+    // This layout was written for Altar Cave, where you FALL onto it through
+    // floor 1's trap holes — which is why its entrance is a bare box room with
+    // no staircase: there is nothing to climb back to. The Cave of Seals' floor
+    // 1 is a boulder puzzle whose exit is a PASSAGE, so its player walks DOWN a
+    // staircase and arrived, until now, standing on plain floor with nothing
+    // behind them.
+    //
+    // Derived from the layout ABOVE rather than from the dungeon id, so it stays
+    // true if floors are ever reordered: you fell iff the floor above is a
+    // `trap-chamber`. Altar Cave's floor 1 is exactly that, so its floor 2 keeps
+    // the bare landing and is byte-identical.
+    const _arrivedByFalling = layoutForFloor(dungeon, floorIndex - 1) === 'trap-chamber';
+    if (!_arrivedByFalling) {
+      // An arrival arch, in the entrance room, opening TOWARD the corridor —
+      // the same rule `trap-chamber` uses for its own entrance.
+      //
+      // ⛔ IT GOES AT THE FAR EDGE FROM THE CORRIDOR, NOT THE MIDDLE.
+      // `placeDeepEntrance` lays WALL_ROCKY on the arch's CLOSED side, and from
+      // the middle of the room that wall landed across the corridor mouth and
+      // severed it — one stranded tile, one seed in three hundred, invisible to
+      // everything except the sweep's pocket check.
+      const _archX = Math.max(2, Math.min(29, horizDir === 1 ? entranceX : entranceX + entrBaseW));
+      const _archBase = startFloorY - 5;
+      placeDeepEntrance(tilemap, _archX, horizDir, _archBase);
+      enforceMinCeilingGap(tilemap);
+      entranceX = _archX;
+      entranceY = _archBase + 1;                 // the PASSAGE_ENTRY row
+    } else {
+
     // Trap spawn point — center of entrance room
     const spawnX = entranceX + Math.floor(entrBaseW / 2);
     const spawnY = startFloorY - 1; // middle of 3 walkable rows after overhang
@@ -2111,6 +2070,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
           entranceY = startFloorY - d; break;
         }
       }
+    }
     }
 
     // Rock switch — find a corner floor tile in the 7×7 room

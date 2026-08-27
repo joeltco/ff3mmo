@@ -378,11 +378,25 @@ export const ENCOUNTERS = new Map([
     ],
     weights: [24, 24, 12, 4],   // out of 64
   }],
-  // Floor 4 is the BOSS CHAMBER. The cartridge gives map 106 a rate of
-  // 6/256, but our chamber is a single room with a scripted fight, so
-  // the rate is forced to 0 here. The group is kept so the formations it
-  // would have rolled stay visible.
+  // ⛔ THIS IS A WALKABLE FLOOR NOW, NOT THE BOSS CHAMBER. The Cave of Seals
+  // gained a fourth walkable floor in v1.11.3 to match Altar Cave's shape, so
+  // the zone that used to be its boss room is the deepest floor you fight on —
+  // the cartridge's own B3F, at the cartridge's own rate. The boss chamber moved
+  // down to `seals_cave_f5`.
   ['seals_cave_f4', {
+    rom: { map: 106, group: 0x09 },
+    rate: 6,   // out of 256 per step — the cartridge's rate for map 106
+    formations: [
+      [{ id: 0x0b, min: 1, max: 1 }, { id: 0x0a, min: 3, max: 5 }],   // 0x0a  Skeleton x1-1 + Mummy x3-5
+      [{ id: 0x0d, min: 2, max: 2 }, { id: 0x0c, min: 2, max: 4 }],   // 0x0b  Larva x2-2 + CursdCopper x2-4
+      [{ id: 0x0f, min: 1, max: 1 }, { id: 0x0e, min: 3, max: 5 }],   // 0x0c  Revenant x1-1 + Shadow x3-5
+    ],
+    weights: [36, 24, 4],   // out of 64
+  }],
+  // The BOSS CHAMBER. The cartridge gives map 106 a rate of 6/256, but our
+  // chamber is a single room with a scripted fight, so the rate is forced to 0.
+  // The group is kept so the formations it would have rolled stay visible.
+  ['seals_cave_f5', {
     rom: { map: 106, group: 0x09 },
     rate: 0,   // out of 256 per step — never
     formations: [

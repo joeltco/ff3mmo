@@ -136,6 +136,8 @@ for (const dg of DUNGEONS) {
 // two names. Floor 0 was in exactly that state: 83 of 200 seeds pixel-identical,
 // the rest differing by ONE tile.
 {
+  // Floors that are still an intentional clone, awaiting their own design.
+  const CLONE_PENDING = new Set(['altar/seals/f3']);
   const CMP = 60;
   for (let i = 0; i < DUNGEONS.length; i++) {
     for (let j = i + 1; j < DUNGEONS.length; j++) {
@@ -154,8 +156,19 @@ for (const dg of DUNGEONS) {
         }
         const mean = Math.round(diffSum / CMP);
         console.log(`${A.id} f${f} vs ${B.id} f${f}: ${identical}/${CMP} identical, mean ${mean} tiles differ`);
-        if (identical > 0) fails.push(`${A.id} and ${B.id} generate the SAME floor ${f} map on ${identical}/${CMP} seeds — one dungeon wearing two names`);
-        else if (mean < 50) fails.push(`${A.id} and ${B.id} floor ${f} differ by only ${mean} tiles on average — not meaningfully different caves`);
+        // ⛔ ONE PINNED EXCEPTION, AND IT IS TEMPORARY. The Cave of Seals is a
+        // CLONE of Altar Cave (Joel, 2026-08-26: "this is supposed to ba a clone
+        // of altar cave"), differentiated floor by floor as each is designed:
+        // f0 by its own snake ranges, f1 by the boulder hall, f2 by corridor
+        // length and its arrival arch. Floor 3 has not been designed yet —
+        // "STAND BY FOR THE FUCKING FLOOR AFTER THAT" — so it is deliberately
+        // still Altar Cave's `spine`. Pinned rather than skipped so it shows up
+        // in this gate's output every run until it is dealt with.
+        const pending = `${A.id}/${B.id}/f${f}`;
+        if (CLONE_PENDING.has(pending)) {
+          console.log(`  ⚠ ${pending}: still an exact clone — awaiting its own design`);
+        } else if (identical > 0) fails.push(`${A.id} and ${B.id} generate the SAME floor ${f} map on ${identical}/${CMP} seeds — one dungeon wearing two names`);
+        else if (!CLONE_PENDING.has(pending) && mean < 50) fails.push(`${A.id} and ${B.id} floor ${f} differ by only ${mean} tiles on average — not meaningfully different caves`);
       }
     }
   }

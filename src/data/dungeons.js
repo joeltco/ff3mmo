@@ -101,8 +101,12 @@ export const DUNGEONS = [
     name: 'Cave of Seals',
     base: 2000,
     worldEntranceMap: 103,        // the ROM's own overworld mouth, world (84,36)
-    floors: 4,                    // 2000-2003; 3 normal floors + boss, matching
-                                  // the cartridge's 103 / 104+105 / 106
+    // ⛔ FIVE FLOORS — ALTAR CAVE'S SHAPE. Joel, 2026-08-27: "CLONE ALTAR CAVE
+    // OVER TO SEALS". This was `floors: 4` — three walkable floors and the boss
+    // on f3 — so the Cave of Seals ran f0, f1, f2 and then straight into the
+    // Djinn, while Altar Cave runs f0..f3 with f3 holding the DOOR to its boss
+    // room. One walkable floor short of the cave it is a clone of.
+    floors: 5,                    // 2000-2004; f0..f3 walkable, f4 is the Djinn's room
     donorMap: 103,                // "Sealed Cave", area $18, palette $79
     tileset: 0,
     bossSkinId: 'seals',          // the dais from ROM map 106 — no crystal
@@ -117,7 +121,9 @@ export const DUNGEONS = [
     // tiles after the overhang ate the band, which is what made this cave read
     // as a string of rooms rather than a cave.
     layout: {
-      floors: ['snake', 'boulder-chamber', 'rock-switch'],
+      // Altar Cave's four walkable layouts, with ONE substitution: floor 1 is a
+      // giant boulder puzzle instead of a trap room (Joel, 2026-08-26/27).
+      floors: ['snake', 'boulder-chamber', 'rock-switch', 'spine'],
       corridor: { hMin: 8, hMax: 12, vMin: 9, vMax: 13 },
       // ⭐ ITS OWN ENTRY FLOOR. Both caves used to open on the same map — 83 of
       // 200 seeds pixel-identical, the rest differing by ONE tile (Altar Cave's
@@ -129,9 +135,6 @@ export const DUNGEONS = [
       // 29 precisely BECAUSE this cave declares no secret rooms: nothing needs
       // the void margin outside the room wall.
       snake: { top: [3, 5], bot: [19, 21], roomW: [8, 11], left: [2, 4], right: [28, 29], gap: [7, 11], tilt: [4, 7] },
-      // The Cave of Seals may draw water: its donor map (103) carries the pond
-      // metatiles and floor 3's pool proves they read as water in this tileset.
-      caps: ['water'],
       // ⭐ THE TWO CAVES FAVOUR DIFFERENT ROOMS. Multipliers on the catalogue's
       // base weights, so a new chamber type still reaches both caves without
       // editing either row.
@@ -164,10 +167,15 @@ export const DUNGEONS = [
     rosterPrefix: 'seals',
     bossRosterLoc: 'seals-boss',
     encounterZonePrefix: 'seals_cave',
-    // 1:1 with the cartridge's own four maps, in depth order: 103 "Sealed
+    // The cartridge's four Cave of Seals maps, in depth order: 103 "Sealed
     // Cave", 104 "B2F", 105 (B2F's second map — same encounter group as 104),
     // 106 "B3F". Groups 7 -> 8 -> 8 -> 9.
-    romFloorMaps: [103, 104, 105, 106],
+    //
+    // ⛔ 106 APPEARS TWICE, ON PURPOSE. Our fourth walkable floor and the boss
+    // room are both the cartridge's B3F — that is where the Djinn is fought —
+    // so both draw their encounter group from it. The boss chamber's rate is
+    // forced to 0 in `encounters.js` regardless.
+    romFloorMaps: [103, 104, 105, 106, 106],
     // ⛔ NO SIDE ROOMS. The locked/secret rooms are Altar Cave content; giving
     // this dungeon empty arrays is a statement, not an oversight — the generator
     // hands out ids from `secretRoomMapIds` and would otherwise invent some.

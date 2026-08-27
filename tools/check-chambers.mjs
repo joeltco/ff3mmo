@@ -16,7 +16,7 @@ import fs from 'node:fs';
 const rom = new Uint8Array(fs.readFileSync(process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname));
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { DUNGEONS, layoutForFloor } = await import('../src/data/dungeons.js');
-const { CHAMBERS, rollableFor, chamberById, dungeonCaps } = await import('../src/data/chambers.js');
+const { CHAMBERS, rollableFor, chamberById } = await import('../src/data/chambers.js');
 
 const SEEDS = parseInt(process.argv[2] || '300', 10);
 const BASE = 1754900000000;
@@ -49,9 +49,6 @@ for (const dg of DUNGEONS) {
         // ⛔ CONSTRAINTS ARE CHECKED AGAINST WHAT ROLLED, not against the table.
         if (f < (entry.minDepth ?? 0)) fails.push(`${dg.id} f${f}: '${c.id}' rolled below its minDepth ${entry.minDepth}`);
         if (entry.maxDepth != null && f > entry.maxDepth) fails.push(`${dg.id} f${f}: '${c.id}' rolled above its maxDepth ${entry.maxDepth}`);
-        for (const need of entry.requires || []) {
-          if (!dungeonCaps(dg).has(need)) fails.push(`${dg.id} f${f}: '${c.id}' rolled but the dungeon lacks capability '${need}'`);
-        }
       }
       for (const [id, n] of perSeed) {
         const entry = chamberById(id);
@@ -76,7 +73,6 @@ for (const row of perFloor) {
 const FEATURE_EVIDENCE = {
   bones:  /bones x[1-9]/,
   vault:  /chests x[1-9]/,
-  pond:   /pond [1-9]/,
   traps:  /traps/,
   null:   /plain/,
 };
@@ -104,9 +100,16 @@ for (const c of CHAMBERS) {
 // Pinned per dungeon and exact in both directions: a floor outside the set must
 // have NO water, and a floor inside it must actually produce some, so the rule
 // cannot be satisfied by deleting ponds everywhere.
+// ⭐ BOTH CAVES: FLOOR 3, AND NOWHERE ELSE. Joel, 2026-08-27, twice: "ALTAR
+// SHOULD ONLY HAVE A POND ON F3" and "ponds need to be on f3."
+//
+// It is the same pond in both — the hand-carved pool in the `spine` branch,
+// which is floor 3 of each cave now that the Cave of Seals has Altar Cave's
+// five-floor shape. Before that clone the Seals had no walkable floor 3 at all,
+// so it had nowhere to put one; that was the shape being wrong, not the rule.
 const WATER_FLOORS = new Map([
-  ['altar', new Set([3])],      // the hand-carved pool in the `spine` branch, and nowhere else
-  ['seals', new Set([1, 2])],   // `spring` chambers roll on its two mid slots
+  ['altar', new Set([3])],
+  ['seals', new Set([3])],
 ]);
 const WATER = 0x04, WATER_EDGE_N = 0x23;
 for (const dg of DUNGEONS) {
@@ -149,8 +152,7 @@ for (const dg of DUNGEONS) {
   if (!row) continue;
   const total = [...row.counts.values()].reduce((a, b) => a + b, 0);
   const mult = (dg.layout && dg.layout.chambers) || {};
-  const pool = rollableFor('mid').filter((c) => row.f >= (c.minDepth ?? 0)
-    && (c.requires || []).every((n) => dungeonCaps(dg).has(n)));
+  const pool = rollableFor('mid').filter((c) => row.f >= (c.minDepth ?? 0));
   if (!pool.length || !row.counts.has('junction')) continue;
   const wsum = pool.reduce((a, c) => a + c.weight * (mult[c.id] ?? 1), 0);
   for (const c of pool) {
