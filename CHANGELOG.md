@@ -1,3 +1,49 @@
+## 1.11.2 — 2026-08-27
+
+### Altar Cave has ONE pond and it is on floor 3
+
+⛔ Joel, 2026-08-27: *"ALTAR SHOULD ONLY HAVE A POND ON F3!!!!!! WHEN THE FUCK DID
+I TELL YOU TO PUT PONDS ON F1?"*
+
+He did not. v1.10.99 granted **both** caves the `water` capability and made
+`spring` a rollable mid chamber, which put ponds on Altar Cave's floors 1 and 2
+on **15-17% of seeds**. Altar Cave's pond is the hand-carved pool in the `spine`
+branch on floor 3 — inline code that owes nothing to the catalogue — and that is
+the only one it has ever had.
+
+I granted the capability because the TILESET could draw it. **"The tileset can
+draw it" is not a reason to put a thing in a cave.** A capability answers "is
+this possible here", never "should this be here"; the second question has an
+owner and it is not me.
+
+    altar f0..f2, f4   water on 0/300 seeds
+    altar f3           water on 300/300 seeds   (the hand-carved pool, untouched)
+
+### `spring: 2.5` on the Cave of Seals is gone too
+
+Same fault, one line down. I wrote *"the Cave of Seals is the drowned one"* and
+multiplied its pond weight by two and a half on that basis — a flavour claim with
+no source in the ROM, the design notes, or anything Joel said. It took ponds to
+**31% of that cave's floors**. Back to base weight: 16% and 14% on f1 and f2.
+The `spring` chamber itself stays — pond chambers were on Joel's own catalogue
+list from 2026-08-20 — but at the weight the catalogue gives every other room.
+
+### New gate — water only where a dungeon is pinned to have it
+
+`check-chambers` now carries `WATER_FLOORS`, exact in both directions: a floor
+outside the set must have NO water, and a floor inside it must actually produce
+some, so the rule cannot be satisfied by deleting ponds everywhere.
+
+    altar -> { 3 }        seals -> { 1, 2 }
+
+Proven by mutation: restoring `caps: ['water']` to the Altar Cave row fails it
+immediately on f1 (25/120) and f2 (16/120).
+
+⛔ Knock-on caught by the registry gate: the `probe` fixture declared
+`caps: ['water']` to mirror Altar Cave, and the moment Altar lost it the two
+carved different floors — failing a check that is really about the asset loader.
+`layout.caps` is part of a dungeon's identity now, so the fixture mirrors it.
+
 ## 1.11.1 — 2026-08-27
 
 ### Revert: floor 1's boulder gates its EXIT, not treasure

@@ -93,6 +93,37 @@ for (const c of CHAMBERS) {
   }
 }
 
+// ── 1b. WATER ONLY WHERE THE DUNGEON IS SUPPOSED TO HAVE IT ───────────────
+//
+// ⛔ Joel, 2026-08-27: "ALTAR SHOULD ONLY HAVE A POND ON F3". v1.10.99 granted
+// BOTH caves the `water` capability and made `spring` a rollable mid chamber,
+// which put ponds on Altar Cave's floors 1 and 2 on 15-17% of seeds. Nobody
+// asked for that — I granted the capability because the TILESET could draw it,
+// and "the tileset can draw it" is not a reason to put a pond in a cave.
+//
+// Pinned per dungeon and exact in both directions: a floor outside the set must
+// have NO water, and a floor inside it must actually produce some, so the rule
+// cannot be satisfied by deleting ponds everywhere.
+const WATER_FLOORS = new Map([
+  ['altar', new Set([3])],      // the hand-carved pool in the `spine` branch, and nowhere else
+  ['seals', new Set([1, 2])],   // `spring` chambers roll on its two mid slots
+]);
+const WATER = 0x04, WATER_EDGE_N = 0x23;
+for (const dg of DUNGEONS) {
+  const allowed = WATER_FLOORS.get(dg.id);
+  if (!allowed) { fails.push(`dungeon '${dg.id}' has no pinned water-floor set — add one deliberately`); continue; }
+  for (let f = 0; f < dg.floors; f++) {
+    let wet = 0;
+    for (let k = 0; k < SEEDS; k++) {
+      const tm = generateFloor(rom, f, BASE + k * 7919, dg).tilemap;
+      for (let i = 0; i < 1024; i++) if (tm[i] === WATER || tm[i] === WATER_EDGE_N) { wet++; break; }
+    }
+    if (wet && !allowed.has(f)) fails.push(`${dg.id} f${f}: water on ${wet}/${SEEDS} seeds — this floor is not supposed to have any`);
+    if (!wet && allowed.has(f)) fails.push(`${dg.id} f${f}: pinned as a water floor but produced NONE in ${SEEDS} seeds`);
+    if (wet) console.log(`  water: ${dg.id} f${f} ${wet}/${SEEDS} seeds`);
+  }
+}
+
 // ── 2. Every rollable chamber must actually appear ─────────────────────────
 for (const slot of new Set(CHAMBERS.map((c) => c.slot))) {
   for (const c of rollableFor(slot)) {

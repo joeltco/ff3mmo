@@ -66,10 +66,16 @@ export const DUNGEONS = [
       // Altar Cave's secrets. The Cave of Seals has no secret corridors to
       // protect, which is exactly why it may go wider.
       snake: { top: [4, 6], bot: [18, 20], roomW: [7, 9], left: [5, 6], right: [26, 27], gap: [3, 5], tilt: [3, 5] },
-      // ⛔ A CAPABILITY IS ABOUT WHAT THE TILESET CAN DRAW, not what we want.
-      // `water` says the pond metatiles ($04 / $08) exist and read as water in
-      // this cave's donor map — measured, both caves, collision 2 (passable).
-      caps: ['water'],
+      // ⛔ NO `water` CAPABILITY. ALTAR CAVE HAS EXACTLY ONE POND AND IT IS ON
+      // FLOOR 3 — the hand-carved pool in the `spine` branch, which is inline
+      // code and owes nothing to the catalogue. Joel, 2026-08-27: "ALTAR SHOULD
+      // ONLY HAVE A POND ON F3".
+      //
+      // v1.10.99 granted this cave `water` and made `spring` a rollable mid
+      // chamber, which put ponds on floors 1 and 2 at 15-17% of seeds. Nobody
+      // asked for that; I granted the capability to both caves because the
+      // TILESET could draw it, and "the tileset can draw it" is not a reason to
+      // put it in a cave. `tools/check-chambers.mjs` gates the rule now.
     },
     bossId: 0xCC,                 // Land Turtle / Adamantoise
     music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
@@ -123,12 +129,19 @@ export const DUNGEONS = [
       // 29 precisely BECAUSE this cave declares no secret rooms: nothing needs
       // the void margin outside the room wall.
       snake: { top: [3, 5], bot: [19, 21], roomW: [8, 11], left: [2, 4], right: [28, 29], gap: [7, 11], tilt: [4, 7] },
+      // The Cave of Seals may draw water: its donor map (103) carries the pond
+      // metatiles and floor 3's pool proves they read as water in this tileset.
       caps: ['water'],
-      // ⭐ THE TWO CAVES FAVOUR DIFFERENT ROOMS. The Cave of Seals is the
-      // drowned one — springs and bones over vaults. Multipliers on the
-      // catalogue's base weights, so a new chamber type still reaches both caves
-      // without editing either row.
-      chambers: { spring: 2.5, 'bone-pit': 1.6, vault: 0.75 },
+      // ⭐ THE TWO CAVES FAVOUR DIFFERENT ROOMS. Multipliers on the catalogue's
+      // base weights, so a new chamber type still reaches both caves without
+      // editing either row.
+      //
+      // ⛔ `spring: 2.5` IS REMOVED. I wrote "the Cave of Seals is the drowned
+      // one" and multiplied its pond weight by two and a half on that basis —
+      // a flavour claim I invented, which took ponds to 31% of its floors.
+      // Nothing in the ROM, the design notes or anything Joel said makes this
+      // cave wet. Base weight only unless someone asks otherwise.
+      chambers: { 'bone-pit': 1.6, vault: 0.75 },
     },
     bossId: 0xCD,                 // Djinn — the id right after the Land Turtle
     // ⭐ THE DJINN DROPS THE WSLAYER, 2 in 7 (28.6%). Joel, 2026-08-26.

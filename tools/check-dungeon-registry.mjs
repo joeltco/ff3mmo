@@ -92,7 +92,13 @@ const SEALS = {
   romFloorMaps: [103, 104, 105, 106],   // one ROM map per floor — see romMapForFloor
   // Same layouts AND same catalogue inputs as Altar Cave — see the shape
   // assertion near the end of this file for why both halves matter.
-  layout: { floors: ['snake', 'trap-chamber', 'rock-switch'], caps: ['water'] },
+  // ⛔ MIRRORS ALTAR CAVE EXACTLY, `caps` INCLUDED. The shape assertion near the
+  // end of this file compares this fixture against Altar Cave, and `layout.caps`
+  // changes which chambers are in the mid-slot pool — so a `water` here that
+  // Altar Cave does not have makes the two carve different floors and fails a
+  // gate that is actually about the asset loader. It did, the moment Altar Cave
+  // lost its water capability.
+  layout: { floors: ['snake', 'trap-chamber', 'rock-switch'] },
   lockedRooms: [{ mapId: 3010, floor: 1 }],
   secretRooms: [{ mapId: 3020, floor: 0 }],
 };
