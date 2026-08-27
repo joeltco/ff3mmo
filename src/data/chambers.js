@@ -52,11 +52,14 @@ export const CHAMBERS = [
     note: 'the 7x7 whose trap holes ARE the descent — Altar Cave floor 1' },
   { id: 'boulder-hall', slot: SLOTS.BIG, role: 'puzzle', weight: 0, feature: null,
     note: 'the hall holding the boulder that opens the false wall' },
-  { id: 'sealed-hoard', slot: SLOTS.BIG, role: 'treasure', weight: 0, feature: 'hoard',
-    note: 'the chamber behind a boulder-opened wall. ⛔ A BOULDER PUZZLE OPENS '
-        + 'TREASURE, NEVER AN EXIT (Joel, 2026-08-27) — so nothing the player '
-        + 'needs to finish the dungeon may ever be placed in here. That is what '
-        + 'makes the puzzle optional and the reward worth solving it for.' },
+  // ⛔ NO `sealed-hoard` YET. A treasure chamber behind a boulder-opened wall is
+  // floor 2's design (Joel, 2026-08-27: *"f2 is gonna be random chambers...
+  // Boulder puzzles will only be to open treasure chambers. not an exit"*), and
+  // floor 2 has not been built. It was added and removed the same day because I
+  // applied that rule to floor 1 as well, which was never asked for — floor 1's
+  // boulder gates its EXIT and always has. Re-add it with the layout that places
+  // it, not before: a weight-0 entry no layout uses reads exactly like a working
+  // chamber from the outside.
 
   // ── Rolled. This is the catalogue proper.
   { id: 'junction', slot: SLOTS.MID, role: 'junction', weight: 10, minDepth: 0,

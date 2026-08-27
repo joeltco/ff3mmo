@@ -207,7 +207,7 @@ export function exitAudit(r, seen) {
 const PUZZLE_ROLE = new Map([
   ['altar/rock-switch',     { gates: 'exit', walkaroundCap: 0.20 }],
   ['seals/rock-switch',     { gates: 'exit', walkaroundCap: 0 }],
-  ['seals/boulder-chamber', { gates: 'treasure' }],
+  ['seals/boulder-chamber', { gates: 'exit', walkaroundCap: 0 }],
 ]);
 
 export function sweepFloors(rom, n = 150, base = 1754900000000) {

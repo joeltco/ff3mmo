@@ -1,3 +1,38 @@
+## 1.11.1 — 2026-08-27
+
+### Revert: floor 1's boulder gates its EXIT, not treasure
+
+⛔ **I APPLIED A RULE TO A FLOOR IT WAS NEVER GIVEN FOR.**
+
+Joel's instruction was about floor 2: *"f2 is gonna be random chambers. entrance
+chamber to exit chamber. Boulder puzzles will only be to open treasure chambers.
+not an exit."* I read the last sentence as a global law and asked whether floor 1
+should follow it too. He answered **"f1 needs to be a boulder room, but we gotta
+double the size of the room"** — which is not either option I offered. I took the
+size amendment and treated the rest of my own recommended option as approved.
+
+**An answer that does not pick an option is not an approval of that option.** If
+the reply amends one part of a proposal, only that part is settled; everything
+else is still unasked.
+
+Floor 1 is back to what v1.10.96 shipped: the boulder opens the false wall, and
+the chamber behind it holds the passage down. The doubled hall stays — that IS
+what he asked for. Measured: **37.3 -> 84.0 walkable tiles**, and the boulder
+gates the exit on 200/200 seeds again.
+
+`PUZZLE_ROLE` in `dungeon-sweep` puts `seals/boulder-chamber` back to
+`gates: 'exit'` with a zero walk-around ceiling — the wall must be the only route,
+exactly as before.
+
+### `sealed-hoard` removed the same day it was added
+
+The catalogue entry and its `hoard` feature existed only to serve the change
+above. With that reverted, nothing places it — and a weight-0 entry no layout
+uses reads exactly like a working chamber from the outside, which is the failure
+mode `check-chambers` exists to prevent. Removed, with a note where it sat saying
+it belongs to floor 2's design and should be re-added *with* the layout that
+places it.
+
 ## 1.11.0 — 2026-08-27
 
 ### A boulder puzzle opens treasure, never an exit — Cave of Seals
