@@ -45,7 +45,15 @@ if (BOSS) {
   // point of the flag is to see the shape in a tileset it was not drawn for.
   md = { tilemap, ...loadRomAssets(rom), ...info };
 } else {
-  md = generateFloor(rom, floorIndex, seed);
+  // `--dungeon <id>` renders a floor with THAT dungeon's assets. Without it you
+  // get Altar Cave's donor map (111) for every dungeon, and the Cave of Seals
+  // draws from 103 — same shape, different palette. Looking at the wrong one is
+  // how a "the seals chamber looks like X" claim gets made about Altar Cave.
+  const { DUNGEONS, STARTING_DUNGEON } = await import('../src/data/dungeons.js');
+  const dgId = flag('dungeon', null);
+  const dg = dgId ? DUNGEONS.find((d) => d.id === dgId) : STARTING_DUNGEON;
+  if (!dg) throw new Error(`unknown dungeon '${dgId}' — have: ${DUNGEONS.map((d) => d.id).join(', ')}`);
+  md = generateFloor(rom, floorIndex, seed, dg);
 }
 const W = 32, TILE = 16, pxW = W * TILE, pxH = W * TILE;
 const rgb = new Uint8Array(pxW * pxH * 3);
