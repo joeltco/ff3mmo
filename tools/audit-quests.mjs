@@ -19,6 +19,7 @@ globalThis.document = { createElement: (t) => (t === 'canvas' ? createCanvas(1, 
 const { ps } = await import('../src/player-stats.js');
 const { QUESTS } = await import('../src/data/quests.js');
 const q = await import('../src/quests.js');
+const { SCRIPT, stagePages, asidePages, asideKeys } = await import('../src/data/script.js');
 
 const holes = [];
 const hole = (title, detail) => { holes.push(title); console.log(`\n[HOLE] ${title}\n       ${detail}`); };
@@ -86,28 +87,42 @@ console.log('\n── 1. reward durability vs quest-state durability');
 // finished one, whose `done` pages it returns for the rest of the save.
 console.log('\n── 2. a second quest from the same NPC');
 {
+  // ⛔ A synthetic quest is authored the way a REAL one is now: mechanics into
+  // `data/quests.js`, prose into `data/script.js`. Injecting inline pages here
+  // (which is what this harness did before the split) resolves to NO pages, the
+  // candidate is dropped, and the harness reports the very bug it is testing for
+  // — a false positive that says the product regressed when only the fixture did.
   const second = {
     id: 'audit_second',
     reward: { gil: 1 },
     stages: [
-      { id: 'ask', at: { map: mapId, npc: npcKey }, offer: ['b'], accepted: ['b'], denied: ['b'] },
+      { id: 'ask', at: { map: mapId, npc: npcKey } },
       { id: 'clear', at: { map: mapId, npc: npcKey },
-        objective: { kind: 'defeat', zonePrefix: 'altar_cave', count: 1 },
-        say: ['b'], onAdvance: ['b'] },
+        objective: { kind: 'defeat', zonePrefix: 'altar_cave', count: 1 } },
     ],
-    after: { [npcKey]: ['b'] },
   };
   QUESTS[second.id] = second;
+  SCRIPT[second.id] = {
+    stages: {
+      ask:   { offer: ['b'], accepted: ['b'], denied: ['b'] },
+      clear: { say: ['b'], onAdvance: ['b'] },
+    },
+  };
   ps.quests = { [QID]: { s: 'done', n: OBJ_COUNT } };
   const pages = q.talkQuest(mapId, npcKey, () => {});
-  if ((pages || []).join('|') === quest.after[npcKey].join('|')) {
+  // The second quest has no startWord, so it offers on sight. A finished first
+  // quest must not stand in front of it. (Pre-v1.8.6 `talkQuest` returned on the
+  // FIRST matching giver, so the finished quest answered forever; the `after`
+  // layer that made that possible is now gone entirely.)
+  if (!pages || pages.join('|') !== 'b') {
     hole('a giver can only ever hold one quest',
-      'talkQuest returns on the FIRST matching giver, so the finished quest keeps ' +
-      'answering forever and the second quest (no startWord, should offer on sight) is unreachable.');
+      `a finished quest still shadows the next one at the same giver — expected the ` +
+      `second quest's offer, got ${JSON.stringify(pages)}.`);
   } else okay('a second quest from the same giver is reachable');
   // The word-gated path has the same shape but a saving grace: it `continue`s
   // past quests whose startWord does not match.
   delete QUESTS[second.id];
+  delete SCRIPT[second.id];
 }
 
 // ── 3. the reward table cannot express what the dialogue promises ─────────
@@ -226,19 +241,13 @@ console.log('\n── 6. player-facing progress');
       for (const part of ['offer', 'accepted', 'denied', 'say', 'onAdvance']) {
         for (const pg of st[part] || []) if (/\{/.test(pg)) _tokened.push(`${qq.id}.${st.id}.${part}`);
       }
-      for (const [k, pgs] of Object.entries(st.also || {})) {
-        for (const pg of pgs || []) if (/\{/.test(pg)) _tokened.push(`${qq.id}.${st.id}.also.${k}`);
+      for (const k of asideKeys(qq.id, st.id)) {
+        for (const pg of asidePages(qq.id, st.id, k) || []) if (/\{/.test(pg)) _tokened.push(`${qq.id}.${st.id}.also.${k}`);
       }
     }
-    // `after` pages are shown with NO stage, so a token there can never be
-    // filled — quests.js passes `stage: null` and the count reads 0. That is a
-    // page the player would see braces on, not a formatting nit.
-    for (const [k, pgs] of Object.entries(qq.after || {})) {
-      for (const pg of pgs || []) if (/\{/.test(pg)) {
-        hole(`after.${k} of ${qq.id} carries a progress token`,
-          `"${pg}" — \`after\` pages are rendered with no stage, so {n}/{count}/{left} cannot be filled.`);
-      }
-    }
+    // ⛔ The `after` token check is gone with the layer. A parting line is now
+    // an idle variant on the NPC's own row, rendered with no stage at all, so
+    // `check-dialogue-fit` wrapping every variant is the check that matters.
   }
   if (_tokened.length) okay(`progress tokens live on ${_tokened.length} page group(s): ${_tokened.join(', ')}`);
 }

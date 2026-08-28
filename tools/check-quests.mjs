@@ -25,6 +25,13 @@ const { ENCOUNTERS } = await import('../src/data/encounters.js');
 const q = await import('../src/quests.js');
 const { isObjectiveKind } = await import('../src/quest-objectives.js');
 const { setFlag, hasFlag } = await import('../src/story-flags.js');
+const { stagePages } = await import('../src/data/script.js');
+// ⭐ The parting line is no longer a quest layer — it is a flag-guarded variant
+// on the NPC's own row. So "what does he say afterwards" is a SPEECH question,
+// not a quest question, and this gate asks the function the game asks.
+const { previewSpeech } = await import('../src/speech.js');
+const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
+const _specFor = (m, k) => ((TOWN_NPCS.get(m) || []).find((r) => r.key === k) || {}).spec || null;
 
 let failed = 0;
 const ok = (m) => console.log(`  ✓ ${m}`);
@@ -52,7 +59,7 @@ is(ps.quests[QID] === undefined, true, 'plain talk does NOT start the quest');
 
 const offer = q.askQuestWord(mapId, npcKey, quest.startWord);
 // Pages come back token-FILLED (v1.8.6), so compare content, never identity.
-is(offer && offer.pages.join('|'), S0.offer.join('|'), 'asking about the start word returns the OFFER pages');
+is(offer && offer.pages.join('|'), stagePages(QID, S0.id, 'offer').join('|'), 'asking about the start word returns the OFFER pages');
 is(ps.quests[QID] === undefined, true, 'the offer alone does not start the quest');
 is(q.acceptQuest(QID), true, 'ACCEPT starts it');
 is(ps.quests[QID].s, quest.stages[1].id, 'quest advanced to stage 1');
@@ -70,7 +77,7 @@ q.noteEncounterVictory('altar_cave_f2');
 is(ps.quests[QID].n, 2, 'two Altar Cave wins counted');
 
 const pagesMid = q.talkQuest(mapId, npcKey, () => { bad('rewarded early!'); });
-is(pagesMid.length, SLAST.say.length, 'talking mid-quest returns the WAITING nag, not the reward');
+is(pagesMid.length, stagePages(QID, SLAST.id, 'say').length, 'talking mid-quest returns the WAITING nag, not the reward');
 is(/\b2 of 3\b/.test(pagesMid.join(' ')), true, 'the WAITING nag reads the progress count out');
 
 q.noteEncounterVictory('altar_cave_boss');
@@ -80,15 +87,22 @@ q.noteEncounterVictory('altar_cave_f1');
 is(ps.quests[QID].n, 3, 'count does not overshoot the objective');
 
 const pages2 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
-is(pages2.join('|'), SLAST.onAdvance.join('|'), 'handing in returns the onAdvance pages');
+is(pages2.join('|'), stagePages(QID, SLAST.id, 'onAdvance').join('|'), 'handing in returns the onAdvance pages');
 is(rewarded && rewarded.gil, quest.reward.gil, 'reward gil paid out');
 is(rewarded && rewarded.item, quest.reward.item, 'reward ITEM handed over — the line promises an object');
 is(ps.quests[QID].s, 'done', 'quest is done');
 
 rewarded = null;
 const pages3 = q.talkQuest(mapId, npcKey, (r) => { rewarded = r; });
-is(pages3.join('|'), quest.after[npcKey].join('|'), 'talking again returns the AFTER pages');
+is(pages3, null, 'a FINISHED quest contributes no pages — it is over');
 is(rewarded, null, 'reward is NOT paid twice');
+// ...and the player is not met with silence: his own row now carries a variant
+// keyed to the flag the last stage set.
+const after = previewSpeech(mapId, npcKey, _specFor(mapId, npcKey));
+is(after && after.source, 'idle', 'talking again falls through to his own lines');
+is(!!after && after.pages.join('|') !== '', true,
+   `and they are the post-quest ones: ${after ? JSON.stringify(after.pages.join(' / ')) : 'NONE'}`);
+is(hasFlag('brother_avenged'), true, 'the last stage set the world fact those lines hang off');
 
 // ── persistence ───────────────────────────────────────────────────────────
 const round = q.sanitizeQuests(JSON.parse(JSON.stringify(ps.quests)));
@@ -254,13 +268,17 @@ for (const [id, qq] of Object.entries(QUESTS)) {
     if ((paid.item | 0) !== (qq.reward.item | 0)) bad(`${tag}: paid item ${paid.item}, table says ${qq.reward.item}`);
   }
 
-  // Talking again must not pay twice, and must fall to the `after` lines.
+  // Talking again must not pay twice, and must not leave the player in silence.
   paid = null;
   const lastNpc = stages[stages.length - 1].at;
   const again = q.talkQuest(lastNpc.map, lastNpc.npc, (r) => { paid = r; });
   if (paid) bad(`${tag}: paid a second time`);
-  if (qq.after && qq.after[lastNpc.npc] && (!again || !again.length)) {
-    bad(`${tag}: declares after[${lastNpc.npc}] but says nothing once finished`);
+  if (again) bad(`${tag}: a finished quest still returns pages — the layer is gone`);
+  // ⛔ EVERY quest's last stage must set a flag, or there is nothing for the
+  // parting line to hang off and the giver silently reverts to their opening
+  // line for the rest of the save.
+  if (!(stages[stages.length - 1].sets || []).length) {
+    bad(`${tag}: the last stage sets no flag — nothing can mark the quest as over`);
   }
 
   ok(`${tag}: ${qq.startWord ? `ask ${qq.startWord} -> ` : ''}${trail.join(' -> ')} -> paid ${qq.reward.gil}g` +

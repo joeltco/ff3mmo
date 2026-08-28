@@ -1,3 +1,64 @@
+## 1.11.15 — 2026-08-28
+
+### Prose out of the server's table, and one resolver for what people say
+
+Phase 1 of the dialogue/quest refactor (`docs/DIALOGUE-QUEST-PLAN.md`). No new
+writing — this is the engine underneath it. The acceptance test was a **speech
+transcript diffed before and after**: `tools/audit-npc-talk.mjs --all` walks 14
+story beats x 55 placed people, and steps 1a-1c came back byte-identical.
+
+**`data/quests.js` is mechanics only, 529 -> 256 lines.** It was roughly 45%
+English while `api.js` and `economy-arbiter.js` booted from it — the process
+deciding whether a player gets paid was carrying the King's dialogue around.
+Every line now lives in the new client-only `src/data/script.js`. This was
+specified on 2026-08-25, deferred, and has been open since.
+
+**`src/speech.js` — one resolver.** The notice -> quest -> idle priority used to
+be inlined in twenty lines of `npc.js` and re-derived by every tool. Three
+re-derived it and drifted: two re-implemented the `{n}`/`{count}` progress-token
+fill, and one missed that a FINISHED quest shadows idle dialogue forever. Gates
+now ask `previewSpeech`, the same function the game runs with the mutating half
+removed, so a harness cannot pay a reward to find out what somebody says.
+
+**`also` became `voice`.** Same asides, keyed by PERSON instead of by stage, so
+one character's whole arc reads in order and a stage they have nothing for is a
+gap you can see on the page.
+
+**`after` is gone as a resolution layer** — and that fixes two shipped bugs.
+A quest's parting line outranked the NPC's own dialogue for the rest of the
+save, so an endgame variant an author wrote could never appear. Measured across
+all 384 consistent world states: **2 authored page sets were unreachable, now
+0.** A parting line is a fact about the WORLD, so every quest's last stage now
+sets a flag (`brother_avenged`, `road_cleared`, `daughter_home`) and the line is
+a flag-guarded variant on that person's own row.
+
+* **Sara no longer says she is going back for a Djinn that is dead.** At the
+  endgame she said *"I am still going back for that thing."* She now says *"The
+  ring did its work. I felt it go. Take me home, would you."*
+* **Cid's post-curse line is reachable.** It never was; `after.cid` stood in
+  front of it on every save.
+* Sara's `sara_found` variant was **deleted** — three lines that appeared in
+  none of the 384 states, shadowed by her own `voice` entry for that stage.
+
+### Gates
+
+* **`check-script-split`** — no prose in the file the server imports, and no
+  server module can reach the script. Walks the import closure transitively, so
+  `server.js -> ws-presence.js -> economy-arbiter.js -> script.js` fails too.
+  Proven by three reverts. Its first cut regexed the source and reported 33
+  "sentences" that were spans of code; it walks the loaded object instead.
+* **`check-speech-coverage`** — everybody a quest NAMES has a line at every
+  stage of it, and once it is over their line must have CHANGED. Carries a
+  draining allowlist of the gaps that exist today and fails BOTH ways: a new gap
+  blocks, and a listed gap that got fixed must be deleted. **Three came off it
+  immediately** — the hall servant, Sara and the King already had endgame
+  variants written and were simply being shadowed. **9 left, for Phase 3.**
+
+`check-words` caught the one real mistake in this pass: the King's new
+daughter-is-home variant did not contain the word DJINN, which he teaches, so
+LEARN would have offered a term he never spoke. The lines were rewritten, not
+the rule.
+
 ## 1.11.14 — 2026-08-27
 
 ### The King gives the canoe, and the canoe is an item

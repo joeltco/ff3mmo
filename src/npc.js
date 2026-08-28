@@ -48,10 +48,10 @@ import { msgState, showMsgBoxPages, dismissMsgBox } from './message-box.js';
 import { sendNetInvEvent, SERVER_ECONOMY, sendNetQuestClaim, setNetQuestResultHandler,
          sendNetInvStateRequest, nextChestTxnId } from './net.js';
 import { openWordMenu } from './word-menu.js';
-import { talkQuest, revertQuestHandIn } from './quests.js';
+import { revertQuestHandIn } from './quests.js';
+import { resolveSpeech } from './speech.js';
 import { QUESTS, QUEST_DONE } from './data/quests.js';
 import { hasFlag } from './story-flags.js';
-import { resolvePages } from './data/dialogue.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -935,28 +935,21 @@ export function talkToNpc(npc) {
     openShop(npc.shopId);
     return;
   }
-  // A quest giver says its quest line instead of its idle dialogue. Returns
-  // null when this NPC has no quest, so everyone else is unaffected. A pending
-  // reject notice outranks it — the player is owed an explanation before the
-  // hand-in is offered again.
-  const qPages = npc.key
-    ? (_takeQuestNotice(npc) || talkQuest(mapSt.currentMapId, npc.key, _grantQuestReward))
-    : null;
-  if (qPages && qPages.length) {
-    if (playerSprite) {
-      const pd = playerSprite.getDirection();
-      npc.talkFacing = pd === DIR_DOWN ? DIR_UP : pd === DIR_UP ? DIR_DOWN
-                     : pd === DIR_LEFT ? DIR_RIGHT : DIR_LEFT;
-    }
-    _sayThenOfferWords(npc, qPages);
-    return;
-  }
-  // ⭐ Idle lines may be STATE-DEPENDENT (data/dialogue.js) — resolved against
-  // the story flags, first match wins. A variant list with no unguarded default
-  // resolves to null, and an NPC with nothing to say stays silent rather than
-  // rendering `undefined`.
-  const idle = resolvePages(npc.dialogue, hasFlag);
-  if (!idle || idle.length === 0) return;
+  // ⭐ ONE RESOLVER. Which of notice / quest / idle answers, and in what order,
+  // is `speech.js` — not this function. It used to be inlined here, and every
+  // gate and transcript tool re-derived it; two of them re-implemented the
+  // progress-token fill and one missed that a FINISHED quest shadows idle
+  // dialogue forever, which is how a shipped line became unreachable.
+  //
+  // `apply` is null unless talking actually changes something, so a nag or an
+  // aside cannot pay a reward by accident.
+  const sp = resolveSpeech(mapSt.currentMapId, npc.key, npc, { notice: _takeQuestNotice(npc) });
+  if (!sp) return;
+  const pages = sp.apply ? sp.apply(_grantQuestReward) : sp.pages;
+  // A refused grant (a full pack) returns null and the beat must not happen —
+  // the player keeps the stage and the notice explains why.
+  if (!pages || !pages.length) return;
+
   // NPC turns to face the player. Player's facing = direction they walked
   // INTO the NPC, so the NPC's talk-facing is the opposite axis.
   if (playerSprite) {
@@ -966,7 +959,7 @@ export function talkToNpc(npc) {
     else if (pdir === DIR_LEFT)  npc.talkFacing = DIR_RIGHT;
     else if (pdir === DIR_RIGHT) npc.talkFacing = DIR_LEFT;
   }
-  _sayThenOfferWords(npc, idle);
+  _sayThenOfferWords(npc, pages);
 }
 
 // Show an NPC's lines, then hand off to the FF2-style ASK/LEARN menu if this

@@ -360,10 +360,22 @@ const sasuneNpc = (slot, extra = {}) => townNpc(SASUNE_BUNDLES, slot, extra);
 // his pages for every stage.
 export const UR_NPC_05 = urNpc(2, {
   romOffset: 0x01E210, wander: false, animate: true, dir: DIR_DOWN,
+  // ⭐ The first variant is what `QUESTS.ur_missing_brother.after` used to be.
+  // It moved here because a parting line is a fact about the world, not a
+  // property of an errand — and as a quest layer it outranked this NPC's own
+  // dialogue for the rest of the save, which is how two shipped lines elsewhere
+  // became unreachable. `brother_avenged` is set by the quest's last stage.
   dialogue: [
-    'You have the look',
-    'of someone who asks.',
-    'Ask, then.',
+    { when: 'brother_avenged', pages: [
+      'The cave is quieter now.',
+      'It will not bring him back.',
+      'But it is quieter.',
+    ] },
+    { pages: [
+      'You have the look',
+      'of someone who asks.',
+      'Ask, then.',
+    ] },
   ],
   // He will not offer the job unasked — the quest opens when you bring him the
   // word BROTHER, which ur_npc_09 teaches. See QUESTS.ur_missing_brother.
@@ -582,8 +594,14 @@ export const UR_TAVERN_DRINKER_C = interior(0x01E610, DIR_UP, [
   'Four! Look at us.',
 ]);
 export const UR_TAVERN_DRINKER_D = interior(0x01E110, DIR_DOWN, [
-  'Sit a while, warrior.',
-  "North road's cold.",
+  { when: 'road_cleared', pages: [
+    'They will not ride back.',
+    'But the road is ours.',
+  ] },
+  { pages: [
+    'Sit a while, warrior.',
+    "North road's cold.",
+  ] },
 ], {
   answers: {
     riders: [
@@ -863,10 +881,16 @@ export const CID = {
   wander: false,
   animate: true,
   fixedSpawn: true,
+  // ⛔ THESE THREE LINES REPLACE AN UNREACHABLE PAGE SET. This spec is only
+  // placed once `curse_lifted` holds, which only his own quest sets — and while
+  // that quest was `done`, `after.cid` outranked idle dialogue forever, so
+  // "That rock in Nelv keeps me here" could not be reached in any of the 384
+  // world states. The `after` pages are the ones a player actually saw, so they
+  // are the ones that survive.
   dialogue: [
-    'Cid, of Canaan.',
-    'That rock in Nelv',
-    'keeps me here.',
+    'Cid, of Canaan. Properly,',
+    'this time.',
+    'Fly her well.',
   ],
   answers: {
     djinn: [
@@ -1114,10 +1138,23 @@ const throneNpc = (romOffset, extra = {}) => ({
 
 /** King Sasune, cursed — a ghost on his own throne. Records $37 @(10,6). */
 export const SASUNE_KING_CURSED = throneNpc(0x01ED10, {
+  // ⭐ He hears about his daughter BEFORE the curse lifts — the two chains are
+  // independent, so the cursed King needs both lines. As a quest `after` this
+  // was one page set for every state at once.
+  // ⛔ EVERY VARIANT MUST SAY THE WORD HE TEACHES. `check-words` enforces it,
+  // and it caught this exact line: the first cut of the daughter variant read
+  // "She is home and furious. / Let her be furious." — no DJINN in it, so the
+  // ASK list would have offered LEARN on a term he never spoke.
   dialogue: [
-    'King Sasune. Or I was.',
-    'The Djinn made ghosts',
-    'of my whole house.',
+    { when: 'daughter_home', pages: [
+      'She is home and furious.',
+      'The Djinn still has us.',
+    ] },
+    { pages: [
+      'King Sasune. Or I was.',
+      'The Djinn made ghosts',
+      'of my whole house.',
+    ] },
   ],
   teaches: ['djinn'],
   answers: {
@@ -1146,9 +1183,16 @@ export const SASUNE_KING_CURSED = throneNpc(0x01ED10, {
 /** King Sasune, restored. Record $38 @(10,6) — bundle 0x1EF10, his alone. */
 export const SASUNE_KING = throneNpc(0x01EF10, {
   dialogue: [
-    'The Djinn is sealed.',
-    'Flesh again, all of us.',
-    'Sasune cannot repay this.',
+    { when: 'daughter_home', pages: [
+      'The Djinn is sealed and',
+      'she is home. Furious.',
+      'Let her be furious.',
+    ] },
+    { pages: [
+      'The Djinn is sealed.',
+      'Flesh again, all of us.',
+      'Sasune cannot repay this.',
+    ] },
   ],
   teaches: ['djinn'],
   answers: {
@@ -1296,16 +1340,24 @@ export const SARA = {
   wander: false,
   animate: true,
   fixedSpawn: true,
+  // ⛔ THE `sara_found` VARIANT IS GONE, and that is a measurement, not a trim.
+  // `tools/audit-dialogue-reach.mjs` walked all 384 consistent world states and
+  // it appeared in none: `sara_found` is set the moment the `found` stage
+  // advances, and from that instant until the quest closes her `voice` entry
+  // for the `return` stage outranks idle dialogue. It was three lines nobody
+  // could ever read. Its beat — "not going home while that thing is down
+  // there" — is carried by that voice line and by the `djinn_sealed` variant.
   dialogue: [
     { when: 'djinn_sealed', pages: [
       'The ring did its work.',
       'I felt it go.',
       'Take me home, would you.',
     ] },
-    { when: 'sara_found', pages: [
-      'I still have the ring.',
-      'I am not going home',
-      'while that thing is down there.',
+    // Was `QUESTS.sasune_missing_daughter.after.sara`.
+    { when: 'daughter_home', pages: [
+      'You told him, then.',
+      'I am still going back',
+      'for that thing.',
     ] },
     { pages: [
       'Sara. Of Castle Sasune.',

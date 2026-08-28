@@ -33,6 +33,9 @@ const SHOW_ALL = process.argv.includes('--all');
 const { QUESTS, QUEST_DONE } = await import('../src/data/quests.js');
 const { TOWN_NPCS, GENERATED_NPCS } = await import('../src/data/town-npcs.js');
 const { isFlag } = await import('../src/data/flags.js');
+// Prose (and therefore WHO a stage speaks to mid-stage) lives in data/script.js
+// since the split — data/quests.js is mechanics only and the server imports it.
+const { asideKeys } = await import('../src/data/script.js');
 
 /**
  * Who is standing on `mapId` given a story state.
@@ -102,7 +105,7 @@ for (const quest of Object.values(QUESTS)) {
     // ⭐ `also` speakers must be in THEIR room at this stage too — a mid-stage
     // aside nobody can hear is dialogue that was written and never reaches a
     // player. They are keyed by npcKey alone, so check every map they sit on.
-    for (const key of Object.keys(st.also || {})) {
+    for (const key of asideKeys(quest.id, st.id)) {
       const anywhere = [...TOWN_NPCS.keys(), ...GENERATED_NPCS.keys()].some((m) => placedOn(m, { quests: questsAtStage, flags }).includes(key));
       if (!anywhere) bad(`${quest.id}/${st.id}: also.${key} is placed nowhere while this stage is live`);
       else if (SHOW_ALL) ok(`${quest.id}/${st.id} aside ${key} — present`);
@@ -116,11 +119,10 @@ for (const quest of Object.values(QUESTS)) {
 
   // Once it is over, whoever the quest gives `after` lines to must be standing
   // somewhere — otherwise the pay-off line is unreachable.
-  for (const key of Object.keys(quest.after || {})) {
-    const anywhere = [...TOWN_NPCS.keys(), ...GENERATED_NPCS.keys()].some((m) => placedOn(m, { quests: questsAtStage, flags }).includes(key));
-    if (!anywhere) bad(`${quest.id}: after.${key} is placed nowhere once the quest is finished`);
-    else if (SHOW_ALL) ok(`${quest.id} after ${key} — present`);
-  }
+  // ⛔ The `after` check is gone with the layer. A quest's parting line lives on
+  // the NPC's own row as a flag-guarded variant now, so "is the speaker placed"
+  // is `check-npc-placement`'s question, and "does it ever show" is
+  // `audit-dialogue-reach`'s.
 
   // ⛔ Only claim the walk if it actually walked. A ✓ under two ✗ for the same
   // quest reads as "mostly fine", which is how a dead quest keeps looking alive.

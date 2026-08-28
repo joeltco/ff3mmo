@@ -34,12 +34,30 @@
  * not declared here does not exist.
  */
 export const FLAGS = {
+  // ── Ur ──────────────────────────────────────────────────────────────────
+  //
+  // ⭐ THESE EXIST BECAUSE `after` DIED. A quest's parting line used to be
+  // `quest.after[npcKey]`, a layer that outranked the NPC's own dialogue for
+  // the rest of the save — so an endgame idle variant an author wrote could
+  // never be seen (measured over all 384 world states: Cid's post-curse line
+  // and Sara's `sara_found` line were both unreachable). What somebody says
+  // forever after is a fact about the WORLD, which is what this table is for.
+  brother_avenged: {
+    text: 'The Altar Cave was thinned out for the man who lost his brother.',
+  },
+  road_cleared: {
+    text: 'The north road out of Ur has been cleared.',
+  },
+
   // ── The Sasune chain ────────────────────────────────────────────────────
   sara_found: {
     text: 'Princess Sara has been found.',
   },
   canoe_granted: {
     text: 'King Sasune has handed over the canoe.',
+  },
+  daughter_home: {
+    text: 'The King has been told his daughter is alive.',
   },
 
   // ── The Sealed Cave chain ───────────────────────────────────────────────

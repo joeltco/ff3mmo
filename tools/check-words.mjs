@@ -23,6 +23,9 @@ const { KEYWORDS } = await import('../src/data/keywords.js');
 const { allPageSets, isVariantList, hasDefault } = await import('../src/data/dialogue.js');
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 const { QUESTS } = await import('../src/data/quests.js');
+// Stage prose lives in data/script.js since the split — data/quests.js is
+// mechanics only, because the SERVER imports it.
+const { stagePages } = await import('../src/data/script.js');
 const { _nameToBytes } = await import('../src/text-utils.js');
 const { msgLineCount, MSG_MAX_LINES } = await import('../src/message-box.js');
 
@@ -155,7 +158,8 @@ for (const q of Object.values(QUESTS)) {
     err(`quest ${q.id} stage-0 NPC has no answers.${q.startWord} — the start word looks unanswerable in the ASK list`);
   }
   for (const part of ['offer', 'accepted', 'denied']) {
-    if (!Array.isArray(s0[part]) || !s0[part].length) err(`quest ${q.id} stage 0 is missing ${part} pages`);
+    const pages = stagePages(q.id, s0.id, part);
+    if (!Array.isArray(pages) || !pages.length) err(`quest ${q.id} stage 0 is missing ${part} pages`);
   }
 }
 

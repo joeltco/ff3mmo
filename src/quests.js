@@ -35,6 +35,12 @@ import { saveSlotsToDB } from './save-state.js';
 import { setFlag, clearFlag } from './story-flags.js';
 import { QUESTS, QUEST_DONE, stageById, stageIndex, firstStage, maxObjectiveCount,
          isLegalStage } from './data/quests.js';
+// ⛔ PROSE COMES FROM HERE, NOT FROM THE QUEST RECORD. `data/quests.js` is
+// imported by the SERVER (api.js, economy-arbiter.js) and now carries no
+// English at all; every page a quest makes somebody say lives in
+// `data/script.js`, which the server never touches. Gate:
+// `tools/check-script-split.mjs`.
+import { stagePages, asidePages } from './data/script.js';
 import { objectiveCount, objectiveMatches, isTalkObjective } from './quest-objectives.js';
 
 // ── state ─────────────────────────────────────────────────────────────────
@@ -93,12 +99,28 @@ const _at = (stage, mapId, npcKey) =>
 // quest must never shadow a live one — pre-v1.8.6 `talkQuest` returned on the
 // FIRST matching quest, so the first quest's `done` pages answered forever and a
 // second quest from the same giver was unreachable.
-const _RANK = { advance: 0, waiting: 1, offer: 2, aside: 3, after: 4 };
+// ⛔ THERE IS NO `after` RANK ANY MORE. A finished quest used to contribute an
+// `after` candidate that outranked the NPC's own dialogue for the rest of the
+// save — which made endgame idle variants unreachable (measured: 2 of them, in
+// all 384 world states). A finished quest now contributes NOTHING, and the
+// parting line is a flag-guarded variant on the person's own row. See
+// data/script.js's header.
+const _RANK = { advance: 0, waiting: 1, offer: 2, aside: 3 };
 
 /**
  * What does this NPC have to say about quests right now, and what would talking
- * to them do? Pure — reads state, writes nothing. `talkQuest` is the half that
+ * to them do? Pure — reads state, writes nothing. `applyTalk` is the half that
  * acts.
+ *
+ * ⭐ PAGES COME BACK TOKEN-FILLED. They used to be raw, with `talkQuest` doing
+ * the `{n}`/`{count}`/`{left}` substitution on the way out — which meant every
+ * tool that wanted to know what a player would READ had to re-implement `_fill`.
+ * Three of them did. Filling here makes "what does this say" one question with
+ * one answer.
+ *
+ * ⛔ The fill happens at RESOLVE time, before any mutation, which is the state
+ * the numbers must describe: "2 of 3 cleared" is the count as the player walks
+ * up, not after the stage advances.
  *
  * Returns `{ intent, quest, stage, pages }` or null.
  */
@@ -114,27 +136,59 @@ export function resolveTalk(mapId, npcKey) {
       // they neither answer nor block.
       const s0 = firstStage(quest);
       if (!quest.startWord && _at(s0, mapId, npcKey)) {
-        cand = { intent: 'offer', quest, stage: s0, pages: s0.offer };
+        cand = { intent: 'offer', quest, stage: s0, pages: stagePages(quest.id, s0.id, 'offer') };
       }
     } else if (entry.s === QUEST_DONE) {
-      const pages = quest.after && quest.after[npcKey];
-      if (pages) cand = { intent: 'after', quest, stage: null, pages };
+      // Finished. It has nothing further to say; the world does — through the
+      // flag its last stage set, read by this person's own dialogue variants.
+      cand = null;
     } else {
       const stage = _currentStage(quest, entry);
       if (stage && _at(stage, mapId, npcKey)) {
         cand = _stageMet(stage, entry)
-          ? { intent: 'advance', quest, stage, pages: stage.onAdvance }
-          : { intent: 'waiting', quest, stage, pages: stage.say };
-      } else if (stage && stage.also && stage.also[npcKey]) {
+          ? { intent: 'advance', quest, stage, pages: stagePages(quest.id, stage.id, 'onAdvance') }
+          : { intent: 'waiting', quest, stage, pages: stagePages(quest.id, stage.id, 'say') };
+      } else if (stage && asidePages(quest.id, stage.id, npcKey)) {
         // ⭐ The quest's OTHER people, mid-stage. Walking back to the King while
         // you are still looking for his daughter should not be silence.
-        cand = { intent: 'aside', quest, stage, pages: stage.also[npcKey] };
+        cand = { intent: 'aside', quest, stage, pages: asidePages(quest.id, stage.id, npcKey) };
       }
     }
 
-    if (cand && cand.pages && (!best || _RANK[cand.intent] < _RANK[best.intent])) best = cand;
+    if (cand && cand.pages) {
+      cand.pages = _fill(cand.pages, cand.stage, entry);
+      if (!best || _RANK[cand.intent] < _RANK[best.intent]) best = cand;
+    }
   }
   return best;
+}
+
+/**
+ * ACT on an already-resolved talk. Returns the pages to show, or null when a
+ * grant was refused and the beat must not happen.
+ *
+ * ⭐ SPLIT OUT OF `talkQuest` so the decision and the mutation are separable.
+ * `speech.js` needs to know what an NPC would say — and what pressing Z would
+ * DO — without doing it, because the gates and the transcript tools ask exactly
+ * that question and must never pay a reward to answer it.
+ *
+ * Only `offer` and `advance` change anything; `waiting` / `aside` / `after`
+ * say their line and leave.
+ */
+export function applyTalk(r, grantReward) {
+  if (!r) return null;
+  if (r.intent === 'offer') {
+    // An unguarded quest offers on sight, and taking it is the offer itself.
+    _startQuest(r.quest);
+    return r.pages;
+  }
+  if (r.intent === 'advance') return _advance(r.quest, r.stage, grantReward);
+  return r.pages;
+}
+
+/** Does acting on this talk mutate anything? `speech.js` reads this. */
+export function talkMutates(r) {
+  return !!r && (r.intent === 'offer' || r.intent === 'advance');
 }
 
 /**
@@ -143,18 +197,7 @@ export function resolveTalk(mapId, npcKey) {
  * (caller then falls back to the NPC's ordinary idle dialogue).
  */
 export function talkQuest(mapId, npcKey, grantReward) {
-  const r = resolveTalk(mapId, npcKey);
-  if (!r) return null;
-
-  if (r.intent === 'offer') {
-    // An unguarded quest offers on sight, and taking it is the offer itself.
-    _startQuest(r.quest);
-    return _fill(r.pages, r.stage, _entry(r.quest.id));
-  }
-  if (r.intent === 'advance') return _advance(r.quest, r.stage, grantReward);
-
-  // waiting / aside / after — say the line, change nothing.
-  return _fill(r.pages, r.stage, _entry(r.quest.id));
+  return applyTalk(resolveTalk(mapId, npcKey), grantReward);
 }
 
 /** Put a player onto a quest's SECOND stage — stage 0 is the offer itself. */
@@ -173,7 +216,8 @@ function _startQuest(quest) {
  */
 function _advance(quest, stage, grantReward) {
   const entry = _entry(quest.id);
-  const pages = _fill(stage.onAdvance, stage, entry);
+  // Already token-filled by `resolveTalk`, at the pre-advance count.
+  const pages = _fill(stagePages(quest.id, stage.id, 'onAdvance'), stage, entry);
 
   // ⭐ A STAGE MAY HAND SOMETHING OVER — the King's canoe, four stages before
   // the quest closes. Granted BEFORE the stage moves and before any flag is
@@ -266,9 +310,9 @@ export function askQuestWord(mapId, npcKey, wordId) {
     if (!_at(s0, mapId, npcKey)) continue;
     return {
       id: quest.id,
-      pages: _fill(s0.offer, s0, null),
-      accepted: _fill(s0.accepted, s0, null),
-      denied: _fill(s0.denied, s0, null),
+      pages:    _fill(stagePages(quest.id, s0.id, 'offer'), s0, null),
+      accepted: _fill(stagePages(quest.id, s0.id, 'accepted'), s0, null),
+      denied:   _fill(stagePages(quest.id, s0.id, 'denied'), s0, null),
     };
   }
   return null;

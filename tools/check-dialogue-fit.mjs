@@ -23,6 +23,8 @@ const { msgLineCount, MSG_MAX_LINES, MSG_MAX_CHARS } = await import('../src/mess
 const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
 const { allPageSets, isVariantList } = await import('../src/data/dialogue.js');
 const { QUESTS } = await import('../src/data/quests.js');
+// Prose moved out of the server's table — read it where it lives now.
+const { stagePages, asidePages, asideKeys } = await import('../src/data/script.js');
 
 let failed = 0, checked = 0;
 const check = (where, page) => {
@@ -76,19 +78,19 @@ const _expansions = (page, stage) => {
 for (const q of Object.values(QUESTS)) {
   for (const stage of q.stages || []) {
     for (const part of ['offer', 'accepted', 'denied', 'say', 'onAdvance']) {
-      for (const page of stage[part] || []) {
+      for (const page of stagePages(q.id, stage.id, part) || []) {
         for (const variant of _expansions(page, stage)) check(`quest ${q.id}.${stage.id}.${part}`, variant);
       }
     }
-    for (const [npcKey, pages] of Object.entries(stage.also || {})) {
-      for (const page of pages || []) {
+    for (const npcKey of asideKeys(q.id, stage.id)) {
+      for (const page of asidePages(q.id, stage.id, npcKey) || []) {
         for (const variant of _expansions(page, stage)) check(`quest ${q.id}.${stage.id}.also.${npcKey}`, variant);
       }
     }
   }
-  for (const [npcKey, pages] of Object.entries(q.after || {})) {
-    for (const page of pages || []) check(`quest ${q.id}.after.${npcKey}`, page);
-  }
+  // ⛔ No `after` block to walk: a quest's parting line is now a flag-guarded
+  // variant on the person's own row, and the TOWN_NPCS pass above already wraps
+  // every variant of every spec.
 }
 
 if (failed) {
