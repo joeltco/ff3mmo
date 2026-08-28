@@ -887,9 +887,13 @@ export function sendNetVaseSearch({ txnId, mapId, x, y, claim }) {
   return _send({ type: 'vase-search', txnId: txnId | 0, mapId: mapId | 0,
     x: x | 0, y: y | 0, claim: claim || null });
 }
-export function sendNetQuestClaim({ txnId, questId }) {
+// `stageId` claims a MID-CHAIN grant (a stage's own `item`) rather than the
+// quest's end reward. Ledgered separately — see `validateQuestClaim`.
+export function sendNetQuestClaim({ txnId, questId, stageId }) {
   if (!_helloed) return false;
-  return _send({ type: 'quest-claim', txnId: txnId | 0, questId: String(questId || '') });
+  const msg = { type: 'quest-claim', txnId: txnId | 0, questId: String(questId || '') };
+  if (stageId) msg.stageId = String(stageId);
+  return _send(msg);
 }
 export function setNetQuestResultHandler(fn) { _onQuestResult = typeof fn === 'function' ? fn : null; }
 export function setNetChestResultHandler(fn) { _onChestResult = typeof fn === 'function' ? fn : null; }

@@ -175,6 +175,19 @@ function _advance(quest, stage, grantReward) {
   const entry = _entry(quest.id);
   const pages = _fill(stage.onAdvance, stage, entry);
 
+  // ⭐ A STAGE MAY HAND SOMETHING OVER — the King's canoe, four stages before
+  // the quest closes. Granted BEFORE the stage moves and before any flag is
+  // set, because a full bag has to be able to stop the whole beat: advance
+  // first and the player has walked past the one chance to be given it.
+  //
+  // ⛔ THROUGH THE SAME VALIDATED CLAIM THE REWARD USES, keyed per stage
+  // (`questId#stageId` in `quest_claims`). A bare `addItem` here would be an
+  // unvalidated bag add under `SERVER_ECONOMY`, and the mirror's next push
+  // would take it straight back — the player watches the item vanish.
+  if (stage.item && typeof grantReward === 'function') {
+    if (grantReward({ item: stage.item }, quest.id, stage.id) === false) return null;
+  }
+
   for (const flag of stage.sets || []) {
     if (setFlag(flag)) _noteEvent('flag-set', flag);
   }

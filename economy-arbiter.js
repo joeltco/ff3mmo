@@ -251,6 +251,41 @@ export function validateQuestClaim(userId, slot, payload) {
   const quest = QUESTS[questId];
   if (!quest) return { ok: false, reason: 'unknown-quest' };
 
+  // ⭐ A STAGE MAY HAND SOMETHING OVER MID-CHAIN, not only the finished quest.
+  //
+  // Joel, 2026-08-27: *"canoe is a key item."* The King gives it when he asks
+  // you to go, which is stage `ask` — four stages before the quest closes. The
+  // reward path could not express that: it pays `quest.reward` once per
+  // (user, slot, QUEST), so an item handed over at a stage had no claim at all,
+  // and granting it client-side would be an unvalidated bag add that the
+  // mirror's next push takes straight back.
+  //
+  // ⛔ ITS OWN LEDGER ROW, AND NO SCHEMA CHANGE TO GET ONE. `quest_claims`
+  // is keyed (user_id, slot, quest_id TEXT) — a stage claim keys
+  // `questId#stageId`, which cannot collide with the plain `questId` the end
+  // reward uses. One payout per stage, replay rejected, same as the reward.
+  //
+  // ⛔ NO GIL FROM A STAGE. Gil is what a replay is worth farming; a stage grant
+  // is a story object handed over once. Items only, deliberately.
+  const stageId = payload.stageId ? String(payload.stageId) : '';
+  if (stageId) {
+    const stage = (quest.stages || []).find((s) => s.id === stageId);
+    if (!stage) return { ok: false, reason: 'unknown-stage' };
+    const sItem = stage.item | 0;
+    if (sItem <= 0) return { ok: false, reason: 'stage-grants-nothing' };
+    if (!ITEMS.get(sItem)) return { ok: false, reason: 'bad-reward-item' };
+    const key = `${questId}#${stageId}`;
+    if (questClaimedAt(userId, slot, key) != null) {
+      return { ok: false, reason: 'already-claimed' };
+    }
+    const mirror = mirrorReadFullState(userId, slot);
+    const inv = mirror.inventory || {};
+    const have = (inv[sItem] | 0) > 0;
+    if (!have && Object.keys(inv).length >= INV_CAP) return { ok: false, reason: 'inv-full' };
+    return { ok: true, questId: key, gil: 0, itemId: sItem,
+             events: [{ kind: 'add', itemId: sItem, qty: 1, source: 'quest' }] };
+  }
+
   if (questClaimedAt(userId, slot, questId) != null) {
     return { ok: false, reason: 'already-claimed' };
   }

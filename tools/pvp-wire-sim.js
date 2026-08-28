@@ -3291,6 +3291,64 @@ async function suiteWire() {
     _testHooks.setServerEconomy(false);
   });
 
+  await asyncTest('A quest STAGE can hand over an item, once (the King\'s canoe)', async () => {
+    // ⛔ ITS OWN TEST AND ITS OWN USER, because `quest-claim` is capped at 4 per
+    // bucket (`PER_KIND_RATES`). Folded into the hand-in test above it shared
+    // that bucket with three claims already spent, and the last two sends came
+    // back with no frame at all — which reads exactly like a server bug.
+    _testHooks.setServerEconomy(true);
+    _testEnsureUser(3027);
+    const ws = await connectClient(port, 3027, { name: 'StageGr', jobIdx: 0,
+      level: 1, palIdx: 0, hp: 50, maxHP: 50, agi: 5 });
+    ws.send(JSON.stringify({ type: 'slot', slot: 0 }));
+    await new Promise(r => setTimeout(r, 30));
+    const gilOf = (m) => (m.econ ? (m.econ.gil | 0) : 0);
+    // ⭐ A MID-CHAIN STAGE GRANT — the King's canoe, handed over at stage `ask`,
+    // four stages before this quest closes. It is paid through this same claim
+    // and ledgered as `questId#stageId`, so it must: land in the mirror, reject
+    // its own replay, and NOT consume the end reward's ledger row.
+    //
+    // Joel, 2026-08-27: *"THE POCKET CANOE IS A FUCKING ITEM."* It is one now;
+    // this is what stops it being an item that vanishes on the next mirror push.
+    const KING = QUESTS.sasune_missing_daughter;
+    const askStage = KING.stages.find(s => s.id === 'ask');
+    assertEqual(!!askStage.item, true, 'the King no longer hands over an item');
+    _testQuestClaimsClear(3027, 0);
+    const pre = _testMirrorRead(3027, 0);
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 10,
+      questId: 'sasune_missing_daughter', stageId: 'ask' }));
+    const g1 = await once(ws, m => m.type === 'quest-result' && m.txnId === 10, 1000);
+    assertEqual(g1.status, 'ok', 'the stage grant was rejected: ' + g1.reason);
+    const got = _testMirrorRead(3027, 0);
+    assertEqual(got.inv.some(r => r.item_id === askStage.item && r.qty > 0), true,
+      'the canoe never reached the mirror — the item would vanish on the next push');
+    assertEqual(gilOf(got), gilOf(pre), 'a stage grant paid gil; stages hand over items only');
+
+    // Replay: rejected, exactly like the end reward's.
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 11,
+      questId: 'sasune_missing_daughter', stageId: 'ask' }));
+    const g2 = await once(ws, m => m.type === 'quest-result' && m.txnId === 11, 1000);
+    assertEqual(g2.status, 'rejected', 'the canoe can be claimed twice');
+    assertEqual(g2.reason, 'already-claimed', 'wrong reject reason: ' + g2.reason);
+
+    // ⛔ AND IT DID NOT SPEND THE QUEST'S OWN LEDGER ROW. `questId#stageId`
+    // must not collide with the bare `questId` the end reward is keyed on —
+    // if it did, taking the canoe would silently forfeit the 500 gil.
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 12, questId: 'sasune_missing_daughter' }));
+    const g3 = await once(ws, m => m.type === 'quest-result' && m.txnId === 12, 1000);
+    assertEqual(g3.status, 'ok', 'the stage claim consumed the end reward: ' + g3.reason);
+
+    // A stage that grants nothing cannot be milked for one.
+    ws.send(JSON.stringify({ type: 'quest-claim', txnId: 13,
+      questId: 'sasune_missing_daughter', stageId: 'errand' }));
+    const g4 = await once(ws, m => m.type === 'quest-result' && m.txnId === 13, 1000);
+    assertEqual(g4.status, 'rejected', 'a stage with no item paid out');
+    assertEqual(g4.reason, 'stage-grants-nothing', 'wrong reject reason: ' + g4.reason);
+    _testQuestClaimsClear(3027, 0);
+
+    ws.close();
+  });
+
   await asyncTest('Dungeon chests are NOT server-tracked (regen by design, v1.7.789)', async () => {
     _testHooks.setServerEconomy(true);
     _testEnsureUser(3024);

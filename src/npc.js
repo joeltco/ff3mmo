@@ -763,8 +763,21 @@ function _walkPhase(npc) {
 // Quest reward payout. Routed through the same grantGil / grantExp the battle
 // rewards use, so the server's inventory mirror sees it the way it sees any
 // other gain rather than through a second, unvalidated path.
-function _grantQuestReward(reward, questId) {
+function _grantQuestReward(reward, questId, stageId) {
   if (!reward) return;
+  // ⭐ A MID-CHAIN STAGE GRANT. Items only — no gil, no exp, no end-of-quest
+  // claim — and it returns FALSE when the bag is full so `_advance` can leave
+  // the player on the stage instead of walking them past the hand-over.
+  if (stageId) {
+    if (!reward.item) return true;
+    if (addItem(reward.item, 1) <= 0) {
+      _questNotice = { questId, pages: ['Your pack is full.', 'Come back for it.'] };
+      return false;
+    }
+    if (SERVER_ECONOMY) sendNetQuestClaim({ txnId: nextChestTxnId(), questId, stageId });
+    else sendNetInvEvent('add', reward.item, 1, 'quest');
+    return true;
+  }
   // The item comes FIRST because a full bag is the one failure worth stopping
   // for, and it is knowable right here — addItem returns 0 when the bag is
   // full. The server applies a claim all-or-nothing (economy-arbiter.js

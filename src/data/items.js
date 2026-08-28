@@ -200,6 +200,13 @@ export const ITEMS = new Map([
   [0x96, { type: 'armor', subtype: 'arms', def: 9, evade: 15, mdef: 7, sResist: 0x62, price: 30000, jobs: Mk|Ni }],
   [0x97, { type: 'armor', subtype: 'arms', def: 10, evade: 15, mdef: 10, price: 50000, jobs: On|Fi|Rw|Kn|Dr|Vi|Mk|Ni }],
   [0x98, { type: 'key', price:   100 }],
+  // ⭐ THE CANOE. Joel, 2026-08-27: *"canoe is a key item."* FF3's own item
+  // table has no boat — `0xa5` is a genuine gap in it ("not an item" in
+  // docs/FF3-ITEMS.md) — so the name is FF1's, which carries `CANOE` as key
+  // item 0x11 (docs/FF1-ITEMS.md). Borrowing across the three cartridges is
+  // what this game already does for music, SFX and sprites; the id is ours.
+  // Price 0 and `key` makes it unsellable, which `check-shops` enforces.
+  [0xa5, { type: 'key', price:     0 }],
   [0x99, { type: 'key', price:   150 }],
   [0x9a, { type: 'key', price:     0 }],
   [0x9b, { type: 'key', price:     0 }],
@@ -393,7 +400,7 @@ export const ITEM_NAMES_SHRINES = new Map([
   [0x9b, 'Eye'],      [0x9c, 'TimeGear'], [0x9d, 'EurekaKey'],
   [0x9e, 'WindFang'], [0x9f, 'FireFang'], [0xa0, 'WaterFang'],
   [0xa1, 'EarthFang'],[0xa2, 'Lute'],     [0xa3, 'SylxKey'],
-  [0xa4, 'MidgBread'],
+  [0xa4, 'MidgBread'], [0xa5, 'Canoe'],
   // Consumables
   [0xa7, 'HiPotion'], [0xa9, 'FenixDown'],[0xaa, 'Soft'],     [0xab, 'MaidKiss'],
   [0xac, 'EchoHerb'], [0xad, 'LuckMallet'],[0xae, 'Eyedrop'],

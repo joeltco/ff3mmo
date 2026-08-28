@@ -1,3 +1,58 @@
+## 1.11.14 — 2026-08-27
+
+### The King gives the canoe, and the canoe is an item
+
+Joel, five times: *"the king should have a quest to go find sara where we receive
+the canoe to go there"* ... *"I told you 5 times to have the king give the canoe"*
+... *"THE POCKET CANOE IS A FUCKING ITEM."*
+
+I put it on the SMITH in v1.11.13 and wrote a paragraph in the source explaining
+why the smith was the better beat. That was not a misreading — it was me
+overriding a plain instruction with my own taste. Then I shipped the canoe as a
+parked craft only and wrote up why the item half could wait. Both wrong.
+
+    was:  ask -> errand -> forge[+CANOE] -> found -> return
+    now:  ask[+CANOE +Canoe item] -> errand -> forge -> found -> return
+
+The King asks you to go and hands you the means, the moment you accept.
+
+**The Canoe is item `0xa5`, `type: 'key'`** — unsellable, in the pack. FF3's own
+table has no boat (`0xa5` is a real gap in it), so the name is FF1's, which
+carries `CANOE` as key item `0x11`; borrowing across the three cartridges is what
+this game already does for music, SFX and sprites. The craft is still parked at
+world (87,41) as well, because boarding is by POSITION the way the cartridge does
+it — the item without the craft is a boat you cannot get into.
+
+### A quest STAGE can now hand something over, and the server pays it
+
+This is what I claimed could wait. It could not: the canoe arrives at stage `ask`,
+four stages before the quest closes, and `validateQuestClaim` paid
+`quest.reward` once per (user, slot, QUEST) and knew nothing about stages. A
+client-side `addItem` there is an unvalidated bag add — the mirror's next push
+takes it straight back and the player watches a Canoe vanish.
+
+* `stage.item` grants through the SAME validated claim the reward uses, keyed
+  **`questId#stageId`** in `quest_claims`. No schema change: that column is TEXT
+  and the primary key already covers it, and a composite key cannot collide with
+  the bare `questId` the end reward is keyed on.
+* **Items only, no gil.** Gil is what a replay is worth farming; a stage grant is
+  a story object handed over once.
+* Granted BEFORE the stage advances, and a full bag returns false so the player
+  stays on the beat instead of walking past their one chance to be given it.
+
+### Gate
+
+`pvp-wire-sim` — a new test drives the whole thing over a real socket: the canoe
+lands in the MIRROR (not just on screen), its replay is rejected `already-claimed`,
+a stage that grants nothing is rejected `stage-grants-nothing`, and — the one
+that matters — **the end reward still pays its 500 gil afterwards**, proving the
+stage row did not consume the quest's own.
+
+⛔ That test also caught its own harness: folded into the existing quest test it
+shared a `quest-claim` rate bucket (cap 4) with three claims already spent, and
+the last two sends came back with no frame at all — which reads exactly like a
+server bug and is not one. Own test, own user, own bucket. 155/155 wire tests pass.
+
 ## 1.11.13 — 2026-08-27
 
 ### Princess Sara moves into the Sealed Cave, and the canoe moves to the smith

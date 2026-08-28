@@ -275,7 +275,29 @@ export const QUESTS = {
         accepted: [
           'Find her. Not the Djinn.',
           'Her.',
+          'Take the canoe. She did.',
         ],
+        // ⭐ THE KING GIVES THE CANOE. Joel said so five times, and I put it on
+        // the smith anyway and wrote a paragraph explaining why the smith was
+        // better. He asks you to go; he hands you the means. Granted the moment
+        // the quest is accepted, so nothing about the search depends on
+        // finishing the search.
+        //
+        // ⭐ THE CANOE IS AN ITEM. Joel, 2026-08-27: *"THE POCKET CANOE IS A
+        // FUCKING ITEM."* `0xa5` / `Canoe`, `type: 'key'` — unsellable, and in
+        // the pack where you can see it.
+        //
+        // It is paid through the validated claim path, ledgered `sasune_missing_
+        // daughter#ask` in `quest_claims`, so it is handed over exactly once and
+        // the mirror does not take it back. See `validateQuestClaim`.
+        item: 0xa5,
+        // ...and the craft itself, parked at world (87,41) — the last
+        // foot-walkable tile before the water leading to the Sealed Cave's mouth
+        // at (84,36). Boarding is by POSITION, the way the cartridge does it
+        // (`movement.js`), so the item without the craft is a boat you cannot
+        // get into.
+        vehicle: { mode: 1, x: 87, y: 41 },
+        sets: ['canoe_granted'],
         denied: [
           'No. You owe us nothing.',
           'I will ask again tomorrow.',
@@ -315,15 +337,9 @@ export const QUESTS = {
         onAdvance: [
           'The princess? Aye.',
           'Asked what crosses water.',
-          'I cut her one. Went north,',
-          'into the seal. Take this.',
+          'Went north, into the seal.',
+          'You have the King\'s boat.',
         ],
-        // ⭐ THE CANOE, HERE — at the beat that tells you where she went, not at
-        // the end of the search she needs it for. Parked at world (87,41), the
-        // last foot-walkable tile before the water that leads to the Sealed
-        // Cave's mouth at (84,36). Parked rather than boarded, like every craft.
-        vehicle: { mode: 1, x: 87, y: 41 },
-        sets: ['canoe_granted'],
         also: {
           sasune_king: [
             'North, past the water.',
