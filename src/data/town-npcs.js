@@ -1402,10 +1402,12 @@ export const TOWN_NPCS = new Map([
     // native 0x1DF10 map 10 already loads. Kazus cuts the mythril (script
     // 0x231), so the man who made Sara's ring is the lead that points north.
     { key: 'kazus_smith', x: 22, y: 12, spec: KAZUS_SMITH },
-    // ⭐ PRINCESS SARA — ROM record $21 @(15,20), open ground west of the inn.
-    // See the SARA spec for why she is here and not in her tower: map 174 loads
-    // no townsfolk bundle at all (measured), so nobody can be drawn there.
-    { key: 'sara', x: 15, y: 20, spec: SARA },
+    // ⛔ PRINCESS SARA IS NOT IN KAZUS ANY MORE — see GENERATED_NPCS below. She stood on ROM record $21
+    // @(15,20) because the quest's canoe used to be its final REWARD, so the
+    // Sealed Cave was unreachable until after she was found and she could not be
+    // put there. Joel, 2026-08-27: *"why is sara in kazus?!"* — the canoe moved
+    // to the smith's stage instead, and she is where she said she was going.
+    // Placed by `placeSaraInExitChamber` on the Cave of Seals' floor 1.
   ]],
   // Coordinates MEASURED from the map's largest connected room (63 tiles,
   // x2-6 / y16-20). Map 12's own ROM roster coords are sealed pockets —
@@ -1548,4 +1550,22 @@ export const TOWN_NPCS = new Map([
     { key: 'ur_npc_0e', x: 15, y: 22, spec: UR_NPC_0E },   // wanders
     { key: 'ur_npc_0f', x: 21, y: 17, spec: UR_NPC_0F },
   ]],
+]);
+
+
+// ── NPCs ON GENERATED MAPS ────────────────────────────────────────────────
+//
+// `TOWN_NPCS` pairs a person with a TILE, which only works on a map that is the
+// same every time. A dungeon floor is regenerated on every entry, so there is no
+// tile to write down — the placer finds one at load time from something stable
+// on the map (Sara: the `PASSAGE_ENTRY` that marks her chamber).
+//
+// ⛔ IT STILL HAS TO BE DECLARED SOMEWHERE THE GATES CAN READ. `check-quest-
+// stages` asks "is the person you need in the room" by looking them up in
+// `TOWN_NPCS`, and a person placed by a function in `npc.js` is invisible to it
+// — the quest would read as unstartable while being perfectly fine, or, far
+// worse, the reverse. This is that declaration: same shape, no coordinates.
+export const GENERATED_NPCS = new Map([
+  // The Cave of Seals, floor 1 — the exit chamber the boulder opens.
+  [2001, [{ key: 'sara', spec: SARA, where: 'floor-1 exit chamber' }]],
 ]);

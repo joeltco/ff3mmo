@@ -31,7 +31,7 @@ const bad = (m) => { console.error(`  ✗ ${m}`); failed++; };
 const SHOW_ALL = process.argv.includes('--all');
 
 const { QUESTS, QUEST_DONE } = await import('../src/data/quests.js');
-const { TOWN_NPCS } = await import('../src/data/town-npcs.js');
+const { TOWN_NPCS, GENERATED_NPCS } = await import('../src/data/town-npcs.js');
 const { isFlag } = await import('../src/data/flags.js');
 
 /**
@@ -45,7 +45,12 @@ const { isFlag } = await import('../src/data/flags.js');
 function placedOn(mapId, { quests = {}, flags = {} } = {}) {
   const questDone = (id) => !!quests[id] && quests[id].s === QUEST_DONE;
   const flag = (id) => !!flags[id];
-  return (TOWN_NPCS.get(mapId) || [])
+  // ⛔ BOTH TABLES. A person on a GENERATED map has no tile to write in
+  // `TOWN_NPCS`, so they live in `GENERATED_NPCS` instead — and a gate that
+  // reads only the first one calls them missing. That is how this check first
+  // reported `sasune_missing_daughter/found` as unstartable on a chain that
+  // works: Sara stands in the Cave of Seals, which is carved fresh every entry.
+  return [...(TOWN_NPCS.get(mapId) || []), ...(GENERATED_NPCS.get(mapId) || [])]
     .filter((n) => !n.when || n.when(questDone, flag))
     .map((n) => n.key);
 }
@@ -85,8 +90,9 @@ for (const quest of Object.values(QUESTS)) {
     else {
       bad(`${label} — NOT PLACED. Room holds: ${room.join(', ') || '(nobody)'}`);
       // Say WHY, because "not placed" without the reason is a scavenger hunt.
-      const row = (TOWN_NPCS.get(st.at.map) || []).find((n) => n.key === st.at.npc);
-      if (!row) console.error(`      ${st.at.npc} is not in TOWN_NPCS[${st.at.map}] at all`);
+      const row = [...(TOWN_NPCS.get(st.at.map) || []), ...(GENERATED_NPCS.get(st.at.map) || [])]
+        .find((n) => n.key === st.at.npc);
+      if (!row) console.error(`      ${st.at.npc} is in neither TOWN_NPCS[${st.at.map}] nor GENERATED_NPCS[${st.at.map}]`);
       else if (row.when) {
         console.error(`      it has a \`when\` predicate that is false at this point in the story.`);
         console.error(`      state here: quests=${JSON.stringify(questsAtStage)} flags=${JSON.stringify(flags)}`);
@@ -97,7 +103,7 @@ for (const quest of Object.values(QUESTS)) {
     // aside nobody can hear is dialogue that was written and never reaches a
     // player. They are keyed by npcKey alone, so check every map they sit on.
     for (const key of Object.keys(st.also || {})) {
-      const anywhere = [...TOWN_NPCS.keys()].some((m) => placedOn(m, { quests: questsAtStage, flags }).includes(key));
+      const anywhere = [...TOWN_NPCS.keys(), ...GENERATED_NPCS.keys()].some((m) => placedOn(m, { quests: questsAtStage, flags }).includes(key));
       if (!anywhere) bad(`${quest.id}/${st.id}: also.${key} is placed nowhere while this stage is live`);
       else if (SHOW_ALL) ok(`${quest.id}/${st.id} aside ${key} — present`);
     }
@@ -111,7 +117,7 @@ for (const quest of Object.values(QUESTS)) {
   // Once it is over, whoever the quest gives `after` lines to must be standing
   // somewhere — otherwise the pay-off line is unreachable.
   for (const key of Object.keys(quest.after || {})) {
-    const anywhere = [...TOWN_NPCS.keys()].some((m) => placedOn(m, { quests: questsAtStage, flags }).includes(key));
+    const anywhere = [...TOWN_NPCS.keys(), ...GENERATED_NPCS.keys()].some((m) => placedOn(m, { quests: questsAtStage, flags }).includes(key));
     if (!anywhere) bad(`${quest.id}: after.${key} is placed nowhere once the quest is finished`);
     else if (SHOW_ALL) ok(`${quest.id} after ${key} — present`);
   }

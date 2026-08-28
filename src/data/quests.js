@@ -229,13 +229,22 @@ export const QUESTS = {
   // opens NEITHER cave, because both mouths carry tile byte1 $9e and bit 4 is
   // the flight barrier. The canoe is the only key that fits the lock we have.
   //
-  // ⛔ SO SARA CANNOT BE IN THE CAVE. The cave is behind the canoe that finding
-  // her grants. She is in Kazus, which is where her ring was cut (`0x231`) and
-  // where `0x245` has her going — and her ring is why the curse has not taken
-  // her.
+  // ⛔ THIS BLOCK USED TO SAY "SO SARA CANNOT BE IN THE CAVE", AND IT HAD THE
+  // ARGUMENT BACKWARDS. It reasoned: the cave is behind the canoe, the canoe is
+  // this quest's REWARD, therefore she must be somewhere else — and parked her
+  // in Kazus. Joel, 2026-08-27: *"the king should have a quest to go find sara
+  // where we receive the canoe to go there.... why is sara in kazus?!"*
+  //
+  // The canoe's TIMING was the thing that should have moved, not the princess. A
+  // reward that arrives after the search cannot be the means of the search; it
+  // has to arrive at the beat that tells you where she went. So the smith — the
+  // man who cut her ring and was asked "what crosses water" — is now who puts a
+  // craft in your hands, and she is where she said she was going.
   //
   // The walk: gate -> throne -> the one servant who was outside -> the smith who
-  // made the ring -> the princess. Four rooms, two towns, every beat a lead.
+  // made the ring AND the boat -> north across the water -> the Sealed Cave, and
+  // she is past its boulder, one floor down. Four leads, two towns, and the last
+  // one is a dungeon rather than a doorway.
   sasune_missing_daughter: {
     id: 'sasune_missing_daughter',
 
@@ -248,7 +257,10 @@ export const QUESTS = {
     // foot-walkable tile before the four water tiles that lead to the Sealed
     // Cave's mouth at (84,36). Parked rather than boarded, like every craft —
     // you walk out to it and step in.
-    reward: { gil: 500, exp: 200, vehicle: { mode: 1, x: 87, y: 41 } },
+    // ⛔ NO `vehicle` HERE ANY MORE — it moved to the `forge` stage. A craft on
+    // the reward is granted by `_grantVehicle` only when the LAST stage closes,
+    // which is exactly what made the cave unreachable until after the search.
+    reward: { gil: 500, exp: 200 },
 
     stages: [
       {
@@ -303,27 +315,37 @@ export const QUESTS = {
         onAdvance: [
           'The princess? Aye.',
           'Asked what crosses water.',
-          'She never left. Look west',
-          'of the inn.',
+          'I cut her one. Went north,',
+          'into the seal. Take this.',
         ],
+        // ⭐ THE CANOE, HERE — at the beat that tells you where she went, not at
+        // the end of the search she needs it for. Parked at world (87,41), the
+        // last foot-walkable tile before the water that leads to the Sealed
+        // Cave's mouth at (84,36). Parked rather than boarded, like every craft.
+        vehicle: { mode: 1, x: 87, y: 41 },
+        sets: ['canoe_granted'],
         also: {
           sasune_king: [
-            'Kazus, then. Of course.',
-            'The ring was cut there.',
+            'North, past the water.',
+            'She took a boat, not a road.',
           ],
         },
       },
       {
+        // ⭐ IN THE SEALED CAVE, past the boulder on its second floor — map 2001
+        // is the Cave of Seals' floor 1 (`base` 2000). She is behind the wall
+        // that boulder opens, in the chamber the way down is in, so finding her
+        // and finding the way deeper are the same walk.
         id: 'found',
-        at: { map: 10, npc: 'sara' },
+        at: { map: 2001, npc: 'sara' },
         onAdvance: [
           'Sara. Of Castle Sasune.',
-          'Do not look so relieved.',
-          'I got as far as the water.',
+          'You are late, and I am',
+          'not going back up yet.',
         ],
         sets: ['sara_found'],
         also: {
-          kazus_smith: ['West of the inn.', 'She has not moved.'],
+          kazus_smith: ['Past the water. She had', 'the ring and my boat.'],
         },
       },
       {
@@ -334,12 +356,11 @@ export const QUESTS = {
           'Say it plainly.',
         ],
         onAdvance: [
-          'Alive. In that town.',
-          'Then take this.',
-          'It folds. It floats.',
-          'It is what she lacked.',
+          'Alive. Under the ground.',
+          'Of course she is.',
+          'She has her mother\'s',
+          'contempt for stairs.',
         ],
-        sets: ['canoe_granted'],
         also: {
           sara: ['Tell him yourself.', 'He will not believe me.'],
         },

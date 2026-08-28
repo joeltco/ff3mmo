@@ -63,11 +63,11 @@ import { specWithRomFlags, makeCanRoamFrom } from './data/npc-flags.js';
 const _canRoamFrom = makeCanRoamFrom(isWalkableForNpc, MIN_OPEN_NEIGHBOURS);
 import { OPENING_ELDER, OPENING_LEFT_ATTENDANT, OPENING_RIGHT_ATTENDANT, OPENING_INTRO } from './data/opening-scene.js';
 import { transSt } from './transitions.js';
-import { TOWN_NPCS } from './data/town-npcs.js';
+import { TOWN_NPCS, SARA } from './data/town-npcs.js';
 // The map is the authority on how it colours people — see data/npc-palette.js.
 // Node-clean and shared with the gate so the rule lives in exactly one place.
 import { mapPalettesForSpec } from './data/npc-palette.js';
-import { isOpenAreaTile, isWalkableForNpc, MIN_OPEN_NEIGHBOURS } from './data/npc-walk-area.js';
+import { isOpenAreaTile, isWalkableForNpc, MIN_OPEN_NEIGHBOURS, findExitChamberSpot } from './data/npc-walk-area.js';
 import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
@@ -339,6 +339,33 @@ export function placeMoogleAtCaveCenter(mapData) {
     }
   }
   return false;
+}
+
+/**
+ * Princess Sara, standing in the Cave of Seals' floor-1 exit chamber.
+ *
+ * Joel, 2026-08-27: *"we gotta add a standing princess Sarah npc in the f1
+ * boulder exit chamber."*
+ *
+ * ⛔ FOUND FROM THE PASSAGE TILE, NOT FROM COORDINATES. This floor is generated
+ * fresh on every entry — there is no fixed spot to put her on, and a literal
+ * would land her in rock on most seeds. `boulder-chamber` puts its way down
+ * (`PASSAGE_ENTRY`, $6a) inside the exit chamber, so that tile IS the chamber:
+ * spiral out from it and take the first open floor. Same technique
+ * `placeMoogleAtCaveCenter` uses on floor 0, for the same reason.
+ *
+ * ⛔ AND NOT ON THE PASSAGE'S OWN APPROACH. She is not walkable, so standing her
+ * on the tile you step onto to go down would seal the floor — the same class of
+ * bug as a chest on a boulder's only approach. The search starts at radius 2.
+ *
+ * @param {object} mapData  the generated floor, as returned by `generateFloor`
+ * @returns {boolean} whether she was placed
+ */
+export function placeSaraInExitChamber(mapData) {
+  const spot = findExitChamberSpot(mapData);
+  if (!spot) return false;
+  addSceneNpc('sara', spot.x, spot.y, SARA);
+  return true;
 }
 
 // Map 7 (new-game spawn) opening scene: elder facing south, two

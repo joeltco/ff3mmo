@@ -44,7 +44,18 @@ import { DIR_DOWN } from './sprite.js';
 import { sprite } from './player-sprite.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { clearFlameSprites, rebuildFlameSprites } from './flame-sprites.js';
-import { clearNpcs, placeMoogleAtCaveCenter, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
+import { clearNpcs, placeMoogleAtCaveCenter, placeSaraInExitChamber, placeOpeningScene, placeTownNpcs, addBlackMageShopkeeper, addMageShopkeeper, addBossNpc, addCrystalNpc, getLandTurtleFrames, setBossFrames, getBossFrames } from './npc.js';
+import { QUESTS } from './data/quests.js';
+
+// ⛔ READ OFF THE QUEST, NOT WRITTEN TWICE. The floor Sara stands on and the
+// floor the quest sends you to are the same fact; a literal here would be a
+// second copy of it, free to drift the day the stage moves. `check-quest-stages`
+// asks whether the person you need is in the room — this is what makes the
+// answer true by construction rather than by coincidence.
+const SARA_MAP_ID = (() => {
+  const st = (QUESTS.sasune_missing_daughter?.stages || []).find((s) => s.id === 'found');
+  return st && st.at ? st.at.map : -1;
+})();
 import { transSt, topBoxSt } from './transitions.js';
 import { getBattleBg } from './battle-bg.js';
 import { resolveBackdrop } from './data/backdrops.js';
@@ -225,6 +236,11 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   clearFlameSprites();
   clearNpcs();
   if (floorIndex === 0) placeMoogleAtCaveCenter(result);
+  // ⭐ PRINCESS SARA, in the Cave of Seals' floor-1 exit chamber — the room the
+  // boulder opens. Keyed off the MAP ID the quest names (`sasune_missing_
+  // daughter`'s `found` stage is `map: 2001`), not off a floor index, so the two
+  // cannot drift apart.
+  if (mapId === SARA_MAP_ID) placeSaraInExitChamber(result);
   // Boss is now an NPC rendered through `drawNpcs`. Keep `mapSt.bossSprite`
   // as a no-frames presence flag for the existing battle-trigger / collision
   // checks in movement.js + battle code.

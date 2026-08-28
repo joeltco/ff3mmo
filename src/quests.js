@@ -179,6 +179,15 @@ function _advance(quest, stage, grantReward) {
     if (setFlag(flag)) _noteEvent('flag-set', flag);
   }
 
+  // ⭐ A STAGE MAY PARK A CRAFT, not just the finished quest.
+  //
+  // Joel, 2026-08-27: *"the king should have a quest to go find sara where we
+  // receive the canoe to go there."* The canoe used to be the quest's REWARD, so
+  // it arrived only after Sara was found — which is why she could not be in the
+  // Sealed Cave the canoe exists to reach. The craft has to arrive mid-chain,
+  // at the beat that tells you where she went.
+  if (stage.vehicle) _parkCraft(stage.vehicle);
+
   const idx = stageIndex(quest, stage.id);
   const next = (quest.stages || [])[idx + 1];
   if (next) {
@@ -209,7 +218,15 @@ function _advance(quest, stage, grantReward) {
  * lost. Re-parking an already-parked craft is harmless.
  */
 function _grantVehicle(quest) {
-  const g = quest.reward && quest.reward.vehicle;
+  _parkCraft(quest.reward && quest.reward.vehicle);
+}
+
+/**
+ * Park one craft. Shared by the quest reward and by `stage.vehicle`, so a
+ * mid-chain grant behaves identically to an end-of-quest one — including the
+ * "already aboard" guard and the idempotency `_advance` relies on.
+ */
+function _parkCraft(g) {
   if (!g) return;
   // Already aboard it — do not yank it out from under the player.
   if ((ps.vehicle | 0) === (g.mode | 0)) return;

@@ -1,3 +1,72 @@
+## 1.11.13 — 2026-08-27
+
+### Princess Sara moves into the Sealed Cave, and the canoe moves to the smith
+
+Joel, 2026-08-27: *"we gotta add a standing princess Sarah npc in the f1 boulder
+exit chamber... the king should have a quest to go find sara where we receive the
+canoe to go there.... why is sara in kazus?!"*
+
+**Because I put her there for a bad reason.** `quests.js` carried a ⛔ block
+reading *"SO SARA CANNOT BE IN THE CAVE — the cave is behind the canoe that
+finding her grants"*, and on that basis parked her in Kazus with an after-the-fact
+justification (her ring was cut there, script `0x231`). The deadlock was real; the
+conclusion drawn from it was not. **A reward that arrives after the search cannot
+be the means of the search** — the canoe's TIMING was the thing that had to move.
+
+    was:  ask -> errand -> forge -> found(KAZUS) -> return[+CANOE]
+    now:  ask -> errand -> forge[+CANOE] -> found(SEALS f1) -> return
+
+The smith cut her ring and was asked "what crosses water" — he is the beat that
+tells you where she went, so he is the one who puts a boat in your hands. She is
+now where she said she was going: past the water, in the Cave of Seals, behind
+the boulder on floor 1, in the chamber the way down is in. Finding her and
+finding the way deeper are the same walk.
+
+`stage.vehicle` is new — `_advance` can park a craft mid-chain, sharing
+`_parkCraft` with the end-of-quest reward so both behave identically.
+
+### An NPC on a map that is carved fresh, and the two ways I got it wrong
+
+There is no tile to write down: the floor is regenerated on every entry. Her spot
+is derived from the map — and the first two derivations were wrong on nearly
+every seed.
+
+1. **`PASSAGE_ENTRY` ($6a) marks BOTH ends of the floor.** I took the first one in
+   scan order as "the exit chamber". It is the ARRIVAL arch. She stood two rows
+   under the entrance, inside its one-wide neck — **400 of 400 seeds**, sealing
+   the floor on 242. The map already says which is which: `entranceX/entranceY`
+   IS the arrival tile, so the exit is the other one.
+2. **She is as solid as a boulder, in a five-tile room.** Two rings out from the
+   passage is far enough not to stand ON the approach and nowhere near far enough
+   to be safe: the player opened the wall, walked in, and the staircase was
+   behind the princess — **226 of 400 seeds**. She now gets the same
+   block-and-reflood test the boulder gets; a spot she may stand on is one the
+   passage survives.
+
+⛔ Neither was visible to any dungeon gate, and that is the point: **the floor is
+perfectly connected in both cases.** It is the person standing on it that breaks
+it, and no floor gate knows she is there.
+
+### Gates
+
+* **`check-generated-npcs`** (new, in `deploy.sh`) — for every NPC on a generated
+  map: they get a spot, that spot is inside the region the puzzle opens, and
+  blocking it costs the flood exactly themselves. Both failures above reproduce
+  on revert, at the same counts (400/400 and 226/400).
+* `GENERATED_NPCS` in `town-npcs.js` is the one declaration both the game and the
+  gates read. `check-quest-stages` asks "is the person you need in the room" by
+  looking them up in `TOWN_NPCS` — a person placed by a function in `npc.js` is
+  invisible to it, so it reported this working chain as unstartable. It now reads
+  both tables, and `check-generated-npcs` fails any quest stage that points at a
+  generated map with nobody declared on it.
+* The spiral search moved out of `npc.js` into `data/npc-walk-area.js`. It was
+  written twice (the moogle, Sara) and could not be reached from a tool at all —
+  `npc.js` pulls in `boot.js` and the message box. A gate would have had to
+  hand-copy it, which is the one thing `CLAUDE.md` forbids.
+
+No floor changed: `check-floor-snapshot` is unmoved. Placement happens at load
+time, not in the generator.
+
 ## 1.11.12 — 2026-08-27
 
 ### Skeletons in the boulder vault
