@@ -342,7 +342,7 @@ The dialogue names people directly. In the towns we ship:
 | **Dahn** — Father Dahn, elder | 16 | Ur elder house |
 | **Cid** — of Canaan | 48 | (his line) |
 | **Takka** — the blacksmith | 52 | Kazus |
-| **Sara** — King Sasune's daughter | 67 | — |
+| **Sara** — King Sasune's daughter | 67 | ⛔ see below — id 67 is NOT her face |
 | **Desch** | 192 | — |
 
 Full rosters: `docs/sprites/ff3-npc-dialogue.txt` (the 44 NPCs in shipped towns)
@@ -362,6 +362,34 @@ NPC ids wearing that sprite are **Sara** (id 67), **Desch** (id 192), and two
 unnamed. One sprite cannot be both Sara and Desch, so it is a shared townsfolk
 sprite, not Cid's. Combined with `0x1ED10` (the generic ghost, above), **both**
 entries in `STORY_SPRITE_BUNDLES` are labelled wrong.
+
+### ⛔⛔ AND THE ROW ABOVE IS A TRAP — id 67 IS NOT SARA'S FACE (2026-08-28)
+
+The `Sara -> id 67` row is a **dialogue** attribution: id 67 is the record whose
+string identifies itself as Sara. It is NOT a sprite attribution, and it was used
+as one. `gfxForNpcId(rom, 67)` is gfx 25 -> **`0x1D910`**, which is the bundle
+ff3mmo dresses **Cid** in — so `SARA.romOffset` and `CID.romOffset` shipped as
+the same value, byte for byte, and the princess wore the engineer's face.
+
+**Sara is `0x1D810`.** Joel, looking at a render: *"thats not sara. thats cid"*,
+then *"0x1D810 is sara"*. It is worn by ROM ids 57/61/65 and placed only on maps
+104/105/106/178/182/253/255 — nowhere ff3mmo ships, so nobody here wears it but
+her. Rendered four directions: `docs/sprites/sara-0x1D810.png`
+(`node tools/sara-shot.mjs`).
+
+⛔ **The id->gfx table was never going to know her.** It is PPU-verified and
+correct; FF3 simply puts Sara on screen by EVENT SCRIPT rather than from the
+static NPC list. Do NOT "restore" her to gfx 25 on the strength of that lookup.
+
+⛔ **Do not answer a sprite question from a filtered sheet.** The search that
+missed this drew only the 14 bundles the beginner valley loads — `0x1D810` is not
+one of them, so the right answer had been excluded before the question was asked.
+`tools/sara-candidates.mjs` draws all 32 real walk bundles; anything past
+`0x1FF10` is off the end of the bank and renders as noise and font tiles.
+
+Gated by **`check-story-sprites`**: two different NAMED characters may never share
+a walk bundle. The ghost `0x1ED10` is an allowed exception — the cartridge
+dresses every cursed id in gfx 45.
 
 The ghost identification is now doubly confirmed: all ten ids wearing gfx 45 are
 Kazus's cursed cast, and their own lines say so — *"The Djinn's curse has left me

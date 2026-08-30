@@ -1,3 +1,78 @@
+## 1.11.16 — 2026-08-30
+
+### Castle Sasune's barred exits — a ROM map id is not a place
+
+Reported by players: doors inside Castle Sasune answered **"The way is
+barred."** Three rooms were worse than that — you walked in and could not walk
+out at all:
+
+| room | tiles | why |
+|---|---|---|
+| **map 29, the THRONE ROOM** | 65 | its one and only trigger tile, (10,14), was barred |
+| map 28/30, the keep's 2F chamber | 91 | same, (14,24) |
+| map 25, the keep's east chamber | 12 | both its doors barred |
+
+The throne room is where `sasune_missing_daughter` is offered AND handed in, so
+every player who took the King's quest walked into a dead end. The keep's front
+door at (10,31) was barred too; the hall was escapable only through a side
+passage.
+
+**The cause: `SHIPPED_MAPS` compared a raw ROM map id against a content list,
+and an id is not a place.** FF3 has no "warp to map M, tile (x,y)" — a door
+names a MAP ID and the engine drops you on that id's `entranceX/Y`. So a room
+with four staircases costs four map ids: same tilemap, same door table, same NPC
+list, four arrival tiles. Castle Sasune's keep is **three rooms addressed by
+twelve ids**. We shipped six and barred the other six as "unbuilt content" —
+and the six we barred were exactly the RETURN half of every stair pair.
+
+**`data/areas.js#ARRIVAL_ALIASES`** now resolves an id to its canonical room
+plus the cartridge's own arrival tile, and `isShippedMap` asks about the
+canonical. Nine ids resolve: 186 -> 18, and 26/27/187/188/189/190 -> 25, and
+30/191 -> 28.
+
+⛔ Deliberately NOT "add 186-191 to SHIPPED_MAPS". That would have unbarred the
+doors and left seven copies of one hall, each with its own chest ledger and its
+own roster key — and only one of them carrying the hall's TOWN_NPCS, so
+arriving by the 2F stairs would lose `sasune_hall_servant` and with him the
+quest's `errand` stage. Collapsing 26/27/30 into aliases fixes three roster keys
+for one room at the same time.
+
+**Doors that go back the way you came now POP the return trail instead of
+extending it** (`_triggerMapTransition`). Bouncing between two floors used to
+push a breadcrumb each way; after the round trip above the stack was 8 deep, and
+map 25's exit-prev tiles would have sent the player upstairs instead of out to
+the courtyard. It ends at 0 now.
+
+**Every gate we had said the castle was fine, and all three are fixed:**
+
+* `check-map-exits` listed Ur's rooms, Kazus's rooms and Sasune's COURTYARD —
+  not one castle interior. Its list is now derived from `SHIPPED_MAPS`, so
+  shipping a room enrolls it: **18 maps checked before, 31 now.** It also
+  counted exit TILES; it now asks `isShippedMap` and `STRANDING_MAPS` what the
+  engine actually does, and floods from every arrival tile because one tilemap
+  can hold three disconnected rooms joined only by staircases.
+* `check-area-graph` printed the nine dead doors as a ✓ — refusing an unbuilt
+  destination is what it was written to want. It now walks to the canonical
+  room. Barred doors in the whole game: **9 before, 3 now** (10 -> 101,
+  25 -> 182, 174 -> 175 — all genuinely unbuilt).
+* `map-audit --play` reported "WALLED IN: 0 maps" throughout. It walks the
+  CARTRIDGE's graph and knows nothing about `isShippedMap`. Left as is; it
+  answers a different question, and the new gates cover this one.
+
+**Two new gates, both proven by reverting the fix:**
+
+* `check-arrival-aliases` re-derives the whole table from the ROM by grouping
+  all 256 maps on (tilemap bytes, door table bytes, npcIdx, tileset, fill) and
+  fails three ways — a drifted arrival tile, an undeclared family member, a
+  stale entry. Song is part of the identity test, not the match: maps
+  11/32/64/77 pass every structural check and are four different PLACES reusing
+  a tilemap.
+* `check-castle-walk` **walks the castle with the shipped engine** —
+  `checkTrigger`, `loadMapById`, `updateTransition`, tile by tile — through the
+  keep to the throne room, back out, and up all four floors of the west tower.
+  20 legs, each pinned to the map AND the landing tile. On the reverted build it
+  fails on the throne-room leg with the message the player saw.
+
 ## 1.11.15 — 2026-08-28
 
 ### Prose out of the server's table, and one resolver for what people say

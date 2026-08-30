@@ -1307,7 +1307,7 @@ export const KAZUS_SMITH = kazusNpc(0, {
 
 // ── PRINCESS SARA ────────────────────────────────────────────────────────
 //
-// ⭐ HER OWN SPRITE. `gfxForNpcId(rom, 67)` -> gfx 25 -> bundle 0x1D910. The
+// ⭐ HER OWN SPRITE — and nobody else's in this game. The
 // cartridge places her only on maps 33/34 (a late-game pair) and NEVER in
 // Sasune or the Sealed Cave — in FF3 she is put on screen by event script, not
 // by the static NPC table, so where she stands here is ff3mmo's call.
@@ -1319,20 +1319,33 @@ export const KAZUS_SMITH = kazusNpc(0, {
 // bundle. FF3 is CHR-RAM: anybody placed there renders as tilemap noise, the
 // same as map 11.
 //
-// ⛔ SHE SHARES A SPRITE WITH OUR CID, and there is no third option. gfx 25 is
-// worn by ids 31, 67 (Sara), 192 (Desch) and 217 — a shared townsfolk sprite,
-// which `docs/NPC-CATALOG.md` already flagged when it said the "Cid" label on
-// this bundle was wrong. Rendering every bundle the valley can draw
-// (`tools/valley-cast-sheet.mjs`) shows the alternative is a generic blue-cap
-// villager: dressing the princess as a townsman is worse than sharing a face
-// with a man who stands in a different room. Cid is in the pub (map 12); she is
-// out in the town (map 10). They are never on screen together.
+// ⛔⛔ SHE IS `0x1D810`. SHE WAS `0x1D910`, WHICH IS CID — byte for byte the
+// same bundle as `CID.romOffset`, and it shipped that way.
+//
+// The paragraph that used to sit here argued the clash was acceptable because
+// "Cid is in the pub (map 12); she is out in the town (map 10) — they are never
+// on screen together". That premise died the day she left Kazus for the Cave of
+// Seals, and nothing re-checked it. Joel, 2026-08-28, looking at a render of
+// her: *"thats not sara. thats cid"* — then, after a sheet of all 32 walk
+// bundles: *"none of those are sara"*, and finally *"0x1D810 is sara"*.
+//
+// ⛔ THE ROM's OWN id->gfx TABLE DOES NOT FIND HER. `gfxForNpcId(rom, 67)` is
+// gfx 25 -> `0x1D910`, and id 67 is placed only on maps 33/34. That table is
+// PPU-verified and it is not wrong — it simply does not hold the answer, because
+// FF3 puts Sara on screen by EVENT SCRIPT, not from the static NPC list. Asking
+// it for her face returns a shared villager sprite that our Cid already wears.
+// ⛔ Do NOT "restore" her to gfx 25 on the strength of that lookup.
+//
+// `0x1D810` is worn by ROM ids 57/61/65, placed on maps 104/105/106/178/182/
+// 253/255 — none of them anywhere ff3mmo ships, so nobody in this game wears it
+// but her. Rendered through the real `Sprite` class in all four directions:
+// `tools/sara-shot.mjs` -> `docs/sprites/sara-0x1D810.png`.
 //
 // ⛔ NOT ON (17,21). That is the pub DOORWAY — one open neighbour, and the tile
 // Cid's own ROM record sits on. Placing her there would block the entrance.
 // (15,20) is the ROM's $21 record, out in the open west of the inn.
 export const SARA = {
-  romOffset: 0x01D910,
+  romOffset: 0x01D810,
   ignoreRomFlags: true,
   palTop: UR_SP3,
   palBtm: UR_SP2,

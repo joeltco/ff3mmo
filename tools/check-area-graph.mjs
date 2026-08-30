@@ -30,7 +30,7 @@ globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext:
 
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
-const { AREAS, SHIPPED_MAPS, isShippedMap } = await import('../src/data/areas.js');const { applyPassage } = await import('../src/map-passage.js');
+const { AREAS, SHIPPED_MAPS, isShippedMap, canonicalMapId, ARRIVAL_ALIASES } = await import('../src/data/areas.js');const { applyPassage } = await import('../src/map-passage.js');
 
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
@@ -65,8 +65,20 @@ function doorsOf(mapId) {
   applyPassage(md.tilemap);
   const sx = md.entranceX, sy = calcSpawnY(md, md.entranceX, md.entranceY);
   const r = new MapRenderer(md, sx, sy);
-  const seen = new Set([sy * W + sx]);
-  const q = [[sx, sy]];
+  // ⭐ SEED FROM EVERY TILE THE PLAYER CAN ARRIVE ON, not just the map's own
+  // entrance. Castle Sasune's keep hall is ONE tilemap holding TWO disjoint
+  // walkable regions joined by internal staircases, and the cartridge addresses
+  // them with six arrival aliases (areas.js#ARRIVAL_ALIASES). Flooding only
+  // from `entranceX/Y` sees half the room and calls the other half's doors
+  // unreachable — which reported map 28 as cut off from its own castle.
+  const seeds = [[sx, sy]];
+  for (const [alias, a] of ARRIVAL_ALIASES) {
+    if (a.map !== mapId) continue;
+    const am = loadMap(rom, alias);
+    seeds.push([am.entranceX, calcSpawnY(am, am.entranceX, am.entranceY)]);
+  }
+  const seen = new Set(seeds.map(([x, y]) => y * W + x));
+  const q = seeds.slice();
   while (q.length) {
     const [x, y] = q.pop();
     for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
@@ -123,8 +135,12 @@ for (const a of AREAS) {
     const id = q.pop();
     for (const d of graph.get(id) || []) {
       if (!d.reachable || d.dest === 0 || !isShippedMap(d.dest)) continue;
-      if (seen.has(d.dest)) continue;
-      seen.add(d.dest); q.push(d.dest);
+      // ⭐ WALK TO THE ROOM, NOT TO THE ID. Half of Castle Sasune's doors name
+      // an ARRIVAL ALIAS of a room we already ship (areas.js#ARRIVAL_ALIASES);
+      // the engine loads the canonical, so the graph must too.
+      const dest = canonicalMapId(d.dest);
+      if (seen.has(dest)) continue;
+      seen.add(dest); q.push(dest);
     }
   }
   // A room may be declared unreachable, with the measurement written down next
@@ -146,7 +162,8 @@ for (const a of AREAS) {
 for (const [mapId, doors] of graph) {
   for (const d of doors) {
     if (!d.reachable || d.dest === 0) continue;
-    if (isShippedMap(d.dest) && !SHIPPED_MAPS.has(d.dest)) fail(`map ${mapId} door ${d.trigId} -> ${d.dest}: isShippedMap and SHIPPED_MAPS disagree`);
+    const canon = canonicalMapId(d.dest);
+    if (isShippedMap(d.dest) && !SHIPPED_MAPS.has(canon)) fail(`map ${mapId} door ${d.trigId} -> ${d.dest} (canonical ${canon}): isShippedMap and SHIPPED_MAPS disagree`);
   }
 }
 

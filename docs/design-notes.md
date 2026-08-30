@@ -86,10 +86,16 @@ Intentional design decisions that aren't obvious from reading the code. One sect
 - **Castle Sasune map 24** is listed as a room but is refused at the door by
   `STRANDING_MAPS` and nothing points at it (its own door 0 points at itself).
   Declared in `Castle Sasune.unreachable`.
-- **24 of Castle Sasune's doors lead out of the castle** and are now barred by
-  `isShippedMap`. They are not wrong in the ROM — they lead to parts of FF3 we
-  have not built. Each one is a place to build, and `check-area-graph --list`
-  prints them.
+- ~~**24 of Castle Sasune's doors lead out of the castle**~~ — WRONG, and it cost
+  three trapped rooms (v1.11.16). NINE of those 24 led back INTO the castle:
+  a ROM map id is (tilemap, door table, ARRIVAL TILE), so one room with four
+  staircases costs four ids, and the ids we barred were the return half of every
+  stair pair — the throne room included. `data/areas.js#ARRIVAL_ALIASES` resolves
+  them; `check-arrival-aliases` re-derives the table from the cartridge.
+  **Three doors genuinely leave what we have built**: 10 -> 101 (a cave),
+  25 -> 182 (a Sasune water room, 42 tiles, 3 ROM NPCs) and 174 -> 175 (the east
+  tower's upper floors, 175/176/177, which would make the east tower as deep as
+  the west). Each is a place to build; `check-area-graph --list` prints them.
 - **Kazus map 10's door 0 at (21,11) leads to map 101**, which is a cave, not a
   Kazus interior (rendered with `map-png.mjs`). Barred for now.
 

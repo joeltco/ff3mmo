@@ -670,3 +670,96 @@ anyway, and a stage cast that passes `check-speech-coverage`.
 | 4 | Sara's second placement row: map 24 (11,8), `when: daughter_home` | 3 |
 | 5 | fanfare identified by audition; found-her beat wired | 3 |
 | 6 | Quest 3 authored | 3 |
+
+---
+
+# 10. SHIPPED — v1.11.15, 2026-08-28
+
+Phase 1 steps **1a-1d** are live. Verified on ff3mmo.com; commit `54b9a315`.
+
+| step | what | state |
+|---|---|---|
+| 1a | prose split — `data/script.js` | ✅ shipped |
+| 1b | `src/speech.js`, one resolver | ✅ shipped |
+| 1c | `also` -> `voice` | ✅ shipped |
+| 1d | `after` collapsed into flag-keyed idle | ✅ shipped |
+| 1e | leads and beats (finding Sara early) | ⬜ NOT DONE |
+| 1f | world-event flags + `when` on `GENERATED_NPCS` | ⬜ NOT DONE |
+
+**The acceptance test held.** `tools/audit-npc-talk.mjs --all` (14 beats x 55
+placed people) was captured to `docs/history/speech-before-phase1.txt` BEFORE
+any edit and diffed after each step. 1a, 1b and 1c came back **byte-identical**;
+1d changed exactly nine lines, eight of them label-only (`[after:x]` -> `[idle]`,
+same words). The after-state is `docs/history/speech-after-phase1.txt`.
+
+**`data/quests.js`: 529 -> 256 lines, zero English.** `check-script-split` walks
+the server's import closure transitively and fails on
+`server.js -> ws-presence.js -> economy-arbiter.js -> script.js`.
+
+**Reachability went 2 -> 0.** Cid's post-curse idle and Sara's endgame line were
+both unreachable in all 384 world states because `after` shadowed idle forever.
+Sara's `sara_found` variant was deleted — it appeared in none of them.
+
+**Three of the twelve coverage gaps closed for free.** The hall servant, Sara and
+the King already had endgame variants written; deleting the layer made them
+visible. `check-speech-coverage` refuses to let the allowlist keep stale
+entries, which is how that was noticed. **9 remain, for Phase 3.**
+
+**`check-words` caught the one real mistake:** the King's new
+daughter-is-home variant did not contain DJINN, which he teaches, so LEARN would
+have offered a term he never spoke. The lines were rewritten, not the rule.
+
+## 10.1 ⛔ SARA WAS WEARING CID'S SPRITE — fixed, not shipped
+
+`SARA.romOffset` and `CID.romOffset` were both `0x1D910`. Byte for byte the same
+bundle, in a shipped release. The source justified it with *"Cid is in the pub
+(map 12); she is out in the town (map 10) — never on screen together"*, and that
+premise died the day she moved to the Cave of Seals. Nothing re-checked it
+because no gate asked. Joel found it by looking at a render I had made and
+labelled "Sara" from the source rather than from the picture.
+
+**She is `0x1D810`** (Joel, 2026-08-28: *"0x1D810 is sara"*). Worn by ROM ids
+57/61/65, placed on maps 104/105/106/178/182/253/255 — none of which ff3mmo
+ships, so nobody here wears it but her. Rendered in all four directions through
+the real `Sprite` class: `docs/sprites/sara-0x1D810.png`.
+
+⛔ **The ROM's id->gfx table does not hold her face.** `gfxForNpcId(rom, 67)` is
+gfx 25 -> `0x1D910`, and id 67 is placed only on maps 33/34. That table is
+PPU-verified and not wrong — FF3 puts Sara on screen by EVENT SCRIPT, not from
+the static NPC list, so it was never going to know her. Do NOT "restore" her to
+gfx 25 on the strength of that lookup.
+
+⛔ **My search was filtered before it was asked.** The first sheet I showed held
+only the 14 bundles the beginner-valley maps load; `0x1D810` is not among them,
+so the right answer was excluded from the options. The second ran off the end of
+the sprite bank past `0x1FF10` and rendered 24 rows of noise and font tiles as
+candidates. `tools/sara-candidates.mjs` now draws all 32 real bundles.
+
+**New gate `check-story-sprites`** — two DIFFERENT named characters may never
+share a walk bundle. In `deploy.sh`, fails on revert. The Djinn's ghost
+(`0x1ED10`) is an allowed exception: the cartridge dresses every cursed id in
+gfx 45, and losing your face is the point of the curse.
+
+## 10.2 Tools added this arc
+
+| tool | answers |
+|---|---|
+| `audit-npc-talk.mjs` | the transcript — what every placed person says at each beat |
+| `audit-quest-coverage.mjs` | quest cast x stage: who has a line, who falls to idle |
+| `audit-dialogue-reach.mjs` | walks all 384 world states; which authored pages are never seen |
+| `audit-word-matrix.mjs` | the ASK table: teachers, answerers, what each term is FOR |
+| `audit-talk-reach.mjs` | can the player press Z on this person, by the RUNTIME's rule |
+| `speech-shot.mjs` | DRAWS what somebody says, in any world state |
+| `sara-shot.mjs` | Sara through the real `Sprite` class, 4 directions, per-map palettes |
+| `sara-candidates.mjs` | all 32 real walk bundles, for picking a face |
+| `sara-in-cave.mjs` | Sara ON the generated floor, with the boulder puzzle overlaid |
+
+## 10.3 Still open, unchanged
+
+* **1e / 1f**, above — both prerequisites for the spring room.
+* **Map 24 is unreachable** (§9.3): nothing points a door at it, its ROM
+  entrance is a dead pocket. Needs a secret door to (5,5).
+* **The join fanfare is unidentified** (§9.5) — no FF3 track catalogue exists.
+* **9 speech-coverage gaps** (Phase 3), listed in `check-speech-coverage`.
+* Uncommitted at session end: the `0x1D810` fix, `check-story-sprites`, the
+  render tools and their PNGs. They ride the next deploy.

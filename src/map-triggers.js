@@ -22,7 +22,7 @@ import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
 import { loadMapById, loadWorldMapAt, loadWorldMapAtPosition } from './map-loading.js';
 import { rosterLocForMapId, getPlayerLocation } from './roster.js';
-import { isShippedMap } from './data/areas.js';
+import { isShippedMap, resolveArrival } from './data/areas.js';
 import { applyPassage } from './map-passage.js';
 import { addItem, canAddItem } from './inventory.js';
 import { sendNetInvEvent, SERVER_ECONOMY, PVE_ARBITER, sendNetChestOpen, sendNetVaseSearch, nextChestTxnId } from './net.js';
@@ -533,6 +533,8 @@ function _triggerMapTransition(tileX, tileY, dest) {
   const isDoor = (((mapSt.mapData.collisionByte2[tileM] >> 4) & 0x0F) === 5);
   const isSameMap = (typeof dest === 'object' && dest.sameMap);
   const destMapId = (typeof dest === 'object') ? dest.mapId : dest;
+  const destX = (typeof dest === 'object') ? dest.destX : undefined;
+  const destY = (typeof dest === 'object') ? dest.destY : undefined;
   const finalize = isSameMap
     ? () => {
         // In-map warp: snap position, refresh the renderer at the new tile,
@@ -554,7 +556,23 @@ function _triggerMapTransition(tileX, tileY, dest) {
           mapSt.openDoor = { x: dest.destX, y: dest.destY, tileId: destTileId };
         }
       }
-    : () => { mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY }); loadMapById(destMapId); };
+    : () => {
+        // ⭐ GOING BACK THE WAY YOU CAME POPS THE TRAIL, IT DOES NOT EXTEND IT.
+        //
+        // The stack is a breadcrumb of "where an exit-prev tile sends me". A
+        // door that leads to the map already on top is the return half of a
+        // pair, so pushing there would leave a stale crumb: walk 6 -> 7 -> 6
+        // and map 6's exit-prev tile sends you back UPSTAIRS instead of out to
+        // Ur. Nothing in Ur or Kazus has a door that goes backwards — every
+        // upper floor returns through a collision exit-prev — but the whole of
+        // Castle Sasune's keep does, on both stairs of both pairs.
+        const top = mapSt.mapStack[mapSt.mapStack.length - 1];
+        if (top && top.mapId === destMapId) mapSt.mapStack.pop();
+        else mapSt.mapStack.push({ mapId: mapSt.currentMapId, x: savedX, y: savedY });
+        // `destX`/`destY` are undefined for a plain numeric `dest`, which is
+        // what `loadMapById` wants for "land on the map's own entrance".
+        loadMapById(destMapId, destX, destY);
+      };
   if (isDoor) {
     mapSt.mapRenderer.updateTileAt(tileX, tileY, 0x7E); playSFX(SFX.DOOR);
     transSt.state = 'door-opening'; transSt.timer = 0;
@@ -591,11 +609,16 @@ function _checkDynType1(trigger, tileX, tileY) {
   // ⭐ A DOOR MAY ONLY LEAD SOMEWHERE WE BUILT.
   //
   // `entranceData` is the cartridge's own table, and it points at the whole of
-  // FF3 — not at the part of it ff3mmo ships. Castle Sasune had 24 doors leading
-  // out of the castle: its tower rooms chain 19 -> 23 -> 21 into UR'S HOUSES, and
-  // map 22 opens into the Altar Cave. That is the "warps are all over the place"
-  // report, and `map-audit --play` measured the damage — 69 maps reachable on
-  // foot from Ur, against 32 that are actually places.
+  // FF3 — not at the part of it ff3mmo ships. Castle Sasune looked like it had 24
+  // doors leading out of the castle: its tower rooms chain 19 -> 23 -> 21 into
+  // UR'S HOUSES, and map 22 opens into the Altar Cave. That is the "warps are all
+  // over the place" report, and `map-audit --play` measured the damage — 69 maps
+  // reachable on foot from Ur, against 32 that are actually places.
+  //
+  // ⛔ NINE OF THOSE 24 LED BACK INTO THE CASTLE and this test barred them
+  // anyway, because it compared a raw ROM id against a content list and an id is
+  // not a place. Three rooms — the throne room included — became traps. The
+  // resolve below is the fix; `isShippedMap` now asks about the canonical.
   //
   // Refused here rather than in `_triggerMapTransition`, which the procedural
   // dungeon also uses: its destinations are >= 1000 and generated, not table
@@ -608,7 +631,18 @@ function _checkDynType1(trigger, tileX, tileY) {
     showMsgBox(_nameToBytes('The way is barred.'));
     return true;
   }
-  _triggerMapTransition(tileX, tileY, destMap);
+  // ⭐ RESOLVE THE ARRIVAL ALIAS. A ROM map id is (tilemap, door table, arrival
+  // tile), so half of Castle Sasune's doors name an id that IS the room we are
+  // standing in — or the one below it — entered by a different staircase. See
+  // `data/areas.js#ARRIVAL_ALIASES` for what shipped broken before this.
+  const arrival = resolveArrival(destMap);
+  if (arrival.mapId === mapSt.currentMapId) {
+    // The two staircases inside the keep's hall. Same room, so this is the
+    // in-map warp the engine already had, not a map load.
+    _triggerMapTransition(tileX, tileY, { sameMap: true, destX: arrival.x, destY: arrival.y });
+  } else {
+    _triggerMapTransition(tileX, tileY, { mapId: arrival.mapId, destX: arrival.x, destY: arrival.y });
+  }
   return true;
 }
 

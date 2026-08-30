@@ -14,6 +14,41 @@
 // does NOT check that exit tiles are passable — they must not be. It checks
 // that from the spawn you can REACH a tile adjacent to one, which is what the
 // player actually needs to be able to do.
+//
+// ── ⛔ AND THEN IT SHIPPED THE SAME BUG AGAIN, TWO WAYS ────────────────────
+//
+// v1.11.16. Players reported Castle Sasune had barred exits. Three of its rooms
+// — the THRONE ROOM among them, where the King gives and takes back
+// `sasune_missing_daughter` — were absolute traps: walk in, no way out but a
+// relog. This gate passed the whole time, for two separate reasons, and BOTH
+// are fixed here rather than in a comment:
+//
+//   1. ITS LIST WAS TOWNS-ONLY. `LIVE` named Ur's eleven rooms, Kazus's five and
+//      Castle Sasune's COURTYARD, and stopped. Every interior of the castle —
+//      19, 20, 21, 23, 25, 28, 29, 174 — went unexamined. A hand-written list of
+//      the maps to check is a list of the maps you already thought about. It is
+//      now derived from `SHIPPED_MAPS`, so shipping a room enrolls it.
+//
+//   2. IT COUNTED TILES, NOT EXITS THE ENGINE ALLOWS. "An exit tile adjacent to
+//      the flood" is true of a door the game refuses with "The way is barred."
+//      All three trapped rooms had exactly one exit tile, reachable, and barred.
+//      This gate now asks the SHIPPED PREDICATES — `isShippedMap` for door
+//      destinations and `map-triggers.js#STRANDING_MAPS` — what actually
+//      happens when the player walks into it.
+//
+// The exits it now recognises, which is the engine's own dispatch
+// (`map-triggers.js#checkTrigger`):
+//
+//   dynamic type 1  a door: `entranceData[trigId]`, allowed iff the destination
+//                   is shipped and not a stranding map. Alias destinations
+//                   resolve through `areas.js#ARRIVAL_ALIASES`.
+//   dynamic type 0  exit to the previous map — pops the stack, always allowed
+//   collision type 0  same, from the tile's collision byte rather than a
+//                   placeholder tile. This is how every tower and upper floor in
+//                   the game returns, and missing it is what made an earlier
+//                   pass of this investigation wrongly call maps 19/20/21/23/174
+//                   traps.
+//   collision type 1  exit straight to the overworld — always allowed
 
 import fs from 'node:fs';
 import { createCanvas } from '@napi-rs/canvas';
@@ -23,6 +58,7 @@ globalThis.document = { createElement: () => createCanvas(8, 8), getElementById:
 
 const { loadMap } = await import('../src/map-loader.js');
 const { MapRenderer } = await import('../src/map-renderer.js');
+const { SHIPPED_MAPS, isShippedMap, ARRIVAL_ALIASES } = await import('../src/data/areas.js');
 // ⭐ THE ENGINE OPENS PASSAGES BEFORE THE PLAYER WALKS. `map-loading.js` calls
 // `applyPassage` on every regular map load ($5B -> $5D doorframe, $5C -> $5E the
 // walkable passage). Every reachability tool here used to skip it, which models
@@ -34,14 +70,11 @@ const { calcSpawnY } = await import('./lib/spawn.mjs');
 const ROM = process.env.FF3_ROM || new URL('../FF3-English.nes', import.meta.url).pathname;
 const rom = new Uint8Array(fs.readFileSync(ROM));
 
-// Maps a player can actually be in today. Kept explicit: sweeping all 256
-// re-reports the long-known unreachable slots (`map-triggers.js` STRANDING_MAPS)
-// and buries a real regression in noise.
-const LIVE = [
-  [114, 'Ur'], [1, 'Ur secret2'], [2, 'Ur secret'], [3, 'Ur magic'], [4, 'Ur armor'],
-  [5, 'Ur weapon'], [6, 'Ur elder1'], [7, 'Ur elder2'], [8, 'Ur inn'], [9, 'Ur tavern'],
-  [10, 'Kazus'], [12, 'Kazus inn'], [15, 'Kazus magic'], [16, 'Kazus weapon'], [17, 'Kazus armor'],
-  [18, 'Castle Sasune'],
+// ⛔ NOT A HAND-WRITTEN LIST ANY MORE. `SHIPPED_MAPS` is the content list, so
+// every place the game lets you walk into is checked whether or not anyone
+// remembered to add it here. Arrival aliases are excluded: they are not rooms,
+// they are other ways into a room this list already holds.
+const FUTURE = [
   // Not reachable on foot yet — both sit past the choke boulder — but they
   // carry the SAME defect Sasune did (exit tiles with collision $80, refused by
   // isPassable) and are fixed by the same fire-on-attempt change. Listed now so
@@ -50,37 +83,45 @@ const LIVE = [
   [124, 'map 124 (world entrance 63,32)'],
   [167, 'map 167 (world entrance 88,66)'],
 ];
+const LIVE = [...[...SHIPPED_MAPS].sort((a, b) => a - b).map(id => [id, `map ${id}`]), ...FUTURE];
+
+// The stranding guard, read from its one definition rather than restated —
+// a copy here would agree with itself after somebody edited the real one.
+const _trigSrc = fs.readFileSync(new URL('../src/map-triggers.js', import.meta.url), 'utf8');
+const _sm = /const STRANDING_MAPS = new Set\(\[([^\]]*)\]\)/.exec(_trigSrc);
+if (!_sm) { console.error('  \u26d4 could not find STRANDING_MAPS in map-triggers.js'); process.exit(1); }
+const STRANDING = new Set(_sm[1].split(',').map(t => Number(t.trim())).filter(n => Number.isFinite(n)));
 
 let failed = 0;
-const bad = (m) => { console.error('  ✗ ' + m); failed++; };
+const bad = (m) => { console.error('  \u2717 ' + m); failed++; };
+
+// Maps declared unreachable in areas.js are not in the play area; they are
+// refused at the door, so they cannot trap anybody.
+const DECLARED_UNREACHABLE = new Set();
+{
+  const { AREAS } = await import('../src/data/areas.js');
+  for (const a of AREAS) for (const id of (a.unreachable || [])) DECLARED_UNREACHABLE.add(id);
+}
 
 for (const [mapId, name] of LIVE) {
+  if (DECLARED_UNREACHABLE.has(mapId)) continue;
   const md = loadMap(rom, mapId);
   applyPassage(md.tilemap);
   const mr = new MapRenderer(md, md.entranceX, md.entranceY);
-  const sx = md.entranceX, sy = calcSpawnY(md, md.entranceX, md.entranceY);
 
-  // Every exit the map offers, of any kind: to-world (1), to-previous (0),
-  // and doors (4,5) that lead somewhere else.
-  const exits = [];
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
-      const raw = md.tilemap[y * 32 + x];
-      const m = raw < 128 ? raw : raw & 0x7F;
-      // ⛔ The VOID metatile decodes as trigger-type 0 ("exit to previous"), so
-      // every map shows a row of phantom exits along y=0. They are unreachable
-      // today, but a map with reachable void at the edge would satisfy this
-      // gate on an exit that does not exist. Skip the fill tile.
-      if (m === (md.fillTile < 128 ? md.fillTile : md.fillTile & 0x7F)) continue;
-      const t = ((md.collisionByte2[m] || 0) >> 4) & 0x0F;
-      if (t === 0 || t === 1 || t === 4 || t === 5) exits.push({ x, y, t });
-    }
+  // Seed from every tile the player can ARRIVE on. One tilemap can hold two
+  // disjoint rooms joined by an internal staircase, and the cartridge addresses
+  // the far one with an arrival alias — flooding from `entranceX/Y` alone sees
+  // half the keep hall.
+  const seeds = [[md.entranceX, calcSpawnY(md, md.entranceX, md.entranceY)]];
+  for (const [alias, a] of ARRIVAL_ALIASES) {
+    if (a.map !== mapId) continue;
+    const am = loadMap(rom, alias);
+    seeds.push([am.entranceX, calcSpawnY(am, am.entranceX, am.entranceY)]);
   }
-  if (!exits.length) { bad(`${name} (map ${mapId}) has NO exit tiles of any kind`); continue; }
 
-  // Flood from the spawn through the game's own passability.
-  const seen = new Set([`${sx},${sy}`]);
-  const q = [[sx, sy]];
+  const seen = new Set(seeds.map(([x, y]) => `${x},${y}`));
+  const q = seeds.slice();
   while (q.length) {
     const [x, y] = q.shift();
     for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
@@ -90,16 +131,34 @@ for (const [mapId, name] of LIVE) {
       seen.add(k); q.push([nx, ny]);
     }
   }
+  const near = (x, y) => seen.has(`${x},${y}`)
+    || [[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => seen.has(`${x + dx},${y + dy}`));
 
-  // An exit counts as usable when the player can STAND ON it, or stand next to
-  // it and walk in (fire-on-attempt).
-  const usable = exits.filter(e =>
-    seen.has(`${e.x},${e.y}`) ||
-    [[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => seen.has(`${e.x + dx},${e.y + dy}`)));
+  // ⭐ ASK THE ENGINE, NOT THE TILEMAP. `getTriggerAt` is the very lookup
+  // `checkTrigger` performs, so what comes back here is what the player gets.
+  const usable = [];
+  const refused = [];
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const t = mr.getTriggerAt(x, y);
+      if (!t || !near(x, y)) continue;
+      if (t.source === 'dynamic') {
+        if (t.type === 0) { usable.push(`(${x},${y}) exit-prev`); continue; }
+        if (t.type !== 1) continue;
+        const dest = md.entranceData[t.trigId] | 0;
+        if (dest === 0) continue;                       // inert door, no destination
+        if (STRANDING.has(dest)) { refused.push(`(${x},${y}) -> ${dest} stranding`); continue; }
+        if (!isShippedMap(dest)) { refused.push(`(${x},${y}) -> ${dest} not shipped`); continue; }
+        usable.push(`(${x},${y}) door -> ${dest}`);
+      } else if (t.trigType === 0) usable.push(`(${x},${y}) collision exit-prev`);
+      else if (t.trigType === 1) usable.push(`(${x},${y}) collision exit-to-world`);
+    }
+  }
 
   if (!usable.length) {
-    bad(`${name} (map ${mapId}): ${exits.length} exit tile(s), NONE reachable from spawn ` +
-        `(${sx},${sy}) — the player walks in and is stuck`);
+    bad(`${name}: no way out. ${refused.length} reachable exit(s), ALL refused by the engine` +
+        (refused.length ? ` — ${refused.join('; ')}` : '') +
+        ` — the player walks in and is stuck`);
   }
 }
 

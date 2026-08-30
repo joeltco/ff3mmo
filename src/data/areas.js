@@ -112,8 +112,12 @@ export const AREAS = [
     rooms: new Map([
       [19, 'sasune-a'], [20, 'sasune-b'], [21, 'sasune-c'],
       [23, 'sasune-d'], [24, 'sasune-e'], [25, 'sasune-f'],
-      [26, 'sasune-g'], [27, 'sasune-h'], [28, 'sasune-i'],
-      [30, 'sasune-j'],
+      [28, 'sasune-i'],
+      // ⛔ 26, 27 and 30 USED TO BE LISTED HERE, and that was the bug. They are
+      // not rooms — they are ARRIVAL ALIASES of 25 and 28 (see
+      // ARRIVAL_ALIASES below). Listing one room under three ids gave the same
+      // hall three roster keys, three chest ledgers, and NPCs on only one of
+      // the three.
       // The EAST tower room, measured: walking into the tower door at (23,12)
       // in the real ROM lands on map 174 at (4,10) (tools/monscan/door-graph.cjs).
       // It shares map 19's tilemap and entrance, which is why the pair looks like
@@ -163,14 +167,22 @@ export const TOWN_MAPS = new Set(AREAS.filter(a => a.fromOverworld).map(a => a.h
  * ⭐ EVERY MAP THIS GAME SHIPS AS A PLACE YOU CAN WALK INTO.
  *
  * FF3's door tables are the whole cartridge's, and most of what they point at is
- * a part of the game ff3mmo has not built. Castle Sasune alone had TWENTY-FOUR
- * doors leading outside the castle — its tower rooms chain 19 -> 23 -> 21 into
- * Ur's houses, and map 22 opens straight into the Altar Cave. `map-audit --play`
- * measured 69 maps reachable on foot from Ur; only 32 of them are places.
+ * a part of the game ff3mmo has not built. Castle Sasune alone looked like it
+ * had TWENTY-FOUR doors leading outside the castle — its tower rooms chain
+ * 19 -> 23 -> 21 into Ur's houses, and map 22 opens straight into the Altar
+ * Cave. `map-audit --play` measured 69 maps reachable on foot from Ur; only 32
+ * of them are places.
  *
  * `map-triggers.js` refuses a door whose destination is not in here, with the
  * same "The way is barred." the stranding guard uses. Ur already had ZERO
  * leaking doors, which is why nobody noticed the rule was missing.
+ *
+ * ⛔ AND THEN THE RULE OVER-FIRED, BECAUSE THE COUNT WAS WRONG. Nine of those
+ * twenty-four "doors out of the castle" led back INTO it — they were arrival
+ * aliases of rooms this list already holds (see ARRIVAL_ALIASES). Barring them
+ * left the throne room, the keep's 2F and half the hall as rooms you walk into
+ * and cannot walk out of. Three doors genuinely leave: 10 -> 101, 25 -> 182 and
+ * 174 -> 175. `check-area-graph --list` prints exactly those.
  *
  * ⛔ This is a CONTENT list, not a passability rule. Adding a map here makes it
  * enterable, so add it only when the place is actually built — and check its own
@@ -179,8 +191,93 @@ export const TOWN_MAPS = new Set(AREAS.filter(a => a.fromOverworld).map(a => a.h
 export const SHIPPED_MAPS = new Set();
 for (const a of AREAS) { SHIPPED_MAPS.add(a.head); for (const r of a.rooms.keys()) SHIPPED_MAPS.add(r); }
 
-/** Is this door destination a place we ship? Dungeon/world ids are not doors. */
-export function isShippedMap(mapId) { return SHIPPED_MAPS.has(mapId); }
+/**
+ * ⭐⭐ A ROM MAP ID IS NOT A PLACE. IT IS (TILEMAP, DOOR TABLE, ARRIVAL TILE).
+ *
+ * FF3 has no "warp to map M, tile (x,y)" instruction. A door names a MAP ID and
+ * the engine drops you on that id's `entranceX/Y`. So when the cartridge wants
+ * one room to be enterable by four staircases, it spends four map ids on it —
+ * same tilemap, same door table, same NPC list, four different arrival tiles.
+ *
+ * Castle Sasune's keep is THREE rooms addressed by TWELVE ids. We shipped six of
+ * the twelve and barred the other six as "unbuilt content", and the six we
+ * barred were exactly the RETURN halves of every stair pair:
+ *
+ *   map  29  the THRONE ROOM       its one and only exit -> 191   BARRED
+ *   map  30  keep 2F               its one and only exit -> 190   BARRED
+ *   map  27  keep hall             both exits -> 187 / 182        BARRED
+ *   map  25  keep hall, front door -> 186                         BARRED
+ *   map  26  keep hall             -> 188                         BARRED
+ *   map  28  keep 2F               -> 189                         BARRED
+ *
+ * Players walked in to talk to the King and could not walk out. That is the
+ * "Castle Sasune has barred exits" report, and it is why an id is resolved to
+ * its CANONICAL room here instead of being added to SHIPPED_MAPS as a seventh
+ * copy of the same hall — a copy would carry its own chest ledger, its own
+ * roster key, and none of the hall's TOWN_NPCS (the quest servant `errand`
+ * stage is `at: { map: 25 }`, so arriving as 189 would lose him).
+ *
+ * ⭐ MEASURED, NOT INVENTED. Every entry below was derived by grouping all 256
+ * maps on (tilemap bytes, entrance table bytes, npcIdx, tileset, fill tile) and
+ * keeping the groups with more than one member; the arrival tile is that id's
+ * own ROM `entranceX/Y`. `tools/check-arrival-aliases.mjs` re-derives the whole
+ * table from the cartridge and fails on a drifted coordinate, a missing family
+ * member AND a stale entry.
+ *
+ * ⛔ ONLY THREE FAMILIES EXIST among the maps we ship, and all three are in
+ * Castle Sasune. The sweep found one other multi-id group (11 / 32 / 64 / 77),
+ * and those are NOT aliases — they carry different songs, i.e. different
+ * places that happen to reuse a tilemap. Do not add them.
+ *
+ * ⚠ The alias ids carry bgPalette2 116 where the canonical carries 148 — one
+ * palette line, and the only thing it colours in this room is the pair of beds
+ * (white vs blue). The canonical's palette wins, because the canonical is the
+ * id you arrive on from the courtyard and therefore what players already see.
+ */
+export const ARRIVAL_ALIASES = new Map([
+  // Castle Sasune courtyard (tilemap d93f5b5f) — 186 is the keep's front step.
+  [186, { map: 18, x: 15, y: 19 }],
+
+  // The keep's hall + upper hall, ONE tilemap (9f843cd0) with two rooms joined
+  // by two internal staircases: (10,9)<->(10,21) and (16,2)<->(16,21).
+  [26,  { map: 25, x: 10, y:  9 }],
+  [27,  { map: 25, x: 16, y: 21 }],
+  [187, { map: 25, x: 16, y:  2 }],
+  [188, { map: 25, x: 10, y: 21 }],
+  [189, { map: 25, x: 10, y:  5 }],
+  [190, { map: 25, x: 14, y:  7 }],
+
+  // The keep's 2F (tilemap a1a1ac50) — two stairs down to the hall, one up to
+  // the throne room.
+  [30,  { map: 28, x: 14, y: 24 }],
+  [191, { map: 28, x: 10, y: 20 }],
+]);
+
+/** The map id that actually gets loaded for `mapId` — itself, unless aliased. */
+export function canonicalMapId(mapId) {
+  const a = ARRIVAL_ALIASES.get(mapId);
+  return a ? a.map : mapId;
+}
+
+/**
+ * Where a door pointed at `mapId` really lands: `{ mapId, x, y }`.
+ *
+ * `x`/`y` are `undefined` for a non-alias, which is exactly what
+ * `loadMapById(id, returnX, returnY)` wants for "use the map's own entrance".
+ */
+export function resolveArrival(mapId) {
+  const a = ARRIVAL_ALIASES.get(mapId);
+  return a ? { mapId: a.map, x: a.x, y: a.y } : { mapId, x: undefined, y: undefined };
+}
+
+/**
+ * Is this door destination a place we ship? Dungeon/world ids are not doors.
+ *
+ * Asks about the CANONICAL id, so an arrival alias of a shipped room is
+ * shipped. Before that it was a raw Set lookup, and every return staircase in
+ * Castle Sasune answered "no".
+ */
+export function isShippedMap(mapId) { return SHIPPED_MAPS.has(canonicalMapId(mapId)); }
 
 /**
  * Every map that belongs to a town/castle area — head map and interiors.
