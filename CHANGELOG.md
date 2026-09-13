@@ -1,3 +1,16 @@
+## 1.13.1 — 2026-09-13
+
+- Fix all three Ur shops — weapon, armor and the inn item counter — being
+  completely unreachable since v1.12.0. The counter reach added that release
+  routes every tileset-5 counter through `talkToNpc` and returns, so the
+  `openShop` branch below it never ran; Ur's keepers have no dialogue, so
+  `resolveSpeech` returned null and the press did nothing at all. A keeper with
+  no speech now opens the shop directly, and a keeper with lines still gets
+  SHOP in the talk menu.
+- `check-counter-talk` now covers silent keepers (maps 4/5/8), not only the
+  Kazus and tavern keepers who happen to have lines. Every row in it was a
+  talking keeper, which is why it stayed green while Ur was dead.
+
 ## 1.13.0 — 2026-09-13
 
 - Rebuild Mithril Mines as two authored excavations with native mine artwork,

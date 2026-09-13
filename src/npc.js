@@ -981,11 +981,23 @@ export function talkToNpc(npc, counterShopId = null) {
   // `apply` is null unless talking actually changes something, so a nag or an
   // aside cannot pay a reward by accident.
   const sp = resolveSpeech(mapSt.currentMapId, npc.key, npc, { notice: _takeQuestNotice(npc) });
-  if (!sp) return;
-  const pages = sp.apply ? sp.apply(_grantQuestReward) : sp.pages;
+  const pages = sp ? (sp.apply ? sp.apply(_grantQuestReward) : sp.pages) : null;
   // A refused grant (a full pack) returns null and the beat must not happen —
   // the player keeps the stage and the notice explains why.
-  if (!pages || !pages.length) return;
+  //
+  // ⛔ A SILENT KEEPER MUST STILL SELL. v1.13.1. `handleAction`'s counter reach
+  // routes EVERY tileset-5 counter through `talkToNpc` and `return`s, so the
+  // `openShop` branch below it is dead. Ur's WEAPON_KEEPER has no dialogue,
+  // teaches nothing and answers nothing, so `resolveSpeech` returned null and
+  // the two bails here ate the press: all THREE Ur shops — weapon, armor and
+  // the inn item counter — did nothing at all in v1.12.0. Kazus's keepers have
+  // lines, reach `_sayThenOfferWords`, and get SHOP in the menu; that is
+  // exactly why `check-counter-talk` stayed green on maps 9/12/16/17 while Ur
+  // was dead. ⛔ Do not re-split this into `if (!sp) return;` — that was the bug.
+  if (!pages || !pages.length) {
+    if (counterShopId) openShop(counterShopId);
+    return;
+  }
 
   // NPC turns to face the player. Player's facing = direction they walked
   // INTO the NPC, so the NPC's talk-facing is the opposite axis.
