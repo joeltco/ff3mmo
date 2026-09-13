@@ -1,3 +1,4 @@
+import { sanitizeDungeonRun } from './dungeons/run-state.js';
 import { queueSaveSnapshot, readLocalSnapshot } from './save-sync.js';
 // Save state — owns selectCursor, saveSlots, name entry, and DB persistence.
 // Extracted from game.js so any module can import save state directly.
@@ -91,6 +92,7 @@ export async function saveSlotsToDB() {
     // Story flags (world facts). Same lockstep rule again — data/flags.js is
     // import-free so api.js validates against the very same table.
     slot.flags = ps.flags ? JSON.parse(JSON.stringify(ps.flags)) : {};
+    slot.dungeonRun = sanitizeDungeonRun(ps.dungeonRun);
     slot.consumedTiles = ps.consumedTiles ? JSON.parse(JSON.stringify(ps.consumedTiles)) : {};
     slot.consumedTilesAt = ps.consumedTilesAt ? JSON.parse(JSON.stringify(ps.consumedTilesAt)) : {};
   }
@@ -129,6 +131,7 @@ export async function saveSlotsToDB() {
       quests: s.quests || {},
       words: s.words || {},
       flags: s.flags || {},
+      dungeonRun: sanitizeDungeonRun(s.dungeonRun),
       consumedTiles: s.consumedTiles || {},
       consumedTilesAt: s.consumedTilesAt || {},
     } : null);

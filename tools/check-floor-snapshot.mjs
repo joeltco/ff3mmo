@@ -46,6 +46,7 @@ const BASE = 1754900000000;
 function digestOf(r) {
   const parts = [];
   parts.push('tm:' + Buffer.from(r.tilemap).toString('hex'));
+  if (r.designVersion) parts.push('design:' + JSON.stringify({ version: r.designVersion, section: r.sectionId, route: r.route, features: r.features }));
   parts.push(`ent:${r.entranceX},${r.entranceY}`);
   parts.push(`ts:${r.tileset} fill:${r.fillTile} exit:${r.mapExit} clip:${r.skipRoomClip ? 1 : 0}`);
   const mapPairs = (m) => m ? [...m.entries()].map(([k, v]) => `${k}=${JSON.stringify(v)}`).sort().join('|') : '';

@@ -233,9 +233,9 @@ ok(DUNGEONS.every((d) => d.romFloorMaps && d.romFloorMaps.length === d.floors),
 // and the player is dropped into a solid slab of rock with an entrance in it —
 // generated, connected-looking to every tile gate, and unplayable. Three ways it
 // can be wrong, all rejected at construction.
-ok(DUNGEONS.every((d) => layoutForFloor(d, d.floors - 1) === null),
+ok(DUNGEONS.every((d) => d.design || layoutForFloor(d, d.floors - 1) === null),
    'a boss chamber must have no layout — its shape comes from bossSkinId');
-ok(DUNGEONS.every((d) => d.layout.floors.every((n) => LAYOUTS.has(n))),
+ok(DUNGEONS.every((d) => (d.design ? [d.design.layout] : d.layout.floors).every((n) => LAYOUTS.has(n))),
    'a shipped dungeon names a layout that does not exist');
 {
   const cases = [

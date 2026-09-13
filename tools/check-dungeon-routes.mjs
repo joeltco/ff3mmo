@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { createCanvas } from '@napi-rs/canvas';
 globalThis.document = { createElement: () => createCanvas(256, 240) };
 const { MapRenderer } = await import('../src/map-renderer.js');
+const { applyFeature } = await import('../src/dungeons/compile.js');
 const { generateFloor } = await import('../src/dungeon-generator.js');
 const { DUNGEONS } = await import('../src/data/dungeons.js');
 const rom = fs.readFileSync(new URL('../FF3-English.nes', import.meta.url));
@@ -40,6 +41,7 @@ for (const [id, floor, seed] of cases) {
     data.tilemap = new Uint8Array(data.tilemap);
     for (const { x, y, newTile } of data.rockSwitch.wallTiles) data.tilemap[y * 32 + x] = newTile;
   }
+  for (const feature of data.features || []) if (feature.kind === 'passage') applyFeature(data, feature, dg);
   const seen = flood(data);
   for (let i = 0; i < data.tilemap.length; i++) {
     if (data.tilemap[i] === 0x7c) assert(adjacent(seen, i % 32, Math.floor(i / 32)), `${id}: chest ${i} unreachable`);
@@ -53,6 +55,6 @@ for (const [id, floor, seed] of cases) {
     assert(seen.has(y * 32 + x), `${id}: onward exit unreachable`);
     onward++;
   }
-  assert(onward > 0, `${id}: onward exit missing`);
+  assert((dg.design && floor === dg.floors - 1) || onward > 0, `${id}: onward exit missing`);
 }
 console.log(`PASS: ${cases.length} rare layouts have usable chests, switches and onward exits in the game renderer.`);

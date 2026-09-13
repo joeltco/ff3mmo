@@ -40,6 +40,7 @@ const CEIL = 0x00, ROCK = 0x01;
 // keeps its historical 25 — tightening a shipped floor's limit is a separate
 // call from pinning a new one honestly.
 const DEEP_LIMIT = new Map([
+  ['authored-mine', 0], // authored mine faces are exactly two rocky tiles deep
   ['snake', 5], ['trap-chamber', 25], ['boulder-chamber', 0], ['rock-switch', 20], ['spine', 30],
   // Pinned at ZERO because it MEASURES zero, the same standard `boulder-chamber`
   // is held to: 10,000 floors across five seed bases, not one band off depth 2.

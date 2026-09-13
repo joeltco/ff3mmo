@@ -192,6 +192,8 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-npc-dialogue` | FF3's script stays decoded — the DTE table at `0x75FA1`, the string pointer table, and `stringId = npcId + 0x202`, pinned against lines read off a running game |
 | `check-ff12-text` | FF1's and FF2's scripts stay decoded — FF1's reversed DTE halves + `dialogueId == objType`, FF2's 45-kana run. Pinned against text read off a running game |
 | `check-static-exposure` | Private files, encoded traversal and symlink escapes must be refused; exposed in v1.12.0. |
+| `check-mithril-mines` | Authored Mines discovery, loot, endpoint and return routes survive 400 seeds per section, full bags, reloads and personal run resets. Unreleased refactor. |
+| `check-dungeon-run-save` | The actual server validator and client codec retain versioned dungeon progress and reject incompatible records using a disposable database. Unreleased Mines refactor. |
 | `check-boss-mechanics` | Boss specials, Hein barrier turns and Scholar Study must execute and reset correctly. |
 | `check-companions` | Solo companion filling must preserve injuries, legal gear and Desch state without entering PvP. |
 | `check-continent-combat` | Continent encounters must finish through the shipped battle state machine without stalls. |

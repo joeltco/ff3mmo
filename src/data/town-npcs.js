@@ -745,7 +745,7 @@ export const KAZUS_TOWN_B = kazusNpc(0, {
 // ROM record is (18,27), so he moves there instead and gets both: the cartridge's
 // own tile and sprite, AND his walk.
 export const KAZUS_TOWN_C = kazusNpc(2, {
-  dialogue: ['Mythril still comes up.', 'Little else does.'],
+  dialogue: ['Mythril still comes up.', 'Seek the far mine gallery.', 'Search its northern wall.', 'An old stair is hidden.'],
 });
 // Teaches AIRSHIP. The term must be a word he SAYS — that is what makes LEARN
 // honest — and the carry is town -> inn, so the word has a walk in it.

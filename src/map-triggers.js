@@ -1,3 +1,5 @@
+import { applyFeature } from './dungeons/compile.js';
+import { startOrResumeDungeonRun } from './dungeons/run-state.js';
 // Map triggers — tile-based and walk-on event handlers
 // Extracted from game.js: checkTrigger, _checkWorldMapTrigger, _checkHiddenTrap,
 // _checkDynType1, _checkDynType4, _checkExitPrev, _triggerMapTransition,
@@ -129,6 +131,10 @@ export function triggerWipe(action, destMapId) {
 // in-memory tilemap AND records the mutation keyed by (mapId, "x,y").
 function _consumeTile(facedX, facedY, newTileId) {
   mapSt.mapData.tilemap[facedY * 32 + facedX] = newTileId;
+  if (newTileId === OPENED_CHEST && ps.dungeonRun) {
+    const feature = mapSt.mapData.features?.find(f => f.kind === 'chest' && f.at[0] === facedX && f.at[1] === facedY);
+    if (feature) ps.dungeonRun.features[feature.id] = 1;
+  }
   const mapId = mapSt.currentMapId;
   if (mapId == null) return;
   if (!ps.consumedTiles) ps.consumedTiles = {};
@@ -176,7 +182,8 @@ export function handleChest(facedX, facedY) {
   // retries (v1.7.689). Gil never fails. Mimic rolls always proceed (no
   // inventory required). canAddItem returns true for ids already in the bag
   // (stack grows), so most "full" cases are still resolvable for repeats.
-  const entry = rollLootEntry(mapSt.currentMapId);
+  const feature = mapSt.mapData.features?.find(f => f.kind === 'chest' && f.at[0] === facedX && f.at[1] === facedY);
+  const entry = feature?.item ?? rollLootEntry(mapSt.currentMapId);
   const isItem = entry != null && !(typeof entry === 'object' && (entry.gil || entry.monster));
   if (isItem && !canAddItem(entry)) {
     playSFX(SFX.ERROR);
@@ -191,7 +198,7 @@ export function handleChest(facedX, facedY) {
   // produced a visible screen flicker on chest open in cave maps).
   if (mapSt.mapRenderer) mapSt.mapRenderer.redrawMetatileAt(facedX, facedY);
   resetIndoorWaterCache();
-  saveSlotsToDB();   // chest is consumed regardless of outcome
+  // Save ordinary treasure after both consumption and reward are applied.
 
   // Chest mimic — "Monster appeared!", then (on dismiss) the battle flash.
   // v1.7.804 — when PVE_ARBITER+SERVER_ECONOMY are on, send the chest-open
@@ -203,6 +210,7 @@ export function handleChest(facedX, facedY) {
   // and the server saw none of it, so a crafted client could lie about
   // the kill at pve-battle-end claim time.
   if (entry && entry.monster) {
+    saveSlotsToDB();
     const zoneKey = currentEncounterZoneKey();
     showMsgBox(_nameToBytes('Monster appeared!'), () => {
       if (SERVER_ECONOMY) {
@@ -242,6 +250,7 @@ export function handleChest(facedX, facedY) {
     }
     msg = foundItemMsg(entry);
   }
+  saveSlotsToDB();
   playSFX(SFX.TREASURE);
   showMsgBox(msg);
 }
@@ -304,6 +313,29 @@ export function handleHiddenTreasure(facedX, facedY) {
   }
   playSFX(SFX.TREASURE);
   showMsgBox(msg);
+  return true;
+}
+
+export function handleDungeonFeature(facedX, facedY) {
+  const feature = mapSt.mapData?.features?.find(f => f.kind === 'passage' && f.at[0] === facedX && f.at[1] === facedY);
+  if (!feature || !ps.dungeonRun || ps.dungeonRun.features[feature.id]) return false;
+  applyFeature(mapSt.mapData, feature, dungeonForMapId(mapSt.currentMapId));
+  ps.dungeonRun.features[feature.id] = 1;
+  for (const { x, y } of feature.tiles) mapSt.mapRenderer.redrawMetatileAt(x, y);
+  playSFX(SFX.DOOR);
+  saveSlotsToDB();
+  showMsgBoxPages(feature.pages.map(_nameToBytes));
+  return true;
+}
+
+function checkDungeonLandmark(x, y) {
+  const feature = mapSt.mapData?.features?.find(f => f.kind === 'landmark' && (f.area ? x >= f.area[0] && y >= f.area[1] && x <= f.area[2] && y <= f.area[3] : f.at[0] === x && f.at[1] === y));
+  if (!feature || !ps.dungeonRun || ps.dungeonRun.features[feature.id]) return false;
+  ps.dungeonRun.features[feature.id] = 1;
+  if (feature.flag) setFlag(feature.flag, { persist: false });
+  saveSlotsToDB();
+  playSFX(SFX.TREASURE);
+  showMsgBoxPages(feature.pages.map(_nameToBytes));
   return true;
 }
 
@@ -483,6 +515,10 @@ function _checkWorldMapTrigger(tileX, tileY) {
   if (_enteringDungeon) {
     if (!canEnterDungeon(_enteringDungeon)) return true;
     mapSt.dungeonSeed = Date.now();
+    if (_enteringDungeon.design) {
+      ps.dungeonRun = startOrResumeDungeonRun(ps.dungeonRun, _enteringDungeon, mapSt.dungeonSeed);
+      mapSt.dungeonSeed = ps.dungeonRun.seed;
+    }
     clearDungeonCache();
     // Procedural dungeon: each run gets a fresh seed → fresh layout. The
     // `ps.consumedTiles[mapId]` overrides from a previous run point at
@@ -666,6 +702,10 @@ function _checkDynType1(trigger, tileX, tileY) {
   if (dungeon) {
     if (!canEnterDungeon(dungeon)) return true;
     mapSt.dungeonSeed = Date.now();
+    if (dungeon.design) {
+      ps.dungeonRun = startOrResumeDungeonRun(ps.dungeonRun, dungeon, mapSt.dungeonSeed);
+      mapSt.dungeonSeed = ps.dungeonRun.seed;
+    }
     clearDungeonCache();
     for (const ledger of [ps.consumedTiles, ps.consumedTilesAt]) {
       if (!ledger) continue;
@@ -926,6 +966,7 @@ export function checkTrigger() {
   // Bed tiles aren't ROM trigger tiles, so check them before the trigger
   // lookup (which would early-return null). Stepping onto a bed → rest scene.
   if (mapSt.mapRenderer.isBedTileAt(tileX, tileY)) { openBed(); return true; }
+  if (checkDungeonLandmark(tileX, tileY)) return true;
   const trigger = mapSt.mapRenderer.getTriggerAt(tileX, tileY);
   if (!trigger) return false;
   if (_checkHiddenTrap(trigger, tileX, tileY)) return true;

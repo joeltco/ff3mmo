@@ -1,3 +1,5 @@
+import { dungeonResumeAnchor } from './data/dungeons.js';
+import { sanitizeDungeonRun } from './dungeons/run-state.js';
 // title-screen.js — title screen state, rendering, and player select screen
 
 import { drawText, measureText, TEXT_WHITE } from './font-renderer.js';
@@ -758,6 +760,7 @@ function _updateTitleMainOutCase() {
   // Story flags. Same treatment: an undeclared flag (one retired since the save
   // was written) is dropped rather than carried as a fact nothing can read.
   ps.flags = sanitizeFlags(slot && slot.flags);
+  ps.dungeonRun = sanitizeDungeonRun(slot && slot.dungeonRun);
   ps.consumedTiles = (slot && slot.consumedTiles) ? JSON.parse(JSON.stringify(slot.consumedTiles)) : {};
   ps.consumedTilesAt = (slot && slot.consumedTilesAt) ? JSON.parse(JSON.stringify(slot.consumedTilesAt)) : {};
   swapBattleSprites(ps.jobIdx);
@@ -785,7 +788,11 @@ function _updateTitleMainOutCase() {
     transSt.pendingTrack = songForMap(slot.currentMapId);
     const tx = slot.worldX != null ? slot.worldX / TILE_SIZE : undefined;
     const ty = slot.worldY != null ? slot.worldY / TILE_SIZE : undefined;
-    loadMapById(slot.currentMapId, tx, ty);
+    const anchor = dungeonResumeAnchor(slot.currentMapId);
+    if (anchor) {
+      mapSt.mapStack.length = 0;
+      loadMapById(anchor.mapId, anchor.x, anchor.y);
+    } else loadMapById(slot.currentMapId, tx, ty);
   } else {
     // Fresh slot — new players spawn upstairs in the elder's house
     // (map 7, tile 4, 4) with elder + 2 attendants placed by

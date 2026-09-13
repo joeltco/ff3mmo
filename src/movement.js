@@ -1,3 +1,4 @@
+import { handleDungeonFeature } from './map-triggers.js';
 // movement.js — player movement, input dispatch, tile collision, action handling
 
 import { DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
@@ -477,6 +478,7 @@ function handleAction() {
     }
     return;
   }
+  if (handleDungeonFeature(facedX, facedY)) return;
   if (facedTile === 0x7C)                                         { handleChest(facedX, facedY); return; }
   // Hidden-treasure tiles (0x78-0x7B) — ROM-flagged "search here" markers.
   // Render as vases / grass / etc. Z attempts a search with a small hit

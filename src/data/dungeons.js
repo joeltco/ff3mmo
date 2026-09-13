@@ -1,3 +1,4 @@
+import { MINES_DESIGN } from '../dungeons/definitions/mines.js';
 // THE DUNGEON REGISTRY — one row per dungeon, and the only place a dungeon's
 // identity is written down.
 //
@@ -324,15 +325,11 @@ DUNGEONS.push({
 
 DUNGEONS.push({
   id: 'mines', name: 'Mythril Mines', base: 12000, worldEntranceMap: 101,
-  floors: 3, donorMap: 101, tileset: 0, bossSkinId: 'mines', ending: ENDING_REACH, bossId: null,
-  layout: {
-    floors: ['chamber-run', 'snake'],
-    corridor: { hMin: 6, hMax: 8, vMin: 6, vMax: 9 },
-    snake: { top: [4, 8], bot: [18, 24], roomW: [5, 9], left: [2, 5], right: [26, 29], gap: [6, 7], tilt: [3, 4] },
-  },
+  floors: 2, donorMap: 101, tileset: 0, bossSkinId: 'mines', ending: ENDING_REACH, bossId: null,
+  design: MINES_DESIGN,
   music: { floors: 'DUNGEON_CAVE', boss: 'DUNGEON_CAVE' },
   rosterPrefix: 'mines', bossRosterLoc: 'mines-end',
-  encounterZonePrefix: 'mythril_mines', romFloorMaps: [101,102,102],
+  encounterZonePrefix: 'mythril_mines', romFloorMaps: [101,102],
   lockedRooms: [], secretRooms: [],
   destination: { flag: 'mines_explored', world: { x: 93, y: 59 } },
 });
@@ -399,8 +396,13 @@ export function buildRegistry(rows) {
     // branch, so the floor falls through every carve and the player gets a solid
     // slab of rock with an entrance in it. Length is `floors - 1` because the
     // boss chamber is shaped by `bossSkinId`, not by a layout.
-    const _lay = d.layout && d.layout.floors;
-    if (!Array.isArray(_lay) || _lay.length !== d.floors - 1) {
+    if (d.design && (d.design.id !== d.id || !Number.isSafeInteger(d.design.version)
+        || d.design.version < 1 || new Set(d.design.floors).size !== d.floors)) {
+      throw new Error(`dungeon '${d.id}': invalid authored definition`);
+    }
+    const expectedLayouts = d.design ? d.floors : d.floors - 1;
+    const _lay = d.design ? d.design.floors.map(() => d.design.layout) : d.layout && d.layout.floors;
+    if (!Array.isArray(_lay) || _lay.length !== expectedLayouts) {
       throw new Error(`dungeon '${d.id}': layout.floors must have ${d.floors - 1} entries (floors minus the boss chamber), got ${Array.isArray(_lay) ? _lay.length : typeof _lay}`);
     }
     if (_lay.some((n) => !LAYOUTS.has(n))) {
@@ -476,6 +478,7 @@ export function buildRegistry(rows) {
 // share a head (entrance room, elbow, junction, drop) and differ in what the
 // big room at the bottom is and how you leave it.
 export const LAYOUTS = new Set([
+  'authored-mine',    // explicit route, compiled by dungeons/compile.js
   'snake',            // two-room ceiling snake, stairs out. Both caves' floor 0.
   'trap-chamber',     // ends in a 7x7 room whose TRAP HOLES are the way down.
   'boulder-chamber',  // ends in a 7x7 room with a boulder; the way down is a
@@ -592,6 +595,7 @@ export function corridorBounds(dungeon) {
  * a non-null return is always one of `LAYOUTS`.
  */
 export function layoutForFloor(dungeon, floorIndex) {
+  if (dungeon?.design) return dungeon.design.floors[floorIndex] ? dungeon.design.layout : null;
   const l = dungeon && dungeon.layout && dungeon.layout.floors;
   return (l && l[floorIndex] != null) ? l[floorIndex] : null;
 }
@@ -612,10 +616,15 @@ export function isBossFloor(dungeon, floorIndex) {
 /** mapId of the dungeon's boss chamber. */
 export function bossFloorMapId(dungeon) { return dungeon.base + dungeon.floors - 1; }
 
+/** Authored bossless destinations remain exploration floors. */
+export function isEncounterFloor(dungeon, floorIndex) {
+  return !isBossFloor(dungeon, floorIndex) && (!!dungeon.design || !isFinalFloor(dungeon, floorIndex));
+}
+
 /** Every non-boss floor mapId — the floors that carry loot pools and encounters. */
 export function normalFloorMapIds(dungeon) {
   const out = [];
-  for (let f = 0; f < dungeon.floors - 1; f++) out.push(dungeon.base + f);
+  for (let f = 0; f < dungeon.floors - (dungeon.design ? 0 : 1); f++) out.push(dungeon.base + f);
   return out;
 }
 
@@ -707,3 +716,9 @@ export function rosterLocFor(mapId) { return _R.rosterLocFor(mapId); }
 
 /** The dungeon a new run starts in — first row of the registry. */
 export const STARTING_DUNGEON = DUNGEONS[0];
+
+/** A redesigned dungeon resumes at a safe native entrance, never old tile coordinates. */
+export function dungeonResumeAnchor(mapId) {
+  const dungeon = dungeonForMapId(mapId) || DUNGEONS.find(d => d.design?.retiredMapIds?.includes(mapId));
+  return dungeon?.design?.entryAnchor ?? null;
+}

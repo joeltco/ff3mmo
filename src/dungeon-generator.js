@@ -1,3 +1,4 @@
+import { compileDungeonFloor } from './dungeons/compile.js';
 // Dungeon Generator — procedural cave floors using FF3 tileset 0
 
 import {
@@ -1146,6 +1147,9 @@ export function clearDungeonCache() {
 }
 
 export function generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
+  if (dungeon.design) {
+    return compileDungeonFloor(loadRomAssets(romData, dungeon.floorDonorMaps?.[floorIndex] ?? dungeon.donorMap, dungeon.tileset), floorIndex, seed, dungeon);
+  }
   // The newer layouts can put a chest across a narrow bend. Collision bytes
   // alone miss that blocking trigger, and reaching the first staircase may
   // only prove we can return upstairs. Validate the complete finished floor,

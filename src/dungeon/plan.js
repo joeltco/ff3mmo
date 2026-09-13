@@ -112,6 +112,8 @@ export function describePlan(plan) {
   for (const c of plan.chambers) {
     out.push(c.kind === 'inline'
       ? `  chamber ${c.role.padEnd(10)} inline    ${c.note}`
+      : c.kind === 'excavation'
+      ? `  chamber ${c.role.padEnd(10)} excavation ${c.rect[0]},${c.rect[1]} -> ${c.rect[2]},${c.rect[3]}`
       : c.kind === 'organic'
       ? `  chamber ${c.role.padEnd(10)} organic cols ${c.left}..${c.right} rows ${c.top}..${c.bot}${c.keepEdge ? ' (edge held)' : ''}`
       : `  chamber ${c.role.padEnd(10)} ${String(c.kind).padEnd(6)} at ${c.x},${c.y}` +
@@ -119,7 +121,9 @@ export function describePlan(plan) {
         (c.w != null ? ` w${c.w}` : '') + (c.dyMin != null ? ` rows ${c.dyMin}..${c.dyMax}` : ''));
   }
   for (const l of plan.links) {
-    out.push(l.kind === 'h' || l.kind === 'branch'
+    out.push(l.kind === 'gallery'
+      ? `  gallery ${l.from} -> ${l.to}: ${l.rects.map(r => r.join(',')).join(' / ')}`
+      : l.kind === 'h' || l.kind === 'branch'
       ? `  link    ${l.kind.padEnd(10)} from ${l.x0},${l.y} dir ${l.dir > 0 ? '+' : '-'} steps ${l.steps} -> x${l.endX}`
       : l.kind === 'secret'
         ? `  link    secret     mouth ${l.x},${l.y} dir ${l.dir > 0 ? '+' : '-'} len ${l.len} -> alcove ${l.alcove.x},${l.alcove.y}`

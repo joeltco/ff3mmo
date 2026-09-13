@@ -24,7 +24,7 @@ Research and the initial gameplay evaluation are in
 | Tozus | Doctor's Potion treatment opens the passage. Mini access, shops, and a generated bossless tunnel with forward and reverse exits. |
 | Vikings / Nepto | Giant Rat, NEPTO conversation quest, restored waters and Enterprise reward. |
 | Western towns | Tokkul, Village of the Ancients, Gulgan Gulch, Gysahl and Living Woods; native inhabitants, shops, spell lessons, healing and route hints. |
-| Owen | Machinery-themed ascent, Medusa, Desch's guardian scene and completed exit. |
+| Owen | Five-floor adaptation of the ten-floor ROM tower, Medusa, Desch's guardian scene and completed exit. Uses maps 126/128/130/132/134 (native 2F/4F/6F/8F/10F), every other floor, as material donors; generated layouts do not reproduce the original tower geometry. |
 | Dwarven Hollows | Gutsco, stolen horns, Flame Cave and Salamander; Fire Crystal jobs, chief's reward and opened vault. |
 | Hein / Argus | Tokkul capture, Castle Hein, Barrier Shift and Scholar Study; restored forest, castle audience, Time Wheel and flying Enterprise. |
 | Revisit routes | Restored woods offer a personal Hein replay; story rewards remain one-time. Mythril Mines finish by finding the endpoint. Chocobo Woods offer rides. |
@@ -155,6 +155,11 @@ The 400-seed dungeon sweep passes; Altar and Seals retain their existing
 structural snapshots. Dedicated regression cases use the actual map renderer
 to check the previously failing chest, boulder and exit routes.
 
-All 105 deployment gates passed after fixes and focused retests, with additional
-route and rendering checks. Lint and whitespace checks also passed. A consistent
-SQLite backup was taken before deployment and its integrity was verified.
+~~All 105 deployment gates passed~~ was an inaccurate description: those were
+separate checks and focused retests, not 105 gates enforced by `deploy.sh`.
+The original runner had 89 executable gate calls. The v1.12.1 containment
+release passed 108; restoring Mines and adding its two gates brings the local
+runner to **110**. The runner remains ignored and untracked. This count does not
+claim that all 110 were rerun together or that Mines has been deployed.
+Lint and whitespace checks also passed for v1.12.0. A consistent SQLite backup
+was taken before that deployment and its integrity was verified.

@@ -138,7 +138,7 @@ for (const slot of new Set(CHAMBERS.map((c) => c.slot))) {
 // ── 3. Both dungeons must draw from the catalogue ──────────────────────────
 // The whole point is that a chamber is not owned by one dungeon or one floor.
 // Snake layouts have no catalogue slots; the carved topology supplies variety.
-const caveIds = new Set(DUNGEONS.filter(d => d.layout.floors.some(f => f !== 'snake')).map(d=>d.id));
+const caveIds = new Set(DUNGEONS.filter(d => !d.design && d.layout.floors.some(f => f !== 'snake')).map(d=>d.id));
 for (const dgId of caveIds) {
   const got = [...dungeonsWith.entries()].filter(([, set]) => set.has(dgId)).map(([id]) => id);
   if (got.length < 3) fails.push(`dungeon '${dgId}' only ever rolls ${got.length} chamber type(s) (${got.join(', ')}) — it is not really using the catalogue`);

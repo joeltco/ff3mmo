@@ -1,9 +1,21 @@
+## 1.13.0 — 2026-09-13
+
+- Rebuild Mithril Mines as two authored excavations with native mine artwork,
+  a searchable rock face, hidden stair, equipment caches and an exploration
+  endpoint. Replace its three generic cave floors and update only its dungeon
+  snapshots; other dungeon layouts retain their existing snapshots.
+- Preserve the mine's seed, discoveries and claimed caches across personal
+  run saves. Save ordinary chest rewards together with their consumed state.
+
+See [the Mines milestone](docs/plans/MITHRIL-MINES-REFACTOR.md) for the design,
+validation and remaining MMO work.
+
 ## 1.12.1 — 2026-09-13
 
 - Restrict static serving to browser assets and reject private paths, encoded
   traversal and symlink aliases. Add a real-handler gate proven to fail against
   the former server, which exposed the root database and Git configuration.
-- Track the deployment script and enforce 18 previously omitted continent
+- Repair the local deployment script and enforce 18 previously omitted continent
   checks plus the static-exposure gate. Run preflight in a disposable copy
   without player databases; retain the script's commit, push and smoke rollback.
 - Mithril Mines remains separate, uncommitted work and is not in this release.

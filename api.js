@@ -1,3 +1,4 @@
+import { sanitizeDungeonRun } from './src/dungeons/run-state.js';
 // Auth + Save API — handles /api/* routes
 import { createRequire } from 'module';
 import { createHmac } from 'crypto';
@@ -334,6 +335,7 @@ function _validateSaveData(data) {
     }
     out.flags = f;
   }
+  out.dungeonRun = sanitizeDungeonRun(data.dungeonRun);
   if (data.consumedTiles && typeof data.consumedTiles === 'object' && !Array.isArray(data.consumedTiles)) {
     // Keep as-is; capped indirectly by overall payload size. Each key is a
     // map id, each value is a per-tile set of consumed coords.

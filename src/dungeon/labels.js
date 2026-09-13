@@ -32,7 +32,7 @@ const _cache = new Map();
  * reproduces that value rather than replacing it.
  */
 export function dungeonLevelCount(dungeon) {
-  return Math.max(1, (dungeon ? dungeon.floors : 5) - 1);
+  return dungeon?.design ? dungeon.floors : Math.max(1, (dungeon ? dungeon.floors : 5) - 1);
 }
 
 /** The dungeon's boss HP, or the default boss's when a row names no monster. */

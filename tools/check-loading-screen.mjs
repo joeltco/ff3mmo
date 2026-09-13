@@ -44,7 +44,7 @@ console.log('labels');
 for (const d of DUNGEONS) {
   const L = dungeonLabels(d);
   const boss = MONSTERS.get(d.bossId);
-  const want = { name: d.name, levels: `${d.floors - 1} Levels`, hp: d.ending === 'reach' ? '' : `HP ${boss.hp}` };
+  const want = { name: d.name, levels: `${d.floors - (d.design ? 0 : 1)} Levels`, hp: d.ending === 'reach' ? '' : `HP ${boss.hp}` };
   const got = { name: txt(L.nameBytes), levels: txt(L.levelsBytes), hp: txt(L.hpBytes) };
   for (const k of ['name', 'levels', 'hp']) {
     if (got[k] === want[k]) ok(`${d.id} ${k}: "${got[k]}"`);

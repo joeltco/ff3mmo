@@ -1,3 +1,4 @@
+import { sanitizeDungeonRun } from './dungeons/run-state.js';
 import { queueCloudDelete } from './save-sync.js';
 export function openSaveDB() {
   return new Promise((resolve, reject) => {
@@ -51,6 +52,7 @@ export function parseSaveSlots(data) {
       words: s.words && typeof s.words === 'object' ? { ...s.words } : {},
       flags: s.flags && typeof s.flags === 'object' ? { ...s.flags } : {},
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
+      dungeonRun: sanitizeDungeonRun(s.dungeonRun),
       consumedTiles: (s.consumedTiles && typeof s.consumedTiles === 'object') ? s.consumedTiles : {},
       consumedTilesAt: (s.consumedTilesAt && typeof s.consumedTilesAt === 'object') ? s.consumedTilesAt : {},
     };

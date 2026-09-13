@@ -86,6 +86,7 @@ export const ps = {
   // Word Memory: id -> 1 for every Key Term learned. The vocabulary lives in
   // data/keywords.js; only which ones are known is saved.
   words: {},
+  dungeonRun: null,
   consumedTiles: {},
   // Parallel to consumedTiles, keyed the same way (mapId → "x,y" → epoch ms):
   // the time a chest tile was opened. Used by expireResettableChests to bring

@@ -91,6 +91,13 @@ console.log(`floor                    walkTiles  jaccard  alwaysTiles  entrances
 for (const dg of DUNGEONS) {
  for (let f = 0; f < dg.floors; f++) {
   const lay = layoutForFloor(dg, f);
+  if (dg.design) {
+    const variants = new Set();
+    for (let k = 0; k < SEEDS; k++) variants.add(Buffer.from(generateFloor(rom, f, BASE + k * 7919, dg).tilemap).toString('hex'));
+    if (variants.size !== 3) fails.push(`${dg.id} f${f}: expected three authored branch variants, found ${variants.size}`);
+    console.log(`${dg.id} f${f}: ${variants.size} authored branch variants; signature route stays fixed`);
+    continue;
+  }
   if (!LIMITS.has(lay)) { fails.push(`${dg.id} floor ${f}: layout '${lay}' has no variety limits — pin them from a measurement`); continue; }
   const lim = LIMITS.get(lay);
   const label = `${dg.id} f${f} ${lay ?? 'boss'}`;

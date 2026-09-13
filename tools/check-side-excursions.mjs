@@ -43,8 +43,9 @@ function endpoint(map,flag,x,y,spell){
 }
 // Kazus's mine door, and a bossless finish.
 loadMapById(10);at(21,11);finish();assert.equal(mapSt.currentMapId,12000);
-loadMapById(12002);assert.equal(mapSt.bossSprite,null);
-endpoint(12002,'mines_explored',93,59);
+// The Mines complete within their exploration map; their full walking and
+// return route is checked by check-mithril-mines.mjs.
+loadMapById(12001);assert.equal(mapSt.bossSprite,null);assert.equal(mapSt.warpTile,null);
 for(const [x,y,base,flag,spell] of [[32,53,10000,'dohr_defeated',0x0d],[89,96,11000,'bahamut_defeated',0x06]]){
   delete ps.flags.invincible_acquired;world(x,y);
   assert.equal(transSt.pendingAction,null);assert.notEqual(msgState.state,'none');

@@ -37,6 +37,14 @@ const check = (where, page) => {
   }
 };
 
+const { DUNGEONS } = await import('../src/data/dungeons.js');
+const { planDungeonFloor } = await import('../src/dungeons/compile.js');
+for (const dungeon of DUNGEONS.filter(d => d.design)) for (let f = 0; f < dungeon.floors; f++) {
+  for (const feature of planDungeonFloor(dungeon, f, 0).features) {
+    for (const page of feature.pages || []) check(`${dungeon.id}.${feature.id}`, page);
+  }
+}
+
 const { MOUNTAIN_ESCAPE, HEIN_CAPTURE, DUNGEON_RETURNS } = await import('../src/data/story-scenes.js');
 for (const page of [...MOUNTAIN_ESCAPE, ...HEIN_CAPTURE, ...Object.values(DUNGEON_RETURNS).flat()]) check('field scene', page);
 

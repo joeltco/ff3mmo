@@ -65,7 +65,7 @@ export function floorNames(dg) {
   const out = [];
   for (let f = 0; f < dg.floors; f++) {
     const lay = layoutForFloor(dg, f);
-    out.push(`F${f + 1} ${lay ? (LAYOUT_LABEL[lay] || lay) : 'boss'}`);
+    out.push(`F${f + 1} ${dg.design ? dg.design.floors[f] : lay ? (LAYOUT_LABEL[lay] || lay) : 'boss'}`);
   }
   return out;
 }
@@ -197,6 +197,7 @@ function overlay(ctx2d, md, seen) {
       const [x, y] = coord.split(',').map(Number);
       ring(x, y, dest.goBack ? '#ff9a3a' : '#ff5ad2', 3);
     }
+    for (const feature of md.features || []) ring(...feature.at, feature.kind === 'landmark' ? '#ffffff' : '#4ad2ff');
     if (md.warpTile) ring(md.warpTile.x, md.warpTile.y, '#ffffff', 3);
     // ⛔ Entrance LAST, and inset, so it nests inside rather than replacing.
     // On the deeper floors the tile you arrive on is ALSO the way back, so both
@@ -223,6 +224,10 @@ function report(md, seen) {
   const lay = layoutForFloor(dg, state.floor);
   const cb = corridorBounds(dg);
   lines.push(`${dg.name}  f${state.floor}/${dg.floors - 1}   layout ${lay || 'BOSS CHAMBER'}   map ${dg.base + state.floor}`);
+  if (md.designVersion) {
+    lines.push(`definition v${md.designVersion} / ${md.sectionId}`);
+    lines.push(...md.features.map(f => `${f.kind} ${f.id} at ${f.at.join(',')}${f.port ? ' -> floor ' + f.port.destination.floor : ''}`));
+  }
   lines.push(`donor ${dg.donorMap}   boss skin ${dg.bossSkinId}   corridors h${cb.hMin}-${cb.hMax} v${cb.vMin}-${cb.vMax}`);
   if (md.chambers && md.chambers.length) {
     lines.push(`chambers: ${md.chambers.map((c) => `${c.id}(${c.what})`).join('   ')}`);

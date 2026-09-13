@@ -1,7 +1,7 @@
 import { ps } from './player-stats.js';
 // Random encounter spawning — extracted from game.js
 
-import { dungeonForMapId, isFinalFloor, STARTING_DUNGEON } from './data/dungeons.js';
+import { dungeonForMapId, isEncounterFloor, STARTING_DUNGEON } from './data/dungeons.js';
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
 import { MONSTERS } from './data/monsters.js';
@@ -96,7 +96,7 @@ export function tickRandomEncounter() {
   // on its deepest normal floor or gain them in its boss chamber — and this
   // fails SILENTLY, which is why it is worth the lookup.
   const _dungeon = dungeonForMapId(mapSt.currentMapId);
-  const inDungeon = !!_dungeon && mapSt.dungeonFloor >= 0 && !isFinalFloor(_dungeon, mapSt.dungeonFloor);
+  const inDungeon = !!_dungeon && mapSt.dungeonFloor >= 0 && isEncounterFloor(_dungeon, mapSt.dungeonFloor);
   const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && !mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
   const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
   if (!inDungeon && !onGrass && !inPatch) return false;

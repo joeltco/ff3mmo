@@ -17,6 +17,7 @@
 // Exit code is 1 if a HARD invariant fails (see `sweepFloors` / `sweepSideMaps`).
 
 import fs from 'node:fs';
+import { applyFeature } from '../src/dungeons/compile.js';
 import { generateFloor, generateSecretRoomMap } from '../src/dungeon-generator.js';
 import { generateLockedRoomMap } from '../src/dungeon-locked-room.js';
 import { DUNGEONS, isFinalFloor, layoutForFloor } from '../src/data/dungeons.js';
@@ -261,6 +262,18 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
       try { r = generateFloor(rom, f, seed, dg); }
       catch (e) { hard.push(`${label} seed ${seed} threw: ${e.message}`); continue; }
       t.seeds++;
+      // Inspect a passage from the reachable side before checking its opened
+      // route. A closed feature must never acquire a live transition early.
+      for (const feature of r.features || []) {
+        if (feature.kind !== 'passage') continue;
+        const closed = reachableFrom(r.tilemap, r.entranceX, r.entranceY);
+        const [x, y] = feature.at;
+        if (![[x-1,y],[x+1,y],[x,y-1],[x,y+1]].some(([a,b]) => a >= 0 && a < 32 && b >= 0 && b < 32 && closed[b*32+a])) {
+          hard.push(`${label} seed ${seed}: passage '${feature.id}' cannot be inspected`);
+        }
+        if (r.triggerMap.has(`${x},${y}`)) hard.push(`${label}: closed passage has an active exit`);
+        applyFeature(r, feature, dg);
+      }
       const tm = r.tilemap;
       const seen = reachableFrom(tm, r.entranceX, r.entranceY);
       let reach = 0;

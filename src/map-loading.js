@@ -1,3 +1,5 @@
+import { applyFeature } from './dungeons/compile.js';
+import { sanitizeDungeonRun } from './dungeons/run-state.js';
 // ═══════════════════════════════════════════════════════════════════════════
 // ⛔⛔⛔  DO NOT HALF-ASS THE DATA PULL.  ⛔⛔⛔
 //
@@ -215,7 +217,16 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   } else {
     floorIndex = floorIndexForMapId(mapId);
     mapSt.dungeonFloor = floorIndex;
+    if (_dungeon.design) {
+      const saved = sanitizeDungeonRun(ps.dungeonRun);
+      ps.dungeonRun = saved || { dungeonId: _dungeon.id, version: _dungeon.design.version,
+        seed: Number.isSafeInteger(mapSt.dungeonSeed) && mapSt.dungeonSeed >= 0 ? mapSt.dungeonSeed : Date.now(), features: {} };
+      mapSt.dungeonSeed = ps.dungeonRun.seed;
+    }
     result = generateFloor(romRaw, floorIndex, mapSt.dungeonSeed, _dungeon);
+    if (_dungeon.design) for (const feature of result.features) {
+      if (ps.dungeonRun.features[feature.id]) applyFeature(result, feature, _dungeon);
+    }
   }
   mapSt.mapData = result;
   mapSt.secretWalls = result.secretWalls;
@@ -227,7 +238,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.pondTiles = result.pondTiles || null;
   mapSt.dungeonDestinations = result.dungeonDestinations;
   mapSt.currentMapId = mapId;
-  _replayConsumedTiles(mapId, result);
+  if (!_dungeon.design) _replayConsumedTiles(mapId, result);
   const playerX = returnX !== undefined ? returnX : result.entranceX;
   const playerY = returnY !== undefined ? returnY : result.entranceY;
   mapSt.worldX = playerX * TILE_SIZE;
@@ -236,7 +247,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   resetIndoorWaterCache();
   clearFlameSprites();
   clearNpcs();
-  if (floorIndex === 0) placeMoogleAtCaveCenter(result);
+  if (floorIndex === 0 && !_dungeon.design) placeMoogleAtCaveCenter(result);
   // ⭐ PRINCESS SARA, in the Cave of Seals' floor-1 exit chamber — the room the
   // boulder opens. Keyed off the MAP ID the quest names (`sasune_missing_
   // daughter`'s `found` stage is `map: 2001`), not off a floor index, so the two
