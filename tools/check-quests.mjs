@@ -196,7 +196,14 @@ for (const [id, qq] of Object.entries(QUESTS)) {
     if (plain !== null) bad(`${tag}: word-gated but plain talk returned pages`);
     const offer = q.askQuestWord(s0.at.map, s0.at.npc, qq.startWord);
     if (!offer) { bad(`${tag}: asking stage 0 about "${qq.startWord}" opened nothing`); continue; }
-    if (!q.acceptQuest(id)) { bad(`${tag}: ACCEPT did not start it`); continue; }
+    let offeredItem = null;
+    if (!q.acceptQuest(id, reward => { offeredItem = reward.item; return true; })) { bad(`${tag}: ACCEPT did not start it`); continue; }
+    if (s0.item && offeredItem !== s0.item) bad(`${tag}: offer item was not handed over`);
+    for (const flag of s0.sets || []) if (!hasFlag(flag)) bad(`${tag}: offer flag ${flag} was not set`);
+    if (s0.vehicle && (!ps.vehicleParked || ps.vehicleParkedMode !== s0.vehicle.mode ||
+        ps.vehicleParkedX !== s0.vehicle.x || ps.vehicleParkedY !== s0.vehicle.y)) {
+      bad(`${tag}: offer craft was not parked`);
+    }
   } else if (!ps.quests[id]) {
     bad(`${tag}: ungated quest did not start on talk`); continue;
   }

@@ -308,6 +308,17 @@ export const ITEMS = new Map([
   [0xe4, { type: 'scroll', learnedSpell: 0x35, price:  100 }], // Pure (Poisona)
   [0xe5, { type: 'scroll', learnedSpell: 0x36, price:  100 }], // Sight
   [0xe6, { type: 'scroll', learnedSpell: 0x3a, price:  700 }], // Ice2 / Blizzara
+  // Canaan's level-two black magic. MMO scroll ids; spell ids are the
+  // original player spell table (not the monster/item duplicates at $3B+).
+  [0xe7, { type: 'scroll', learnedSpell: 0x2a, price: 700 }], // Thunder
+  [0xe8, { type: 'scroll', learnedSpell: 0x2b, price: 700 }], // Poison
+  [0xea, { type: 'scroll', learnedSpell: 0x26, price: 1500 }], // Cura
+  [0xeb, { type: 'scroll', learnedSpell: 0x23, price: 1500 }], // Fira
+  [0xec, { type: 'scroll', learnedSpell: 0x24, price: 1500 }], // Blizzara
+  [0xed, { type: 'scroll', learnedSpell: 0x25, price: 1500 }], // Thundara
+  [0xee, { type: 'scroll', learnedSpell: 0x2f, price: 700 }], // Mini
+  [0xef, { type: 'scroll', learnedSpell: 0x2e, price: 700 }], // Toad
+  [0xe9, { type: 'scroll', learnedSpell: 0x2c, price: 700 }], // Blind
 ]);
 
 // Shrines short-name overrides for player-facing list/inventory rows.

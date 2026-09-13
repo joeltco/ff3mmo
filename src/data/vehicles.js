@@ -26,7 +26,7 @@ const cue = (romSfxId) => romSfxId + 0x41;
 
 export const VEHICLES = new Map([
   [0, { name: 'on foot',        music: 0x1e, sfx: null,       water: false, flies: false }],
-  [1, { name: 'canoe',          music: 0x08, sfx: null,       water: false, flies: false }],
+  [1, { name: 'chocobo',          music: 0x08, sfx: null,       water: false, flies: false }],
   [2, { name: 'canoe (afloat)', music: 0x1e, sfx: null,       water: true,  flies: false }],
   [3, { name: 'ship',           music: 0x22, sfx: cue(0x04),  water: true,  flies: false }],
   [4, { name: 'airship',        music: 0x0a, sfx: cue(0x26),  water: false, flies: true  }],

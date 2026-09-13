@@ -91,6 +91,14 @@ function stepOntoWarp(defeated) {
 
 const before = stepOntoWarp(false);
 const after = stepOntoWarp(true);
+const { DUNGEONS, ENDING_REACH, isBossFloor } = await import('../src/data/dungeons.js');
+const previousEnding = DUNGEONS[0].ending;
+DUNGEONS[0].ending = ENDING_REACH;
+const bossless = stepOntoWarp(false);
+if (isBossFloor(DUNGEONS[0], 4)) fails.push('a reach ending still spawns a boss');
+DUNGEONS[0].ending = previousEnding;
+if (!bossless.landed || !bossless.warped) fails.push('reaching a bossless endpoint did not finish the run');
+console.log(`bossless     — landed on warp: ${bossless.landed}, warp fired: ${bossless.warped}`);
 console.log(`boss alive   — landed on warp: ${before.landed}, warp fired: ${before.warped}`);
 console.log(`boss beaten  — landed on warp: ${after.landed}, warp fired: ${after.warped}`);
 

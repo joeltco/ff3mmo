@@ -1,3 +1,28 @@
+## 1.12.0 — 2026-09-12
+
+### Floating Continent
+
+- Extend the main adventure through Canaan, Dragon's Peak, Tozus, Nepto, Owen,
+  the dwarves, Flame Cave, Hein, Argus and Cid's flying Enterprise upgrade.
+- Add western towns, shops, healing, Mythril Mines and Chocobo Woods. Bossless
+  dungeons finish at their endpoint; the mountain escape and Healing Copse
+  include the requested warps.
+- Fill missing PvE party slots with NPC adventurers, giving real players
+  priority. Add Desch's journey, Hein's Barrier Shift and Scholar Study.
+- Add later-gated Leviathan and Bahamut caves. Their Invincible milestone and
+  the Surface World are outside this chapter.
+- Preserve story and vehicle data through save loading, serialize cloud writes,
+  recover pending local checkpoints and retry unpaid quest rewards on reconnect.
+- Raise the level cap to 40 and correct canoe/chocobo modes, flight and landing.
+- Validate new dungeon routes and treasure before accepting a seeded layout;
+  broaden layout variation and add their structural snapshots. Existing Altar
+  and Seals snapshots remain unchanged.
+- Show the endpoint objective on bossless loading screens and trim oversized
+  transparent battle sprite margins without changing their native artwork.
+
+See [the build record](docs/FLOATING-CONTINENT-BUILD.md) for MMO adaptations,
+verification coverage and remaining playtest limitations.
+
 ## 1.11.16 — 2026-08-30
 
 ### Castle Sasune's barred exits — a ROM map id is not a place

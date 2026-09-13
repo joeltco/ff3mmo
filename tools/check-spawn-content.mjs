@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { playerRegion } from './lib/talkable.mjs';
 // check-spawn-content.mjs — the player spawns where the content is.
 //
 // Every shop counter, shop keeper and placed NPC on a map has to be REACHABLE
@@ -61,25 +62,9 @@ function calcSpawnY(md, ex, ey) {
 
 /** What the engine does on a fresh entry, spawn override included. */
 function spawnAndRegion(mapId) {
-  const md = loadMap(rom, mapId);
-  // Same condition map-loading.js uses: maps carrying the torch puzzle keep it
-  // closed until the player solves it.
-  if (md.tilemap[16 * 32 + 8] !== 0x32) applyPassage(md.tilemap);
-  const sx = md.entranceX;
-  const sy = calcSpawnY(md, md.entranceX, md.entranceY);
-  const r = new MapRenderer(md, sx, sy);
-  const seen = new Set([sy * W + sx]);
-  const q = [[sx, sy]];
-  while (q.length) {
-    const [x, y] = q.pop();
-    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-      const nx = x + dx, ny = y + dy, k = ny * W + nx;
-      if (nx < 0 || ny < 0 || nx > 31 || ny > 31 || seen.has(k)) continue;
-      if (!r.isPassable(nx, ny)) continue;
-      seen.add(k); q.push([nx, ny]);
-    }
-  }
-  return { sx, sy, seen };
+  const md=loadMap(rom,mapId);
+  const {sx,sy,reach}=playerRegion(md,MapRenderer,calcSpawnY,mapId);
+  return {sx,sy,seen:reach};
 }
 
 // ⛔ "ORTHOGONALLY ADJACENT TO THE WALK" IS THE WRONG TEST, and it fails six

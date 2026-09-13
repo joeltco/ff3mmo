@@ -1,7 +1,7 @@
 // loading-screen.js — loading screen overlay + right-panel moogle.
 // Reads ui/transitions state directly (no shared-bag).
 
-import { dungeonForMapId } from './data/dungeons.js';
+import { dungeonForMapId, ENDING_REACH } from './data/dungeons.js';
 import { bossFramesForDungeon } from './dungeon/boss-chamber.js';
 import { initMapObjectFrames } from './sprite-init.js';
 import { buildSpritePalettes, parseMapProperties } from './map-loader.js';
@@ -10,6 +10,7 @@ import { mapSt } from './map-state.js';
 import { nesColorFade } from './palette.js';
 import { NES_SYSTEM_PALETTE } from './tile-decoder.js';
 import { loadingSt, transSt } from './transitions.js';
+import { encodeName } from './data/strings.js';
 import { dungeonLabels } from './dungeon/labels.js';
 import { hudSt } from './hud-state.js';
 import { getLandTurtleFrames, getLandTurtleFadeFrames, getLoadingMoogleFadeFrames } from './npc.js';
@@ -61,9 +62,10 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   // The floor does not exist yet, so the dungeon comes from the transition's
   // destination — the same resolve the silhouette below uses.
   const dungeon = dungeonForMapId(transSt.destMapId) || dungeonForMapId(mapSt.currentMapId);
-  const { levelsBytes, hpBytes } = dungeonLabels(dungeon);
+  const { levelsBytes, hpBytes, objectiveBytes } = dungeonLabels(dungeon);
+  const reach = dungeon?.ending === ENDING_REACH;
   const hpW = measureText(hpBytes);
-  const bossRowW = 16 + 4 + hpW;
+  const bossRowW = reach ? measureText(objectiveBytes) : 16 + 4 + hpW;
   const infoBoxW = Math.ceil(Math.max(bossRowW + 16, 80) / 8) * 8;
   const infoBoxH = 48;
   const infoBoxX = Math.round(cx - infoBoxW / 2);
@@ -74,6 +76,10 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   drawText(ui.ctx, infoBoxX + Math.floor((infoBoxW - floorsW) / 2), infoBoxY + 10, levelsBytes, fadedTextPal);
   const bossContentX = infoBoxX + Math.floor((infoBoxW - bossRowW) / 2);
   const bossRowY = infoBoxY + 22;
+  if (reach) {
+    drawText(ui.ctx, bossContentX, bossRowY + 4, objectiveBytes, fadedTextPal);
+    return;
+  }
   // ⛔ THE SILHOUETTE WAS ALWAYS THE LAND TURTLE. It is the FF2 Adamantoise rip,
   // drawn on the way into every dungeon. A dungeon whose skin names a map object
   // (the Cave of Seals' Djinn) shows ITS boss instead.
@@ -83,7 +89,7 @@ function _drawLoadingInfoBox(cx, vpTop, vpBot, fadeLevel, fadedTextPal) {
   // load uses, so the loading screen and the room agree.
   const own = _dungeonBossFrames(dungeon);
   if (own) {
-    ui.ctx.drawImage(own[Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY);
+    ui.ctx.drawImage(own[Math.floor(transSt.timer / 400) & 1], bossContentX, bossRowY, 16, 16);
   } else {
     const bossFade = getLandTurtleFadeFrames();
     const landTurtle = getLandTurtleFrames();
@@ -123,8 +129,10 @@ function _drawLoadingRightPanel(fadeLevel) {
 }
 
 function _drawLoadingChatBubble(rpCX, rpY, rpH, fadeLevel) {
-  const beatBytes = new Uint8Array([0x8B,0xA8,0xA4,0xB7,0xFF,0xB7,0xAB,0xA8]);
-  const bossBytes = new Uint8Array([0x8B,0xB2,0xB6,0xB6,0xC0,0xFF,0x94,0xB8,0xB3,0xB2,0xC4]); // "Boss, Kupo!"
+  const dungeon = dungeonForMapId(transSt.destMapId) || dungeonForMapId(mapSt.currentMapId);
+  const reach = dungeon?.ending === ENDING_REACH;
+  const beatBytes = encodeName(reach ? 'Find the' : 'Beat the');
+  const bossBytes = encodeName(reach ? 'End, Kupo!' : 'Boss, Kupo!');
   let fadedWhite = 0x30;
   for (let s = 0; s < fadeLevel; s++) fadedWhite = nesColorFade(fadedWhite);
   const whiteRgb = NES_SYSTEM_PALETTE[fadedWhite] || [0,0,0];

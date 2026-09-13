@@ -49,6 +49,15 @@ const ok = (msg) => console.log('  ✓ ' + msg);
 // deriving the expectation from `areas.js` would make this test agree with any
 // typo the table happens to contain.
 const MEASURED = new Map([
+  [93, 'Chocobo Woods'],
+  [60, 'Village of the Ancients'], [67, 'Gulgan Gulch'], [69, 'Gysahl'],
+  // Canaan: map-property title byte, through the ROM's $0100 string block
+  // (3A/9341 and 3F/E252-E264). Same title source used by the native banner.
+  [55, 'Tokkul'], [78, 'Castle Argus'], [173, 'Living Woods'],
+  [85, 'Dwarven Hollows'], // ROM title $18c
+  [31, 'Canaan'],
+  [43, 'Tozus'],
+  [51, 'Vikings Cove'],
   [10, 'Kazus'], [18, 'Castle Sasune'], [29, 'Sasune Throne Room'], [114, 'Ur'],
 ]);
 

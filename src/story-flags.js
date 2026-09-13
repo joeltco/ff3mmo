@@ -31,7 +31,7 @@ export function hasFlag(id) {
  * Idempotent: setting a flag that is already set is a no-op and does NOT
  * re-save, so a stage that is re-entered costs nothing.
  */
-export function setFlag(id) {
+export function setFlag(id, { persist = true } = {}) {
   if (!isFlag(id)) {
     console.warn('[flags] refusing to set undeclared flag ' + id);
     return false;
@@ -39,7 +39,9 @@ export function setFlag(id) {
   const bag = _bag();
   if (bag[id]) return true;
   bag[id] = 1;
-  try { saveSlotsToDB(); } catch (_) { /* pre-boot / headless harness */ }
+  if (persist) {
+    try { saveSlotsToDB(); } catch (_) { /* pre-boot / headless harness */ }
+  }
   return true;
 }
 

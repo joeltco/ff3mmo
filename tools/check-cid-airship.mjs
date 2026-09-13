@@ -175,7 +175,7 @@ if (ghost && man) {
   // cartridge dresses her in, not a lookalike. Reserved to the two of them and
   // nobody else; they stand in different rooms and are never co-visible.
   const _res = RESERVED_BUNDLES.get(0x01D910);
-  if (_res && _res.has('cid') && _res.has('sara') && _res.size === 2) {
+  if (_res && _res.has('cid') && _res.has('sara') && _res.has('canaan_cid') && _res.size === 3) {
     ok('0x01D910 is reserved to Cid and Sara — the ROM\'s own wearers of gfx 25');
   }
   else bad('0x01D910 is not reserved to Cid');

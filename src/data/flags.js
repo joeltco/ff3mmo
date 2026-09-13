@@ -34,6 +34,26 @@
  * not declared here does not exist.
  */
 export const FLAGS = {
+  mines_explored: { text: 'Reached the end of the Mythril Mines beneath Kazus.' },
+  invincible_acquired: { text: 'The later-world Invincible milestone opens the optional summon caves.' },
+  dohr_defeated: { text: 'Leviathan has answered the warrior at Lake Dohr.' },
+  bahamut_defeated: { text: 'Bahamut has granted his summon.' },
+  floating_continent_complete: { text: 'The Floating Continent is safe and the Enterprise can fly.' },
+  doctor_healed: { text: 'The Tozus doctor is well and his passage is open.' },
+  mrs_cid_healed: { text: 'Mrs. Cid has recovered after receiving an Elixir.' },
+  hein_defeated: { text: 'Hein is defeated and the Elder Tree has returned to the Living Woods.' },
+  enterprise_upgraded: { text: 'Cid has fitted the Enterprise with the Time Wheel.' },
+  horns_stolen: { text: 'Gutsco has stolen both dwarven horns and fled north.' },
+  dwarves_saved: { text: 'Salamander is defeated and both dwarven horns are home.' },
+  owen_restored: { text: 'Medusa is defeated and Owen\'s engine is safe.' },
+  nepto_restored: { text: 'Nepto\'s eye is restored and the Enterprise is ready to sail.' },
+  tozas_passage_open: { text: 'Found the far end of Tozas Tunnel.' },
+  nelv_pass_open: {
+    text: 'Cid\'s ram has shattered the boulder blocking the southern road.',
+  },
+  bahamut_escaped: {
+    text: 'Escaped Bahamut at the summit and reached the Healing Copse.',
+  },
   // ── Ur ──────────────────────────────────────────────────────────────────
   //
   // ⭐ THESE EXIST BECAUSE `after` DIED. A quest's parting line used to be

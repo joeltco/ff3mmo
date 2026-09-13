@@ -311,6 +311,15 @@ export function processNextTurn() {  if (battleSt.turnQueue.length === 0) {
       if (pn) queueBattleMsg(pn);
       _playerTurnFight();
     }
+    else if (cmd === 'study') {
+      inputSt.battleActionCount++;
+      const target = battleSt.isRandomEncounter
+        ? battleSt.encounterMonsters?.find(m => m.hp > 0) : activeBossStats();
+      const weak = target?.weakness;
+      const words = Array.isArray(weak) ? weak.join('/') : (weak || 'None');
+      replaceBattleMsg(_nameToBytes(`Weak: ${words}`));
+      battleSt.battleState = 'study-read'; battleSt.battleTimer = 0;
+    }
     else if (cmd === 'defend') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); playSFX(SFX.DEFEND_HIT); battleSt.battleState = 'defend-anim'; battleSt.battleTimer = 0; }
     else if (cmd === 'item') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); _playerTurnItem(); }
     else if (cmd === 'magic') { inputSt.battleActionCount++; if (pn) queueBattleMsg(pn); _playerTurnMagic(); }
@@ -564,29 +573,30 @@ function _applyEndOfRoundPoison() {
 // `combatant-ai.js`; this function builds the player-side team list, calls
 // the shared picker, and writes the ally-specific state bag.
 function _tryAllyCure(ally, allyIdx) {
-  if (!canCastBasic(ally, SPELL_CURE)) return false;
+  const spellId = !pvpSt.isPVPBattle && canCastBasic(ally, 0x26) ? 0x26 : SPELL_CURE;
+  if (!canCastBasic(ally, spellId)) return false;
 
   const team = _buildPlayerTeam();
   const target = pickHealTarget(team, AI_HEAL_THRESHOLD);
   if (!target) return false;
 
-  const heal = rollCureAmount(ally);
+  const heal = rollCureAmount(ally, { power: SPELLS.get(spellId)?.power });
   battleSt.allyMagicCasterIdx     = allyIdx;
   battleSt.allyMagicTargetType    = target.ref.type;
   battleSt.allyMagicTargetIdx     = target.ref.index;
-  battleSt.allyMagicSpellId       = SPELL_CURE;
+  battleSt.allyMagicSpellId       = spellId;
   battleSt.allyMagicHealAmount    = heal;
   battleSt.allyMagicEffectApplied = false;
   battleSt.allyMagicItemMode      = false;
   setActiveCast({
     caster: { faction: 'ally', idx: allyIdx },
-    spellId: SPELL_CURE,
+    spellId,
     targets: [{ faction: target.ref.type, idx: target.ref.index }],
     healAmount: heal,
   });
-  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId: SPELL_CURE, target: _wireTargetFromAllyMagicBag(), healAmount: heal });
+  _emitWireAllyAction(allyIdx, { kind: 'magic', spellId, target: _wireTargetFromAllyMagicBag(), healAmount: heal });
   queueBattleMsg(ally.name ? _nameToBytes(ally.name) : BATTLE_ALLY);
-  replaceBattleMsg(getSpellNameShrinesClean(SPELL_CURE));
+  replaceBattleMsg(getSpellNameShrinesClean(spellId));
   playSFX(SFX.MAGIC_CAST);
   battleSt.battleState = 'ally-magic-cast';
   battleSt.battleTimer = 0;
@@ -724,7 +734,8 @@ function _tryAllyOffensiveCast(ally, allyIdx) {
       if (a) enemies.push({ ref: { type: 'pvp-enemy', index: i + 1 }, hp: a.hp });
     });
   } else {
-    return false;
+    targetType = 'enemy';
+    enemies.push({ ref: { type: 'enemy', index: 0 }, hp: getEnemyHP() });
   }
 
   const target = pickRandomLivingTarget(enemies);

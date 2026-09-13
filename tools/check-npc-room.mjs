@@ -79,7 +79,7 @@ for (const [mapId, list] of TOWN_NPCS) {
   try { md = loadMap(rom, mapId); }
   catch (e) { err(`map ${mapId}: loadMap threw — ${e.message}`); continue; }
 
-  const { reach, stand, sx, sy, passable } = playerRegion(md, MapRenderer, calcSpawnY);
+  const { reach, stand, sx, sy, passable } = playerRegion(md, MapRenderer, calcSpawnY, mapId);
   if (!reach.size) { err(`map ${mapId}: the player's own spawn (${sx},${sy}) is not walkable`); continue; }
 
   for (const n of list) {

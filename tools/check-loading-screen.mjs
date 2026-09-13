@@ -34,7 +34,7 @@ const { DUNGEONS } = await import('../src/data/dungeons.js');
 const { dungeonLabels } = await import('../src/dungeon/labels.js');
 const { MONSTERS } = await import('../src/data/monsters.js');
 
-const txt = (b) => [...b].map((c) => (c === 0xFF ? ' '
+const txt = (b) => [...b].map((c) => (c === 0xBF ? "'" : c === 0xFF ? ' '
   : c >= 0x8A && c <= 0xA3 ? String.fromCharCode(65 + c - 0x8A)
   : c >= 0xA4 && c <= 0xBD ? String.fromCharCode(97 + c - 0xA4)
   : c >= 0x80 && c <= 0x89 ? String.fromCharCode(48 + c - 0x80) : '?')).join('');
@@ -44,7 +44,7 @@ console.log('labels');
 for (const d of DUNGEONS) {
   const L = dungeonLabels(d);
   const boss = MONSTERS.get(d.bossId);
-  const want = { name: d.name, levels: `${d.floors - 1} Levels`, hp: `HP ${boss.hp}` };
+  const want = { name: d.name, levels: `${d.floors - 1} Levels`, hp: d.ending === 'reach' ? '' : `HP ${boss.hp}` };
   const got = { name: txt(L.nameBytes), levels: txt(L.levelsBytes), hp: txt(L.hpBytes) };
   for (const k of ['name', 'levels', 'hp']) {
     if (got[k] === want[k]) ok(`${d.id} ${k}: "${got[k]}"`);
@@ -103,6 +103,7 @@ await mutate('floors 4 -> 7', { floors: 7 }, { banner: 'same', view: 'changed' }
 // A different boss must repaint the HP row. 0x06 Berserker (30 HP) is two digits
 // against the Djinn's three, so the box re-widths too — a same-width swap would
 // still be caught by the pixel diff, this one just fails louder.
+await mutate('bossless objective', { ending: 'reach' }, { banner: 'same', view: 'changed' });
 await mutate('bossId Djinn -> Berserker', { bossId: 0x06 }, { banner: 'same', view: 'changed' });
 
 // ── 3. The frame is not shared between dungeons ────────────────────────────

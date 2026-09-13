@@ -37,7 +37,8 @@ let failed = 0;
 const ok  = (m) => console.log(`  ✓ ${m}`);
 const bad = (m) => { console.error(`  ✗ ${m}`); failed++; };
 
-const { DUNGEONS, bossFloorMapId } = await import('../src/data/dungeons.js');
+const { DUNGEONS, bossFloorMapId, isBossFloor } = await import('../src/data/dungeons.js');
+const BOSS_DUNGEONS = DUNGEONS.filter(d => isBossFloor(d, d.floors - 1));
 const { MONSTERS } = await import('../src/data/monsters.js');
 const { DEFAULT_BOSS_ID } = await import('../src/data/bosses.js');
 const { battleSt, activeBossStats } = await import('../src/battle-state.js');
@@ -47,7 +48,7 @@ const q = await import('../src/quests.js');
 const { QUESTS } = await import('../src/data/quests.js');
 
 // ── 1. every dungeon names a boss the bestiary actually has ───────────────
-for (const d of DUNGEONS) {
+for (const d of BOSS_DUNGEONS) {
   const mon = MONSTERS.get(d.bossId);
   if (!mon) { bad(`dungeon '${d.id}' names bossId 0x${(d.bossId | 0).toString(16)} — not in the bestiary`); continue; }
   ok(`${d.id}: boss 0x${d.bossId.toString(16).toUpperCase()} = ${mon.hp} HP / atk ${mon.atk} / def ${mon.def}`);
@@ -57,7 +58,7 @@ for (const d of DUNGEONS) {
 // against a `startBattle` that still hardcoded the default — the bug it exists
 // to catch would be invisible. Guard the guard.
 {
-  const ids = DUNGEONS.map((d) => d.bossId);
+  const ids = BOSS_DUNGEONS.map((d) => d.bossId);
   if (new Set(ids).size !== ids.length) bad('two dungeons share a bossId — this gate cannot tell them apart');
   else if (!ids.includes(DEFAULT_BOSS_ID)) bad('no dungeon uses DEFAULT_BOSS_ID — the fallback path is untested');
   else ok('the dungeons have distinct bosses, and one of them is the default');
@@ -68,7 +69,7 @@ for (const d of DUNGEONS) {
 // Drives the SHIPPED `startBattle()`. A reimplementation of the lookup here
 // would keep agreeing with itself after someone changed the real one.
 const { startBattle } = await import('../src/battle-update.js');
-for (const d of DUNGEONS) {
+for (const d of BOSS_DUNGEONS) {
   const mapId = bossFloorMapId(d);
   mapSt.currentMapId = mapId;
   ps.quests = {}; ps.flags = {};
@@ -93,7 +94,7 @@ for (const d of DUNGEONS) {
 // `resetBattleVars` does not clear `bossId`, so it must be ASSIGNED on every
 // entry, not just when a dungeon happens to name one.
 {
-  const seals = DUNGEONS.find((d) => d.bossId !== DEFAULT_BOSS_ID);
+  const seals = BOSS_DUNGEONS.find((d) => d.bossId !== DEFAULT_BOSS_ID);
   const altar = DUNGEONS.find((d) => d.bossId === DEFAULT_BOSS_ID);
   if (seals && altar) {
     mapSt.currentMapId = bossFloorMapId(seals); startBattle();
@@ -145,7 +146,7 @@ ps.quests = {}; ps.flags = {};
 // The fight was never too hard. The counterplay did not function.
 {
   const { elemMultiplier } = await import('../src/battle-math.js');
-  const seals = DUNGEONS.find((d) => d.bossId === 0xCD);
+  const seals = BOSS_DUNGEONS.find((d) => d.bossId === 0xCD);
   if (seals) {
     mapSt.currentMapId = bossFloorMapId(seals);
     startBattle();
@@ -203,7 +204,7 @@ ps.quests = {}; ps.flags = {};
 {
   const { DROP_GATE_DIE } = await import('../src/data/monsters.js');
   const { ITEMS } = await import('../src/data/items.js');
-  for (const d of DUNGEONS) {
+  for (const d of BOSS_DUNGEONS) {
     if (!d.bossDrop) continue;
     const bd = d.bossDrop;
     if (!ITEMS.get(bd.item)) { bad(`${d.id}: bossDrop item 0x${(bd.item | 0).toString(16)} is not a real item`); continue; }

@@ -190,6 +190,8 @@ it is. Only `$600B` = 2 (Cid's airship, granted at Kazus) is confirmed.
 
 ## Dungeon floor generation (Altar Cave)
 
+- **Bossless dungeons end by finding the end.** Joel, 2026-09-12: dungeons without bosses are navigation objectives, completed by reaching their endpoint. A boss fight is not a universal completion requirement. The current registry still assumes a boss chamber on every final floor; this rule is the intended behavior for future bossless dungeon support, not a claim that it is implemented. See [FF3 gameplay reference](FF3-GAMEPLAY-REFERENCE.md).
+
 `generateFloor(romData, floorIndex, seed)` in `src/dungeon-generator.js`. The live game seeds with `Date.now()` (`map-triggers.js:287`) on every overworld→cave entry — so reproduce in-game floors by passing large/timestamp seeds to the viewer, NOT seed 1. **Always validate gen changes with `tools/floor-view.mjs` across many seeds (incl. timestamp-style) before shipping.**
 
 - **Floor 0 = two rooms (left/right, randomized) + corridor, traced as ONE continuous ceiling snake.** Built via the deeper-floor boundary mode, NOT two separate room outlines (that left a room's ceiling as a disconnected formation). Steps: assemble one `inside` mask (`addRoom` per room, clamped to halves, unioned) → fill ONLY the void gap between rooms as a 5-tall neck (NOT the full span — that makes a bad H-topology) → boundary-detect (inside tile touching void = CEILING, else FLOOR) → **close diagonal perimeter gaps to a fixpoint** (boundary tracing links some ceilings only diagonally) → cleanup (`enforceMinCeilingGap` → `ensureCeilingConnectivity` → `addOverhang`, which eats the neck to a 1-tile corridor) → after the secret path, a bridge-repair loop reconnects any cut-off main-floor ceiling.
@@ -928,4 +930,3 @@ left open on purpose. Parked while the beginner valley is hardened.
     can reach an auto-all spell through the ally AI pool today
     (`check-spell-targeting` section 5 pins that), so nothing is broken — but a
     multi-target ally cast path does not exist and would be real work.
-

@@ -17,7 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ME from './lib/ff3-map-encounters.mjs';
 import * as EN from './lib/ff3-encounters.mjs';
-import { DUNGEONS, isBossFloor, romMapForFloor } from '../src/data/dungeons.js';
+import { DUNGEONS, isBossFloor, isFinalFloor, romMapForFloor } from '../src/data/dungeons.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROMP = process.env.FF3_ROM || path.join(HERE, '..', 'FF3-English.nes');
@@ -206,7 +206,7 @@ for (const d of DUNGEONS) {
   for (let f = 0; f < d.floors; f++) {
     const map = romMapForFloor(d, f);
     const key = `${d.encounterZonePrefix}_f${f + 1}`;
-    if (isBossFloor(d, f)) {
+    if (isFinalFloor(d, f)) {
       out.push(zoneFromMap(key, map, {
         rateOverride: 0,
         note: `Floor ${f + 1} is the BOSS CHAMBER. The cartridge gives map ${map} a rate of\n${ME.rateForMap(rom, map)}/256, but our chamber is a single room with a scripted fight, so\nthe rate is forced to 0 here. The group is kept so the formations it\nwould have rolled stay visible.`,
@@ -215,7 +215,7 @@ for (const d of DUNGEONS) {
       out.push(zoneFromMap(key, map));
     }
   }
-  out.push(`  ['${d.encounterZonePrefix}_boss', {
+  if (isBossFloor(d, d.floors - 1)) out.push(`  ['${d.encounterZonePrefix}_boss', {
     rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
     rate: 0,
     formations: [

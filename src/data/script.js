@@ -50,6 +50,50 @@
 // same thing after the quest as before it.
 
 export const SCRIPT = {
+  argus_time_wheel: {
+    voice: { argus_king: [{ while: ['cid'], pages: ['Take the Time Wheel to Cid.', 'You will find him in Canaan.'] }] },
+    stages: {
+      ask: {
+        offer: ['Take our Time Wheel.', 'Bring it to Cid in Canaan.', 'Will you carry it to him?'],
+        accepted: ['The Time Wheel is yours.', 'Cid will know what to do.'],
+        denied: ['I will keep it safe.'],
+      },
+      cid: {
+        say: ['The Time Wheel! Let me see.'],
+        onAdvance: ['The Time Wheel! Perfect!', 'I can fit this to your ship.', 'The Enterprise can fly!', 'She waits west of Canaan.', 'Step aboard to take flight.', 'Press Z over land to land.'],
+      },
+    },
+  },
+  dwarves_horns: {
+    stages: {
+      ask: {
+        offer: ['Gutsco stole our horn!', 'He fled into the lake.', 'Bring our treasure home?'],
+        accepted: ['Take the western passage.', 'Lali-ho! And good luck!'],
+        denied: ['Our door is always open.'],
+      },
+      lake: {
+        say: ['Gutsco is deep in the lake.', 'Bring back our horn!'],
+        onAdvance: ['The horn! Lali-ho!', 'Wait. Your shadow moved!', 'Gutsco! He has both horns!', 'He fled to Flame Cave.', 'Go north. Stop him!'],
+      },
+      flame: {
+        say: ['Flame Cave lies north.', 'Ice armor wards its fire.'],
+        onAdvance: ['Both horns! We are saved!', 'Our vault is open to you.', 'Lali-ho, brave friend!', 'There is trouble in Tokkul.', 'Find the village by the sea.'],
+      },
+    },
+  },
+  vikings_nepto: {
+    stages: {
+      ask: {
+        offer: ['Nepto rages at our ships.', 'His stone eye was stolen.', 'Find it inside the temple.', 'Our ship will be yours.'],
+        accepted: ['Take the northwest road.', 'Bring that eye back!'],
+        denied: ['We can wait a little longer.'],
+      },
+      eye: {
+        say: ['The temple lies northwest.', 'Find the thief in its depths.'],
+        onAdvance: ['The eye! Nepto is calm.', 'The Enterprise is yours.', 'She waits west of the dock.', 'Step aboard and sail!'],
+      },
+    },
+  },
   // ── UR: the missing brother ──────────────────────────────────────────────
   ur_missing_brother: {
     stages: {

@@ -1,6 +1,7 @@
 // World Map Loader — reads FF3 world map data from ROM
 
 import { decodeTile } from './tile-decoder.js';
+import { decodeWorldTrigger, EVENT_ENTRANCE_INDEX } from './world-triggers.js';
 
 // ROM offsets (file offsets, including 16-byte iNES header)
 const COMMON_TILESET   = 0x000010;  // 256B: 4 planes × 64 metatiles
@@ -34,8 +35,10 @@ export function loadWorldMap(romData, worldId) {
       const mid = tilemap[y * MAP_SIZE + x];
       const m = mid & 0x7F;
       const props = tileProps[m];
-      if (!(props.byte1 & 0x80)) continue; // not a trigger
-      const trigId = props.byte2 & 0x3F;
+      const trigger = decodeWorldTrigger(props, entranceTable);
+      const trigId = trigger?.type === 'entrance' ? trigger.trigId
+        : trigger?.type === 'event' ? EVENT_ENTRANCE_INDEX.get(trigger.eventId) : undefined;
+      if (trigId === undefined) continue;
       if (!triggerPositions.has(trigId)) {
         triggerPositions.set(trigId, { x, y });
       }

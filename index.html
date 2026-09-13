@@ -924,7 +924,7 @@
     // cross-device sync. Network errors keep the original console.warn
     // (offline is a normal state, not worth a chat line every save).
     async function serverSave(slot, data) {
-      if (!authToken) return;
+      if (!authToken) return false;
       try {
         const res = await fetch(`${API}/api/save`, {
           method: 'POST',
@@ -939,8 +939,10 @@
           // the game is in-world). Best-effort post if the hook exists.
           try { window.ff3AddChatMessage?.('* Cloud save failed: ' + reason + ' — local save kept', 'system'); }
           catch { /* swallow */ }
+          return false;
         }
-      } catch (e) { console.warn('Save sync failed (network):', e); }
+        return true;
+      } catch (e) { console.warn('Save sync failed (network):', e); return false; }
     }
 
     async function serverDeleteSave(slot) {
@@ -967,7 +969,7 @@
     }
 
     // Expose to game.js via window
-    window.ff3Auth = { serverSave, serverDeleteSave, serverLoadSaves };
+    window.ff3Auth = { serverSave, serverDeleteSave, serverLoadSaves, getAccountKey: () => authToken ? authEmail : null };
 
     // --- ROM buffers + IndexedDB ROM cache ---
     // v1.7.939 — MOVED ABOVE THE PASSWORD GATE. `unlockGate()` runs

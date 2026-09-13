@@ -68,6 +68,43 @@ import { encodeName } from './strings.js';
  * casually.
  */
 export const AREAS = [
+  { head: 93, banner: 'Chocobo Woods', loc: 'chocobo-woods', fromOverworld: false, rooms: new Map(), unreachable: new Set() },
+  { head: 60, banner: 'Village of the Ancients', loc: 'ancients', fromOverworld: true,
+    rooms: new Map([[61, 'ancients-weapon'], [62, 'ancients-armor'], [63, 'ancients-magic'], [64, 'ancients-spring'], [66, 'ancients-inn']]), unreachable: new Set() },
+  { head: 67, banner: 'Gulgan Gulch', loc: 'gurgan', fromOverworld: true,
+    rooms: new Map([[68, 'gurgan-elder']]), unreachable: new Set() },
+  { head: 69, banner: 'Gysahl', loc: 'gysahl', fromOverworld: true,
+    rooms: new Map([[70, 'gysahl-stable'], [72, 'gysahl-tavern'], [73, 'gysahl-inn'], [74, 'gysahl-keys'], [75, 'gysahl-magic'], [77, 'gysahl-spring']]), unreachable: new Set() },
+  { head: 173, banner: 'Living Woods', loc: 'living-woods', fromOverworld: true, rooms: new Map(), unreachable: new Set() },
+  { head: 55, banner: 'Tokkul', loc: 'tokkul', fromOverworld: true,
+    rooms: new Map([[56, 'tokkul-house'], [57, 'tokkul-cellar'], [58, 'tokkul-elder'], [59, 'tokkul-store']]), unreachable: new Set() },
+  { head: 78, banner: 'Castle Argus', loc: 'argus', fromOverworld: true,
+    rooms: new Map([[79, 'argus-tower'], [81, 'argus-king'], [83, 'argus-halls']]), unreachable: new Set() },
+
+  {
+    head: 85, banner: 'Dwarven Hollows', loc: 'dwarves', fromOverworld: true,
+    rooms: new Map([[86, 'dwarves-hall'], [87, 'dwarves-inn'], [88, 'dwarves-weapon'], [89, 'dwarves-armor'], [91, 'dwarves-vault']]),
+    unreachable: new Set(),
+  },
+  {
+    head: 51, banner: 'Vikings Cove', loc: 'vikings', fromOverworld: true,
+    rooms: new Map([[52, 'vikings-dock'], [53, 'vikings-chief'], [54, 'vikings-inn']]),
+    unreachable: new Set(),
+  },
+  {
+    head: 43, banner: 'Tozus', loc: 'tozas', fromOverworld: true,
+    rooms: new Map([[44, 'tozas-doctor'], [46, 'tozas-inn'], [47, 'tozas-magic'], [50, 'tozas-house']]),
+    unreachable: new Set(),
+  },
+  {
+    head: 31, banner: 'Canaan', loc: 'canaan', fromOverworld: true,
+    rooms: new Map([
+      [32, 'canaan-spring'], [33, 'canaan-cid'], [35, 'canaan-vault'],
+      [36, 'canaan-armor'], [38, 'canaan-magic'], [39, 'canaan-weapon'],
+      [41, 'canaan-inn'], [42, 'canaan-salina'],
+    ]),
+    unreachable: new Set(),
+  },
   {
     head: 114, banner: 'Ur', loc: 'ur', fromOverworld: true,
     rooms: new Map([
@@ -235,6 +272,23 @@ for (const a of AREAS) { SHIPPED_MAPS.add(a.head); for (const r of a.rooms.keys(
  * id you arrive on from the courtyard and therefore what players already see.
  */
 export const ARRIVAL_ALIASES = new Map([
+  [80, { map: 79, x: 27, y: 6 }],
+  [82, { map: 83, x: 5, y: 5 }],
+  [84, { map: 83, x: 28, y: 21 }],
+  [171, { map: 78, x: 15, y: 20 }],
+  [172, { map: 78, x: 15, y: 14 }],
+
+  // The cave's upper/lower arrivals differ only by equivalent door aliases.
+  [160, { map: 51, x: 25, y: 2 }],
+  [161, { map: 52, x: 29, y: 1 }],
+  [162, { map: 53, x: 6, y: 2 }],
+  [163, { map: 54, x: 7, y: 9 }],
+  // Tozus's doctor house/tunnel stairs share one native room record.
+  [164, { map: 43, x: 8, y: 8 }],
+  [45, { map: 44, x: 29, y: 1 }],
+  [122, { map: 44, x: 26, y: 30 }],
+  [179, { map: 44, x: 29, y: 4 }],
+  [48, { map: 47, x: 4, y: 8 }],
   // Castle Sasune courtyard (tilemap d93f5b5f) — 186 is the keep's front step.
   [186, { map: 18, x: 15, y: 19 }],
 

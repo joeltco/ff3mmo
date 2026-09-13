@@ -15,6 +15,8 @@
 //      at (6,24)/(8,24) sit under the northern house's exit and are only
 //      approachable that way, which is why that room is legitimately empty.
 
+import { ARRIVAL_ALIASES } from '../../src/data/areas.js';
+import { applyPassage } from '../../src/map-passage.js';
 const W = 32;
 
 /** True if this tile is an exit / door trigger — walkable but not standable. */
@@ -31,31 +33,29 @@ export function isTransitionTile(md, x, y) {
  * Returns { sx, sy, reach, stand } — `reach` is everything the player can walk
  * through, `stand` is the subset they can stop on (no door / exit tiles).
  */
-export function playerRegion(md, MapRenderer, calcSpawnY) {
-  const sx = md.entranceX;
-  const sy = calcSpawnY(md, md.entranceX, md.entranceY);
+export function playerRegion(md, MapRenderer, calcSpawnY, mapId = null) {
+  if (md.tilemap[16 * 32 + 8] !== 0x32) applyPassage(md.tilemap);
+  const sx = md.entranceX, sy = calcSpawnY(md, sx, md.entranceY);
   const renderer = new MapRenderer(md, sx, sy);
-  const passable = (x, y) => x >= 0 && x < W && y >= 0 && y < W && renderer.isPassable(x, y);
-
-  const reach = new Set();
-  if (passable(sx, sy)) {
-    const q = [[sx, sy]];
-    reach.add(sy * W + sx);
-    while (q.length) {
-      const [x, y] = q.pop();
-      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-        const nx = x + dx, ny = y + dy, k = ny * W + nx;
-        if (reach.has(k) || !passable(nx, ny)) continue;
-        reach.add(k); q.push([nx, ny]);
-      }
+  const seeds = [[sx,sy], ...[...ARRIVAL_ALIASES.values()].filter(a => a.map === mapId).map(a => [a.x,a.y])];
+  const reach = new Set(), states = new Set(), q = [];
+  for (const [x,y] of seeds) {
+    const z=renderer.zAfterEntering(x,y,0);
+    if(renderer.isPassable(x,y,z)) { q.push([x,y,z]);states.add(`${x},${y},${z}`);reach.add(y*W+x); }
+  }
+  while(q.length) {
+    const [x,y,z]=q.pop();
+    for(const [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nx=x+dx,ny=y+dy;
+      if(nx<0||ny<0||nx>=W||ny>=W||!renderer.isPassable(nx,ny,z))continue;
+      const nz=renderer.zAfterEntering(nx,ny,z),key=`${nx},${ny},${nz}`;
+      if(states.has(key))continue;
+      states.add(key);reach.add(ny*W+nx);q.push([nx,ny,nz]);
     }
   }
-  const stand = new Set();
-  for (const k of reach) {
-    const x = k % W, y = (k - x) / W;
-    if (!isTransitionTile(md, x, y)) stand.add(k);
-  }
-  return { sx, sy, reach, stand, passable, renderer };
+  const passable=(x,y)=>x>=0&&x<W&&y>=0&&y<W&&[0,1,2].some(z=>renderer.isPassable(x,y,z));
+  const stand=new Set([...reach].filter(k=>!isTransitionTile(md,k%W,Math.floor(k/W))));
+  return {sx,sy,reach,stand,passable,renderer};
 }
 
 /** Can the player stand somewhere and talk to an NPC on (x, y)? */

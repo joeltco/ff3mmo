@@ -57,6 +57,13 @@ let _onPveCancel = null;         // ({reason}) → void
 let _onShopResult = null;        // ({txnId, status, ...}) → void — v1.7.776 P-9
 let _onChestResult = null;       // v1.7.777 P-10
 let _onVaseResult = null;
+let _questRecoveryProvider = () => [];
+let _questRecoveryQueue = [];
+const _questRecoverySent = new Map();
+const _questClaimsSent = new Map();
+let _questRecoveryNext = 0;
+export function setNetQuestRecoveryProvider(fn) { _questRecoveryProvider = fn; }
+
 let _onQuestResult = null;      // ({txnId, questId, status, reason?}) → void — v1.8.6
 let _onPartyInvite = null;   // ({challenger}) → void — invite arrived; auto-respond or prompt
 let _onPartyResult = null;   // ({accept, partner?, reason?}) → void — our outgoing invite resolved
@@ -101,6 +108,10 @@ function _sendHello() {
   if (_send({ type: 'hello', profile, loc, build })) {
     _helloed = true;
     _lastSentLoc = loc;
+    _questRecoverySent.clear();
+    _questClaimsSent.clear();
+    _questRecoveryQueue = _questRecoveryProvider();
+    _questRecoveryNext = Date.now() + 1500;
   }
 }
 
@@ -306,7 +317,20 @@ function _handleMessage(data) {
         catch (e) { console.warn('[net] vase-result handler error', e); }
       }
       return;
-    case 'quest-result':
+    case 'quest-result': {
+      msg.claim = _questClaimsSent.get(msg.txnId);
+      _questClaimsSent.delete(msg.txnId);
+      const recovery = _questRecoverySent.get(msg.txnId);
+      if (recovery) {
+        _questRecoverySent.delete(msg.txnId);
+        if (msg.status === 'ok' || msg.reason === 'already-claimed') return;
+        // Inventory may have filled while disconnected. Retry after the
+        // player has had time to make space, preserving story and local XP.
+        if (msg.reason === 'inv-full') {
+          _questRecoveryQueue.push(recovery); _questRecoveryNext = Date.now() + 10000;
+        }
+        msg.recovery = true;
+      }
       // v1.8.6 — the server's hand-in verdict. This one MUST keep an ear:
       // a rejected claim means the player was not paid, and without a branch
       // here they would watch the giver hand over an heirloom that never
@@ -316,6 +340,7 @@ function _handleMessage(data) {
         catch (e) { console.warn('[net] quest-result handler error', e); }
       }
       return;
+    }
     case 'party-invite-incoming':
       if (_onPartyInvite) {
         try { _onPartyInvite(msg); }
@@ -519,6 +544,13 @@ function _startLocPoll() {
     const loc = _locFn();
     if (!loc) return;
     if (!_helloed) { _sendHello(); return; }
+    if (_questRecoveryQueue.length && Date.now() >= _questRecoveryNext) {
+      const claim = _questRecoveryQueue.shift();
+      const txnId = nextChestTxnId();
+      if (sendNetQuestClaim({ ...claim, txnId })) _questRecoverySent.set(txnId, claim);
+      else _questRecoveryQueue.unshift(claim);
+      _questRecoveryNext = Date.now() + 1500;
+    }
     if (loc !== _lastSentLoc) {
       if (_send({ type: 'location', loc })) _lastSentLoc = loc;
     }
@@ -893,7 +925,16 @@ export function sendNetQuestClaim({ txnId, questId, stageId }) {
   if (!_helloed) return false;
   const msg = { type: 'quest-claim', txnId: txnId | 0, questId: String(questId || '') };
   if (stageId) msg.stageId = String(stageId);
-  return _send(msg);
+  const sent = _send(msg);
+  if (sent) _questClaimsSent.set(txnId | 0, { questId: msg.questId, ...(stageId ? { stageId: String(stageId) } : {}) });
+  return sent;
+}
+export function retryNetQuestClaim(claim) {
+  if (!claim) return;
+  if (!_questRecoveryQueue.some(c => c.questId === claim.questId && c.stageId === claim.stageId)) {
+    _questRecoveryQueue.push(claim);
+  }
+  _questRecoveryNext = Date.now() + 10000;
 }
 export function setNetQuestResultHandler(fn) { _onQuestResult = typeof fn === 'function' ? fn : null; }
 export function setNetChestResultHandler(fn) { _onChestResult = typeof fn === 'function' ? fn : null; }

@@ -7,6 +7,7 @@ import { MONSTER_REGISTRY, PALETTE_TABLE } from './data/monster-sprites-rom.js';
 
 // ── State ──────────────────────────────────────────────────────────
 const monsterBattleCanvas = new Map(); // monsterId → canvas
+const fittedBattleCanvas = new Map();
 const monsterWhiteCanvas  = new Map(); // monsterId → white flash canvas
 const monsterDeathFrames  = new Map(); // monsterId → death frame canvas[]
 
@@ -138,14 +139,31 @@ export function initMonsterSprites() { /* built on demand — see the getters */
 
 /** Get the battle canvas for a monster. Builds on first ask. */
 export function getMonsterCanvas(monsterId, fallback) {
-  return buildMonsterCanvas(monsterId) || fallback;
+  const base = buildMonsterCanvas(monsterId) || fallback;
+  if (!base || (base.width <= 128 && base.height <= 128)) return base;
+  if (fittedBattleCanvas.has(monsterId)) return fittedBattleCanvas.get(monsterId);
+  // Native art may carry a wide empty canvas (Dullahan: 144px, only 88 painted).
+  // Remove transparent margins before fitting the 128px interior of our arena.
+  const pixels=base.getContext('2d').getImageData(0,0,base.width,base.height).data;
+  let left=base.width,top=base.height,right=-1,bottom=-1;
+  for(let y=0;y<base.height;y++)for(let x=0;x<base.width;x++)if(pixels[(y*base.width+x)*4+3]) {
+    left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+  }
+  if(right<left)return base;
+  left=Math.floor(left/8)*8;top=Math.floor(top/8)*8;
+  const w=Math.ceil((right+1)/8)*8-left,h=Math.ceil((bottom+1)/8)*8-top;
+  const scale=Math.min(1,128/w,128/h),out=document.createElement('canvas');
+  out.width=Math.max(1,Math.floor(w*scale));out.height=Math.max(1,Math.floor(h*scale));
+  const ctx=out.getContext('2d');ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(base,left,top,w,h,0,0,out.width,out.height);
+  fittedBattleCanvas.set(monsterId,out);return out;
 }
 
 /** White flash canvas, derived from the battle canvas. Builds on first ask. */
 export function getMonsterWhiteCanvas(monsterId, fallback) {
   const cached = monsterWhiteCanvas.get(monsterId);
   if (cached) return cached;
-  const base = buildMonsterCanvas(monsterId);
+  const base = getMonsterCanvas(monsterId);
   if (!base) return fallback;
   const white = _makeWhiteCanvas(base);
   monsterWhiteCanvas.set(monsterId, white);
@@ -156,7 +174,7 @@ export function getMonsterWhiteCanvas(monsterId, fallback) {
 export function getMonsterDeathFrames(monsterId, fallback) {
   const cached = monsterDeathFrames.get(monsterId);
   if (cached) return cached;
-  const base = buildMonsterCanvas(monsterId);
+  const base = getMonsterCanvas(monsterId);
   if (!base) return fallback;
   const frames = _makeDeathFrames(base);
   monsterDeathFrames.set(monsterId, frames);

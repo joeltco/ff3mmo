@@ -572,7 +572,7 @@ function _resolveSimpleThrow(role, target) {
     spellId = pvpSt.pvpMagicSpellId;
     stateName = 'pvp-enemy-magic-hit';
   }
-  if (spellId !== 0x31 && spellId !== 0x32 && spellId !== 0x33) return null;
+  if (![0x31, 0x32, 0x33, 0x23, 0x24, 0x25].includes(spellId)) return null;
   const spell = SPELLS.get(spellId);
   if (!spell) return null;
   const ms = battleSt.battleTimer;

@@ -37,6 +37,9 @@ const check = (where, page) => {
   }
 };
 
+const { MOUNTAIN_ESCAPE, HEIN_CAPTURE, DUNGEON_RETURNS } = await import('../src/data/story-scenes.js');
+for (const page of [...MOUNTAIN_ESCAPE, ...HEIN_CAPTURE, ...Object.values(DUNGEON_RETURNS).flat()]) check('field scene', page);
+
 // ⛔ EVERY VARIANT, not the one that happens to be showing. Lines may be
 // state-dependent (`[{ when, pages }, ...]`, data/dialogue.js), and a variant
 // that only appears after the curse lifts still has to fit the box — it would
@@ -45,6 +48,12 @@ for (const [mapId, list] of TOWN_NPCS) {
   for (const e of list) {
     for (const pages of allPageSets(e.spec.dialogue)) {
       for (const page of pages || []) check(`map ${mapId} ${e.key}`, page);
+    }
+    for (const page of e.spec.revisit?.pages || []) check(`map ${mapId} ${e.key} revisit`, page);
+    for (const page of e.spec.fieldLesson?.pages || []) check(`map ${mapId} ${e.key} lesson`, page);
+    if (e.spec.treatment) {
+      for (const page of [...e.spec.treatment.missing, ...e.spec.treatment.thanks,
+        e.spec.treatment.ask + ' Yes No']) check(`map ${mapId} ${e.key} treatment`, page);
     }
     // ASK replies go through the same box.
     // An answer is bare pages, or `{ pages, teaches }` when asking about it

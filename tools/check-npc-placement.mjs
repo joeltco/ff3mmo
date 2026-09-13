@@ -97,7 +97,14 @@ for (const [mapId, list] of TOWN_NPCS) {
       const nm = nraw < 128 ? nraw : nraw & 0x7F;
       if ((md.collision[nm] & 0x07) !== 3 && !(md.collision[nm] & 0x80)) open++;
     }
-    if (open < 1) {
+    // A keeper can be enclosed on all four sides and still be usable across
+    // a counter. Verify the actual counter and the customer's floor tile.
+    const front = md.tilemap[(y + 1) * W + x];
+    const customer = md.tilemap[(y + 2) * W + x];
+    const servesCounter = md.tileset === 5 && [0x1d, 0x1f].includes(front)
+      && customer !== undefined && !(md.collision[customer & 0x7f] & 0x80)
+      && (md.collision[customer & 0x7f] & 7) !== 3;
+    if (open < 1 && !servesCounter) {
       console.error(`  ✗ ${key} on map ${mapId} at (${x},${y}) is sealed in — no open neighbours`);
       failed++; continue;
     }
@@ -184,6 +191,13 @@ const LOADED_BUNDLES = new Map([
 // posed on purpose. Adding a name here is a deliberate edit, like check-shops'
 // EXPECTED — if you are reaching for it for an ordinary villager, don't.
 const MAY_IGNORE_ROM_FLAGS = new Set([
+  'ancients_weapon_keeper', 'ancients_armor_keeper', 'ancients_innkeeper', 'ancients_item_keeper',
+  'gysahl_innkeeper', 'gysahl_greens_keeper', 'gysahl_key_keeper',
+  // Canaan's counter-bound merchants and Cid's deliberate seated scene.
+  'dwarves_innkeeper', 'dwarves_item_keeper', 'dwarves_weapon_keeper', 'dwarves_armor_keeper',
+  'canaan_cid', 'canaan_armor_keeper', 'canaan_weapon_keeper',
+  'canaan_innkeeper', 'canaan_item_keeper',
+  'vikings_innkeeper', 'vikings_item_keeper',
   'inn_item_keeper', 'inn_keeper', 'inn_guest', 'weapon_keeper', 'armor_keeper',
   'kazus_item_keeper', 'kazus_inn_keep', 'kazus_weapon_keeper', 'kazus_armor_keeper',
   'cid', 'cid_ghost',

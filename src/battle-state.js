@@ -23,6 +23,7 @@ export const battleSt = {
   // non-random encounter in the game today. The victory-reward path reads it
   // rather than a literal, so a second boss is a field write, not a code hunt.
   bossId: DEFAULT_BOSS_ID,
+  bossTurns: 0, bossBarrier: null, bossBarrierRule: null,
   battleShakeTimer: 0,
   bossFlashTimer: 0,
   critFlashTimer: -1,
@@ -200,7 +201,13 @@ export const BOSS_MAX_HP = _BOSS_DATA.hp;
  * a boss with 0 HP dies to the intro flash.
  */
 export function activeBossStats() {
-  return MONSTERS.get(battleSt.bossId ?? DEFAULT_BOSS_ID) || _BOSS_DATA;
+  let stats = MONSTERS.get(battleSt.bossId ?? DEFAULT_BOSS_ID) || _BOSS_DATA;
+  // The ROM uses a scripted breath rather than an ordinary attack list.
+  if (battleSt.bossId === 0xd1) stats = { ...stats, attacks: ['Fire Breath'] };
+  if (!battleSt.bossBarrier) return stats;
+  return { ...stats, weakness: battleSt.bossBarrier,
+    resist: battleSt.bossBarrierRule.elements.filter(e => e !== battleSt.bossBarrier) };
+
 }
 
 // Battle timing constants

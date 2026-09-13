@@ -14,6 +14,9 @@
 // told. A term with no teacher or no answerer among the NPCs actually placed on
 // a map is a dead end; tools/check-words.mjs fails the build on one.
 export const KEYWORDS = {
+  wheel: { text: 'WHEEL' },
+  horn: { text: 'HORN' },
+  nepto: { text: 'NEPTO' },
   brother: { text: 'BROTHER' },   // ur_npc_09: "It took my brother."
   cave:    { text: 'CAVE' },      // ur_npc_0d: "The cave drains the light."
   riders:  { text: 'RIDERS' },    // ur_elder_kin_a: "for riders long gone."

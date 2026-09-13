@@ -265,7 +265,7 @@ const KAZUS_TOWN_BUNDLES = [
 // either bundle by accident — that is what this table is for, and it is why the
 // widening is a LIST of names rather than a deletion.
 export const RESERVED_BUNDLES = new Map([
-  [0x01D910, new Set(['cid', 'sara'])],
+  [0x01D910, new Set(['cid', 'canaan_cid', 'sara'])],
   [0x01ED10, new Set(['cid', 'sasune_king', 'sasune_attendant_w', 'sasune_attendant_e'])],
 ]);
 
@@ -1398,6 +1398,194 @@ export const SARA = {
 };
 
 export const TOWN_NPCS = new Map([
+  [93, [[5,4], [9,6], [2,5]].map(([x,y],i) => ({ key: `woods_chocobo_${i}`, x,y,
+    spec: townNpc([0x1e810], 0, { wander: false, mount: 'chocobo', dialogue: ['Kweh!'] }) }))],
+  [60, [
+    { key: 'ancients_welcome', x: 18, y: 21, spec: townNpc([0x1ec10], 0, { wander: false, dialogue: ['Welcome, child of light.', 'We keep the old stories.'] }) },
+    { key: 'ancients_crystal', x: 23, y: 7, spec: townNpc([0x1ec10], 0, { dialogue: ['Too much light once rose.', 'Dark warriors saved us.', 'Balance keeps us alive.'] }) },
+    { key: 'ancients_sky', x: 18, y: 6, spec: townNpc([0x1ec10], 0, { dialogue: ['Our land floats in the sky.', 'A vast world lies below.'] }) },
+    { key: 'ancients_owen', x: 16, y: 7, spec: townNpc([0x1ec10], 0, { dialogue: ['Owen keeps our land aloft.', 'Guard its ancient engine.'] }) },
+    { key: 'ancients_chocobo', x: 10, y: 10, spec: townNpc([0x1ec10], 0, { dialogue: ['A forest lies to the east.', 'Chocobos nest there.'] }) },
+    { key: 'ancients_traveler', x: 16, y: 13, spec: townNpc([0x1e010], 0, { wander: false, dialogue: ['Our shops welcome you.', 'Prepare before heading on.'] }) },
+    { key: 'ancients_child', x: 17, y: 18, spec: townNpc([0x1e410], 0, { dialogue: ['Will you see the world?', 'Bring back a story!'] }) },
+  ]],
+  [61, [{ key: 'ancients_weapon_keeper', x: 3, y: 22, spec: townNpc([0x1ec10], 0, { ignoreRomFlags: true, wander: false, dialogue: ['Old craft. Fine weapons.'] }) }]],
+  [62, [{ key: 'ancients_armor_keeper', x: 3, y: 4, spec: townNpc([0x1ec10], 0, { ignoreRomFlags: true, wander: false, dialogue: ['Good armor is a wise gift.', 'Give it to yourself.'] }) }]],
+  [66, [
+    { key: 'ancients_innkeeper', x: 7, y: 3, spec: INN_KEEPER },
+    { key: 'ancients_item_keeper', x: 11, y: 3, spec: { ...WEAPON_KEEPER, dialogue: ['Supplies for the road?'] } },
+  ]],
+  [67, [
+    ...[[14,15], [16,15], [11,17], [19,17], [11,19], [19,19], [11,21], [14,23], [16,23], [19,21]].map(([x,y], i) => ({ key: `gurgan_seer_${i}`, x, y, spec: townNpc([0x1f210], 0, { wander: false,
+      dialogue: [
+        ['We see with inner eyes.', 'Seek our elder below.'],
+        ['The tower trembles.', 'Desch must remember.'],
+        ['Water bars the tower.', 'Toad will show the way.', 'Carry Soft for Medusa.'],
+        ['The crystals chose you.', 'Your choices are your own.'],
+        ['Even a small light shines.', 'Travel with hope.'],
+      ][i % 5],
+    }) })),
+  ]],
+  [68, [{ key: 'gurgan_elder', x: 14, y: 8, spec: townNpc([0x1f210], 0, { wander: false,
+    fieldLesson: { spell: 0x2e, pages: ['Desch must enter Owen.', 'Learn the art of Toad.', 'It opens the watery paths.', 'Keep your chosen job.'] },
+    dialogue: [{ when: 'owen_restored', pages: ['The engine sings again.', 'Desch has found his duty.'] }, { pages: ['Toad opens Owen and the lake.', 'The tower lies northeast.'] }],
+  }) }]],
+  [69, [
+    { key: 'gysahl_welcome', x: 12, y: 19, spec: townNpc([0x1df10], 0, { dialogue: ['Welcome to Gysahl.', 'Enjoy our quiet fields.'] }) },
+    { key: 'gysahl_shepherd', x: 7, y: 24, spec: townNpc([0x1e010], 0, { wander: false, dialogue: ['The sheep like company.', 'Walk softly near them.'] }) },
+    ...[[7,25], [5,22], [10,21], [12,23], [11,26], [4,26]].map(([x,y],i) => ({ key: `gysahl_sheep_${i}`, x, y, spec: townNpc([0x1e910], 0, { dialogue: ['Baa!'] }) })),
+    { key: 'gysahl_gardener', x: 23, y: 13, spec: townNpc([0x1df10], 0, { wander: false, dialogue: ['Gysahl Greens grow here.', 'Chocobos love them.'] }) },
+  ]],
+  [70, [
+    { key: 'gysahl_stablekeeper', x: 4, y: 9, spec: townNpc([0x1e210], 0, { dialogue: ['Kweh! Hear that chorus?', 'They know feeding time.'] }) },
+    ...[[11,3], [9,5], [7,4]].map(([x,y],i) => ({ key: `gysahl_chocobo_${i}`, x, y, spec: townNpc([0x1e810], 0, { wander: false, dialogue: ['Kweh!'] }) })),
+  ]],
+  [72, [
+    { key: 'gysahl_host', x: 9, y: 6, spec: townNpc([0x1e110], 0, { wander: false, dialogue: ['Rest at the inn upstairs.', 'Every traveler is welcome.'] }) },
+    { key: 'gysahl_guest', x: 6, y: 5, spec: townNpc([0x1e510], 0, { dialogue: ['The east is peaceful.', 'I wish all lands were.'] }) },
+    { key: 'gysahl_tavern_guest', x: 3, y: 4, spec: townNpc([0x1e210], 0, { wander: false, dialogue: ['Magic Keys open locks.', 'The key shop is northeast.'] }) },
+  ]],
+  [73, [
+    { key: 'gysahl_innkeeper', x: 7, y: 3, spec: INN_KEEPER },
+    { key: 'gysahl_greens_keeper', x: 11, y: 3, spec: { ...WEAPON_KEEPER, dialogue: ['Fresh Gysahl Greens!', 'And cures for your travels.'] } },
+  ]],
+  [74, [{ key: 'gysahl_key_keeper', x: 6, y: 4, spec: townNpc([0x1e210], 0, { ignoreRomFlags: true, wander: false, dialogue: ['A key for a locked door.', 'Each key works just once.'] }) }]],
+
+  [173, [
+    { key: 'forest_fairy', x: 22, y: 21, spec: townNpc([0x14390], 0, { objectSprite: true,
+      revisit: { entrance: 135, flag: 'hein_defeated', pages: ['King Argus awaits you.', 'The tree remembers Hein.', 'You may face him again.'] },
+      dialogue: [{ when: 'hein_defeated', pages: ['The Elder Tree is home.', 'Our woods can breathe again.', 'King Argus awaits you.'] }, { pages: ['Hein stole our Elder Tree.', 'Roots cross the desert.'] }],
+    }) },
+    ...[[18,17], [20,17], [22,17], [17,19], [23,19], [18,21], [20,21]].map(([x,y],i) => ({ key: `forest_fairy_${i}`, x, y, spec: townNpc([0x14390], 0, { objectSprite: true,
+      dialogue: [{ when: 'hein_defeated', pages: ['Listen. The leaves sing.', 'Thank you, Light Warrior.'] }, { pages: ['These roots remember.', 'Please bring our tree home.'] }],
+    }) })),
+  ]],
+  [55, [
+    { key: 'tokkul_door_a', x: 20, y: 22, spec: townNpc([0x1e210], 0, { wander: false, dialogue: ['Our elder is inside.', 'He has seen too much.'] }) },
+    { key: 'tokkul_door_b', x: 21, y: 22, spec: townNpc([0x1e210], 0, { wander: false, dialogue: ['Soldiers took our food.', 'Then they took our people.'] }) },
+    { key: 'tokkul_worried', x: 16, y: 15, spec: townNpc([0x1e210], 0, { wander: false, dialogue: ['Hein made slaves of us.', 'Will anyone stop him?'] }) },
+    { key: 'tokkul_elder_hint', x: 13, y: 15, spec: townNpc([0x1df10], 0, { wander: false, dialogue: ['We have little to offer.', 'But you may rest here.'] }) },
+    { key: 'tokkul_child', x: 14, y: 15, spec: townNpc([0x1e410], 0, { dialogue: ['Will the soldiers return?'] }) },
+    { key: 'tokkul_tree_hint', x: 19, y: 15, spec: townNpc([0x1e210], 0, { dialogue: ['A tree crossed the desert.', 'A castle in its branches!'] }) },
+    { key: 'tokkul_survivor', x: 14, y: 13, spec: townNpc([0x1e210], 0, { dialogue: ['We will build again.', 'One stone at a time.'] }) },
+  ]],
+  [56, [
+    { key: 'tokkul_householder', x: 4, y: 8, spec: townNpc([0x1e010], 0, { wander: false, dialogue: ['Take shelter from the wind.'] }) },
+    { key: 'tokkul_guest', x: 5, y: 5, spec: townNpc([0x1e210], 0, { wander: false, dialogue: ['The cellar hid our supplies.'] }) },
+    { key: 'tokkul_parent', x: 8, y: 4, spec: townNpc([0x1e310], 0, { wander: false, dialogue: ['Our children need peace.'] }) },
+  ]],
+  [58, [
+    { key: 'tokkul_elder', x: 9, y: 6, spec: townNpc([0x1df10], 0, { wander: false,
+      dialogue: [{ when: 'hein_defeated', pages: ["You broke Hein's hold.", 'Tokkul will remember you.'] }, { pages: ['Hein commands the soldiers.', 'He changes his weakness.', 'A Scholar can see through it.'] }],
+    }) },
+  ]],
+  [59, [
+    { key: 'tokkul_storekeeper', x: 28, y: 4, spec: townNpc([0x1e010], 0, { wander: false, dialogue: ['We hid what we could.'] }) },
+    { key: 'tokkul_hidden_child', x: 29, y: 5, spec: townNpc([0x1e410], 0, { wander: false, dialogue: ['Is it safe to come out?'] }) },
+  ]],
+  [78, [[7,13],[23,13],[10,16],[20,16],[14,15],[16,15]].map(([x,y],i) => ({ key: `argus_guard_${i}`, x,y, spec: townNpc([0x1ee10],0,{ wander:false,
+    dialogue: [{ when: 'hein_defeated', pages: ['The king is home!', 'Go to the royal hall.'] }, { pages: ['Our king is missing.', 'The royal hall is sealed.'] }],
+  }) }))],
+  [81, [
+    { key: 'argus_king', x:11,y:4,spec:townNpc([0x1f510],0,{wander:false,
+      dialogue:[{when:'enterprise_upgraded',pages:['May our Time Wheel aid you.', 'The world below needs light.']},{pages:['You saved our kingdom.', 'Take our Time Wheel to Cid.']}],
+      teaches:['wheel'], answers:{wheel:['An heirloom of the Ancients.', 'Cid can make good use of it.']},
+    })},
+    ...[[9,5],[9,7],[13,5],[13,7]].map(([x,y],i)=>({key:`argus_attendant_${i}`,x,y,spec:townNpc([0x1ee10],0,{wander:false,dialogue:['You have our gratitude.', 'Visit Cid in Canaan.']})})),
+  ]],
+  [83, [[4,20],[6,20]].map(([x,y],i)=>({key:`argus_hall_guard_${i}`,x,y,spec:townNpc([0x1ee10],0,{wander:false,dialogue:['The stairs lead to the king.']})}))],
+
+  [85, [
+    { key: 'dwarves_guard_a', x: 17, y: 2, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['Lali-ho! Welcome below!', 'Our hall is just ahead.'] }) },
+    { key: 'dwarves_guard_b', x: 17, y: 4, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['A horn was stolen!', 'Speak with our chief.'], teaches: ['horn'] }) },
+  ]],
+  [86, [
+    { key: 'dwarves_chief', x: 12, y: 27, spec: townNpc([0x1f310], 0, {
+      wander: false, dialogue: [{ when: 'dwarves_saved', pages: ['Lali-ho, friend of dwarves!', 'Both horns are home at last.'] }, { pages: ['Our horn is gone!', 'Gutsco fled into the lake.'] }],
+      answers: { horn: ['Our treasure and our pride.', 'Will you help us find it?'] },
+    }) },
+    { key: 'dwarves_lake_hint', x: 16, y: 25, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['The lake lies to the west.', 'Watch your shadow.'] }) },
+    { key: 'dwarves_flame_hint', x: 18, y: 21, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['Flame Cave is to the north.', 'Ice armor turns its heat.'] }) },
+    { key: 'dwarves_inn_hint', x: 5, y: 18, spec: townNpc([0x1f310], 0, { dialogue: ['Lali-ho! Need a rest?', 'There are beds upstairs.'] }) },
+    { key: 'dwarves_miner', x: 16, y: 28, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['Good steel takes patience.', 'So does a good adventure.'] }) },
+    { key: 'dwarves_armor_hint', x: 7, y: 18, spec: townNpc([0x1f310], 0, { dialogue: ['Ice armor, forged below.', 'Cold comfort for hot caves!'] }) },
+    { key: 'dwarves_vault_hint', x: 17, y: 29, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['Our vault lies downstairs.', 'Bring the horns home first.'] }) },
+  ]],
+  [87, [
+    { key: 'dwarves_innkeeper', x: 7, y: 3, spec: townNpc([0x1f310], 0, { ignoreRomFlags: true, wander: false, dialogue: ['A warm bed is ready.', 'Lali-ho and good night!'] }) },
+    { key: 'dwarves_item_keeper', x: 11, y: 3, spec: townNpc([0x1f310], 0, { ignoreRomFlags: true, wander: false, dialogue: ['Pack well for the lake.', 'Take a few cures with you.'] }) },
+  ]],
+  [88, [{ key: 'dwarves_weapon_keeper', x: 3, y: 22, spec: townNpc([0x1f310], 0, { ignoreRomFlags: true, wander: false, dialogue: ['Dwarf-forged weapons!', 'Made to last a lifetime.'] }) }]],
+  [89, [{ key: 'dwarves_armor_keeper', x: 3, y: 4, spec: townNpc([0x1f310], 0, { ignoreRomFlags: true, wander: false, dialogue: ['Going into Flame Cave?', 'Try our ice armor.'] }) }]],
+  [91, [{ key: 'dwarves_vault_keeper', x: 18, y: 29, spec: townNpc([0x1f310], 0, { wander: false, dialogue: ['Take what will serve you.', 'You have earned our trust.'] }) }]],
+
+  [51, [
+    { key: 'vikings_nepto_teacher', x: 25, y: 10, spec: townNpc([0x1f110], 0, {
+      dialogue: ['Nepto rules these waters.', 'Ask our chief about Nepto.'], teaches: ['nepto'],
+      answers: { nepto: ['His temple is northwest.', 'The chief needs your help.'] },
+    }) },
+    { key: 'vikings_sailor_a', x: 30, y: 6, spec: townNpc([0x1f110], 0, { wander: false, dialogue: ['A sailor belongs at sea.', 'I miss the salt and spray.'] }) },
+    { key: 'vikings_sailor_b', x: 28, y: 8, spec: townNpc([0x1f110], 0, { wander: false, dialogue: ['Want a ship of your own?', 'The chief is downstairs.'] }) },
+    { key: 'vikings_sailor_c', x: 28, y: 6, spec: townNpc([0x1f110], 0, { wander: false, dialogue: ['Share a drink, traveler.', 'Then share a tale.'] }) },
+  ]],
+  [52, [
+    { key: 'vikings_dockhand', x: 27, y: 13, spec: townNpc([0x1f110], 0, { dialogue: ['The dock is up this way.', 'Mind the sea beyond.'] }) },
+    { key: 'vikings_chief_hint', x: 2, y: 25, spec: townNpc([0x1f110], 0, { wander: false, dialogue: ['The chief is through here.'] }) },
+    { key: 'vikings_guest_a', x: 27, y: 23, spec: townNpc([0x1e110], 0, { dialogue: ['We welcome travelers.', 'The inn has spare beds.'] }) },
+    { key: 'vikings_guest_b', x: 26, y: 27, spec: townNpc([0x1e110], 0, { wander: false, dialogue: ['Tokkul lies across the bay.', 'It has seen better days.'] }) },
+    { key: 'vikings_sailor_d', x: 28, y: 21, spec: townNpc([0x1f110], 0, { dialogue: ['The sea road leads west.', 'Pack before you sail.'] }) },
+  ]],
+  [53, [{ key: 'vikings_chief', x: 7, y: 6, spec: townNpc([0x1e210], 0, { wander: false,
+    dialogue: [
+      { when: 'nepto_restored', pages: ['Fair winds, friend!', 'The Enterprise is yours.'] },
+      { pages: ['I lead these Vikings.', 'Our sailors know our plight.'] },
+    ], answers: { nepto: ['Peace on the sea at last.'] },
+  }) }]],
+  [54, [
+    { key: 'vikings_innkeeper', x: 7, y: 3, spec: INN_KEEPER },
+    { key: 'vikings_item_keeper', x: 11, y: 3, spec: { ...WEAPON_KEEPER, dialogue: ['Supplies for a long voyage?', 'Do not forget antidotes.'] } },
+  ]],
+  // All of Tozus's people use native walk graphic 23 ($1D710).
+  [43, [
+    { key: 'tozas_welcome', x: 14, y: 12, spec: townNpc([0x1d710], 0, { dialogue: ['Welcome to Tozus!', 'Small town. Big welcome.'] }) },
+    { key: 'tozas_doctor_hint', x: 9, y: 14, spec: townNpc([0x1d710], 0, { wander: false, dialogue: ['Our doctor lives northwest.', 'His cellar leads out.'] }) },
+    { key: 'tozas_magic_hint', x: 18, y: 16, spec: townNpc([0x1d710], 0, { wander: false, dialogue: ['Small hands, strong magic!', 'Try a spell in the tunnel.'] }) },
+    { key: 'tozas_tunnel_hint', x: 16, y: 20, spec: townNpc([0x1d710], 0, { dialogue: ['Find the far exit.', 'Follow its shining star.'] }) },
+    { key: 'tozas_vikings_hint', x: 21, y: 22, spec: townNpc([0x1d710], 0, { wander: false, dialogue: ['Vikings live beyond here.', 'Big folk. Bigger boats.'] }) },
+    { key: 'tozas_inn_hint', x: 14, y: 17, spec: townNpc([0x1d710], 0, { dialogue: ['Our beds fit travelers.', 'Try not to snore too loud!'] }) },
+  ]],
+  [44, [{ key: 'tozas_doctor', x: 13, y: 25, spec: townNpc([0x1d710], 0, { wander: false, treatment: { item: 0xa6, flag: 'doctor_healed', ask: 'Give a Potion?', missing: ['I feel so ill...', 'Please bring me a Potion.'], thanks: ['Much better! Thank you.', 'Use my cellar passage.', 'It leads out to the north.'] }, dialogue: ['You saved my life!', 'My passage is yours to use.'] }) }]],
+  [46, [
+    { key: 'tozas_innkeeper', x: 7, y: 3, spec: townNpc([0x1d710], 0, { wander: false, dir: DIR_DOWN, dialogue: ['The beds are free.', 'Sleep well, tall friend.'] }) },
+    { key: 'tozas_item_keeper', x: 11, y: 3, spec: townNpc([0x1d710], 0, { wander: false, dir: DIR_DOWN, dialogue: ['Supplies for the tunnel?', 'Pack a few potions.'] }) },
+  ]],
+  [50, [
+    { key: 'tozas_bread_keeper', x: 5, y: 4, spec: townNpc([0x1d710], 0, { wander: false, dialogue: ['Fresh Gnome Bread!', 'A little taste of home.'] }) },
+    { key: 'tozas_baker', x: 8, y: 7, spec: townNpc([0x1d710], 0, { wander: false, dialogue: ['Warm bread, warm hearts.'] }) },
+    { key: 'tozas_guest', x: 4, y: 8, spec: townNpc([0x1d710], 0, { wander: false, dialogue: ['Back from the tunnel?', 'Come sit a while.'] }) },
+  ]],
+  // Canaan's native people, coordinates, and walk graphics. NPC id 31 is
+  // the arrival-event Cid; his ordinary conversation lives in his house so
+  // the town entrance stays clear. Furniture/event ids are not townsfolk.
+  [31, [
+    { key: 'canaan_woman', x: 21, y: 18, spec: townNpc([0x1e110], 0, { dialogue: ['Welcome to Canaan!', 'The inn has beds to spare.'] }) },
+    { key: 'canaan_road', x: 11, y: 27, spec: townNpc([0x1df10], 0, { dialogue: ['Going up Summit Road?', 'Stock up before you climb.'] }) },
+    { key: 'canaan_dragon', x: 20, y: 26, spec: townNpc([0x1df10], 0, { dialogue: ['A dragon nests on the peak.', 'If it wakes, run!'] }) },
+    { key: 'canaan_elder', x: 9, y: 18, spec: townNpc([0x1e210], 0, { dialogue: ['Beyond the peak: a forest.', 'Its springs mend the weary.'] }) },
+    { key: 'canaan_waterfall', x: 22, y: 12, spec: townNpc([0x1e310], 0, { dialogue: ['Follow the water downhill.', 'It hides more than fish.'] }) },
+    { key: 'canaan_neighbor', x: 4, y: 11, spec: townNpc([0x1e010], 0, { dialogue: ['Cid lives up this path.', 'Never a quiet day with him!'] }) },
+  ]],
+  [33, [
+    { key: 'canaan_cid', x: 18, y: 4, spec: { ...CID, dir: DIR_DOWN, dialogue: [{ when: 'enterprise_upgraded', pages: ['How does she fly, eh?', 'Press Z over land to land.'] }, { pages: ['Made it to Canaan, eh?', 'Rest up. The road is long.', 'Come see me about airships.'] }] } },
+    { key: 'canaan_mrs_cid', x: 19, y: 3, spec: townNpc([0x1e310], 0, { wander: false, treatment: { item: 0xa8, flag: 'mrs_cid_healed', ask: 'Give an Elixir?', missing: ['My strength is fading...', 'An Elixir might help me.'], thanks: ['I feel young again!', 'Cid hid supplies below.', 'Please take what you need.'] }, dialogue: ['Do look after that old fool.', 'He forgets to look after me.'] }) },
+  ]],
+  [36, [{ key: 'canaan_armor_keeper', x: 3, y: 4, spec: { ...WEAPON_KEEPER, dialogue: ['Mithril travels well.', 'A shield may save your life.'] } }]],
+  [39, [{ key: 'canaan_weapon_keeper', x: 3, y: 22, spec: { ...WEAPON_KEEPER, dialogue: ['A blade for the road?', 'Mages need good rods, too.'] } }]],
+  [41, [
+    { key: 'canaan_innkeeper', x: 7, y: 3, spec: INN_KEEPER },
+    { key: 'canaan_item_keeper', x: 11, y: 3, spec: { ...WEAPON_KEEPER, dialogue: ['Potions for the climb.', 'Antidotes for the journey.'] } },
+  ]],
+  [42, [{ key: 'canaan_salina', x: 19, y: 10, spec: townNpc([0x1e010], 0, { wander: false, dialogue: ['Desch went up the mountain.', 'He has lost his memory.', 'Please bring him back safe.'] }) }]],
   // --- Castle Sasune --- (two bundles; see the block above SASUNE_GUARD_W)
   [18, [
     // On the ENTRANCE PATH, at the ROM's own id48 / id59 coordinates. They were

@@ -1,7 +1,8 @@
+import { queueSaveSnapshot, readLocalSnapshot } from './save-sync.js';
 // Save state — owns selectCursor, saveSlots, name entry, and DB persistence.
 // Extracted from game.js so any module can import save state directly.
 
-import { openSaveDB, serverDeleteSlot, parseSaveSlots } from './save.js';
+import { parseSaveSlots } from './save.js';
 import { ps, playerStatsSnapshot } from './player-stats.js';
 import { playerInventory, playerInventoryOrder } from './inventory.js';
 
@@ -131,47 +132,21 @@ export async function saveSlotsToDB() {
       consumedTiles: s.consumedTiles || {},
       consumedTilesAt: s.consumedTilesAt || {},
     } : null);
-    // Local IndexedDB
-    const db = await openSaveDB();
-    const tx = db.transaction('roms', 'readwrite');
-    tx.objectStore('roms').put(data, 'saves');
-    // Server sync — push each changed slot
-    if (window.ff3Auth) {
-      data.forEach((slotData, i) => {
-        if (slotData) window.ff3Auth.serverSave(i, slotData).catch(e => console.warn('[save] server sync failed for slot', i, e));
-      });
-    }
+    await queueSaveSnapshot(data);
   } catch (e) { console.warn('[save] saveSlotsToDB failed:', e); }
 }
 
 export async function loadSlotsFromDB() {
-  try {
-    // Try server first if logged in
-    if (window.ff3Auth) {
-      const serverSlots = await window.ff3Auth.serverLoadSaves().catch(e => { console.warn('[save] serverLoadSaves failed:', e); return null; });
-      if (serverSlots) {
-        // Only accept server state if at least one slot has actual data — don't clobber local with a null response
-        const hasData = Array.isArray(serverSlots) && serverSlots.some(s => s != null);
-        if (hasData) {
-          saveSlots = parseSaveSlots(serverSlots) || saveSlots;
-          savesLoaded = true;
-          console.log('[save] loaded from server');
-          return;
-        }
-        console.warn('[save] server returned empty slots, falling back to IndexedDB');
-      }
-    }
-    // Fall back to IndexedDB
-    const db = await openSaveDB();
-    const tx = db.transaction('roms', 'readonly');
-    const req = tx.objectStore('roms').get('saves');
-    return new Promise((resolve) => {
-      req.onsuccess = () => {
-        saveSlots = parseSaveSlots(req.result) || saveSlots;
-        savesLoaded = true;
-        resolve();
-      };
-      req.onerror = () => { savesLoaded = true; resolve(); };
-    });
-  } catch (e) { savesLoaded = true; }
+  const local = await readLocalSnapshot().catch(() => null);
+  const server = window.ff3Auth
+    ? await window.ff3Auth.serverLoadSaves().catch(() => null) : null;
+  // Keep this account's unsynced progress. A successful cloud write clears
+  // its pending revision; ordinary subsequent logins prefer the server.
+  const useLocal = local?.pending || !Array.isArray(server) || !server.some(Boolean);
+  const source = useLocal ? local?.slots : server;
+  saveSlots = parseSaveSlots(source) || saveSlots;
+  savesLoaded = true;
+  if (local?.pending && local.slots && window.ff3Auth) {
+    void queueSaveSnapshot(local.slots);
+  }
 }

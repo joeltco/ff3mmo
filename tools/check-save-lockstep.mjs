@@ -25,6 +25,7 @@ const read = (f) => readFileSync(new URL('../' + f, import.meta.url).pathname, '
 const saveSrc  = read('src/save-state.js');
 const apiSrc   = read('api.js');
 const titleSrc = read('src/title-screen.js');
+const { parseSaveSlots } = await import('../src/save.js');
 const SHOW_ALL = process.argv.includes('--all');
 
 // The payload literal in saveSlotsToDB is the authoritative "what we persist".
@@ -73,6 +74,21 @@ const hop3 = (f) => new RegExp('out\\.' + f + '\\s*=').test(apiSrc);
 // line 657 lists half these field names, so a field could pass hop 4 while the
 // load path never restored it.
 const hop4 = (f) => new RegExp('ps\\.' + f + '\\s*=(?!=)').test(titleSrc);
+
+// Exercise the parser, a fifth hop the old source-only audit omitted.
+const parsed = parseSaveSlots([{ name: [65], vehicle: 6, vehicleParked: 1,
+  vehicleParkedX: 85, vehicleParkedY: 66, vehicleParkedMode: 6,
+  quests: { argus_time_wheel: { s: 'done', n: 0 } }, words: { wheel: 1 },
+  flags: { enterprise_upgraded: 1 }, knownSpells: [0x2e, 0x2f] }])[0];
+const parserFields = ['vehicle', 'vehicleParked', 'vehicleParkedX', 'vehicleParkedY',
+  'vehicleParkedMode', 'quests', 'words', 'flags', 'knownSpells'];
+for (const field of parserFields) {
+  if (parsed[field] == null) throw new Error(`save parser drops ${field}`);
+}
+if (parsed.vehicle !== 6 || parsed.flags.enterprise_upgraded !== 1
+    || parsed.quests.argus_time_wheel.s !== 'done' || parsed.words.wheel !== 1) {
+  throw new Error('save parser changed journey progress');
+}
 
 const HOPS = [
   [1, 'ps -> slot        (save-state.js)', hop1],

@@ -58,7 +58,14 @@ const groups = new Map();
 for (let id = 0; id < 256; id++) {
   let p, md;
   try { p = parseMapProperties(rom, id); md = loadMap(rom, id); } catch { continue; }
-  const key = [md5(md.tilemap), md5(md.entranceData), p.npcIdx, p.tileset, p.fillTile].join('|');
+  // Equivalent arrival ids can appear inside equivalent door tables too
+  // (Vikings Cove 51/160 points to 54/163). The other room fields still
+  // have to match independently, and each alias's own coordinates are checked.
+  // loadEntranceData reads 16 bytes, but the ROM packs variable-length
+  // tables together. Unreferenced tail bytes belong to subsequent maps.
+  const doors = Uint8Array.from([...md.triggerMap.values()]
+    .filter(t => t.type === 1).map(t => canonicalMapId(md.entranceData[t.trigId])));
+  const key = [md5(md.tilemap), md5(doors), p.npcIdx, p.tileset, p.fillTile].join('|');
   info.set(id, { key, x: p.entranceX, y: p.entranceY, song: p.songId });
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(id);
@@ -97,7 +104,9 @@ if (!fails) ok(`${ARRIVAL_ALIASES.size} alias(es) match the ROM's own arrival ti
 const before = fails;
 for (const mapId of SHIPPED_MAPS) {
   const md = loadMap(rom, mapId);
-  for (const dest of md.entranceData) {
+  for (const trigger of md.triggerMap.values()) {
+    if (trigger.type !== 1) continue;
+    const dest = md.entranceData[trigger.trigId];
     if (!dest) continue;
     const d = info.get(dest);
     if (!d) continue;

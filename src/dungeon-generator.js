@@ -25,7 +25,7 @@ import {
 import { carveHRun, carveVRun, carveFatteningVRun, carveFatteningHRun, carveBand } from './dungeon/corridors.js';
 import { carveBossChamber, resolveBossSkin } from './dungeon/boss-chamber.js';
 import { rollChambers, chamberById } from './data/chambers.js';
-import { STARTING_DUNGEON, isBossFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, spineBounds, drawRange } from './data/dungeons.js';
+import { STARTING_DUNGEON, isFinalFloor, bossFloorMapId, lockedRoomMapIdForFloor, secretRoomMapIds, layoutForFloor, corridorBounds, snakeBounds, spineBounds, drawRange } from './data/dungeons.js';
 import {
   ensureCeilingConnectivity, enforceMinCeilingGap, fixDiagonalCeilingPinch,
   addOverhang, removeCeilingProtrusions, openEntranceLanding, sealTinyPockets,
@@ -1126,11 +1126,19 @@ export function loadRomAssets(romData, donorMap = REF_MAP_ID, tileset = 0, { wal
 
 /** Assets for a dungeon's floor — the boss chamber uses the boss skin's donor. */
 function assetsForFloor(romData, dungeon, floorIndex) {
-  if (isBossFloor(dungeon, floorIndex)) {
-    const skin = resolveBossSkin(dungeon.bossSkinId);
-    return loadRomAssets(romData, skin.donorMap, skin.tileset, { walkableWarp: true });
+  const final = isFinalFloor(dungeon, floorIndex);
+  const skin = final ? resolveBossSkin(dungeon.bossSkinId) : null;
+  const assets = loadRomAssets(romData, skin ? skin.donorMap : (dungeon.floorDonorMaps?.[floorIndex] ?? dungeon.donorMap),
+    skin ? skin.tileset : dungeon.tileset, { walkableWarp: final });
+  if (!dungeon.tileArtwork) return assets;
+  // Keep collision and exit semantics while borrowing native stair artwork.
+  // Clone the cached arrays so this cannot repaint another dungeon's donor.
+  const metatiles = assets.metatiles.slice(), tileAttrs = assets.tileAttrs.slice();
+  for (const [target, source] of Object.entries(dungeon.tileArtwork)) {
+    metatiles[target] = assets.metatiles[source];
+    tileAttrs[target] = assets.tileAttrs[source];
   }
-  return loadRomAssets(romData, dungeon.donorMap, dungeon.tileset);
+  return { ...assets, metatiles, tileAttrs };
 }
 
 export function clearDungeonCache() {
@@ -1138,6 +1146,18 @@ export function clearDungeonCache() {
 }
 
 export function generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
+  // The newer layouts can put a chest across a narrow bend. Collision bytes
+  // alone miss that blocking trigger, and reaching the first staircase may
+  // only prove we can return upstairs. Validate the complete finished floor,
+  // including treasure and the region opened by its boulder, before accepting
+  // a deterministic retry. Keep the shipped Altar/Seals seed sequence stable.
+  if (dungeon.id !== 'altar' && dungeon.id !== 'seals') {
+    for (let attempt = 0; attempt < 32; attempt++) {
+      const result = _generateFloor(romData, floorIndex, seed + attempt * 9973, dungeon);
+      if (completeFloorReachable(result)) return result;
+    }
+    throw new Error(`Could not generate a connected ${dungeon.id} floor ${floorIndex} (seed ${seed})`);
+  }
   // Retry with shifted seed if exit is unreachable (rare convergence pinch)
   for (let attempt = 0; attempt < 10; attempt++) {
     const result = _generateFloor(romData, floorIndex, seed + attempt * 9973, dungeon);
@@ -1222,11 +1242,34 @@ export function generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNG
   return _generateFloor(romData, floorIndex, seed, dungeon); // fallback
 }
 
+function completeFloorReachable(result) {
+  const { tilemap, entranceX, entranceY, rockSwitch } = result;
+  const adjacent = (seen, i) => {
+    const x = i % 32, y = Math.floor(i / 32);
+    return (x > 0 && seen[i - 1]) || (x < 31 && seen[i + 1])
+      || (y > 0 && seen[i - 32]) || (y < 31 && seen[i + 32]);
+  };
+  const opened = new Uint8Array(tilemap);
+  if (rockSwitch) {
+    const before = reachableFloorMask(tilemap, entranceX, entranceY);
+    if (!rockSwitch.rocks.some(({ x, y }) => adjacent(before, y * 32 + x))) return false;
+    for (const { x, y, newTile } of rockSwitch.wallTiles) opened[y * 32 + x] = newTile;
+  }
+  const seen = reachableFloorMask(opened, entranceX, entranceY);
+  if (seen.reduce((sum, value) => sum + value, 0) < 20) return false;
+  for (let i = 0; i < opened.length; i++) {
+    const t = opened[i];
+    if ((isFloorTile(t) || t === STAIRS_DOWN || t === PASSAGE_ENTRY) && !seen[i]) return false;
+    if ((t === CHEST || t === DOOR) && !adjacent(seen, i)) return false;
+  }
+  return true;
+}
+
 function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   const assets = assetsForFloor(romData, dungeon, floorIndex);
   const rng = mulberry32(seed + floorIndex);
   // ⭐ WHAT SHAPE THIS FLOOR IS. Null on the boss chamber, whose shape comes from
-  // `bossSkinId` — every branch below tests `isBossFloor` first, so null never
+  // `bossSkinId` — every branch below tests `isFinalFloor` first, so null never
   // reaches a layout comparison. Reading it draws nothing from `rng`, which is
   // why swapping the whole dispatch from floor index to layout name leaves Altar
   // Cave byte-identical (`check-floor-snapshot`).
@@ -1288,7 +1331,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   // boss chamber is authored, so neither is a chamber list.
   const plan = createPlan(floorIndex, LAYOUT !== null && LAYOUT !== 'snake');
 
-  if (isBossFloor(dungeon, floorIndex)) {
+  if (isFinalFloor(dungeon, floorIndex)) {
     const pos = generateBossRoom(tilemap, dungeon);
     entranceX = pos.entranceX;
     entranceY = pos.entranceY;
@@ -3529,8 +3572,8 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
 
   // ── Feature placement (shared across all cave floors) ──────────────
   let hiddenTraps = new Set();
-  if (!isBossFloor(dungeon, floorIndex)) {
-    const config = LAYOUT_CONFIG[LAYOUT] || LAYOUT_CONFIG['snake'];
+  if (!isFinalFloor(dungeon, floorIndex)) {
+    const config = { ...(LAYOUT_CONFIG[LAYOUT] || LAYOUT_CONFIG['snake']), ...dungeon.layout.features };
     const used = new Set();
     used.add(`${entranceX},${entranceY}`);
     for (let dy = -3; dy <= 1; dy++) {
@@ -3895,6 +3938,14 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
     // trigId is computed after processTriggerTiles via the type-1 fall-through below.
   }
 
+  // Structural carving uses the shared vocabulary. A different native
+  // tileset can explicitly replace the few slots whose artwork differs.
+  if (dungeon.tileReplacements) {
+    for (let i = 0; i < tilemap.length; i++) {
+      const replacement = dungeon.tileReplacements[tilemap[i]];
+      if (replacement !== undefined) tilemap[i] = replacement;
+    }
+  }
   const triggerMap = processTriggerTiles(tilemap);
 
   // Warp tile ($61) is in the event range ($60-$63) so processTriggerTiles registers it
@@ -4071,7 +4122,7 @@ function _generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   const entranceData = new Uint8Array(16);
 
   return {
-    tileset: isBossFloor(dungeon, floorIndex) ? resolveBossSkin(dungeon.bossSkinId).tileset : dungeon.tileset,
+    tileset: isFinalFloor(dungeon, floorIndex) ? resolveBossSkin(dungeon.bossSkinId).tileset : dungeon.tileset,
     fillTile,
     skipRoomClip: true,
     entranceX,

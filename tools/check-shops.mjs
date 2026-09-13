@@ -65,7 +65,10 @@ const ok = (m) => console.log('  ✓ ' + m);
 
 // The roster, pinned. Every town that has shipped shops is listed; a missing
 // entry means content was dropped, which is exactly the failure this catches.
-const EXPECTED = ['ur_weapon', 'ur_armor', 'ur_item', 'ur_magic',
+const EXPECTED = ['ancients_weapon', 'ancients_armor', 'ancients_magic', 'ancients_item', 'gysahl_keys', 'gysahl_greens', 'gysahl_magic', 'ur_weapon', 'ur_armor', 'ur_item', 'ur_magic',
+                  'dwarves_item', 'dwarves_weapon', 'dwarves_armor', 'canaan_weapon', 'canaan_armor', 'canaan_item', 'canaan_magic',
+                  'tozas_item', 'tozas_bread', 'tozas_magic',
+                  'vikings_item',
                   // ⭐ kazus_item (v1.10.73) — the keeper standing behind the
                   // pub's bar, ROM record $2e @(9,23), had no counter wired, so
                   // facing him did nothing. Counter (9,24) is tile $1d, the

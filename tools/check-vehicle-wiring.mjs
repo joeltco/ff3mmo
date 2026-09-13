@@ -46,7 +46,7 @@ const T = Object.fromEntries(['land', 'forest', 'ocean', 'shallow', 'mtn'].map(k
 // ── 1. terrain rules ───────────────────────────────────────────────────────
 const EXPECT = [
   ['on foot',  0, { land: true,  forest: true,  ocean: false, shallow: false, mtn: false }],
-  ['canoe',    1, { land: true,  forest: true,  ocean: false, shallow: true,  mtn: false }],
+  ['chocobo',  1, { land: true,  forest: true,  ocean: false, shallow: true,  mtn: false }],
   ['afloat',   2, { land: false, forest: false, ocean: false, shallow: true,  mtn: false }],
   ['ship',     3, { land: false, forest: false, ocean: true,  shallow: false, mtn: false }],
 ];
@@ -120,7 +120,7 @@ for (const mode of [0, 2, 3, 5, 6, 7]) {
   for (const [tileId] of v.layout)
     if (!have.has(tileId)) fail(`mode ${mode} layout references tile $${tileId.toString(16)} with no pattern data`);
 }
-if (!bad) ok('captured vehicle sprites cover modes 0,2,3,5,6,7 with complete tile data');
+if (!bad) ok('captured vehicle sprites cover modes 0,1,2,3,5,6,7 with complete tile data');
 
 // ── 7. boarding is by POSITION, and parking uses the tile being LEFT ────────
 if (!/ps\.vehicleParked\s*&&[\s\S]{0,160}tileX === \(ps\.vehicleParkedX/.test(mv))

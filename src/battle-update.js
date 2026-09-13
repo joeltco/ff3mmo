@@ -1,3 +1,4 @@
+import { companionProfiles } from './data/companions.js';
 // battle-update.js — battle state machine: opening, player attack, defend/item,
 // run, boss dissolve, victory, defeat, and main updateBattle() loop.
 
@@ -108,6 +109,7 @@ const POISON_END_HOLD_MS       = DMG_SHOW_MS;
 // ── Exported utilities ─────────────────────────────────────────────────────
 
 export function resetBattleVars() {
+  battleSt.bossTurns = 0; battleSt.bossBarrier = null; battleSt.bossBarrierRule = null;
   inputSt.battleCursor = 0;
   resetAllDmgNums();
   battleSt.encounterDropItem = null; battleSt.encounterDropItemRejected = false; battleSt.bossFlashTimer = 0; battleSt.battleShakeTimer = 0;
@@ -142,9 +144,10 @@ export function resetBattleVars() {
   clearBattleMsgQueue();
 }
 
+const incapacitated = c => c.hp <= 0 || !!(c.status?.mask & 0xc0); // death or petrify
+
 export function isTeamWiped() {
-  if (ps.hp > 0) return false;
-  return battleSt.battleAllies.every(a => a.hp <= 0);
+  return incapacitated(ps) && battleSt.battleAllies.every(incapacitated);
 }
 
 export function isVictoryBattleState() {
@@ -174,6 +177,7 @@ export function startBattle() {
   // ⛔ ASSIGNED EVERY TIME, not once. `resetBattleVars` does not clear it, so a
   // Seals fight followed by an Altar Cave fight would otherwise keep the Djinn.
   const _dungeon = dungeonForMapId(mapSt.currentMapId);
+  battleSt.bossBarrierRule = _dungeon?.barrierShift ?? null;
   battleSt.bossId = (_dungeon && _dungeon.bossId != null) ? _dungeon.bossId : DEFAULT_BOSS_ID;
   battleSt.enemyHP = activeBossStats().hp;
   playSFX(SFX.EARTHQUAKE);
@@ -205,6 +209,12 @@ export function executeBattleCommand(index) {
       setArbStripName(cellId);
     }
   } else if (index === 1) {
+    if (ps.jobIdx === 9 && !pvpSt.isPVPBattle) {
+      playSFX(SFX.CONFIRM);
+      inputSt.playerActionPending = { command: 'study' };
+      battleSt.battleState = 'confirm-pause'; battleSt.battleTimer = 0;
+      return;
+    }
     // Slot 1: Defend for non-casters, Magic for casters.
     // MUST agree with the label drawn by `battle-draw-menu.js#_isMageJob` —
     // both read `jobHasMagic`. See that helper for what the split cost us.
@@ -353,6 +363,24 @@ function _updateBattleOpening() {
 // confirms). Round-boundary calls (no opts) keep the existing fade-in
 // animation + state transition. v1.7.686.
 export function tryJoinPlayerAlly(opts) {
+  if (pvpSt.isPVPBattle || pvpSt.isWirePVP) return _joinRealPlayerAllies(opts);
+  // Temporarily remove NPCs so an online player can always take their place.
+  // Reuse surviving objects: this must not heal/revive a companion each round.
+  const previous = battleSt.battleAllies.filter(a => a.companionId);
+  battleSt.battleAllies = battleSt.battleAllies.filter(a => !a.companionId);
+  const joined = _joinRealPlayerAllies(opts);
+  for (const profile of companionProfiles(ps)) {
+    if (battleSt.battleAllies.length >= 3) break;
+    const existing = previous.find(a => a.companionId === profile.companionId);
+    const ally = existing || generateAllyStats(profile);
+    ally.companionId = profile.companionId;
+    ally.fadeStep = 0;
+    battleSt.battleAllies.push(ally);
+  }
+  return joined;
+}
+
+function _joinRealPlayerAllies(opts) {
   const initial = !!(opts && opts.initial);
   const loc = getPlayerLocation();
   const pvpNames = new Set([
@@ -986,7 +1014,9 @@ function _updateMonsterDeath() {
 // ── Defend / Item ──────────────────────────────────────────────────────────
 
 export function updateBattleDefendItem(dt) {
-  if (battleSt.battleState === 'defend-anim') {
+  if (battleSt.battleState === 'study-read') {
+    if (battleSt.battleTimer >= 1400) processNextTurn();
+  } else if (battleSt.battleState === 'defend-anim') {
     if (battleSt.battleTimer >= DEFEND_SPARKLE_TOTAL_MS) {
       processNextTurn();
     }
@@ -1121,7 +1151,7 @@ function _updateBossDissolve(dt) {
     // dissolves, that is just the death animation.
     if (isCrystalChamber(mapSt.currentMapId)) {
       startCrystalReveal();
-      ps.unlockedJobs |= WIND_CRYSTAL_JOBS;
+      ps.unlockedJobs |= dungeonForMapId(mapSt.currentMapId)?.crystalJobs ?? WIND_CRYSTAL_JOBS;
     }
     // KO'd player: skip rewards and victory, straight to box-close (→ respawn).
     if (ps.hp <= 0) {
@@ -1222,7 +1252,7 @@ function _respawnAtLastTown() {
 function _updateBoxClose() {
   if (battleSt.battleState === 'encounter-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
-      const playerDead = ps.hp <= 0;
+      const playerDead = incapacitated(ps);
       // v1.7.773 P-3 — fire pve-battle-end before the local tear-down so
       // claim builder can still read battleSt.encounter* fields. No-op
       // when PVE_ARBITER off or no active arbiter battleId.
@@ -1240,7 +1270,7 @@ function _updateBoxClose() {
   if (battleSt.battleState === 'enemy-box-close') {
     if (battleSt.battleTimer >= BOSS_BOX_EXPAND_MS) {
       const wasPVP = pvpSt.isPVPBattle;
-      const playerDead = ps.hp <= 0;
+      const playerDead = incapacitated(ps);
       resetPVPState();
       sprite.setDirection(DIR_DOWN);
       battleSt.battleAllies = []; battleSt.allyJoinRound = 0;

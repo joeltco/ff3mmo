@@ -15,6 +15,7 @@ import { ui } from './ui-state.js';
 import { sprite } from './player-sprite.js';
 import { drawNpcs } from './npc.js';
 import { isBedDimming, drawBedDim } from './bed.js';
+import { endingKindFor, ENDING_REACH } from './data/dungeons.js';
 
 const CANVAS_W = 256;
 const CANVAS_H = 240;
@@ -30,6 +31,15 @@ const BATTLE_FLASH_FRAMES = 65;
 const BATTLE_FLASH_FRAME_MS = 16.67;
 
 function _renderSprites(camX, camY, originX, originY, spriteY) {
+  // The endpoint must be visible. Reuse FF3's two-frame star, also used by
+  // the departure animation, so reaching the end has a clear visual cue.
+  if (!mapSt.onWorldMap && mapSt.warpTile
+      && (battleSt.enemyDefeated || endingKindFor(mapSt.currentMapId) === ENDING_REACH)) {
+    const frames = getStarTiles();
+    if (frames?.length) ui.ctx.drawImage(frames[Math.floor(waterSt.tick / 8) % frames.length],
+      mapSt.warpTile.x * 16 - camX + originX,
+      mapSt.warpTile.y * 16 - camY + originY);
+  }
   const _fs = getFlameSprites();
   if (!mapSt.onWorldMap && _fs.length > 0) {
     const flameFrame = Math.floor(waterSt.tick / 8) & 1;

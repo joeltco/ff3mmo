@@ -344,7 +344,7 @@ export const ENCOUNTERS = new Map([
     ],
     weights: [64],
   }],
-  // ── Cave of Seals — ROM maps 103, 104, 105, 106 ──────────────────────────
+  // ── Cave of Seals — ROM maps 103, 104, 105, 106, 106 ──────────────────────────
   ['seals_cave_f1', {
     rom: { map: 103, group: 0x07 },
     rate: 6,   // out of 256 per step — ~1 per 43 steps
@@ -378,14 +378,9 @@ export const ENCOUNTERS = new Map([
     ],
     weights: [24, 24, 12, 4],   // out of 64
   }],
-  // ⛔ THIS IS A WALKABLE FLOOR NOW, NOT THE BOSS CHAMBER. The Cave of Seals
-  // gained a fourth walkable floor in v1.11.3 to match Altar Cave's shape, so
-  // the zone that used to be its boss room is the deepest floor you fight on —
-  // the cartridge's own B3F, at the cartridge's own rate. The boss chamber moved
-  // down to `seals_cave_f5`.
   ['seals_cave_f4', {
     rom: { map: 106, group: 0x09 },
-    rate: 6,   // out of 256 per step — the cartridge's rate for map 106
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
     formations: [
       [{ id: 0x0b, min: 1, max: 1 }, { id: 0x0a, min: 3, max: 5 }],   // 0x0a  Skeleton x1-1 + Mummy x3-5
       [{ id: 0x0d, min: 2, max: 2 }, { id: 0x0c, min: 2, max: 4 }],   // 0x0b  Larva x2-2 + CursdCopper x2-4
@@ -393,9 +388,10 @@ export const ENCOUNTERS = new Map([
     ],
     weights: [36, 24, 4],   // out of 64
   }],
-  // The BOSS CHAMBER. The cartridge gives map 106 a rate of 6/256, but our
-  // chamber is a single room with a scripted fight, so the rate is forced to 0.
-  // The group is kept so the formations it would have rolled stay visible.
+  // Floor 5 is the BOSS CHAMBER. The cartridge gives map 106 a rate of
+  // 6/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
   ['seals_cave_f5', {
     rom: { map: 106, group: 0x09 },
     rate: 0,   // out of 256 per step — never
@@ -411,6 +407,463 @@ export const ENCOUNTERS = new Map([
     rate: 0,
     formations: [
       [{ id: 0xcd, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Tozus Tunnel — ROM maps 120, 121, 123 ──────────────────────────
+  ['tozas_tunnel_f1', {
+    rom: { map: 120, group: 0x0f },
+    rate: 18,   // out of 256 per step — ~1 per 14 steps
+    formations: [
+      [{ id: 0x18, min: 2, max: 4 }],   // 0x58  Leprechaun x2-4
+      [{ id: 0x19, min: 2, max: 4 }],   // 0x59  Darkface x2-4
+      [{ id: 0x19, min: 1, max: 1 }, { id: 0x18, min: 1, max: 3 }],   // 0x5a  Darkface x1-1 + Leprechaun x1-3
+    ],
+    weights: [30, 30, 4],   // out of 64
+  }],
+  ['tozas_tunnel_f2', {
+    rom: { map: 121, group: 0x0f },
+    rate: 18,   // out of 256 per step — ~1 per 14 steps
+    formations: [
+      [{ id: 0x18, min: 2, max: 4 }],   // 0x58  Leprechaun x2-4
+      [{ id: 0x19, min: 2, max: 4 }],   // 0x59  Darkface x2-4
+      [{ id: 0x19, min: 1, max: 1 }, { id: 0x18, min: 1, max: 3 }],   // 0x5a  Darkface x1-1 + Leprechaun x1-3
+    ],
+    weights: [30, 30, 4],   // out of 64
+  }],
+  // Floor 3 is the BOSS CHAMBER. The cartridge gives map 123 a rate of
+  // 18/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['tozas_tunnel_f3', {
+    rom: { map: 123, group: 0x0f },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x18, min: 2, max: 4 }],   // 0x58  Leprechaun x2-4
+      [{ id: 0x19, min: 2, max: 4 }],   // 0x59  Darkface x2-4
+      [{ id: 0x19, min: 1, max: 1 }, { id: 0x18, min: 1, max: 3 }],   // 0x5a  Darkface x1-1 + Leprechaun x1-3
+    ],
+    weights: [30, 30, 4],   // out of 64
+  }],
+  // ── Nepto Temple — ROM maps 97, 98, 99, 100 ──────────────────────────
+  ['nepto_temple_f1', {
+    rom: { map: 97, group: 0x10 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x1a, min: 2, max: 4 }],   // 0x10  Petit x2-4
+      [{ id: 0x1c, min: 2, max: 4 }],   // 0x12  Lilliputian x2-4
+    ],
+    weights: [33, 31],   // out of 64
+  }],
+  ['nepto_temple_f2', {
+    rom: { map: 98, group: 0x11 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x1b, min: 2, max: 4 }],   // 0x11  Poison Bat x2-4
+      [{ id: 0x1e, min: 2, max: 4 }],   // 0x13  Blood Worm x2-4
+    ],
+    weights: [33, 31],   // out of 64
+  }],
+  ['nepto_temple_f3', {
+    rom: { map: 99, group: 0x11 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x1b, min: 2, max: 4 }],   // 0x11  Poison Bat x2-4
+      [{ id: 0x1e, min: 2, max: 4 }],   // 0x13  Blood Worm x2-4
+    ],
+    weights: [33, 31],   // out of 64
+  }],
+  // Floor 4 is the BOSS CHAMBER. The cartridge gives map 100 a rate of
+  // 6/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['nepto_temple_f4', {
+    rom: { map: 100, group: 0x12 },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x1c, min: 1, max: 2 }, { id: 0x1d, min: 1, max: 2 }],   // 0x14  Lilliputian x1-2 + Wererat x1-2
+      [{ id: 0x1e, min: 1, max: 2 }, { id: 0x1a, min: 1, max: 2 }],   // 0x15  Blood Worm x1-2 + Petit x1-2
+    ],
+    weights: [33, 31],   // out of 64
+  }],
+  ['nepto_temple_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xce, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Tower of Owen — ROM maps 126, 128, 130, 132, 134 ──────────────────────────
+  ['tower_owen_f1', {
+    rom: { map: 126, group: 0x17 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x34, min: 2, max: 4 }],   // 0x17  Petit Mage x2-4
+      [{ id: 0x32, min: 2, max: 4 }],   // 0x18  Far Darrig x2-4
+      [{ id: 0x31, min: 2, max: 4 }],   // 0x16  Pugman x2-4
+    ],
+    weights: [36, 16, 12],   // out of 64
+  }],
+  ['tower_owen_f2', {
+    rom: { map: 128, group: 0x18 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x32, min: 2, max: 4 }],   // 0x18  Far Darrig x2-4
+      [{ id: 0x34, min: 2, max: 4 }],   // 0x17  Petit Mage x2-4
+      [{ id: 0x36, min: 2, max: 4 }],   // 0x19  Aughisky x2-4
+    ],
+    weights: [30, 24, 10],   // out of 64
+  }],
+  ['tower_owen_f3', {
+    rom: { map: 130, group: 0x1a },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x34, min: 1, max: 2 }, { id: 0x33, min: 1, max: 2 }],   // 0x1a  Petit Mage x1-2 + Blood Bat x1-2
+      [{ id: 0x36, min: 2, max: 4 }],   // 0x19  Aughisky x2-4
+      [{ id: 0x34, min: 2, max: 4 }],   // 0x1b  Petit Mage x2-4
+    ],
+    weights: [30, 24, 10],   // out of 64
+  }],
+  ['tower_owen_f4', {
+    rom: { map: 132, group: 0x1c },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x36, min: 1, max: 2 }, { id: 0x32, min: 1, max: 2 }],   // 0x1c  Aughisky x1-2 + Far Darrig x1-2
+      [{ id: 0x34, min: 2, max: 4 }],   // 0x1b  Petit Mage x2-4
+      [{ id: 0x34, min: 1, max: 2 }, { id: 0x33, min: 1, max: 2 }],   // 0x1d  Petit Mage x1-2 + Blood Bat x1-2
+    ],
+    weights: [30, 24, 10],   // out of 64
+  }],
+  // Floor 5 is the BOSS CHAMBER. The cartridge gives map 134 a rate of
+  // 0/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['tower_owen_f5', {
+    rom: { map: 134, group: 0x1d },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x34, min: 1, max: 2 }, { id: 0x33, min: 1, max: 2 }],   // 0x1d  Petit Mage x1-2 + Blood Bat x1-2
+      [{ id: 0x36, min: 1, max: 2 }, { id: 0x32, min: 1, max: 2 }],   // 0x1c  Aughisky x1-2 + Far Darrig x1-2
+      [{ id: 0x34, min: 2, max: 4 }],   // 0x1b  Petit Mage x2-4
+      [{ id: 0x34, min: 1, max: 2 }, { id: 0x33, min: 1, max: 2 }],   // 0x1a  Petit Mage x1-2 + Blood Bat x1-2
+    ],
+    weights: [24, 24, 12, 4],   // out of 64
+  }],
+  ['tower_owen_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xcf, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Subterranean Lake — ROM maps 116, 117, 118, 119 ──────────────────────────
+  ['subterranean_lake_f1', {
+    rom: { map: 116, group: 0x1e },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x37, min: 2, max: 4 }],   // 0x1e  Bomb x2-4
+      [{ id: 0x38, min: 2, max: 4 }],   // 0x1f  Manticore x2-4
+    ],
+    weights: [54, 10],   // out of 64
+  }],
+  ['subterranean_lake_f2', {
+    rom: { map: 117, group: 0x1e },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x37, min: 2, max: 4 }],   // 0x1e  Bomb x2-4
+      [{ id: 0x38, min: 2, max: 4 }],   // 0x1f  Manticore x2-4
+    ],
+    weights: [54, 10],   // out of 64
+  }],
+  ['subterranean_lake_f3', {
+    rom: { map: 118, group: 0x1f },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x38, min: 2, max: 4 }],   // 0x1f  Manticore x2-4
+      [{ id: 0x39, min: 2, max: 4 }],   // 0x20  Stalagmite x2-4
+    ],
+    weights: [54, 10],   // out of 64
+  }],
+  // Floor 4 is the BOSS CHAMBER. The cartridge gives map 119 a rate of
+  // 6/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['subterranean_lake_f4', {
+    rom: { map: 119, group: 0x20 },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x3b, min: 1, max: 2 }, { id: 0x39, min: 1, max: 2 }],   // 0x21  Merman x1-2 + Stalagmite x1-2
+      [{ id: 0x3c, min: 1, max: 2 }, { id: 0x3a, min: 1, max: 2 }],   // 0x22  RuinousWave x1-2 + Sea Devil x1-2
+    ],
+    weights: [36, 28],   // out of 64
+  }],
+  ['subterranean_lake_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xd0, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Flame Cave — ROM maps 107, 108, 109, 149 ──────────────────────────
+  ['flame_cave_f1', {
+    rom: { map: 107, group: 0x23 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x3d, min: 1, max: 2 }, { id: 0x41, min: 1, max: 2 }],   // 0x23  Balloon x1-2 + RMarshmao x1-2
+      [{ id: 0x3f, min: 2, max: 4 }],   // 0x24  Crocotta x2-4
+      [{ id: 0x40, min: 1, max: 2 }],   // 0x26  Adamantoise x1-2
+      [{ id: 0x40, min: 1, max: 2 }, { id: 0x3d, min: 2, max: 4 }],   // 0x27  Adamantoise x1-2 + Balloon x2-4
+    ],
+    weights: [36, 24, 3, 1],   // out of 64
+  }],
+  ['flame_cave_f2', {
+    rom: { map: 108, group: 0x24 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x3f, min: 2, max: 4 }],   // 0x24  Crocotta x2-4
+      [{ id: 0x3d, min: 1, max: 2 }, { id: 0x41, min: 1, max: 2 }],   // 0x23  Balloon x1-2 + RMarshmao x1-2
+      [{ id: 0x3e, min: 1, max: 2 }, { id: 0x3f, min: 1, max: 2 }],   // 0x25  Myrmecoleon x1-2 + Crocotta x1-2
+      [{ id: 0x40, min: 1, max: 2 }],   // 0x26  Adamantoise x1-2
+      [{ id: 0x40, min: 1, max: 2 }, { id: 0x3d, min: 2, max: 4 }],   // 0x27  Adamantoise x1-2 + Balloon x2-4
+    ],
+    weights: [36, 18, 6, 3, 1],   // out of 64
+  }],
+  ['flame_cave_f3', {
+    rom: { map: 109, group: 0x25 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x3e, min: 1, max: 2 }, { id: 0x3f, min: 1, max: 2 }],   // 0x25  Myrmecoleon x1-2 + Crocotta x1-2
+      [{ id: 0x40, min: 1, max: 2 }],   // 0x26  Adamantoise x1-2
+      [{ id: 0x40, min: 1, max: 2 }, { id: 0x3d, min: 2, max: 4 }],   // 0x27  Adamantoise x1-2 + Balloon x2-4
+    ],
+    weights: [48, 12, 4],   // out of 64
+  }],
+  // Floor 4 is the BOSS CHAMBER. The cartridge gives map 149 a rate of
+  // 0/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['flame_cave_f4', {
+    rom: { map: 149, group: 0x00 },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x00, min: 2, max: 4 }],   // 0x00  Goblin x2-4
+      [{ id: 0x02, min: 1, max: 2 }, { id: 0x01, min: 1, max: 2 }],   // 0x01  Eye Fang x1-2 + Carbuncle x1-2
+    ],
+    weights: [63, 1],   // out of 64
+  }],
+  ['flame_cave_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xd1, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Castle Hein — ROM maps 136, 137, 138, 140, 139 ──────────────────────────
+  ['castle_hein_f1', {
+    rom: { map: 136, group: 0x28 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x42, min: 1, max: 2 }, { id: 0x43, min: 1, max: 2 }],   // 0x28  Pharaoh x1-2 + Lemur x1-2
+      [{ id: 0x44, min: 1, max: 2 }, { id: 0x42, min: 2, max: 4 }],   // 0x29  Lamia x1-2 + Pharaoh x2-4
+      [{ id: 0x45, min: 1, max: 2 }],   // 0x2b  Demon x1-2
+      [{ id: 0x46, min: 1, max: 1 }],   // 0x2c  Dullahan x1-1
+    ],
+    weights: [36, 24, 3, 1],   // out of 64
+  }],
+  ['castle_hein_f2', {
+    rom: { map: 137, group: 0x28 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x42, min: 1, max: 2 }, { id: 0x43, min: 1, max: 2 }],   // 0x28  Pharaoh x1-2 + Lemur x1-2
+      [{ id: 0x44, min: 1, max: 2 }, { id: 0x42, min: 2, max: 4 }],   // 0x29  Lamia x1-2 + Pharaoh x2-4
+      [{ id: 0x45, min: 1, max: 2 }],   // 0x2b  Demon x1-2
+      [{ id: 0x46, min: 1, max: 1 }],   // 0x2c  Dullahan x1-1
+    ],
+    weights: [36, 24, 3, 1],   // out of 64
+  }],
+  ['castle_hein_f3', {
+    rom: { map: 138, group: 0x29 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x44, min: 1, max: 2 }, { id: 0x42, min: 2, max: 4 }],   // 0x29  Lamia x1-2 + Pharaoh x2-4
+      [{ id: 0x45, min: 1, max: 2 }],   // 0x2b  Demon x1-2
+      [{ id: 0x46, min: 1, max: 1 }],   // 0x2c  Dullahan x1-1
+    ],
+    weights: [48, 15, 1],   // out of 64
+  }],
+  ['castle_hein_f4', {
+    rom: { map: 140, group: 0x29 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x44, min: 1, max: 2 }, { id: 0x42, min: 2, max: 4 }],   // 0x29  Lamia x1-2 + Pharaoh x2-4
+      [{ id: 0x45, min: 1, max: 2 }],   // 0x2b  Demon x1-2
+      [{ id: 0x46, min: 1, max: 1 }],   // 0x2c  Dullahan x1-1
+    ],
+    weights: [48, 15, 1],   // out of 64
+  }],
+  // Floor 5 is the BOSS CHAMBER. The cartridge gives map 139 a rate of
+  // 0/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['castle_hein_f5', {
+    rom: { map: 139, group: 0x00 },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x00, min: 2, max: 4 }],   // 0x00  Goblin x2-4
+      [{ id: 0x02, min: 1, max: 2 }, { id: 0x01, min: 1, max: 2 }],   // 0x01  Eye Fang x1-2 + Carbuncle x1-2
+    ],
+    weights: [63, 1],   // out of 64
+  }],
+  ['castle_hein_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xd2, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Mythril Mines — ROM maps 101, 102, 102 ──────────────────────────
+  ['mythril_mines_f1', {
+    rom: { map: 101, group: 0x08 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x0b, min: 2, max: 4 }],   // 0x08  Skeleton x2-4
+      [{ id: 0x0e, min: 2, max: 4 }],   // 0x09  Shadow x2-4
+      [{ id: 0x0b, min: 1, max: 1 }, { id: 0x0a, min: 3, max: 5 }],   // 0x0a  Skeleton x1-1 + Mummy x3-5
+      [{ id: 0x0d, min: 2, max: 2 }, { id: 0x0c, min: 2, max: 4 }],   // 0x0b  Larva x2-2 + CursdCopper x2-4
+    ],
+    weights: [24, 24, 12, 4],   // out of 64
+  }],
+  ['mythril_mines_f2', {
+    rom: { map: 102, group: 0x09 },
+    rate: 6,   // out of 256 per step — ~1 per 43 steps
+    formations: [
+      [{ id: 0x0b, min: 1, max: 1 }, { id: 0x0a, min: 3, max: 5 }],   // 0x0a  Skeleton x1-1 + Mummy x3-5
+      [{ id: 0x0d, min: 2, max: 2 }, { id: 0x0c, min: 2, max: 4 }],   // 0x0b  Larva x2-2 + CursdCopper x2-4
+      [{ id: 0x0f, min: 1, max: 1 }, { id: 0x0e, min: 3, max: 5 }],   // 0x0c  Revenant x1-1 + Shadow x3-5
+    ],
+    weights: [36, 24, 4],   // out of 64
+  }],
+  // Floor 3 is the BOSS CHAMBER. The cartridge gives map 102 a rate of
+  // 6/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['mythril_mines_f3', {
+    rom: { map: 102, group: 0x09 },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0x0b, min: 1, max: 1 }, { id: 0x0a, min: 3, max: 5 }],   // 0x0a  Skeleton x1-1 + Mummy x3-5
+      [{ id: 0x0d, min: 2, max: 2 }, { id: 0x0c, min: 2, max: 4 }],   // 0x0b  Larva x2-2 + CursdCopper x2-4
+      [{ id: 0x0f, min: 1, max: 1 }, { id: 0x0e, min: 3, max: 5 }],   // 0x0c  Revenant x1-1 + Shadow x3-5
+    ],
+    weights: [36, 24, 4],   // out of 64
+  }],
+  // ── Lake Dohr — ROM maps 151, 153, 154, 155 ──────────────────────────
+  ['dohr_cave_f1', {
+    rom: { map: 151, group: 0x43 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0x9f, min: 2, max: 4 }],   // 0x43  Ouroboros x2-4
+      [{ id: 0xa0, min: 2, max: 4 }],   // 0x44  Plancti x2-4
+      [{ id: 0xa1, min: 2, max: 4 }],   // 0x45  Sea Lion x2-4
+    ],
+    weights: [33, 30, 1],   // out of 64
+  }],
+  ['dohr_cave_f2', {
+    rom: { map: 153, group: 0x44 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0xa0, min: 2, max: 4 }],   // 0x44  Plancti x2-4
+      [{ id: 0xa1, min: 2, max: 4 }],   // 0x45  Sea Lion x2-4
+      [{ id: 0xa2, min: 2, max: 4 }],   // 0x46  Remora x2-4
+    ],
+    weights: [33, 30, 1],   // out of 64
+  }],
+  ['dohr_cave_f3', {
+    rom: { map: 154, group: 0x44 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0xa0, min: 2, max: 4 }],   // 0x44  Plancti x2-4
+      [{ id: 0xa1, min: 2, max: 4 }],   // 0x45  Sea Lion x2-4
+      [{ id: 0xa2, min: 2, max: 4 }],   // 0x46  Remora x2-4
+    ],
+    weights: [33, 30, 1],   // out of 64
+  }],
+  // Floor 4 is the BOSS CHAMBER. The cartridge gives map 155 a rate of
+  // 8/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['dohr_cave_f4', {
+    rom: { map: 155, group: 0x45 },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0xa1, min: 2, max: 4 }],   // 0x45  Sea Lion x2-4
+      [{ id: 0xa2, min: 2, max: 4 }],   // 0x46  Remora x2-4
+      [{ id: 0xa0, min: 2, max: 4 }],   // 0x44  Plancti x2-4
+    ],
+    weights: [30, 30, 4],   // out of 64
+  }],
+  ['dohr_cave_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xcb, min: 1, max: 1 }],
+    ],
+    weights: [64],
+  }],
+  // ── Bahamut's Lair — ROM maps 156, 165, 166, 166 ──────────────────────────
+  ['bahamut_cave_f1', {
+    rom: { map: 156, group: 0x48 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0xa4, min: 2, max: 4 }],   // 0x48  Drake x2-4
+      [{ id: 0xa4, min: 1, max: 2 }, { id: 0xa3, min: 2, max: 4 }],   // 0x49  Drake x1-2 + Grenade x2-4
+    ],
+    weights: [33, 31],   // out of 64
+  }],
+  ['bahamut_cave_f2', {
+    rom: { map: 165, group: 0x49 },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0xa5, min: 2, max: 4 }],   // 0x4a  Great Boros x2-4
+      [{ id: 0xa6, min: 2, max: 4 }],   // 0x4b  Saber Liger x2-4
+      [{ id: 0xa4, min: 1, max: 2 }, { id: 0xa3, min: 2, max: 4 }],   // 0x49  Drake x1-2 + Grenade x2-4
+    ],
+    weights: [30, 19, 15],   // out of 64
+  }],
+  ['bahamut_cave_f3', {
+    rom: { map: 166, group: 0x4a },
+    rate: 8,   // out of 256 per step — ~1 per 32 steps
+    formations: [
+      [{ id: 0xa7, min: 2, max: 4 }],   // 0x4c  Queen Lamia x2-4
+      [{ id: 0xa6, min: 2, max: 4 }],   // 0x4b  Saber Liger x2-4
+      [{ id: 0xa5, min: 2, max: 4 }],   // 0x4a  Great Boros x2-4
+    ],
+    weights: [36, 24, 4],   // out of 64
+  }],
+  // Floor 4 is the BOSS CHAMBER. The cartridge gives map 166 a rate of
+  // 8/256, but our chamber is a single room with a scripted fight, so
+  // the rate is forced to 0 here. The group is kept so the formations it
+  // would have rolled stay visible.
+  ['bahamut_cave_f4', {
+    rom: { map: 166, group: 0x4a },
+    rate: 0,   // out of 256 per step — never
+    formations: [
+      [{ id: 0xa7, min: 2, max: 4 }],   // 0x4c  Queen Lamia x2-4
+      [{ id: 0xa6, min: 2, max: 4 }],   // 0x4b  Saber Liger x2-4
+      [{ id: 0xa5, min: 2, max: 4 }],   // 0x4a  Great Boros x2-4
+    ],
+    weights: [36, 24, 4],   // out of 64
+  }],
+  ['bahamut_cave_boss', {
+    rom: null,   // ⛔ ours: the boss is placed by the dungeon registry, not rolled
+    rate: 0,
+    formations: [
+      [{ id: 0xd6, min: 1, max: 1 }],
     ],
     weights: [64],
   }],

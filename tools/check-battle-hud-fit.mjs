@@ -32,6 +32,8 @@
 // is enumerated below instead — the layout has to hold for all of them.
 
 import fs from 'node:fs';
+import { createCanvas } from '@napi-rs/canvas';
+globalThis.document={createElement:()=>createCanvas(8,8)};
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,7 +50,7 @@ const { initTextDecoder, getMonsterNameShrines } = await import('../src/text-dec
 initTextDecoder(rom);
 const { measureText } = await import('../src/font-renderer.js');
 const { ENCOUNTERS } = await import('../src/data/encounters.js');
-const { MONSTER_REGISTRY } = await import('../src/data/monster-sprites-rom.js');
+const { getMonsterCanvas } = await import('../src/monster-sprites.js');
 // ⛔ Ask the SHIPPED layout where things go. A local copy of the geometry here
 // would keep passing after someone changed the real one — which is the whole
 // failure this file exists to catch.
@@ -96,8 +98,8 @@ const HUD_VIEW_W = 144, HUD_VIEW_H = 144;
 const PADDING = 16, BODY_GAP_Y = 2;
 /** Sprite size straight from the registry the game renders from. */
 const dimsOf = (id) => {
-  const e = MONSTER_REGISTRY.get(id);
-  return e ? { w: e.cols * 8, h: e.rows * 8 } : null;
+  const e = getMonsterCanvas(id);
+  return e ? { w: e.width, h: e.height } : null;
 };
 
 /**

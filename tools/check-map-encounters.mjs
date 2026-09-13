@@ -173,7 +173,7 @@ if (!natural) {
 // ── 3. the shipped data ─────────────────────────────────────────────────────
 console.log('\n── src/data/encounters.js ──');
 const { ENCOUNTERS, SLOT_ODDS, pickFormation, world0ZoneKey } = await import('../src/data/encounters.js');
-const { DUNGEONS, isBossFloor, romMapForFloor } = await import('../src/data/dungeons.js');
+const { DUNGEONS, isFinalFloor, ENDING_REACH, romMapForFloor } = await import('../src/data/dungeons.js');
 
 ok('SLOT_ODDS matches the ROM', JSON.stringify(SLOT_ODDS) === JSON.stringify(ME.slotOdds(rom)));
 
@@ -204,9 +204,10 @@ for (const d of DUNGEONS) {
   for (let f = 0; f < d.floors; f++) {
     const map = romMapForFloor(d, f);
     expectZone(`${d.encounterZonePrefix}_f${f + 1}`, ME.groupForMap(rom, map),
-               isBossFloor(d, f) ? 0 : ME.rateForMap(rom, map));
+               isFinalFloor(d, f) ? 0 : ME.rateForMap(rom, map));
   }
   const bz = ENCOUNTERS.get(`${d.encounterZonePrefix}_boss`);
+  if (d.ending === ENDING_REACH) { ok(`${d.id}: no boss zone`, !bz); continue; }
   ok(`${d.id}: boss zone is the registry's bossId`,
      !!bz && bz.formations[0][0].id === d.bossId && bz.rate === 0);
 }

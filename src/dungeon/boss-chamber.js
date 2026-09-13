@@ -1,3 +1,4 @@
+import { getMonsterCanvas } from '../monster-sprites.js';
 // The boss chamber — ONE shape, worn by every dungeon under a per-dungeon skin.
 // See docs/DUNGEON-CHAMBERS-PLAN.md §4c.
 //
@@ -18,6 +19,7 @@
 
 // Diamond layout, originally transcribed from ROM map 148.
 // Rows 8-10 / cols 5-7 are plain FLOOR here; the crystal skin puts the altar on.
+import { Sprite } from '../sprite.js';
 import { dungeonForMapId, floorIndexForMapId, isBossFloor } from '../data/dungeons.js';
 
 const LAYOUT = [
@@ -147,6 +149,18 @@ export const SEALS_SKIN = {
  * into this object; `resolveBossSkin` is the only place that lookup happens.
  */
 export const BOSS_SKINS = {
+  mines: { donorMap: 102, tileset: 0 },
+  dohr: { donorMap: 155, tileset: 0, bossSpriteOffset: 0x14110, bossSpriteFrames: 2, bossSpritePalIdx: 0 }, // Leviathan, NPC $45 / gfx 66
+  bahamut: { donorMap: 166, tileset: 0, bossMonsterId: 0xd6 }, // Native battle art; nest object $4d is not the adult dragon.
+
+  hein: { donorMap: 139, tileset: 2, bossSpriteOffset: 0x14b10, bossSpriteFrames: 2, bossSpritePalIdx: 0 }, // NPC $b1, flags $e2
+  lake: { donorMap: 119, tileset: 0, bossWalkOffset: 0x1f410 }, // NPC $9b -> gfx 52
+  flame: { ...CRYSTAL_SKIN, donorMap: 149, bossWalkOffset: 0x1f410 }, // Gutsco before transformation: NPC $a0 -> gfx 52
+  // Native map 134, NPC $91, gfx 73 ($14490), flags $EE -> SP3.
+  owen: { donorMap: 134, tileset: 0, bossSpriteOffset: 0x14490, bossSpriteFrames: 2, bossSpritePalIdx: 1 },
+  // Map 100's NPC $69 -> gfx 70, object $14310, flags $EE -> SP3.
+  nepto: { donorMap: 100, tileset: 1, bossSpriteOffset: 0x14310, bossSpriteFrames: 2, bossSpritePalIdx: 1 },
+  passage: { donorMap: 120, tileset: 0 },
   crystal: CRYSTAL_SKIN,
   seals:   SEALS_SKIN,
 };
@@ -200,8 +214,30 @@ export function resolveDungeonDonor(mapId) {
 export function bossFramesForDungeon(rom, dungeon, initMapObjectFrames, buildSpritePalettes, parseMapProperties) {
   if (!dungeon) return null;
   const skin = resolveBossSkin(dungeon.bossSkinId);
-  if (!skin.bossSpriteOffset) return null;
-  const sp = buildSpritePalettes(rom, parseMapProperties(rom, dungeon.donorMap));
+  if (skin.bossMonsterId != null) {
+    const art = getMonsterCanvas(skin.bossMonsterId);
+    if (!art) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    const scale = Math.min(32 / art.width, 32 / art.height);
+    const w = Math.round(art.width * scale), h = Math.round(art.height * scale);
+    ctx.drawImage(art, Math.floor((32-w)/2), 32-h, w, h);
+    return [canvas, canvas];
+  }
+  if (!skin.bossSpriteOffset && !skin.bossWalkOffset) return null;
+  const sp = buildSpritePalettes(rom, parseMapProperties(rom, skin.donorMap));
+  if (skin.bossWalkOffset) {
+    const sprite = new Sprite(rom, sp[1], sp[0]);
+    sprite.gfxBase = skin.bossWalkOffset;
+    return [0, 1].map(frame => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 16;
+      sprite.frame = frame;
+      sprite.draw(canvas.getContext('2d'), 0, 0);
+      return canvas;
+    });
+  }
   return initMapObjectFrames(rom, skin.bossSpriteOffset, sp[skin.bossSpritePalIdx ?? 0]);
 }
 

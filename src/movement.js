@@ -7,7 +7,7 @@ import { transSt } from './transitions.js';
 import { inputSt, handleBattleInput, handleRosterInput, keys } from './input-handler.js';
 import { sprite } from './player-sprite.js';
 import { pauseSt, handlePauseInput } from './pause-menu.js';
-import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPrompt, yesNoLabels, isMsgTyping, completeMsgTyping } from './message-box.js';
+import { msgState, dismissMsgBox, showMsgBox, showMsgBoxPages, showMsgBoxPrompt, yesNoLabels, isMsgTyping, completeMsgTyping } from './message-box.js';
 import { isWordMenuOpen, handleWordMenuInput } from './word-menu.js';
 import { _nameToBytes } from './text-utils.js';
 import { hasItem, removeItem } from './inventory.js';
@@ -23,7 +23,7 @@ import { saveSlotsToDB } from './save-state.js';
 import { playSFX, playTrack, TRACKS, SFX } from './music.js';
 import { checkTrigger, openPassage, handleChest, handleSecretWall,
          handleRockPuzzle, handlePondHeal, triggerWipe,
-         isHiddenTreasureTile, handleHiddenTreasure , tryExitToWorldAt } from './map-triggers.js';
+         isHiddenTreasureTile, handleHiddenTreasure, tryExitToWorldAt, handleCopseSpring, offerDungeonRevisit } from './map-triggers.js';
 import { shopSt, openShop, handleShopInput } from './shop.js';
 import { bedSt, handleBedInput } from './bed.js';
 import { findShopAtCounter } from './data/shops.js';
@@ -33,6 +33,9 @@ import { startBattle } from './battle-update.js';
 import { MapRenderer } from './map-renderer.js';
 import { resetIndoorWaterCache } from './water-animation.js';
 import { findNpcAt, talkToNpc, tryYieldToPlayer } from './npc.js';
+import { dungeonForMapId, endingKindFor, ENDING_REACH } from './data/dungeons.js';
+import { DUNGEON_RETURNS } from './data/story-scenes.js';
+import { setFlag, hasFlag } from './story-flags.js';
 
 const TILE_SIZE = 16;
 const WALK_DURATION = 16 * (1000 / 60);  // 16 NES frames at 60fps ≈ 267ms per tile
@@ -107,7 +110,7 @@ export function startMove(dir, isNewPress = false) {
   // be stuck at sea forever. The ROM resolves it during the move attempt
   // ($C5B5, reached from the $C51A dispatch): stepping toward a foot-walkable
   // tile puts you out of the craft and the step then happens on foot.
-  if (vehicle !== 0 && renderer && typeof renderer.isFootWalkable === 'function'
+  if (vehicle >= 2 && vehicle <= 3 && renderer && typeof renderer.isFootWalkable === 'function'
       && renderer.isFootWalkable(tileX, tileY)) {
     // Park the craft on the tile being LEFT, not the one being entered — you
     // step ashore and it stays in the water behind you, which is where the ROM
@@ -117,10 +120,12 @@ export function startMove(dir, isNewPress = false) {
     // ashore from could never be boarded again, and `title-screen.js` clamps the
     // field with `& 127` (a tile index), turning e.g. pixel 1424 into tile 16.
     // Found while wiring Cid's airship grant, which writes tiles.
-    ps.vehicleParked = 1;
-    ps.vehicleParkedX = (mapSt.worldX / TILE_SIZE) | 0;
-    ps.vehicleParkedY = (mapSt.worldY / TILE_SIZE) | 0;
-    ps.vehicleParkedMode = vehicle;
+    if (vehicle === 3 || !hasItem(0xa5)) {
+      ps.vehicleParked = 1;
+      ps.vehicleParkedX = (mapSt.worldX / TILE_SIZE) | 0;
+      ps.vehicleParkedY = (mapSt.worldY / TILE_SIZE) | 0;
+      ps.vehicleParkedMode = vehicle;
+    }
     ps.vehicle = 0;
     vehicle = 0;
     playTrack(vehicleInfo(0).music);
@@ -142,6 +147,14 @@ export function startMove(dir, isNewPress = false) {
     }
   }
 
+  // The canoe travels in the bag. Using it must not replace a parked ship.
+  if (vehicle === 0 && mapSt.onWorldMap && hasItem(0xa5)
+      && !renderer.isFootWalkable(tileX, tileY)
+      && renderer.isPassableForMode(tileX, tileY, 2)) {
+    ps.vehicle = vehicle = 2;
+    playTrack(vehicleInfo(2).music);
+  }
+
   const passable = (renderer && mapSt.onWorldMap && typeof renderer.isPassableForMode === 'function')
     ? renderer.isPassableForMode(tileX, tileY, vehicle)
     : (renderer ? renderer.isPassable(tileX, tileY) : true);
@@ -154,6 +167,24 @@ export function startMove(dir, isNewPress = false) {
     // at all. The ROM fires this on the ATTEMPT and refuses the move, which is
     // why the player never ends up standing in the gateway.
     if (tryExitToWorldAt(tileX, tileY)) return;
+    if (mapSt.onWorldMap && tileX === 81 && tileY === 54 && !hasFlag('nelv_pass_open')) {
+      if (!hasFlag('curse_lifted')) {
+        showMsgBox(_nameToBytes('A great rock bars the road.'));
+      } else {
+        showMsgBoxPrompt(_nameToBytes('Break the rock? ' + yesNoLabels()), () => {
+          triggerWipe(() => {
+            setFlag('nelv_pass_open', { persist: false });
+            // The early airship is spent opening the road, as in FF3.
+            if (ps.vehicle >= 4) ps.vehicle = 0;
+            if (ps.vehicleParkedMode >= 4) ps.vehicleParked = 0;
+            mapSt.worldMapData.boulderCleared = true;
+            saveSlotsToDB();
+            showMsgBox(_nameToBytes('Cid\'s ram shatters the rock!'));
+          }, 'world');
+        }, null);
+      }
+      return;
+    }
     // (81,54), the neck of the coastal peninsula, is physically blocked by a
     // boulder overlay (world-map-renderer.js) — no "Coming Soon!" popup
     // needed. v1.7.505 pattern, relocated off Ur's valley in v1.7.925 and
@@ -330,7 +361,29 @@ export function handleInput() {
 // ── Tile action (Z press) ──────────────────────────────────────────────────
 
 function handleAction() {
-  if (mapSt.onWorldMap || !mapSt.mapRenderer || !mapSt.mapData) return;
+  if (mapSt.onWorldMap) {
+    if (ps.vehicle === 1) {
+      ps.vehicle = 0; playTrack(vehicleInfo(0).music); saveSlotsToDB();
+      showMsgBox(_nameToBytes('Kweh! Back to the woods!')); return;
+    }
+    if (vehicleInfo(ps.vehicle).flies) {
+      const x = mapSt.worldX / TILE_SIZE, y = mapSt.worldY / TILE_SIZE;
+      if (!mapSt.worldMapRenderer.isFootWalkable(x, y)) {
+        showMsgBox(_nameToBytes('Find open land to set down.'));
+        return;
+      }
+      ps.vehicleParked = 1;
+      ps.vehicleParkedX = x;
+      ps.vehicleParkedY = y;
+      ps.vehicleParkedMode = ps.vehicle;
+      ps.vehicle = 0;
+      playTrack(vehicleInfo(0).music);
+      saveSlotsToDB();
+      checkTrigger();
+    }
+    return;
+  }
+  if (!mapSt.mapRenderer || !mapSt.mapData) return;
 
   const dir = sprite.getDirection();
   const tileX = mapSt.worldX / TILE_SIZE;
@@ -341,6 +394,7 @@ function handleAction() {
   const facedY = tileY + dy;
 
   if (facedX < 0 || facedX >= 32 || facedY < 0 || facedY >= 32) return;
+  if (handleCopseSpring(facedX, facedY)) return;
 
   // Boss fight trigger
   if (mapSt.bossSprite && !battleSt.enemyDefeated && facedX === 6 && facedY === 8) {
@@ -350,9 +404,34 @@ function handleAction() {
 
   // NPC dialogue
   const npc = findNpcAt(facedX, facedY);
+  if (npc?.scene?.revisit && offerDungeonRevisit(npc.scene.revisit)) return;
+  if (npc?.scene?.mount === 'chocobo') {
+    showMsgBoxPrompt(_nameToBytes('Ride? ' + yesNoLabels()), () => {
+      const entry = mapSt.mapStack.find(e => e.mapId === 'world');
+      const x = entry?.x ?? ps.lastWorldExitX, y = entry?.y ?? ps.lastWorldExitY;
+      if (!Number.isInteger(x) || !Number.isInteger(y)) return;
+      triggerWipe(() => {
+        mapSt.mapStack.length = 0; ps.vehicle = 1;
+        loadWorldMapAtPosition(x, y); playTrack(vehicleInfo(1).music); saveSlotsToDB();
+        showMsgBox(_nameToBytes('Press Z to hop off.'));
+      }, 'world');
+    }, null);
+    return;
+  }
   if (npc) { talkToNpc(npc); return; }
 
   const facedTile = mapSt.mapData.tilemap[facedY * 32 + facedX];
+
+  // Interior counters separate the customer from the speaker by one tile.
+  // Limit the extended reach to the measured counter tiles; walls do not
+  // allow conversation through them. Merchants retain SHOP in the talk menu.
+  if (mapSt.mapData.tileset === 5 && (facedTile === 0x1d || facedTile === 0x1f)) {
+    const keeper = findNpcAt(facedX + dx, facedY + dy);
+    if (keeper) {
+      talkToNpc(keeper, findShopAtCounter(mapSt.currentMapId, facedX, facedY));
+      return;
+    }
+  }
 
   // Third torch opens hidden passage
   if (facedTile === 0x32 && facedX === 8 && facedY === 16) {
@@ -511,24 +590,55 @@ function _checkFalseWall() {
  */
 function _checkWarpTile() {
   if (!mapSt.warpTile) return false;
-  if (!battleSt.enemyDefeated) return false;
+  const reachedEnd = endingKindFor(mapSt.currentMapId) === ENDING_REACH;
+  if (!reachedEnd && !battleSt.enemyDefeated) return false;
   const tx = mapSt.worldX / TILE_SIZE;
   const ty = mapSt.worldY / TILE_SIZE;
   if (tx !== mapSt.warpTile.x || ty !== mapSt.warpTile.y) return false;
+  const dungeon = dungeonForMapId(mapSt.currentMapId);
+  const destination = dungeon?.destination;
+  const arrivalPages = destination?.flag && !hasFlag(destination.flag) ? DUNGEON_RETURNS[dungeon.id] : null;
   sprite.setDirection(DIR_DOWN);
   playSFX(SFX.WARP);
   mapSt.starEffect = {
     frame: 0, radius: 60, angle: 0, spin: true,
     onComplete: () => {
       triggerWipe(() => {
+        if (destination?.spell && !(ps.knownSpells || []).includes(destination.spell)) {
+          ps.knownSpells = [...(ps.knownSpells || []), destination.spell];
+        }
+        if (destination?.flag) setFlag(destination.flag, { persist: false });
+        if (destination?.world) {
+          const entry = mapSt.mapStack.find(e => e.mapId === 'world');
+          const reverse = destination.reverseWorld && entry
+            && entry.x === destination.world.x && entry.y === destination.world.y;
+          const landing = reverse ? destination.reverseWorld : destination.world;
+          mapSt.mapStack.length = 0;
+          loadWorldMapAtPosition(landing.x, landing.y);
+          saveSlotsToDB();
+          if (arrivalPages) showMsgBoxPages(arrivalPages.map(_nameToBytes));
+          return;
+        }
         while (mapSt.mapStack.length > 0) {
           const entry = mapSt.mapStack.pop();
           if (entry.mapId === 'world') {
             playTrack(TRACKS.WORLD_MAP);
             loadWorldMapAtPosition(entry.x, entry.y);
+            saveSlotsToDB();
             return;
           }
         }
+        // A restored/teleported run may have no breadcrumb. Its native
+        // entrance remains a valid exit; never leave the completed star inert.
+        const exit = mapSt.worldMapData?.triggerPositions;
+        const native = mapSt.worldMapData?.entranceTable;
+        let landing = null;
+        if (exit && native) for (const [index, position] of exit) {
+          if (native[index] === dungeon?.worldEntranceMap) { landing = position; break; }
+        }
+        if (landing) loadWorldMapAtPosition(landing.x, landing.y);
+        else loadWorldMapAtPosition(ps.lastWorldExitX ?? 95, ps.lastWorldExitY ?? 41);
+        saveSlotsToDB();
       }, 'world');
     }
   };

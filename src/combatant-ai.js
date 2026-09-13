@@ -118,7 +118,7 @@ export function pickRandomLivingTarget(enemies, opts = {}) {
 export function pickOffensiveSpell(caster, opts = {}) {
   const rng = opts.rand || rand;
   if (!Array.isArray(caster?.knownSpells)) return null;
-  const allowed = offensiveSpellPool();
+  const allowed = caster.companionId ? [...offensiveSpellPool(), 0x23, 0x24, 0x25] : offensiveSpellPool();
   const pool = caster.knownSpells.filter(s => allowed.includes(s));
   if (pool.length === 0) return null;
   return pool[Math.floor(rng() * pool.length)];
@@ -142,7 +142,7 @@ export function rollOffensiveDamage(caster, spell, opts = {}) {
 export function rollCureAmount(caster, opts = {}) {
   const rng = opts.rand || rand;
   const mnd = (caster && caster.mnd) || 5;
-  const atk = Math.floor(mnd / 2) + 42;
+  const atk = Math.floor(mnd / 2) + (opts.power ?? 42);
   return atk + Math.floor(rng() * (Math.floor(atk / 2) + 1));
 }
 

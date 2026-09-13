@@ -94,7 +94,7 @@ const rows = [];
 const maps = new Set([...TOWN_NPCS.keys(), ...SPECIAL.keys()]);
 for (const mapId of [...maps].sort((a, b) => a - b)) {
   const md = loadMap(rom, mapId);
-  const { stand } = playerRegion(md, MapRenderer, calcSpawnY);
+  const { stand } = playerRegion(md, MapRenderer, calcSpawnY, mapId);
   // ⛔ THE NEIGHBOUR COUNT USES `isWalkableForNpc`, NOT `isOpenAreaTile`. This
   // tool first counted neighbours that were themselves open-AREA tiles, which is
   // a stricter rule than the game's and reported two Ur wanderers as STUCK when

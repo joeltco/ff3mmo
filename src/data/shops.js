@@ -38,6 +38,24 @@
 // data hasn't been captured yet for a given type.
 
 export const SHOPS = new Map([
+  ['ancients_weapon', { type: 'weapon', mapId: 61, counter: { x: 3, y: 23 }, items: [0x28, 0x25, 0x0f, 0x10, 0x4c, 0x52, 0x53, 0x54] }],
+  ['ancients_armor', { type: 'armor', mapId: 62, counter: { x: 3, y: 5 }, items: [0x76, 0x78, 0x67, 0x79, 0x7b] }],
+  ['ancients_magic', { type: 'magic', school: 'black', mapId: 63, counter: { x: 4, y: 4 }, items: [0xea, 0xeb, 0xec, 0xed, 0xee] }],
+  ['ancients_item', { type: 'item', mapId: 66, counter: { x: 11, y: 4 }, items: [0xa6, 0xa7, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf] }],
+  ['gysahl_keys', { type: 'item', mapId: 74, counter: { x: 6, y: 5 }, items: [0x98] }],
+  ['gysahl_greens', { type: 'item', mapId: 73, counter: { x: 11, y: 4 }, items: [0x99, 0xa6, 0xa7, 0xab, 0xac, 0xaf] }],
+  ['gysahl_magic', { type: 'magic', school: 'white', mapId: 75, counter: { x: 4, y: 4 }, items: [0xea, 0xee, 0xef, 0xe4] }],
+  ['dwarves_item', { type: 'item', mapId: 87, counter: { x: 11, y: 4 }, items: [0xa6, 0xa7, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf] }],
+  ['dwarves_weapon', { type: 'weapon', mapId: 88, counter: { x: 3, y: 23 }, items: [0x28, 0x2b, 0x25, 0x2a, 0x07, 0x08, 0x11, 0x3a, 0x3b, 0x3d] }],
+  ['dwarves_armor', { type: 'armor', mapId: 89, counter: { x: 3, y: 5 }, items: [0x77, 0x66, 0x5b, 0x79, 0x7b] }],
+  ['vikings_item', { type: 'item', mapId: 54, counter: { x: 11, y: 4 }, items: [0xa6, 0xa7, 0xaf, 0xae, 0xac, 0xab, 0xaa] }],
+  ['tozas_item', { type: 'item', mapId: 46, counter: { x: 11, y: 4 }, items: [0xa6, 0xaf, 0xae, 0xac] }],
+  ['tozas_bread', { type: 'item', mapId: 50, counter: { x: 5, y: 5 }, items: [0xa4] }],
+  ['tozas_magic', { type: 'magic', school: 'white', mapId: 47, counter: { x: 4, y: 4 }, items: [0xe0, 0xe1, 0xe3] }],
+  ['canaan_weapon', { type: 'weapon', mapId: 39, counter: { x: 3, y: 23 }, items: [0x09, 0x20, 0x27] }],
+  ['canaan_armor', { type: 'armor', mapId: 36, counter: { x: 3, y: 5 }, items: [0x75, 0x5a, 0x64, 0x8d, 0x8e] }],
+  ['canaan_item', { type: 'item', mapId: 41, counter: { x: 11, y: 4 }, items: [0xa6, 0xaf, 0xae, 0xac, 0xab] }],
+  ['canaan_magic', { type: 'magic', school: 'black', mapId: 38, counter: { x: 4, y: 4 }, items: [0xe3, 0xe7, 0xe8, 0xe9] }],
   // --- Town of Ur ---
   ['ur_weapon', {
     type: 'weapon',

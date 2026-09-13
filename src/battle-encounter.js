@@ -1,6 +1,7 @@
+import { ps } from './player-stats.js';
 // Random encounter spawning — extracted from game.js
 
-import { dungeonForMapId, isBossFloor, STARTING_DUNGEON } from './data/dungeons.js';
+import { dungeonForMapId, isFinalFloor, STARTING_DUNGEON } from './data/dungeons.js';
 import { battleSt } from './battle-state.js';
 import { forceCloseMsgBox } from './message-box.js';
 import { MONSTERS } from './data/monsters.js';
@@ -87,6 +88,7 @@ export function currentEncounterZoneKey() {
 // ── Random encounter step counter ──────────────────────────────────────────
 export function tickRandomEncounter() {
   if (battleSt.battleState !== 'none') return false;
+  if (mapSt.onWorldMap && (ps.vehicle === 1 || ps.vehicle >= 4)) return false;
   const tileX = Math.floor(mapSt.worldX / TILE_SIZE);
   const tileY = Math.floor(mapSt.worldY / TILE_SIZE);
   // ⛔ `dungeonFloor < 4` was "not the boss floor", hardcoded to Altar Cave's
@@ -94,7 +96,7 @@ export function tickRandomEncounter() {
   // on its deepest normal floor or gain them in its boss chamber — and this
   // fails SILENTLY, which is why it is worth the lookup.
   const _dungeon = dungeonForMapId(mapSt.currentMapId);
-  const inDungeon = !!_dungeon && mapSt.dungeonFloor >= 0 && !isBossFloor(_dungeon, mapSt.dungeonFloor);
+  const inDungeon = !!_dungeon && mapSt.dungeonFloor >= 0 && !isFinalFloor(_dungeon, mapSt.dungeonFloor);
   const onGrass = mapSt.onWorldMap && mapSt.worldMapRenderer && !mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
   const inPatch = mapSt.encounterPatch && mapSt.encounterPatch.has(tileY * 32 + tileX);
   if (!inDungeon && !onGrass && !inPatch) return false;

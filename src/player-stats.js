@@ -58,7 +58,7 @@ export const ps = {
   knownSpells: [],      // array of spell IDs the player has learned (granted by job + magic shop)
   buffs: {},            // active battle buffs (haste/protect/reflect). Cleared on resetBattleVars; not persisted.
   // Which vehicle the player is aboard — the ROM's movement MODE, verified in
-  // docs/VEHICLE-SYSTEM-PLAN.md: 0 on foot, 1 canoe carried, 2 canoe afloat,
+  // docs/VEHICLE-SYSTEM-PLAN.md: 0 on foot, 1 chocobo, 2 canoe afloat,
   // 3 ship, 4-7 flying. Indexes WORLD_MODE_MASKS in world-map-renderer.js.
   vehicle: 0,
 

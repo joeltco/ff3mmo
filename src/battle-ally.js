@@ -1,6 +1,6 @@
 // Battle ally update logic — extracted from game.js
 
-import { battleSt, getEnemyHP, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
+import { battleSt, getEnemyHP, setEnemyHP, activeBossStats, BATTLE_SHAKE_MS, BATTLE_DMG_SHOW_MS } from './battle-state.js';
 import { playSlashSFX } from './battle-sfx.js';
 import { resetSlashScatterCache, shouldDrawSlash, SWING_HOLD_MS,
          BACK_SWING_MS, FWD_SWING_MS, HIT_PAUSE_MS, HIT_COMBO_PAUSE_MS } from './slash-effects.js';
@@ -71,11 +71,12 @@ function _updateAllyDamageShow() {
 // ── Ally join fade-in ────────────────────────────────────────────────────────
 function _updateAllyJoin() {
   if (battleSt.battleState === 'ally-fade-in') {
-    const newAlly = battleSt.battleAllies[battleSt.battleAllies.length - 1];
-    if (newAlly && battleSt.battleTimer >= 100) {
-      newAlly.fadeStep = Math.max(0, newAlly.fadeStep - 1);
+    if (battleSt.battleTimer >= 100) {
+      for (const ally of battleSt.battleAllies) ally.fadeStep = Math.max(0, ally.fadeStep - 1);
       battleSt.battleTimer = 0;
-      if (newAlly.fadeStep <= 0) { battleSt.turnQueue = _buildTurnOrder(); _processNextTurn(); }
+      if (battleSt.battleAllies.every(a => a.fadeStep <= 0)) {
+        battleSt.turnQueue = _buildTurnOrder(); _processNextTurn();
+      }
     }
     return true;
   }
@@ -314,6 +315,20 @@ function _applyAllyMagicEffect() {
   const tIdx  = battleSt.allyMagicTargetIdx;
   const isEnemy = tType === 'enemy' || tType === 'pvp-enemy';
   const isPlayerTgt = tType === 'player';
+  if (tType === 'enemy' && !battleSt.isRandomEncounter && !pvpSt.isPVPBattle) {
+    // Bosses store HP outside encounterMonsters. Give the shared damage
+    // engine a live view so weaknesses, armor, hit checks and HP agree.
+    const stats = activeBossStats();
+    const boss = { ...stats, maxHP: stats.hp,
+      get hp() { return getEnemyHP(); }, set hp(value) { setEnemyHP(value); } };
+    if (spell.type === 'damage' && spell.element !== 'recovery') {
+      applyMagicDamage(boss, battleSt.allyMagicDamageRoll, spell, {
+        onDmgNum: n => _setAllyMagicEnemyDmgNum({ value: n }),
+        onMiss: () => _setAllyMagicEnemyDmgNum({ miss: true }),
+      });
+    } else _setAllyMagicEnemyDmgNum({ miss: true });
+    return;
+  }
   let target = null;
   if (isEnemy) target = _allyMagicEnemyTarget();
   else if (isPlayerTgt) target = ps;
@@ -452,6 +467,9 @@ function _updateAllyMagicCast(dt) {
           playSFX(SFX.MONSTER_DEATH);
           routedToDeath = true;
         }
+      } else if (tgtType === 'enemy' && !pvpSt.isPVPBattle && getEnemyHP() <= 0) {
+        battleSt.battleState = 'boss-dissolve'; battleSt.battleTimer = 0;
+        playSFX(SFX.BOSS_DEATH); routedToDeath = true;
       } else if (tgtType === 'pvp-enemy') {
         const tgt = tgtIdx === 0
           ? pvpSt.pvpOpponentStats

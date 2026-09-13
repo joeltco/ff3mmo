@@ -32,7 +32,7 @@
 
 import { ps } from './player-stats.js';
 import { saveSlotsToDB } from './save-state.js';
-import { setFlag, clearFlag } from './story-flags.js';
+import { setFlag, clearFlag, hasFlag } from './story-flags.js';
 import { QUESTS, QUEST_DONE, stageById, stageIndex, firstStage, maxObjectiveCount,
          isLegalStage } from './data/quests.js';
 // ⛔ PROSE COMES FROM HERE, NOT FROM THE QUEST RECORD. `data/quests.js` is
@@ -64,6 +64,7 @@ function _currentStage(quest, entry) {
 /** True once this stage's objective count is met (or it has no counter). */
 function _stageMet(stage, entry) {
   if (!stage) return false;
+  if (stage.objective?.kind === 'flag' && hasFlag(stage.objective.flag)) return true;
   if (isTalkObjective(stage.objective)) return true;   // talking is the objective
   return (entry.n | 0) >= objectiveCount(stage.objective);
 }
@@ -179,8 +180,7 @@ export function applyTalk(r, grantReward) {
   if (!r) return null;
   if (r.intent === 'offer') {
     // An unguarded quest offers on sight, and taking it is the offer itself.
-    _startQuest(r.quest);
-    return r.pages;
+    return _startQuest(r.quest, grantReward) ? r.pages : null;
   }
   if (r.intent === 'advance') return _advance(r.quest, r.stage, grantReward);
   return r.pages;
@@ -201,18 +201,34 @@ export function talkQuest(mapId, npcKey, grantReward) {
 }
 
 /** Put a player onto a quest's SECOND stage — stage 0 is the offer itself. */
-function _startQuest(quest) {
+function _startQuest(quest, grantReward) {
+  if (!_applyStageEffects(quest, firstStage(quest), grantReward)) return false;
   const next = (quest.stages || [])[1];
   _bag()[quest.id] = next ? { s: next.id, n: 0 } : { s: QUEST_DONE, n: 0 };
   _persist();
+  return true;
+}
+
+// Offer stages and later stages use the same hand-over path. Do not advance
+// past an item grant when there is no inventory/economy handler to deliver it.
+function _applyStageEffects(quest, stage, grantReward) {
+  if (stage.item) {
+    if (typeof grantReward !== 'function') return false;
+    if (grantReward({ item: stage.item }, quest.id, stage.id) === false) return false;
+  }
+  for (const flag of stage.sets || []) {
+    if (setFlag(flag, { persist: false })) _noteEvent('flag-set', flag);
+  }
+  if (stage.vehicle) _parkCraft(stage.vehicle);
+  return true;
 }
 
 /**
  * Finish the current stage and move on. When it was the LAST stage the quest is
  * done and the reward is paid.
  *
- * ⛔ Flags are set BEFORE the stage moves, and the save happens BEFORE the
- * payout — the same ordering the pre-stage code used, for the same reason.
+ * Save after all synchronous effects, including the reward, so completion
+ * cannot be durable while its locally owned XP or vehicle is still absent.
  */
 function _advance(quest, stage, grantReward) {
   const entry = _entry(quest.id);
@@ -228,13 +244,7 @@ function _advance(quest, stage, grantReward) {
   // (`questId#stageId` in `quest_claims`). A bare `addItem` here would be an
   // unvalidated bag add under `SERVER_ECONOMY`, and the mirror's next push
   // would take it straight back — the player watches the item vanish.
-  if (stage.item && typeof grantReward === 'function') {
-    if (grantReward({ item: stage.item }, quest.id, stage.id) === false) return null;
-  }
-
-  for (const flag of stage.sets || []) {
-    if (setFlag(flag)) _noteEvent('flag-set', flag);
-  }
+  if (!_applyStageEffects(quest, stage, grantReward)) return null;
 
   // ⭐ A STAGE MAY PARK A CRAFT, not just the finished quest.
   //
@@ -243,7 +253,6 @@ function _advance(quest, stage, grantReward) {
   // it arrived only after Sara was found — which is why she could not be in the
   // Sealed Cave the canoe exists to reach. The craft has to arrive mid-chain,
   // at the beat that tells you where she went.
-  if (stage.vehicle) _parkCraft(stage.vehicle);
 
   const idx = stageIndex(quest, stage.id);
   const next = (quest.stages || [])[idx + 1];
@@ -255,9 +264,11 @@ function _advance(quest, stage, grantReward) {
   }
 
   entry.s = QUEST_DONE;
-  _persist();                                   // BEFORE the payout, not after
   if (typeof grantReward === 'function') grantReward(quest.reward, quest.id);
+  // A full bag can revert the hand-in inside the reward handler.
+  if (entry.s !== QUEST_DONE) return null;
   _grantVehicle(quest);
+  _persist();
   return pages;
 }
 
@@ -319,12 +330,11 @@ export function askQuestWord(mapId, npcKey, wordId) {
 }
 
 /** Take the quest that askQuestWord offered. */
-export function acceptQuest(id) {
+export function acceptQuest(id, grantReward) {
   const quest = QUESTS[id];
   if (!quest) return false;
   if (_entry(id)) return false;
-  _startQuest(quest);
-  return true;
+  return _startQuest(quest, grantReward);
 }
 
 /**

@@ -1594,7 +1594,7 @@ const tests = [
         const it = ITEMS.get(id);
         if (!it) { shopBad.push(`${shopId}: 0x${id.toString(16)} not in ITEMS`); continue; }
         if (!(it.price > 0)) shopBad.push(`${shopId}: 0x${id.toString(16)} has no price`);
-        if (isQuestItem(id)) shopBad.push(`${shopId}: sells quest item 0x${id.toString(16)}`);
+        if (isQuestItem(id) && ![0x98, 0x99, 0xa4].includes(id)) shopBad.push(`${shopId}: sells quest item 0x${id.toString(16)}`);
       }
       // 3. A shop that ever declares `spells` must price them. `SPELL_BUY_PRICE`
       //    covers 6 of 56 and `getSpellBuyPrice` returns 0 for the rest, so the

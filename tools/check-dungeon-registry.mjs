@@ -80,7 +80,7 @@ for (const file of GUARDED) {
 // collide with real data: distinct id, distinct range, distinct prefix.
 const SEALS = {
   id: 'probe', name: 'Probe Dungeon',
-  base: 3000, worldEntranceMap: 107,
+  base: 3000, worldEntranceMap: 250,
   floors: 4,                      // <- NOT 5: boss floor is 3, not 4
   donorMap: 103, tileset: 0,
   bossSkinId: 'seals',
@@ -110,7 +110,7 @@ ok(R.dungeonForMapId(1004)?.id === 'altar', 'adding a dungeon broke altar lookup
 ok(R.floorIndexForMapId(3004) === null, '3004 is past the probe (4 floors) and must not resolve');
 ok(R.isDungeonMapId(3010) && R.sideRoomForMapId(3010)?.kind === 'locked', 'probe locked room 3010 not registered');
 ok(R.sideRoomForMapId(3020)?.kind === 'secret', 'probe secret room 3020 not registered');
-ok(R.dungeonForWorldEntrance(107)?.id === 'probe', 'overworld mouth 103 does not map to seals');
+ok(R.dungeonForWorldEntrance(250)?.id === 'probe', 'synthetic mouth 250 does not map to probe');
 ok(R.dungeonForWorldEntrance(111)?.id === 'altar', 'overworld mouth 111 no longer maps to altar');
 
 // ⛔ The ending axis is the one that must NOT follow the boss chamber. Seals has

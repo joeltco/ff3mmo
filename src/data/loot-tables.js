@@ -68,6 +68,73 @@ export const UNDESIGNED = [
 ];
 
 export const LOOT_TABLES = {
+  mines: [
+    { weight: 50, pool: [GIL(60, 180)] },
+    { weight: 35, pool: [0xa6, 0xaf, 0xae] },
+    { weight: 15, pool: [0x27, 0x64, 0x75] },
+  ],
+  summon_caves: [
+    { weight: 35, pool: [0xa7, 0xa9, 0xaa] },
+    { weight: 45, pool: [GIL(1200, 2200)] },
+    { weight: 15, pool: [0xa8] },
+    { weight: 5, pool: [0x29, 0x5b] },
+  ],
+  western_towns: [
+    { weight: 50, pool: [GIL(90, 250)] },
+    { weight: 40, pool: [0xa6, 0xa7, 0xaf, 0xae] },
+    { weight: 10, pool: [0xa9] },
+  ],
+  hein: [
+    { weight: 30, pool: [0xa7, 0xa9, 0xac] },
+    { weight: 40, pool: [GIL(400, 800)] },
+    { weight: 25, pool: [0x7b, 0x79, 0x66, 0x5b] },
+    { weight: 5, pool: [0xa8] },
+  ],
+  dwarves: [
+    { weight: 45, pool: [GIL(180, 420)] },
+    { weight: 35, pool: [0xa7, 0xaa, 0xab] },
+    { weight: 20, pool: [0x66, 0x5b, 0x79, 0x7b] },
+  ],
+  vikings: [
+    { weight: 50, pool: [GIL(70, 180)] },
+    { weight: 40, pool: [0xa6, 0xaf, 0xac] },
+    { weight: 10, pool: [0xa7, 0xa9] },
+  ],
+  lake: [
+    { weight: 35, pool: [0xa7, 0xaa, 0xab] },
+    { weight: 35, pool: [GIL(220, 480)] },
+    { weight: 25, pool: [0x66, 0x5b, 0x07, 0x2a] },
+    { weight: 5, pool: [0xa9, 0xa8] },
+  ],
+  flame: [
+    { weight: 30, pool: [0xa7, 0xa9, 0xac] },
+    { weight: 40, pool: [GIL(300, 650)] },
+    { weight: 25, pool: [0x77, 0x5b, 0x79, 0x7b] },
+    { weight: 5, pool: [0xa8] },
+  ],
+  owen: [
+    { weight: 35, pool: [0xa7, 0xaa, 0xaf] },
+    { weight: 35, pool: [GIL(160, 340)] },
+    { weight: 25, pool: [0x66, 0x09, 0x20, 0xe7] },
+    { weight: 5, pool: [0xa9, 0xa8] },
+  ],
+  nepto: [
+    { weight: 35, pool: [0xa6, 0xac, 0xaf] },
+    { weight: 40, pool: [GIL(90, 220)] },
+    { weight: 20, pool: [0x09, 0x20, 0x27, 0xe7] },
+    { weight: 5, pool: [0xa9, 0xe8, 0xe9] },
+  ],
+  tozas_tunnel: [
+    { weight: 40, pool: [0xa6, 0xaf, 0xae] },
+    { weight: 35, pool: [GIL(60, 160)] },
+    { weight: 20, pool: [0x20, 0x75, 0x8e] },
+    { weight: 5, pool: [0xe7, 0xe8, 0xa9] },
+  ],
+  canaan: [
+    { weight: 55, pool: [0xa6, 0xaf, 0xae] },
+    { weight: 30, pool: [GIL(40, 120)] },
+    { weight: 15, pool: [0x20, 0x27, 0x75, 0x8d] },
+  ],
   // ── Towns ───────────────────────────────────────────────────────────────
   ur_town: [
     { weight: 70, pool: [0xA6, 0xA6, 0xAF] },   // Potion x2, Antidote
@@ -215,6 +282,12 @@ export const LOOT_TABLES = {
 
 /** Area `loc` -> table name. An area absent here is UNDESIGNED, on purpose. */
 export const AREA_LOOT = {
+  'chocobo-woods': 'western_towns', ancients: 'western_towns', gurgan: 'western_towns', gysahl: 'western_towns',
+  tokkul: 'western_towns', argus: 'western_towns', 'living-woods': 'western_towns',
+  dwarves: 'dwarves',
+  vikings: 'vikings',
+  tozas: 'canaan',
+  canaan: 'canaan',
   ur: 'ur_town',
   // ⭐ Sasune rolls KAZUS's table, per Joel — the castle is that tier, and its
   // eleven chests were falling through to the Altar Cave's floor-1 table before
@@ -226,6 +299,15 @@ export const AREA_LOOT = {
 
 /** Dungeon id -> its per-floor table names, shallowest first. */
 export const DUNGEON_LOOT = {
+  mines: ['mines', 'mines'],
+  dohr: ['summon_caves', 'summon_caves', 'summon_caves'],
+  bahamut: ['summon_caves', 'summon_caves', 'summon_caves'],
+  hein: ['hein', 'hein', 'hein', 'hein'],
+  lake: ['lake', 'lake', 'lake'],
+  flame: ['flame', 'flame', 'flame'],
+  owen: ['owen', 'owen', 'owen', 'owen'],
+  nepto: ['nepto', 'nepto', 'nepto'],
+  tozas: ['tozas_tunnel', 'tozas_tunnel'],
   altar: ['altar_f1', 'altar_f2', 'altar_f3', 'altar_f4'],
   seals: ['seals_f1', 'seals_f2', 'seals_f3', 'seals_f4'],
 };

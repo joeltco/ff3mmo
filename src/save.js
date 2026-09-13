@@ -1,3 +1,4 @@
+import { queueCloudDelete } from './save-sync.js';
 export function openSaveDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('ff3mmo-roms', 1);
@@ -7,7 +8,7 @@ export function openSaveDB() {
 }
 
 export async function serverDeleteSlot(slot) {
-  if (window.ff3Auth) window.ff3Auth.serverDeleteSave(slot).catch(() => {});
+  await queueCloudDelete(slot);
 }
 
 export function parseSaveSlots(data) {
@@ -40,6 +41,15 @@ export function parseSaveSlots(data) {
       worldY: s.worldY != null ? s.worldY : null,
       onWorldMap: s.onWorldMap != null ? s.onWorldMap : null,
       currentMapId: s.currentMapId != null ? s.currentMapId : null,
+      vehicle: s.vehicle === 1 && s.vehicleParkedMode === 1 ? 0 : (s.vehicle ?? 0),
+      vehicleParked: s.vehicleParked ?? 0,
+      vehicleParkedX: s.vehicleParkedX ?? 0,
+      vehicleParkedY: s.vehicleParkedY ?? 0,
+      // Older builds used mode 1 for a parked canoe. Chocobos are never parked.
+      vehicleParkedMode: s.vehicleParkedMode === 1 ? 2 : (s.vehicleParkedMode ?? 0),
+      quests: s.quests && typeof s.quests === 'object' ? structuredClone(s.quests) : {},
+      words: s.words && typeof s.words === 'object' ? { ...s.words } : {},
+      flags: s.flags && typeof s.flags === 'object' ? { ...s.flags } : {},
       knownSpells: Array.isArray(s.knownSpells) ? [...s.knownSpells] : [],
       consumedTiles: (s.consumedTiles && typeof s.consumedTiles === 'object') ? s.consumedTiles : {},
       consumedTilesAt: (s.consumedTilesAt && typeof s.consumedTilesAt === 'object') ? s.consumedTilesAt : {},

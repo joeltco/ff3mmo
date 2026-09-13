@@ -16,6 +16,7 @@ import { bsc } from './battle-sprite-cache.js';
 import { drawStatusSpriteAbove } from './battle-drawing.js';
 import { ui } from './ui-state.js';
 import { ROSTER_LOC } from './data/areas.js';
+import { LANDMARKS } from './data/landmarks.js';
 import { transSt, WIPE_DURATION } from './transitions.js';
 import { battleSt } from './battle-state.js';
 import { hudSt, HUD_INFO_FADE_STEPS, HUD_INFO_FADE_STEP_MS } from './hud-state.js';
@@ -79,7 +80,7 @@ export function rosterLocForMapId(mapId) {
   // shipped behaviour ('ur'), preserved deliberately, not an oversight here.
   const dloc = rosterLocFor(mapId);
   if (dloc) return dloc;
-  return ROSTER_LOC.get(mapId) || 'ur';
+  return ROSTER_LOC.get(mapId) || LANDMARKS.get(mapId)?.loc || 'ur';
 }
 
 export function getPlayerLocation() {

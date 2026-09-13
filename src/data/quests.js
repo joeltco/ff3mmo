@@ -61,6 +61,30 @@
 export const QUEST_DONE = 'done';     // handed in, finished for good
 
 export const QUESTS = {
+  argus_time_wheel: {
+    id: 'argus_time_wheel', startWord: 'wheel', reward: { gil: 500, exp: 800, vehicle: { mode: 6, x: 85, y: 66 } },
+    stages: [
+      { id: 'ask', at: { map: 81, npc: 'argus_king' }, item: 0x9c },
+      { id: 'cid', at: { map: 33, npc: 'canaan_cid' }, sets: ['enterprise_upgraded', 'floating_continent_complete'] },
+    ],
+  },
+  dwarves_horns: {
+    id: 'dwarves_horns', startWord: 'horn', reward: { gil: 2000, exp: 1200 },
+    stages: [
+      { id: 'ask', at: { map: 86, npc: 'dwarves_chief' } },
+      { id: 'lake', at: { map: 86, npc: 'dwarves_chief' }, objective: { kind: 'boss', bossId: 0xd0 }, sets: ['horns_stolen'] },
+      { id: 'flame', at: { map: 86, npc: 'dwarves_chief' }, objective: { kind: 'boss', bossId: 0xd1 }, sets: ['dwarves_saved'] },
+    ],
+  },
+  vikings_nepto: {
+    id: 'vikings_nepto', startWord: 'nepto',
+    reward: { gil: 600, exp: 400, vehicle: { mode: 3, x: 80, y: 80 } },
+    stages: [
+      { id: 'ask', at: { map: 53, npc: 'vikings_chief' } },
+      { id: 'eye', at: { map: 53, npc: 'vikings_chief' },
+        objective: { kind: 'boss', bossId: 0xce }, sets: ['nepto_restored'] },
+    ],
+  },
   // ── UR: the missing brother ──────────────────────────────────────────────
   //
   // Ur's first quest. The giver is the ROM NPC below the elder's house — door
@@ -160,7 +184,7 @@ export const QUESTS = {
         // foot-walkable tile before the water leading to the Sealed Cave's
         // mouth at (84,36). Boarding is by POSITION (`movement.js`), so the
         // item without the craft is a boat you cannot get into.
-        vehicle: { mode: 1, x: 87, y: 41 },
+        vehicle: { mode: 2, x: 87, y: 41 },
         sets: ['canoe_granted'],
       },
       // No objective: talking to the runner IS the beat. He was outside on an

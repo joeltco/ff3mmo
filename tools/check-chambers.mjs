@@ -110,6 +110,7 @@ for (const c of CHAMBERS) {
 const WATER_FLOORS = new Map([
   ['altar', new Set([3])],
   ['seals', new Set([3])],
+  ...['tozas','nepto','owen','lake','flame','hein','mines','dohr','bahamut'].map(id=>[id,new Set()]),
 ]);
 const WATER = 0x04, WATER_EDGE_N = 0x23;
 for (const dg of DUNGEONS) {
@@ -136,7 +137,8 @@ for (const slot of new Set(CHAMBERS.map((c) => c.slot))) {
 
 // ── 3. Both dungeons must draw from the catalogue ──────────────────────────
 // The whole point is that a chamber is not owned by one dungeon or one floor.
-const caveIds = new Set(DUNGEONS.map((d) => d.id));
+// Snake layouts have no catalogue slots; the carved topology supplies variety.
+const caveIds = new Set(DUNGEONS.filter(d => d.layout.floors.some(f => f !== 'snake')).map(d=>d.id));
 for (const dgId of caveIds) {
   const got = [...dungeonsWith.entries()].filter(([, set]) => set.has(dgId)).map(([id]) => id);
   if (got.length < 3) fails.push(`dungeon '${dgId}' only ever rolls ${got.length} chamber type(s) (${got.join(', ')}) — it is not really using the catalogue`);
@@ -150,7 +152,8 @@ for (const dgId of caveIds) {
 for (const dg of DUNGEONS) {
   const row = perFloor.filter((r) => r.dg === dg.id && r.counts.size).pop();
   if (!row) continue;
-  const total = [...row.counts.values()].reduce((a, b) => a + b, 0);
+  // Fixed treasure rooms (sealed-hoard) are not weighted mid-slot draws.
+  const total = [...row.counts].filter(([id]) => {const c=chamberById(id);return c?.slot === 'mid' && c.weight > 0;}).reduce((a, [,b])=>a+b,0);
   const mult = (dg.layout && dg.layout.chambers) || {};
   const pool = rollableFor('mid').filter((c) => row.f >= (c.minDepth ?? 0));
   if (!pool.length || !row.counts.has('junction')) continue;

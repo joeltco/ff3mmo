@@ -28,6 +28,9 @@ function _playerName() { return saveSlots[selectCursor]?.name || null; }
 // Maps attack name → { type, power, hit, element, status }
 // Derived from spells.js ROM data but kept flat here for battle use
 const SPECIAL_ATTACKS = {
+  'Fire Breath': { targets: 'party', type: 'damage', power: 37, hit: 100, element: 'fire' },
+  'Tidal Wave': { targets: 'party', type: 'damage', power: 37, hit: 100, element: null },
+  'Mega Flare': { targets: 'party', type: 'damage', power: 80, hit: 100, element: null },
   'Fire':        { type: 'damage', power: 25, hit: 100, element: 'fire' },
   'Fira':        { type: 'damage', power: 55, hit: 100, element: 'fire' },
   'Firaga':      { type: 'damage', power: 150, hit: 100, element: 'fire' },
@@ -35,6 +38,7 @@ const SPECIAL_ATTACKS = {
   'Bzzara':      { type: 'damage', power: 55, hit: 100, element: 'ice' },
   'Bzzaga':      { type: 'damage', power: 85, hit: 100, element: 'ice' },
   'Thunder':     { type: 'damage', power: 35, hit: 100, element: 'bolt' },
+  'Tara':        { type: 'damage', power: 55, hit: 100, element: 'bolt' },
   'Thundara':    { type: 'damage', power: 55, hit: 100, element: 'bolt' },
   'Thundaga':    { type: 'damage', power: 110, hit: 100, element: 'bolt' },
   'Tornado':     { type: 'damage', power: 4, hit: 40, element: 'air' },
@@ -45,6 +49,8 @@ const SPECIAL_ATTACKS = {
   'Meteor':      { type: 'damage', power: 180, hit: 100, element: null },
   'Bio':         { type: 'damage', power: 130, hit: 100, element: null },
   'Drain':       { type: 'damage', power: 160, hit: 100, element: null },
+  'Break':       { type: 'status', hit: 50, status: 'petrify' },
+  'Breakga':     { type: 'status', hit: 40, status: 'petrify' },
   'Blind':       { type: 'status', hit: 60, status: 'blind' },
   'Poison':      { type: 'status', hit: 60, status: 'poison' },
   'Glare':       { type: 'status', hit: 80, status: 'paralysis' },
@@ -107,6 +113,16 @@ function _targetCombatant(targetAlly) {
 
 // ── Execute special attack against player or ally ──────────────────────────
 function _doSpecialAttack(mon, spec, targetAlly = -1) {
+  if (spec.targets === 'party') {
+    const single = { ...spec, targets: 'one' };
+    if (ps.hp > 0 && !(ps.status?.mask & 0xc0)) _doSpecialAttack(mon, single, -1);
+    for (let i = 0; i < battleSt.battleAllies.length; i++) {
+      const ally = battleSt.battleAllies[i];
+      if (ally.hp > 0 && !(ally.status?.mask & 0xc0)) _doSpecialAttack(mon, single, i);
+    }
+    battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
+    return;
+  }
   const t = _targetCombatant(targetAlly);
   if (targetAlly >= 0 && (!t || t.ref.hp <= 0)) { _processNextTurn(); return; }
   if (spec.type === 'damage') {
@@ -186,21 +202,33 @@ function _processEnemyFlash() {
   // (Actor name is queued at turn dispatch — battle-turn.js — so its fade-in
   // overlaps the BOSS_PREFLASH_MS window and is visible by the time the swing lands.)
 
+  const attacker = mon || activeBossStats();
+  if (!mon && battleSt.bossBarrierRule) {
+    const rule = battleSt.bossBarrierRule;
+    if (battleSt.bossTurns++ % rule.every === 0) {
+      const choices = rule.elements.filter(e => e !== battleSt.bossBarrier);
+      battleSt.bossBarrier = choices[Math.floor(rand() * choices.length)];
+      replaceBattleMsg(_nameToBytes('Barrier Shift!'));
+      battleSt.battleState = 'enemy-damage-show'; battleSt.battleTimer = 0;
+      return true;
+    }
+  }
+
   // ── Monster special attack check ──────────────────────────────────────────
-  if (mon && mon.spAtkRate > 0 && mon.attacks && mon.attacks.length > 0) {
-    if (rand() * 100 < mon.spAtkRate) {
-      const atkName = mon.attacks[Math.floor(rand() * mon.attacks.length)];
+  if (attacker.spAtkRate > 0 && attacker.attacks && attacker.attacks.length > 0) {
+    if (rand() * 100 < attacker.spAtkRate) {
+      const atkName = attacker.attacks[Math.floor(rand() * attacker.attacks.length)];
       const spec = SPECIAL_ATTACKS[atkName];
       if (spec && spec.type !== 'none') {
         // Monster name was queued at turn dispatch; swap in the attack name.
         replaceBattleMsg(_nameToBytes(atkName));
-        _doSpecialAttack(mon, spec, targetAlly);
+        _doSpecialAttack(attacker, spec, targetAlly);
         return true;
       }
     }
   }
 
-  let hitRate = mon ? (mon.hitRate || GOBLIN_HIT_RATE) : BOSS_HIT_RATE;
+  let hitRate = attacker.hitRate ?? (mon ? GOBLIN_HIT_RATE : BOSS_HIT_RATE);
   if (mon && mon.status) hitRate *= blindHitPenalty(mon.status);
   // v1.7.855 — the player (input-handler.js), allies (battle-turn.js) and PVP
   // opponents (pvp.js) all scale their attack by `miniToadAtkMult`; the monster

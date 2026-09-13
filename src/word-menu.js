@@ -64,6 +64,8 @@ export const wordMenuSt = {
   scroll: 0,
   npc:    null,
   onDone: null,
+  grantReward: null,
+  onShop: null,
 };
 
 /** Is the talk menu taking input right now? */
@@ -79,8 +81,9 @@ function _verbRows(npc) {
   // you which NPC matters before you've asked.
   const participates = !!spec && (((spec.teaches || []).length > 0) ||
                                   Object.keys(spec.answers || {}).length > 0);
-  if (!participates) return [];
   const rows = [];
+  if (wordMenuSt.onShop) rows.push({ label: 'SHOP', act: 'shop' });
+  if (!participates) return rows;
   // LEARN only appears when this NPC actually said something new — FF2 never
   // offers it as dead furniture.
   const learnable = learnableFrom(spec);
@@ -114,13 +117,15 @@ function _setRows(rows) {
  * page underneath. Returns false when the NPC has nothing to offer, so the
  * caller can just let the box slide out.
  */
-export function openWordMenu(npc, onDone) {
+export function openWordMenu(npc, onDone, grantReward, onShop = null) {
+  wordMenuSt.onShop = onShop;
   const rows = _verbRows(npc);
   if (!rows.length) return false;
   wordMenuSt.open = true;
   wordMenuSt.mode = 'verbs';
   wordMenuSt.npc = npc;
   wordMenuSt.onDone = onDone || null;
+  wordMenuSt.grantReward = grantReward || null;
   _setRows(rows);
   return true;
 }
@@ -130,6 +135,8 @@ export function closeWordMenu() {
   wordMenuSt.open = false;
   wordMenuSt.npc = null;
   wordMenuSt.onDone = null;
+  wordMenuSt.grantReward = null;
+  wordMenuSt.onShop = null;
   _setRows([]);
   wordMenuSt.mode = 'verbs';
   // The menu owns the box while it's up (openWordMenu is called with keepOpen),
@@ -206,6 +213,12 @@ function _learnOne(id) {
 function _choose(row) {
   if (!row) { closeWordMenu(); return; }
   playFF2Sfx(FF2_SFX_NAMES.CONFIRM);
+  if (row.act === 'shop') {
+    const shop = wordMenuSt.onShop;
+    closeWordMenu();
+    if (shop) shop();
+    return;
+  }
 
   // ONE word per LEARN (v1.8.8). Pre-fix a single press took everything the
   // NPC had — ur_npc_09 handed over CAVE and BROTHER together — which is the
@@ -272,7 +285,12 @@ function _choose(row) {
 
   if (row.act === 'accept' || row.act === 'deny') {
     const q = row.quest;
-    const taken = row.act === 'accept' && acceptQuest(q.id);
+    const taken = row.act === 'accept' && acceptQuest(q.id, wordMenuSt.grantReward);
+    if (row.act === 'accept' && !taken) {
+      showMsgBoxPages(['Not yet.', 'Make room and ask again.'].map(p => _nameToBytes(p)),
+        _backToVerbs, null, { keepOpen: true });
+      return;
+    }
     const pages = (taken ? q.accepted : q.denied) || ['...'];
     showMsgBoxPages(pages.map(p => _nameToBytes(p)), _backToVerbs, null, { keepOpen: true });
   }

@@ -295,7 +295,9 @@ function _drawAllyTexts(i, ally, rowY, healSparkleSet, ppx, ppy, weaponDraws) {
   // the two in sync. `isInParty` matches by name (the only fingerprint we
   // have in `battleAllies`); fades with the ally's portrait fadeStep so
   // late-joiners + ally-fade-in transitions look right.
-  if (isInParty(ally)) {
+  // One glyph fits beside six-letter names without overwriting them.
+  if (ally.companionId) drawText(ui.ctx, HUD_RIGHT_X + 40, rowY + 8, _nameToBytes('N'), namePal);
+  if (!ally.companionId && isInParty(ally)) {
     const partyPal = [0x0F, 0x1A, 0x0F, 0x2A];   // dark + bright green
     for (let s = 0; s < ally.fadeStep; s++) {
       partyPal[1] = nesColorFade(partyPal[1]);

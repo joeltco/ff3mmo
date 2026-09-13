@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import { generateFloor, generateSecretRoomMap } from '../src/dungeon-generator.js';
 import { generateLockedRoomMap } from '../src/dungeon-locked-room.js';
-import { DUNGEONS, isBossFloor, layoutForFloor } from '../src/data/dungeons.js';
+import { DUNGEONS, isFinalFloor, layoutForFloor } from '../src/data/dungeons.js';
 
 /**
  * Tiles treated as walkable when flooding a generated floor.
@@ -273,7 +273,7 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         ? reachableFrom(applyRockSwitch(tm, r.rockSwitch), r.entranceX, r.entranceY)
         : seen;
       const ex = exitAudit(r, exSeen);
-      if (!isBossFloor(dg, f) && ex.onward === 0) hard.push(`${label} seed ${seed}: no way onward — nothing wired to map ${dg.base + f + 1}`);
+      if (!isFinalFloor(dg, f) && ex.onward === 0) hard.push(`${label} seed ${seed}: no way onward — nothing wired to map ${dg.base + f + 1}`);
       if (ex.unreachable.length) hard.push(`${label} seed ${seed}: unreachable exit ${ex.unreachable.join(' ')}`);
       if (ex.entranceWiredForward) hard.push(`${label} seed ${seed}: ENTRANCE wired as a forward exit (${ex.entranceWiredForward}) — step off and back on skips the floor`);
       t.exits += ex.onward;

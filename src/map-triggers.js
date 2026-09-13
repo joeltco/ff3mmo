@@ -11,12 +11,14 @@ import { MapRenderer } from './map-renderer.js';
 import { clearDungeonCache } from './dungeon-generator.js';
 import { transSt, topBoxSt, startWipeTransition } from './transitions.js';
 import { resetIndoorWaterCache } from './water-animation.js';
-import { showMsgBox } from './message-box.js';
+import { showMsgBox, showMsgBoxPages, showMsgBoxPrompt, yesNoLabels } from './message-box.js';
 import { startChestMimic, currentEncounterZoneKey } from './battle-encounter.js';
 import { _nameToBytes } from './text-utils.js';
 import { POND_RESTORED } from './data/strings.js';
 import { openBed } from './bed.js';
-import { ps, grantGil } from './player-stats.js';
+import { ps, grantGil, fullHeal } from './player-stats.js';
+import { MOUNTAIN_ESCAPE, HEIN_CAPTURE } from './data/story-scenes.js';
+import { setFlag, hasFlag } from './story-flags.js';
 import { getItemNameShrines } from './text-decoder.js';
 import { mapSt } from './map-state.js';
 import { rebuildFlameSprites } from './flame-sprites.js';
@@ -425,11 +427,36 @@ export function findWorldExitIndex(mapId, worldMapData) {
 // whether it touches a door.
 const STRANDING_MAPS = new Set([0, 34, 94, 135, 152, 159, 169, 180, 193, 255]);
 
+function canEnterDungeon(dungeon) {
+  if (dungeon.fieldSpell && !(ps.knownSpells || []).includes(dungeon.fieldSpell)) {
+    showMsgBox(_nameToBytes(dungeon.fieldHint));
+    return false;
+  }
+  if (dungeon.requiredFlag && !hasFlag(dungeon.requiredFlag)) {
+    showMsgBox(_nameToBytes(dungeon.entryHint));
+    return false;
+  }
+  return true;
+}
+
 function _checkWorldMapTrigger(tileX, tileY) {
+  if (ps.vehicle >= 4) return false; // Fly over towns; land with Z to enter.
   const trigger = mapSt.worldMapRenderer.getTriggerAt(tileX, tileY);
-  if (!trigger || trigger.type !== 'entrance') return false;
-  let destMap = trigger.destMap;
+  if (!trigger) return false;
+  // The original event scripts $12/$13 use FB $1A/$1B: Summit Road and
+  // Bahamut's Nest. Our early encounter is the authorized summit warp, so
+  // both approaches enter the climb; neither opens Lake Dohr or cave B3F.
+  const mountainEvent = trigger.type === 'event' && [2, 3].includes(trigger.eventId);
+  const dohrEvent = trigger.type === 'event' && trigger.eventId === 9;
+  const forestEvent = trigger.type === 'event' && trigger.eventId === 7;
+  const passageEvent = trigger.type === 'event' && [4, 5].includes(trigger.eventId);
+  if (trigger.type !== 'entrance' && !mountainEvent && !passageEvent && !forestEvent && !dohrEvent) return false;
+  let destMap = dohrEvent ? 151 : forestEvent ? 173 : mountainEvent ? 92 : passageEvent ? (trigger.eventId === 4 ? 43 : 120) : trigger.destMap;
   if (destMap === 0) return false;
+  if (destMap === 43 && !(ps.knownSpells || []).includes(0x2f)) {
+    showMsgBox(_nameToBytes('Desch on the peak knows Mini.'));
+    return true;
+  }
   // v1.7.923 — maps that strand the player are refused at the door.
   //
   // We enter every map at its ROM `entranceX/Y`; for these four that lands in a
@@ -445,13 +472,16 @@ function _checkWorldMapTrigger(tileX, tileY) {
   //
   // This comes out when the real entry coordinates are decoded (see the v1.7.921
   // changelog note) — the maps are fine, our entry point is wrong.
-  if (STRANDING_MAPS.has(destMap)) {
+  const captured = destMap === 55 && hasFlag('dwarves_saved') && !hasFlag('hein_defeated');
+  if (captured) destMap = 135;
+  if (STRANDING_MAPS.has(destMap) && !dungeonForWorldEntrance(destMap)) {
     showMsgBox(_nameToBytes('The way is barred.'));
     return true;
   }
   const savedX = tileX, savedY = tileY;
   const _enteringDungeon = dungeonForWorldEntrance(destMap);
   if (_enteringDungeon) {
+    if (!canEnterDungeon(_enteringDungeon)) return true;
     mapSt.dungeonSeed = Date.now();
     clearDungeonCache();
     // Procedural dungeon: each run gets a fresh seed → fresh layout. The
@@ -474,7 +504,8 @@ function _checkWorldMapTrigger(tileX, tileY) {
     transSt.dungeon = true;
   }
   const finalDest = destMap;
-  triggerWipe(() => {
+  const enter = () => triggerWipe(() => {
+    if (ps.vehicle === 1) ps.vehicle = 0;
     mapSt.mapStack.push({ mapId: 'world', worldId: 0, x: savedX, y: savedY });
     // DO NOT pre-flip `mapSt.onWorldMap = false` here. `loadMapById` captures
     // the entrance tile into `ps.lastWorldExitX/Y` + saves the slot's
@@ -485,6 +516,8 @@ function _checkWorldMapTrigger(tileX, tileY) {
     loadMapById(finalDest);
     mapSt.disabledTrigger = { x: mapSt.worldX / TILE_SIZE, y: mapSt.worldY / TILE_SIZE };
   }, finalDest);
+  if (captured) showMsgBoxPages(HEIN_CAPTURE.map(_nameToBytes), enter);
+  else enter();
   return true;
 }
 
@@ -606,6 +639,44 @@ function _checkDynType1(trigger, tileX, tileY) {
   }
   const destMap = mapSt.mapData.entranceData[trigger.trigId];
   if (destMap === 0) return false;
+  // This unused Argus door names a room assigned to Sasune in our catalog.
+  // Keep the area boundary explicit; map 24 itself is not a stranding map.
+  if (mapSt.currentMapId === 81 && destMap === 24) {
+    showMsgBox(_nameToBytes('The passage has collapsed.'));
+    return true;
+  }
+  if (destMap === 35 && !hasFlag('mrs_cid_healed')) {
+    showMsgBox(_nameToBytes('Help Mrs. Cid upstairs.'));
+    return true;
+  }
+  if ((destMap === 123 || destMap === 120) && mapSt.currentMapId === 44 && !hasFlag('doctor_healed')) {
+    showMsgBox(_nameToBytes('The doctor needs a Potion.'));
+    return true;
+  }
+  if (destMap === 81 && !hasFlag('hein_defeated')) {
+    showMsgBox(_nameToBytes('The royal hall is sealed.'));
+    return true;
+  }
+  if (destMap === 91 && !hasFlag('dwarves_saved')) {
+    showMsgBox(_nameToBytes('The vault awaits our horns.'));
+    return true;
+  }
+  // Indoor dungeon mouths retain the town-side breadcrumb for backtracking.
+  const dungeon = dungeonForWorldEntrance(destMap);
+  if (dungeon) {
+    if (!canEnterDungeon(dungeon)) return true;
+    mapSt.dungeonSeed = Date.now();
+    clearDungeonCache();
+    for (const ledger of [ps.consumedTiles, ps.consumedTilesAt]) {
+      if (!ledger) continue;
+      for (const key of Object.keys(ledger)) {
+        if (dungeonForMapId(Number(key))?.id === dungeon.id) delete ledger[key];
+      }
+    }
+    transSt.dungeon = true;
+    _triggerMapTransition(tileX, tileY, { mapId: dungeon.base });
+    return true;
+  }
   // ⭐ A DOOR MAY ONLY LEAD SOMEWHERE WE BUILT.
   //
   // `entranceData` is the cartridge's own table, and it points at the whole of
@@ -729,7 +800,93 @@ function _checkExitPrev() {
 export function tryExitToWorldAt(tileX, tileY) {
   if (mapSt.onWorldMap || !mapSt.mapData || !mapSt.mapRenderer) return false;
   if (!isExitToWorldTile(mapSt.mapData, tileX, tileY)) return false;
+  if (mapSt.currentMapId === 92) return _escapeBahamut();
   return _checkExitToWorld();
+}
+
+function _escapeBahamut() {
+  showMsgBoxPages(MOUNTAIN_ESCAPE.map(_nameToBytes), () => {
+    playSFX(SFX.WARP);
+    triggerWipe(() => {
+      setFlag('bahamut_escaped', { persist: false });
+      if (!Array.isArray(ps.knownSpells)) ps.knownSpells = [];
+      if (!ps.knownSpells.includes(0x2f)) ps.knownSpells.push(0x2f);
+      fullHeal();
+      // Indoor saves resume at the most recent world entrance. Land there
+      // first so quitting in the Copse cannot reload above the mountain.
+      loadWorldMapAtPosition(92, 81);
+      // Keep a world breadcrumb for reloads and ordinary forest departures.
+      mapSt.mapStack = [{ mapId: 'world', worldId: 0, x: 92, y: 81 }];
+      loadMapById(185);
+      saveSlotsToDB();
+    }, 185);
+  });
+  return true;
+}
+
+// An MMO revisit of a restored story location: enter a personal replay,
+// retaining the ordinary dungeon rewards and the world's completed state.
+export function offerDungeonRevisit(revisit) {
+  if (!hasFlag(revisit.flag)) return false;
+  const dungeon = dungeonForWorldEntrance(revisit.entrance);
+  if (!dungeon) return false;
+  showMsgBoxPages(revisit.pages.map(_nameToBytes), () => {
+    showMsgBoxPrompt(_nameToBytes('Enter the dream? ' + yesNoLabels()), () => {
+      triggerWipe(() => {
+        mapSt.dungeonSeed = Date.now(); clearDungeonCache();
+        for (const ledger of [ps.consumedTiles, ps.consumedTilesAt]) {
+          if (ledger) for (const key of Object.keys(ledger)) {
+            if (dungeonForMapId(Number(key))?.id === dungeon.id) delete ledger[key];
+          }
+        }
+        const landing = dungeon.destination.world;
+        mapSt.mapStack.length = 0; loadWorldMapAtPosition(landing.x, landing.y);
+        mapSt.mapStack.push({ mapId: 'world', x: landing.x, y: landing.y });
+        loadMapById(dungeon.base);
+      }, dungeon.base);
+    }, null);
+  });
+  return true;
+}
+
+/** The Copse's original three springs, addressed by their ROM coordinates. */
+export function handleCopseSpring(tileX, tileY) {
+  // These four spring houses share the same complete native tilemap.
+  if (!mapSt.onWorldMap && [11, 32, 64, 77].includes(mapSt.currentMapId)
+      && tileX === 3 && (tileY === 4 || tileY === 5)) {
+    fullHeal(); ps.status = { mask: 0, poisonDmgTick: 0 };
+    playSFX(SFX.CURE); saveSlotsToDB();
+    showMsgBox(_nameToBytes('Your strength returns.')); return true;
+  }
+  if (mapSt.onWorldMap || mapSt.currentMapId !== 185) return false;
+  if (tileY === 1 && tileX >= 4 && tileX <= 6) {
+    fullHeal();
+    ps.status = { mask: 0, poisonDmgTick: 0 };
+    playSFX(SFX.CURE);
+    saveSlotsToDB();
+    showMsgBox(_nameToBytes('Your strength returns.'));
+    return true;
+  }
+  if (tileX === 1 && tileY >= 4 && tileY <= 6) {
+    showMsgBoxPrompt(_nameToBytes('Warp to Canaan? ' + yesNoLabels()), () => {
+      playSFX(SFX.WARP);
+      triggerWipe(() => {
+        mapSt.mapStack.length = 0;
+        loadWorldMapAtPosition(86, 66);
+        saveSlotsToDB();
+      }, 'world');
+    }, null);
+    return true;
+  }
+  if (tileX === 9 && tileY >= 4 && tileY <= 6) {
+    showMsgBoxPages([
+      'The north spring heals.',
+      'The west leads to Canaan.',
+      'Tozus lies to the south.',
+    ].map(_nameToBytes));
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -750,9 +907,12 @@ function _checkExitToWorld() {
     topBoxSt.state = 'fade-out'; topBoxSt.timer = 0; topBoxSt.fadeStep = 0;
   }
   triggerWipe(() => {
-    // Unconditional — the ROM does not consult a return stack for this type.
+    const entry = mapSt.mapStack.find(e => e.mapId === 'world');
     mapSt.mapStack.length = 0;
-    loadWorldMapAt(findWorldExitIndex(mapSt.currentMapId, mapSt.worldMapData));
+    if (entry) loadWorldMapAtPosition(entry.x, entry.y);
+    else if (Number.isInteger(ps.lastWorldExitX) && Number.isInteger(ps.lastWorldExitY)) {
+      loadWorldMapAtPosition(ps.lastWorldExitX, ps.lastWorldExitY);
+    } else loadWorldMapAt(findWorldExitIndex(mapSt.currentMapId, mapSt.worldMapData));
   }, 'world');
   return true;
 }

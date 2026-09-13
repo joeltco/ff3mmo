@@ -17,6 +17,7 @@
 //
 // Memoized per dungeon id — the loading screen calls this every frame.
 
+import { ENDING_REACH } from '../data/dungeons.js';
 import { encodeName } from '../data/strings.js';
 import { MONSTERS } from '../data/monsters.js';
 import { DEFAULT_BOSS_ID } from '../data/bosses.js';
@@ -36,6 +37,7 @@ export function dungeonLevelCount(dungeon) {
 
 /** The dungeon's boss HP, or the default boss's when a row names no monster. */
 export function dungeonBossHP(dungeon) {
+  if (dungeon?.ending === ENDING_REACH) return null;
   const id = dungeon && dungeon.bossId != null ? dungeon.bossId : DEFAULT_BOSS_ID;
   const mon = MONSTERS.get(id) || MONSTERS.get(DEFAULT_BOSS_ID);
   return mon ? mon.hp : 120;
@@ -58,7 +60,8 @@ export function dungeonLabels(dungeon) {
   hit = {
     nameBytes: encodeName(name),
     levelsBytes: encodeName(`${levels} Level${levels === 1 ? '' : 's'}`),
-    hpBytes: encodeName(`HP ${hp}`),
+    hpBytes: hp === null ? new Uint8Array() : encodeName(`HP ${hp}`),
+    objectiveBytes: encodeName(hp === null ? 'Find the end' : 'Beat the boss'),
   };
   _cache.set(key, hit);
   return hit;

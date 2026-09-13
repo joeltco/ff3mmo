@@ -164,6 +164,34 @@ if (wm.openWordMenu({ key: 'nobody', scene: { dialogue: ['Hi.'] } }, () => {})) 
   err('a wordless NPC opened the menu — the box would hang on an empty list');
 }
 
+// The King's offer must deliver the canoe through the menu, before advancing.
+const { addItem, playerInventory, setPlayerInventory, INV_CAP } = await import('../src/inventory.js');
+ps.quests = {}; ps.flags = {}; ps.words = { sara: 1 };
+ps.vehicle = 0; ps.vehicleParked = 0;
+mapSt.currentMapId = 29;
+setPlayerInventory(Object.fromEntries(Array.from({ length: INV_CAP }, (_, i) => [i + 1, 1])));
+let grants = 0;
+const grantCanoe = (reward, id, stageId) => {
+  if (id !== 'sasune_missing_daughter' || stageId !== 'ask') err('wrong offer grant identity');
+  if (!addItem(reward.item, 1)) return false;
+  grants++;
+  return true;
+};
+msgState.state = 'hold'; msgState.bytes = new Uint8Array([0]);
+wm.openWordMenu(npcOf(29, 'sasune_king'), () => {}, grantCanoe);
+pick('ASK'); pick('SARA'); pick('ACCEPT');
+if (ps.quests.sasune_missing_daughter || ps.flags.canoe_granted || ps.vehicleParked) {
+  err('full bag advanced the quest or granted a craft');
+}
+setPlayerInventory({});
+pick('ASK'); pick('SARA'); pick('ACCEPT');
+if (ps.quests.sasune_missing_daughter?.s !== 'errand' || !ps.flags.canoe_granted ||
+    !ps.vehicleParked || ps.vehicleParkedMode !== 2 || ps.vehicleParkedX !== 87 ||
+    ps.vehicleParkedY !== 41 || playerInventory[0xa5] !== 1 || grants !== 1) {
+  err('accepting SARA did not deliver exactly one usable canoe');
+}
+wm.closeWordMenu();
+
 if (fail.length) {
   for (const m of fail) console.error(`  ✗ ${m}`);
   console.error(`\ncheck-word-flow: FAIL — ${fail.length} problem(s)`);

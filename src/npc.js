@@ -1,3 +1,4 @@
+import { claimsForProgress } from './data/quest-recovery.js';
 // ═══════════════════════════════════════════════════════════════════════════
 // ⛔⛔⛔  DO NOT HALF-ASS THE DATA PULL.  ⛔⛔⛔
 //
@@ -44,18 +45,18 @@
 import { NPCS } from './data/npcs.js';
 import { romRaw } from './boot.js';
 import { mapSt } from './map-state.js';
-import { msgState, showMsgBoxPages, dismissMsgBox } from './message-box.js';
+import { msgState, showMsgBoxPages, dismissMsgBox, showMsgBoxPrompt, yesNoLabels } from './message-box.js';
 import { sendNetInvEvent, SERVER_ECONOMY, sendNetQuestClaim, setNetQuestResultHandler,
-         sendNetInvStateRequest, nextChestTxnId } from './net.js';
+         sendNetInvStateRequest, nextChestTxnId, setNetQuestRecoveryProvider, retryNetQuestClaim } from './net.js';
 import { openWordMenu } from './word-menu.js';
 import { revertQuestHandIn } from './quests.js';
 import { resolveSpeech } from './speech.js';
 import { QUESTS, QUEST_DONE } from './data/quests.js';
-import { hasFlag } from './story-flags.js';
+import { hasFlag, setFlag } from './story-flags.js';
 import { _nameToBytes } from './text-utils.js';
 import { sprite as playerSprite } from './player-sprite.js';
 import { Sprite, DIR_DOWN, DIR_UP, DIR_LEFT, DIR_RIGHT } from './sprite.js';
-import { MOOGLE_GFX_ID, MOOGLE_PAL } from './sprite-init.js';
+import { MOOGLE_GFX_ID, MOOGLE_PAL, initMapObjectFrames } from './sprite-init.js';
 import { BM_WALK_TOP, BM_WALK_BTM, WM_WALK_TOP, WM_WALK_BTM } from './job-sprites.js';
 // ⛔ The NPC record's 4th byte — facing + movement. Lives in a Node-clean data
 // module so the GATES audit the same derivation the game ships, not the spec.
@@ -72,7 +73,7 @@ import { openShop } from './shop.js';
 import { waterSt } from './water-animation.js';
 import { battleSt } from './battle-state.js';
 import { ps, grantGil, grantExp } from './player-stats.js';
-import { addItem } from './inventory.js';
+import { addItem, hasItem, removeItem } from './inventory.js';
 import { playSFX, SFX } from './music.js';
 import { saveSlotsToDB } from './save-state.js';
 
@@ -196,6 +197,15 @@ const _SPRITE_FACTORIES = {
   },
   scene: (npc) => {
     const spec = npc.scene;
+    if (spec.objectSprite) {
+      const frames = initMapObjectFrames(romRaw, spec.romOffset, spec.palTop);
+      let frame = 0;
+      return {
+        setDirection() {}, resetFrame() { frame = 0; },
+        setWalkProgress(p) { frame = p < 0.5 ? 0 : 1; },
+        draw(ctx, x, y) { ctx.drawImage(frames[frame], x, y); },
+      };
+    }
     const s = new Sprite(romRaw, spec.palTop, spec.palBtm);
     s.gfxBase = spec.romOffset; // raw ROM bundle (header-inclusive, see [[ff3mmo-ines-header-romraw-vs-header-stripped]])
     s.tileCache.clear();
@@ -820,9 +830,15 @@ function _grantQuestReward(reward, questId, stageId) {
 // over an open box.
 let _questNotice = null;
 
+setNetQuestRecoveryProvider(() => claimsForProgress(ps.quests));
+
 setNetQuestResultHandler((msg) => {
   if (!msg || msg.status === 'ok') return;
-  const questId = String(msg.questId || '');
+  const questId = String(msg.questId || '').split('#')[0];
+  if (msg.recovery) {
+    _questNotice = { questId, pages: ['Your reward is waiting.', 'Make room for it, please.'] };
+    return;
+  }
   if (msg.reason === 'already-claimed') {
     // The server had already paid this one — the local save was behind (an
     // older client, or a hand-in that never made it to disk). Keep the quest
@@ -831,13 +847,12 @@ setNetQuestResultHandler((msg) => {
     console.warn('[quest] server had already paid ' + questId + ' — resyncing gil');
     return;
   }
-  // Anything else (economy-disabled, unknown-quest, bad-reward-item, a lost
-  // ledger race): nothing was paid server-side, so put the quest back to
-  // waiting-to-hand-in and let them try again.
-  revertQuestHandIn(questId);
+  // A network/server refusal must not replay local XP, story flags or craft
+  // grants. Keep the durable milestone and retry only the ledgered payment.
+  retryNetQuestClaim(msg.claim);
   sendNetInvStateRequest();
-  _questNotice = { questId, pages: ['He counts the coin.', 'Not yet, he says.', 'Ask again.'] };
-  console.warn('[quest] claim rejected for ' + questId + ' reason=' + (msg.reason || '?'));
+  _questNotice = { questId, pages: ['Your reward is waiting.', 'Make room for it, please.'] };
+  console.warn('[quest] payment pending for ' + questId + ' reason=' + (msg.reason || '?'));
 });
 
 // Does this NPC owe the player a notice from a rejected claim?
@@ -915,12 +930,12 @@ function _drawBossNpc(ctx, sx, sy, npc) {
   const blinkHidden = battleSt.bossFlashTimer > 0 && (Math.floor(battleSt.bossFlashTimer / 60) & 1);
   if (blinkHidden) return;
   const idx = Math.floor(waterSt.tick / 8) & 1;
-  ctx.drawImage(frames[idx], sx, sy);
+  ctx.drawImage(frames[idx], sx + (16 - frames[idx].width) / 2, sy + 16 - frames[idx].height);
 }
 
 // ── Dialogue ───────────────────────────────────────────────────────────────
 
-export function talkToNpc(npc) {
+export function talkToNpc(npc, counterShopId = null) {
   if (!npc) return;
   // Wind Crystal (post-defeat reveal): blessing on first talk, full restore on
   // repeat — mirrors the FF3 Altar-Cave crystal event. Only once it's morphed
@@ -933,6 +948,28 @@ export function talkToNpc(npc) {
   // no dialogue box. Keep the NPC's south-facing pose (don't flip to player).
   if (npc.shopId) {
     openShop(npc.shopId);
+    return;
+  }
+  const lesson = npc.scene?.fieldLesson;
+  if (lesson && !(ps.knownSpells || []).includes(lesson.spell)) {
+    ps.knownSpells = [...(ps.knownSpells || []), lesson.spell];
+    saveSlotsToDB();
+    showMsgBoxPages(lesson.pages.map(_nameToBytes));
+    return;
+  }
+  const treatment = npc.scene?.treatment;
+  if (treatment && !hasFlag(treatment.flag)) {
+    const missing = () => showMsgBoxPages(treatment.missing.map(_nameToBytes));
+    if (!hasItem(treatment.item)) { missing(); return; }
+    showMsgBoxPrompt(_nameToBytes(treatment.ask + ' ' + yesNoLabels()), () => {
+      // Recheck at acceptance: a pending prompt must never grant a second cure.
+      if (hasFlag(treatment.flag)) return;
+      if (removeItem(treatment.item, 1) !== 1) { missing(); return; }
+      sendNetInvEvent('remove', treatment.item, 1, 'use');
+      setFlag(treatment.flag, { persist: false });
+      saveSlotsToDB();
+      showMsgBoxPages(treatment.thanks.map(_nameToBytes));
+    }, null);
     return;
   }
   // ⭐ ONE RESOLVER. Which of notice / quest / idle answers, and in what order,
@@ -959,26 +996,27 @@ export function talkToNpc(npc) {
     else if (pdir === DIR_LEFT)  npc.talkFacing = DIR_RIGHT;
     else if (pdir === DIR_RIGHT) npc.talkFacing = DIR_LEFT;
   }
-  _sayThenOfferWords(npc, pages);
+  _sayThenOfferWords(npc, pages, counterShopId);
 }
 
 // Show an NPC's lines, then hand off to the FF2-style ASK/LEARN menu if this
 // NPC teaches or answers any Key Term. `keepOpen` parks the box on the last
 // page so the verb list appears under a window that's still up — without it
 // the box slides out and the menu floats on nothing.
-function _sayThenOfferWords(npc, lines) {
+function _sayThenOfferWords(npc, lines, counterShopId = null) {
   const bytes = lines.map(l => _nameToBytes(l));
   const spec  = npc.scene;
   const hasWords = !!(spec && ((spec.teaches && spec.teaches.length) ||
                                (spec.answers && Object.keys(spec.answers).length)));
-  if (!hasWords) {
+  if (!hasWords && !counterShopId) {
     showMsgBoxPages(bytes, () => { npc.talkFacing = null; });
     return;
   }
   showMsgBoxPages(bytes, () => {
     // openWordMenu returns false when there's nothing left to learn or ask —
     // then the box has to be closed by hand, since keepOpen suppressed it.
-    if (!openWordMenu(npc, () => { npc.talkFacing = null; })) {
+    if (!openWordMenu(npc, () => { npc.talkFacing = null; }, _grantQuestReward,
+      counterShopId ? () => openShop(counterShopId) : null)) {
       npc.talkFacing = null;
       dismissMsgBox();
     }

@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createCanvas } from '@napi-rs/canvas';
+globalThis.document = { createElement: () => createCanvas(8, 8), getElementById: () => null, addEventListener() {} };
+globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false }) };
+globalThis.localStorage = { getItem: () => null, setItem() {} };
+const { loadWorldMap } = await import('../src/world-map-loader.js');
+const { WorldMapRenderer } = await import('../src/world-map-renderer.js');
+const { initMapLoading, loadMapById } = await import('../src/map-loading.js');
+const { mapSt } = await import('../src/map-state.js');
+const { transSt } = await import('../src/transitions.js');
+const { checkTrigger } = await import('../src/map-triggers.js');
+const { handleInput } = await import('../src/movement.js');
+const { setPlayerSprite } = await import('../src/player-sprite.js');
+const { DIR_UP } = await import('../src/sprite.js');
+const { msgState, forceCloseMsgBox } = await import('../src/message-box.js');
+const { keys } = await import('../src/input-handler.js');
+const { ps } = await import('../src/player-stats.js');
+let dir = DIR_UP;
+setPlayerSprite({ getDirection: () => dir, setDirection: d => { dir = d; }, resetFrame() {}, setWalkProgress() {} });
+fs.mkdirSync('/tmp/ff3mmo-evaluation', { recursive:true });
+const rom = fs.readFileSync(new URL('../FF3-English.nes', import.meta.url));
+const { applyIPS } = await import('../src/ips-patcher.js');
+applyIPS(rom, fs.readFileSync(new URL('../patches/ff3-awj.ips', import.meta.url)));
+initMapLoading(rom);
+mapSt.worldMapData = loadWorldMap(rom, 0);
+mapSt.worldMapRenderer = new WorldMapRenderer(mapSt.worldMapData);
+globalThis.requestAnimationFrame = cb => cb();
+globalThis.document.fonts = { load: async () => [] };
+const { initSpriteAssets } = await import('../src/boot.js');
+const { drawNpcs } = await import('../src/npc.js');
+initSpriteAssets(rom);
+const { initFont } = await import('../src/font-renderer.js');initFont(rom);
+for (const [id,x,y,name] of [[173,13,13,'forest-live'],[67,7,12,'gurgan-live'],[60,12,16,'ancients-live'],[69,2,16,'gysahl-live'],[9004,0,1,'hein-live'],[10003,0,1,'dohr-live'],[11003,0,1,'bahamut-live'],[93,0,0,'chocobo-live']]) {
+  loadMapById(id);const c=createCanvas(256,240),ctx=c.getContext('2d');
+  mapSt.mapRenderer.draw(ctx,x*16,y*16,0,0);
+  drawNpcs(ctx,x*16,y*16,0,0,0);
+  fs.writeFileSync(`/tmp/ff3mmo-evaluation/${name}.png`,c.toBuffer('image/png'));
+}
+const { ui } = await import('../src/ui-state.js');
+const { battleSt } = await import('../src/battle-state.js');
+const { startBattle } = await import('../src/battle-update.js');
+const { drawBattleAllies } = await import('../src/battle-draw-allies.js');
+ps.jobIdx=1;ps.flags={curse_lifted:1,owen_restored:1};ps.stats={level:20,maxHP:150,maxMP:20};ps.hp=150;
+mapSt.currentMapId=9004;startBattle();battleSt.battleState='menu-open';
+const party=createCanvas(256,240);ui.ctx=party.getContext('2d');
+ui.ctx.fillStyle='#000';ui.ctx.fillRect(0,0,256,240);drawBattleAllies();
+fs.writeFileSync('/tmp/ff3mmo-evaluation/companions-live.png',party.toBuffer('image/png'));
+
+const { drawVehicle, hasVehicleSprite }=await import('../src/vehicle-sprite.js');
+assert.ok(hasVehicleSprite(1));
+const riding=createCanvas(32,32);drawVehicle(riding.getContext('2d'),8,8,1);
+fs.writeFileSync('/tmp/ff3mmo-evaluation/chocobo-mounted.png',riding.toBuffer('image/png'));

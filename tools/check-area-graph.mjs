@@ -77,15 +77,19 @@ function doorsOf(mapId) {
     const am = loadMap(rom, alias);
     seeds.push([am.entranceX, calcSpawnY(am, am.entranceX, am.entranceY)]);
   }
+  // Stairs reset elevation; track (tile, z), as the actual movement does.
+  // A fixed entry elevation falsely seals the Ancients' terraced village.
   const seen = new Set(seeds.map(([x, y]) => y * W + x));
-  const q = seeds.slice();
+  const q = seeds.map(([x,y]) => [x,y,r.zAfterEntering(x,y,0)]);
+  const states = new Set(q.map(p => p.join(',')));
   while (q.length) {
-    const [x, y] = q.pop();
+    const [x, y, z] = q.pop();
     for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-      const nx = x + dx, ny = y + dy, k = ny * W + nx;
-      if (nx < 0 || ny < 0 || nx > 31 || ny > 31 || seen.has(k)) continue;
-      if (!r.isPassable(nx, ny)) continue;
-      seen.add(k); q.push([nx, ny]);
+      const nx = x + dx, ny = y + dy;
+      if (!r.isPassable(nx, ny, z)) continue;
+      const nz = r.zAfterEntering(nx, ny, z), key = `${nx},${ny},${nz}`;
+      if (states.has(key)) continue;
+      states.add(key); seen.add(ny * W + nx); q.push([nx, ny, nz]);
     }
   }
   const near = (x, y) => seen.has(y * W + x)

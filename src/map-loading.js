@@ -60,7 +60,8 @@ import { transSt, topBoxSt } from './transitions.js';
 import { getBattleBg } from './battle-bg.js';
 import { resolveBackdrop } from './data/backdrops.js';
 import { dungeonLabels } from './dungeon/labels.js';
-import { BANNER_FOR_MAP, TOWN_MAPS } from './data/areas.js';
+import { BANNER_FOR_MAP, TOWN_MAPS, resolveArrival } from './data/areas.js';
+import { LANDMARK_BANNERS } from './data/landmarks.js';
 import { mapEntryMusic } from './map-music.js';
 import { hudSt } from './hud-state.js';
 import { mapSt } from './map-state.js';
@@ -383,6 +384,10 @@ function _loadRegularMap(mapId, returnX, returnY) {
   // a plain TOWN_NPCS villager next to the counter has neither, which is how
   // v1.8.12 shipped a magic shop that only said a line.
   if (mapId === 15) addMageShopkeeper(4, 4, 'kazus_magic', 'black');
+  if (mapId === 38) addMageShopkeeper(4, 4, 'canaan_magic', 'black');
+  if (mapId === 63) addMageShopkeeper(4, 4, 'ancients_magic', 'black');
+  if (mapId === 75) addMageShopkeeper(4, 4, 'gysahl_magic', 'white');
+  if (mapId === 47) addMageShopkeeper(4, 4, 'tozas_magic', 'white');
   if (mapId === 7) placeOpeningScene();
   // Ur (114) has a dark-tile patch in the town that spawns wild
   // grasslands encounters (Werewolves + Bees). Flood-fill from the seed
@@ -533,7 +538,7 @@ export function setupTopBox(mapId, isWorldMap) {
   // however the map was reached. Per-map rather than per-town because map 29
   // names ITSELF ("Sasune Throne Room") from inside Castle Sasune's interior —
   // a latched banner could never repaint on the way in.
-  const banner = BANNER_FOR_MAP.get(mapId);
+  const banner = BANNER_FOR_MAP.get(mapId) || LANDMARK_BANNERS.get(mapId);
   if (banner) {
     if (!topBoxSt.isTown) { topBoxSt.state = 'pending'; }
     topBoxSt.isTown = true;
@@ -546,6 +551,12 @@ export function setupTopBox(mapId, isWorldMap) {
 }
 
 export function loadMapById(mapId, returnX, returnY) {
+  const arrival = resolveArrival(mapId);
+  if (arrival.mapId !== mapId) {
+    mapId = arrival.mapId;
+    returnX ??= arrival.x;
+    returnY ??= arrival.y;
+  }
   // Entering a town / dungeon FROM overworld? Capture the entrance tile
   // before flipping `mapSt.onWorldMap`, so:
   //   1. `ps.lastWorldExitX/Y` (death respawn point) updates to the
@@ -576,6 +587,7 @@ export function loadMapById(mapId, returnX, returnY) {
 }
 
 function _landOnWorldMap(tileX, tileY) {
+  if (mapSt.worldMapData) mapSt.worldMapData.boulderCleared = !!ps.flags?.nelv_pass_open;
   mapSt.worldX = tileX * TILE_SIZE;
   mapSt.worldY = tileY * TILE_SIZE;
   mapSt.disabledTrigger = { x: tileX, y: tileY };

@@ -27,15 +27,19 @@
 
 export const ENDING_CRYSTAL = 'crystal';
 export const ENDING_BOSS    = 'boss';
+export const ENDING_REACH   = 'reach';
 
 /** Wind Crystal — Warrior, Monk, White Mage, Black Mage, Red Mage (bits 1-5). */
 export const WIND_CRYSTAL_JOBS = 0x3E;
+export const FIRE_CRYSTAL_JOBS = 0x3C0; // Ranger, Knight, Thief, Scholar (bits 6-9)
 
 /**
  * A dungeon row.
  *
  * `base` + `floors` own a contiguous mapId range: floor N is `base + N`, and the
- * LAST floor (`floors - 1`) is the boss chamber. Side rooms carry their own
+ * LAST floor (`floors - 1`) is the destination chamber. Bossless dungeons
+ * complete on reaching its exit; other dungeons place their boss there.
+ * Side rooms carry their own
  * mapIds and name the floor they hang off, because they are not floors —
  * `dungeonFloor` deliberately does not change when you step into one.
  *
@@ -51,7 +55,7 @@ export const DUNGEONS = [
     donorMap: 111,                // ROM map supplying tiles/CHR/palettes
     tileset: 0,
     bossSkinId: 'crystal',        // -> BOSS_SKINS.crystal (donor 148, tileset 2)
-    ending: ENDING_CRYSTAL,
+    ending: ENDING_CRYSTAL, crystalJobs: WIND_CRYSTAL_JOBS,
     // ⭐ WHAT EACH WALKABLE FLOOR IS SHAPED LIKE. One name per floor, boss floor
     // excluded (its shape comes from `bossSkinId`). See `layoutForFloor`.
     // `corridor` is Altar Cave's historical run lengths, written down rather
@@ -203,7 +207,158 @@ export const DUNGEONS = [
     ],
     secretRooms: [],
   },
+  {
+    id: 'tozas', fieldSpell: 0x2f, fieldHint: 'Desch on the peak knows Mini.', name: 'Tozus Tunnel', base: 4000,
+    worldEntranceMap: 120, entranceMaps: [120, 123],
+    floors: 3, donorMap: 120, tileset: 0, bossSkinId: 'passage',
+    ending: ENDING_REACH, bossId: null,
+    layout: {
+      floors: ['snake', 'chamber-run'],
+      corridor: { hMin: 5, hMax: 8, vMin: 6, vMax: 9 },
+      snake: { top: [3, 7], bot: [16, 19], roomW: [5, 8], left: [3, 6], right: [26, 29], gap: [4, 6], tilt: [2, 4] },
+    },
+    music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_CAVE' },
+    rosterPrefix: 'tozas', bossRosterLoc: 'tozas-end',
+    encounterZonePrefix: 'tozas_tunnel', romFloorMaps: [120, 121, 123],
+    lockedRooms: [], secretRooms: [],
+    destination: {
+      flag: 'tozas_passage_open',
+      world: { x: 86, y: 92 },
+      reverseWorld: { x: 95, y: 96 },
+    },
+  },
 ];
+
+// Nepto's masonry uses the same structural metatile slots as cave tileset 0
+// ($00-$02 walls, $30 floor, $42/$73 stairs). Cave bone decorations do not.
+DUNGEONS.push({
+  id: 'nepto', fieldSpell: 0x2f, fieldHint: 'Mini opens this small path.', name: 'Nepto Temple', base: 5000, worldEntranceMap: 96,
+  floors: 4, donorMap: 97, tileset: 1, bossSkinId: 'nepto',
+  ending: ENDING_BOSS, bossId: 0xce,
+  // Cave arch $03 is water in the temple; its ceiling is $00. The warp's
+  // authored coordinate stays, but $61 depicts a statue here, so use floor.
+  tileReplacements: { 3: 0, 97: 48 },
+  tileArtwork: { 104: 100 }, // exit $68 borrows native upward stair $64
+  layout: {
+    floors: ['snake', 'snake', 'snake'],
+    corridor: { hMin: 5, hMax: 7, vMin: 6, vMax: 8 },
+    snake: { top: [2, 6], bot: [19, 24], roomW: [5, 8], left: [2, 5], right: [25, 28], gap: [6, 8], tilt: [2, 3] },
+    features: { skeletons: 0, secrets: 0, chests: [2, 3] },
+  },
+  music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_CAVE' },
+  rosterPrefix: 'nepto', bossRosterLoc: 'nepto-boss',
+  encounterZonePrefix: 'nepto_temple', romFloorMaps: [97, 98, 99, 100],
+  lockedRooms: [], secretRooms: [],
+});
+
+// Owen's ascent borrows the successive native machinery palettes.
+DUNGEONS.push({
+  id: 'owen', fieldSpell: 0x2e, fieldHint: 'Learn Toad in Gurgan Valley.', name: 'Tower of Owen',
+  requiredFlag: 'nepto_restored', entryHint: 'Help the Vikings first.', base: 6000, worldEntranceMap: 124,
+  floors: 5, donorMap: 126, floorDonorMaps: [126, 128, 130, 132, 134],
+  tileset: 0, bossSkinId: 'owen', ending: ENDING_BOSS, bossId: 0xcf,
+  tileReplacements: { 3: 0 }, tileArtwork: { 104: 100 },
+  layout: {
+    floors: ['snake', 'snake', 'snake', 'snake'],
+    corridor: { hMin: 4, hMax: 6, vMin: 6, vMax: 8 },
+    snake: { top: [4, 8], bot: [19, 25], roomW: [6, 10], left: [3, 7], right: [23, 27], gap: [3, 5], tilt: [2, 4] },
+    features: { skeletons: 0, secrets: 0, chests: [2, 3] },
+  },
+  music: { floors: 'ANCIENT_TOWER', boss: 'ANCIENT_TOWER' },
+  rosterPrefix: 'owen', bossRosterLoc: 'owen-engine',
+  encounterZonePrefix: 'tower_owen', romFloorMaps: [126, 128, 130, 132, 134],
+  lockedRooms: [], secretRooms: [],
+  destination: { flag: 'owen_restored', world: { x: 63, y: 32 } },
+});
+
+DUNGEONS.push({
+  id: 'lake', fieldSpell: 0x2e, fieldHint: 'Learn Toad in Gurgan Valley.', name: 'Subterranean Lake',
+  requiredFlag: 'owen_restored', entryHint: 'Owen needs your help first.', base: 7000,
+  worldEntranceMap: 116, entranceMaps: [90, 116],
+  floors: 4, donorMap: 116, tileset: 0, bossSkinId: 'lake',
+  ending: ENDING_BOSS, bossId: 0xd0,
+  layout: {
+    floors: ['snake', 'chamber-run', 'snake'],
+    corridor: { hMin: 7, hMax: 10, vMin: 7, vMax: 10 },
+    snake: { top: [3, 8], bot: [17, 23], roomW: [6, 10], left: [2, 6], right: [25, 29], gap: [5, 8], tilt: [3, 5] },
+  },
+  music: { floors: 'DUNGEON_CAVE', boss: 'DUNGEON_CAVE' },
+  rosterPrefix: 'lake', bossRosterLoc: 'lake-gutsco',
+  encounterZonePrefix: 'subterranean_lake', romFloorMaps: [116, 117, 118, 119],
+  lockedRooms: [], secretRooms: [],
+});
+DUNGEONS.push({
+  id: 'flame', name: 'Flame Cave',
+  requiredFlag: 'horns_stolen', entryHint: 'Speak with the dwarf chief.', base: 8000, worldEntranceMap: 107,
+  floors: 4, donorMap: 107, tileset: 0, bossSkinId: 'flame',
+  ending: ENDING_CRYSTAL, bossId: 0xd1, crystalJobs: FIRE_CRYSTAL_JOBS,
+  layout: {
+    floors: ['snake', 'chamber-run', 'snake'],
+    corridor: { hMin: 6, hMax: 9, vMin: 8, vMax: 11 },
+    snake: { top: [2, 6], bot: [19, 25], roomW: [5, 9], left: [3, 6], right: [25, 28], gap: [5, 7], tilt: [3, 5] },
+  },
+  music: { floors: 'CRYSTAL_CAVE', boss: 'CRYSTAL_ROOM' },
+  rosterPrefix: 'flame', bossRosterLoc: 'fire-crystal',
+  encounterZonePrefix: 'flame_cave', romFloorMaps: [107, 108, 109, 149],
+  lockedRooms: [], secretRooms: [],
+});
+
+DUNGEONS.push({
+  id: 'hein', name: 'Castle Hein', base: 9000, worldEntranceMap: 135,
+  floors: 5, donorMap: 136, tileset: 2, bossSkinId: 'hein',
+  ending: ENDING_BOSS, bossId: 0xd2,
+  barrierShift: { every: 3, elements: ['fire', 'ice', 'bolt'] },
+  tileReplacements: { 3: 0, 97: 48 }, tileArtwork: { 104: 100 },
+  layout: {
+    floors: ['snake', 'snake', 'snake', 'snake'],
+    corridor: { hMin: 6, hMax: 8, vMin: 8, vMax: 10 },
+    snake: { top: [2, 7], bot: [18, 23], roomW: [7, 11], left: [2, 5], right: [26, 29], gap: [4, 7], tilt: [4, 6] },
+    features: { skeletons: 0, secrets: 0, chests: [2, 3] },
+  },
+  music: { floors: 'HAUNTED_TREE', boss: 'HAUNTED_TREE' },
+  rosterPrefix: 'hein', bossRosterLoc: 'hein-boss',
+  encounterZonePrefix: 'castle_hein', romFloorMaps: [136, 137, 138, 140, 139],
+  lockedRooms: [], secretRooms: [],
+  destination: { flag: 'hein_defeated', world: { x: 40, y: 66 } },
+});
+
+DUNGEONS.push({
+  id: 'mines', name: 'Mythril Mines', base: 12000, worldEntranceMap: 101,
+  floors: 3, donorMap: 101, tileset: 0, bossSkinId: 'mines', ending: ENDING_REACH, bossId: null,
+  layout: {
+    floors: ['chamber-run', 'snake'],
+    corridor: { hMin: 6, hMax: 8, vMin: 6, vMax: 9 },
+    snake: { top: [4, 8], bot: [18, 24], roomW: [5, 9], left: [2, 5], right: [26, 29], gap: [6, 7], tilt: [3, 4] },
+  },
+  music: { floors: 'DUNGEON_CAVE', boss: 'DUNGEON_CAVE' },
+  rosterPrefix: 'mines', bossRosterLoc: 'mines-end',
+  encounterZonePrefix: 'mythril_mines', romFloorMaps: [101,102,102],
+  lockedRooms: [], secretRooms: [],
+  destination: { flag: 'mines_explored', world: { x: 93, y: 59 } },
+});
+
+// Late return visits: the original Invincible milestone opens these summon
+// trials. Building the continent does not move that later story reward early.
+for (const [id, name, base, entrance, donor, boss, maps, x, y, spell] of [
+  ['dohr', 'Lake Dohr', 10000, 151, 151, 0xcb, [151,153,154,155], 32,53,0x0d],
+  ['bahamut', "Bahamut's Lair", 11000, 156, 156, 0xd6, [156,165,166,166], 89,96,0x06],
+]) DUNGEONS.push({
+  id, name, base, worldEntranceMap: entrance, floors: 4,
+  requiredFlag: 'invincible_acquired', entryHint: 'Return with the Invincible.',
+  donorMap: donor, tileset: 0, bossSkinId: id, ending: ENDING_BOSS, bossId: boss,
+  layout: {
+    floors: id === 'dohr' ? ['chamber-run', 'snake', 'snake'] : ['snake', 'snake', 'chamber-run'],
+    corridor: { hMin: 8, hMax: 11, vMin: 6, vMax: 9 },
+    snake: id === 'dohr'
+      ? { top: [5, 8], bot: [21, 25], roomW: [8, 12], left: [1, 4], right: [27, 30], gap: [7, 9], tilt: [5, 7] }
+      : { top: [4, 8], bot: [16, 22], roomW: [7, 11], left: [1, 5], right: [26, 30], gap: [4, 6], tilt: [2, 4] },
+  },
+  music: { floors: 'DUNGEON_CAVE', boss: 'DUNGEON_CAVE' },
+  rosterPrefix: id, bossRosterLoc: `${id}-boss`,
+  encounterZonePrefix: `${id}_cave`, romFloorMaps: maps,
+  lockedRooms: [], secretRooms: [],
+  destination: { flag: `${id}_defeated`, world: { x, y }, spell },
+});
 
 // ── Lookups ────────────────────────────────────────────────────────────────
 //
@@ -229,6 +384,9 @@ export function buildRegistry(rows) {
   for (const d of rows) {
     if (seenIds.has(d.id)) throw new Error(`duplicate dungeon id '${d.id}'`);
     seenIds.add(d.id);
+    if (![ENDING_BOSS, ENDING_CRYSTAL, ENDING_REACH].includes(d.ending)) {
+      throw new Error(`dungeon '${d.id}': unknown ending '${d.ending}'`);
+    }
     // ⛔ A SHORT `romFloorMaps` FAILS SILENTLY. `gen-encounters.mjs` walks the
     // floors and would simply emit no zone for the missing ones, and a floor
     // with no zone falls back to a lone Goblin — the same "no encounters"
@@ -272,7 +430,7 @@ export function buildRegistry(rows) {
     const d = dungeonForMapId(mapId);
     if (!d) return ENDING_BOSS;
     const f = floorIndexForMapId(mapId);
-    if (f === null || !isBossFloor(d, f)) return ENDING_BOSS;
+    if (f === null || !isFinalFloor(d, f)) return ENDING_BOSS;
     return d.ending;
   };
 
@@ -292,7 +450,8 @@ export function buildRegistry(rows) {
                                             : `${dungeon.rosterPrefix}-${floorIndex}`;
   };
 
-  const dungeonForWorldEntrance = (romMapId) => rows.find((x) => x.worldEntranceMap === romMapId) || null;
+  const dungeonForWorldEntrance = (romMapId) => rows.find((x) =>
+    x.worldEntranceMap === romMapId || x.entranceMaps?.includes(romMapId)) || null;
 
   const minMapId = Math.min(...[...byFloor.keys(), ...bySide.keys()]);
 
@@ -442,8 +601,13 @@ export function layoutForFloor(dungeon, floorIndex) {
 /** mapId of a dungeon's floor N. */
 export function mapIdForFloor(dungeon, floorIndex) { return dungeon.base + floorIndex; }
 
-/** Is this the dungeon's boss chamber (its last floor)? */
-export function isBossFloor(dungeon, floorIndex) { return floorIndex === dungeon.floors - 1; }
+/** Is this the destination chamber at the end of the run? */
+export function isFinalFloor(dungeon, floorIndex) { return floorIndex === dungeon.floors - 1; }
+
+/** A destination chamber only has a boss when the ending calls for one. */
+export function isBossFloor(dungeon, floorIndex) {
+  return dungeon.ending !== ENDING_REACH && isFinalFloor(dungeon, floorIndex);
+}
 
 /** mapId of the dungeon's boss chamber. */
 export function bossFloorMapId(dungeon) { return dungeon.base + dungeon.floors - 1; }

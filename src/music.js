@@ -18,6 +18,8 @@ export const TRACKS = {
   // is right here. (It is NOT always: see reference_ff3mmo_map_music for towns
   // where it lies.) Song $02 above is the Altar Cave / Molten Cave theme.
   DUNGEON_CAVE: 0x1D,  // Sealed Cave, Mythril Mines, Subterranean Lake, Bahamut's Lair
+  HAUNTED_TREE: 0x38, // Castle Hein maps 135-143
+  ANCIENT_TOWER: 0x24, // Owen maps 124-134, property songId
   WORLD_MAP:    0x1E,  // Eternal Wind
   TOWN_UR:      0x1F,  // My Home Town
   PIANO_3:      0x1A,  // 3rd piano song (loading screen)

@@ -359,7 +359,8 @@ function _drawBattleMenuItems(positions, isVictory, isClose, isFade, fadedPal, m
     }
     const isMage = _isMageJob(ps.jobIdx);
     for (let i = 0; i < BATTLE_MENU_ITEMS.length; i++) {
-      const label = (i === 1 && isMage) ? BATTLE_MAGIC : BATTLE_MENU_ITEMS[i];
+      const label = i === 1 && ps.jobIdx === 9 && !pvpSt.isPVPBattle ? _nameToBytes('Study')
+        : (i === 1 && isMage) ? BATTLE_MAGIC : BATTLE_MENU_ITEMS[i];
       drawText(ui.ctx, positions[i][0], positions[i][1], label, menuPal);
     }
   }

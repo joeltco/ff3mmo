@@ -3,6 +3,7 @@
 import { NES_SYSTEM_PALETTE, buildWaterFrames, decodeTile, drawTile } from './tile-decoder.js';
 import { BOULDER_TILES, BOULDER_PAL } from './data/boulder-sprite.js';
 import { battleBgIdForWorldProps, NO_BACKDROP } from './battle-bg.js';
+import { decodeWorldTrigger } from './world-triggers.js';
 
 const TILE_SIZE = 16;
 
@@ -84,7 +85,7 @@ function passableForMode(data, tileX, tileY, mode) {
   const wy = ((tileY % size) + size) % size;
 
   // Choke boulder south of Ur — hard-blocked regardless of terrain prop.
-  if (wx === CHOKE_TILE_X && wy === CHOKE_TILE_Y) return false;
+  if (wx === CHOKE_TILE_X && wy === CHOKE_TILE_Y && !data.boulderCleared) return false;
 
   const props = data.tileProps[data.tilemap[wy * size + wx] & 0x7F];
   let byte1 = props.byte1;
@@ -406,6 +407,7 @@ export class WorldMapRenderer {
     const endTX = startTX + Math.ceil(ctx.canvas.width / TILE_SIZE) + 1;
     const endTY = startTY + Math.ceil(ctx.canvas.height / TILE_SIZE) + 1;
     for (let ty = startTY; ty <= endTY; ty++) {
+      if (this.data.boulderCleared) break;
       if ((((ty % size) + size) % size) !== CHOKE_TILE_Y) continue;
       for (let tx = startTX; tx <= endTX; tx++) {
         if ((((tx % size) + size) % size) !== CHOKE_TILE_X) continue;
@@ -472,15 +474,9 @@ export class WorldMapRenderer {
     const m = metatileId & 0x7F;
     const props = this.data.tileProps[m];
 
-    // Must have trigger bit set in byte1
-    if (!(props.byte1 & 0x80)) return null;
-
-    const trigId = props.byte2 & 0x3F;
-    const destMap = this.data.entranceTable[trigId];
-    if (destMap === 0) return null;
-    if (REMOVED_ENTRANCES.has(destMap)) return null;
-
-    return { type: 'entrance', trigId, destMap };
+    const trigger = decodeWorldTrigger(props, this.data.entranceTable);
+    if (trigger?.type === 'entrance' && REMOVED_ENTRANCES.has(trigger.destMap)) return null;
+    return trigger;
   }
 
   /**
