@@ -191,6 +191,25 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-npc-gfx` | the NPC id → sprite lookup stays decoded — the table at ROM `0x1410`, the people/object arrays, and the drawn/undrawn split. See `docs/NPC-CATALOG.md`; sprite sheets in `docs/sprites/` |
 | `check-npc-dialogue` | FF3's script stays decoded — the DTE table at `0x75FA1`, the string pointer table, and `stringId = npcId + 0x202`, pinned against lines read off a running game |
 | `check-ff12-text` | FF1's and FF2's scripts stay decoded — FF1's reversed DTE halves + `dialogueId == objType`, FF2's 45-kana run. Pinned against text read off a running game |
+| `check-static-exposure` | Private files, encoded traversal and symlink escapes must be refused; exposed in v1.12.0. |
+| `check-boss-mechanics` | Boss specials, Hein barrier turns and Scholar Study must execute and reset correctly. |
+| `check-companions` | Solo companion filling must preserve injuries, legal gear and Desch state without entering PvP. |
+| `check-continent-combat` | Continent encounters must finish through the shipped battle state machine without stalls. |
+| `check-continent-story` | The fresh-character story must reach both crystals and the flying Enterprise with saved milestones. |
+| `check-counter-talk` | Customer-side Z must reach dialogue and shops across counters. |
+| `check-dungeon-routes` | Rare chest and switch placements must leave routes usable; fixed during v1.12.0 validation. |
+| `check-dwarves-quest` | Horn recovery, theft, Salamander victory, fire jobs and the vault must remain connected. |
+| `check-hein-route` | Hein victory must restore the woods and lead through Time Wheel to the Enterprise upgrade. |
+| `check-mountain-route` | The mountain climb must reach the summit escape, healing and return warp. |
+| `check-nepto-quest` | Nepto dialogue, entrance and victory hand-in must grant exactly one ship reward. |
+| `check-owen-route` | Owen ascents must reach Medusa and require victory before the completed exit; revert-proven by audit. |
+| `check-quest-reconnect` | Reconnect claims must retry unpaid rewards without duplicate grants or crossing character slots. |
+| `check-save-recovery` | Slow/offline cloud saves must preserve ordered local checkpoints and account isolation. |
+| `check-side-excursions` | Mines, summon access and repeat rewards must coexist with chocobo and parked-ship travel. |
+| `check-story-treatments` | Story cures must handle missing items, cancellation and repeated conversations. |
+| `check-tozas-route` | Tozus village stairs and the bossless tunnel must support both directions of travel. |
+| `check-vehicle-journey` | Flight, landing, reboarding, canoe and Viking ship travel must remain usable. |
+| `check-western-towns` | Western town entrances, terrace stairs and Mini/Toad gates must remain reachable. |
 | `check-dialogue-fit` | every page wraps to ≤2 lines through the REAL wrapper |
 | `check-msgbox-typing` | the type-out finishes, Z fills it in, and `message-box.js` calls NO audio |
 | `check-msg-highlight` | Key Terms render red, runs stay aligned, nothing darker than the box blue |

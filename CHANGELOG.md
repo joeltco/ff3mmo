@@ -1,3 +1,13 @@
+## 1.12.1 — 2026-09-13
+
+- Restrict static serving to browser assets and reject private paths, encoded
+  traversal and symlink aliases. Add a real-handler gate proven to fail against
+  the former server, which exposed the root database and Git configuration.
+- Track the deployment script and enforce 18 previously omitted continent
+  checks plus the static-exposure gate. Run preflight in a disposable copy
+  without player databases; retain the script's commit, push and smoke rollback.
+- Mithril Mines remains separate, uncommitted work and is not in this release.
+
 ## 1.12.0 — 2026-09-12
 
 ### Floating Continent

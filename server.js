@@ -1,6 +1,6 @@
 import { createServer } from 'http';
-import { readFile } from 'fs/promises';
-import { extname, join } from 'path';
+import { readFile, realpath } from 'fs/promises';
+import { extname, resolve, sep } from 'path';
 import { handleAPI, setLogoutAllHook } from './api.js';
 import { attachWebSocketPresence, getPlayerCounts, revokeWsBeforeIat } from './ws-presence.js';
 
@@ -53,6 +53,24 @@ const MIME = {
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
   '.nes': 'application/octet-stream', '.bin': 'application/octet-stream',
 };
+
+// Only browser assets are public. Containment alone still exposes the database
+// and server configuration inside the project. v1.12.1: deny by default.
+const STATIC_ROOT = await realpath('.');
+const PUBLIC_FILES = new Set([
+  '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
+  '/apple-touch-icon.png', '/lib/libgme.js', '/lib/jsnes.min.js',
+  '/patches/ff3-awj.ips',
+]);
+function isPublicAsset(path) {
+  const parts = path.split('/').slice(1);
+  if (parts.some(p => !p || p.startsWith('.') || p === 'node_modules') ||
+      /[\\%]/.test(path) || path.includes('\0')) return false;
+  return PUBLIC_FILES.has(path) ||
+    (/^\/src\/[A-Za-z0-9_./-]+\.js$/.test(path) && !path.endsWith('.local.js')) ||
+    path === '/src/debug/spell-captures.json' ||
+    /^\/src\/debug\/scenes\/[A-Za-z0-9_-]+\.json$/.test(path);
+}
 
 const httpServer = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -107,8 +125,22 @@ const httpServer = createServer(async (req, res) => {
     res.end('Bad request');
     return;
   }
+  if (!isPublicAsset(path)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
   try {
-    let data = await readFile(join('.', path));
+    const requested = resolve(STATIC_ROOT, '.' + path);
+    const canonical = await realpath(requested);
+    // Reject aliases too: an allowed .js symlink must not expose a private file
+    // elsewhere inside the project, nor follow a link outside it.
+    if (!canonical.startsWith(STATIC_ROOT + sep) || canonical !== requested) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+    let data = await readFile(canonical);
     const ext = extname(path);
     if (ext === '.html') data = Buffer.from(data.toString()
       // replaceAll, not replace — there are TWO `{{VERSION}}` occurrences
