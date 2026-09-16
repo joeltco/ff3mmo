@@ -1,3 +1,4 @@
+import { validateDungeonFloor } from './dungeons/validate.js';
 import { compileDungeonFloor } from './dungeons/compile.js';
 // Dungeon Generator — procedural cave floors using FF3 tileset 0
 
@@ -1147,6 +1148,19 @@ export function clearDungeonCache() {
 }
 
 export function generateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
+  let rejected;
+  // Existing construction stays intact. Reject unsafe final candidates through
+  // the same boundary as authored floors; never return an unchecked fallback.
+  for (let attempt = 0; attempt < (dungeon.design ? 1 : 32); attempt++) {
+    const result = generateCandidateFloor(romData, floorIndex, seed + attempt * 9973, dungeon);
+    try { validateDungeonFloor(result, dungeon); return result; }
+    catch (error) { rejected = error; }
+  }
+  rejected.message += ` (${dungeon.id} floor ${floorIndex}, seed ${seed})`;
+  throw rejected;
+}
+
+function generateCandidateFloor(romData, floorIndex, seed, dungeon = STARTING_DUNGEON) {
   if (dungeon.design) {
     return compileDungeonFloor(loadRomAssets(romData, dungeon.floorDonorMaps?.[floorIndex] ?? dungeon.donorMap, dungeon.tileset), floorIndex, seed, dungeon);
   }

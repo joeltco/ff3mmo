@@ -1,3 +1,4 @@
+import { OWEN_DESIGN } from '../dungeons/definitions/owen.js';
 import { MINES_DESIGN } from '../dungeons/definitions/mines.js';
 // THE DUNGEON REGISTRY — one row per dungeon, and the only place a dungeon's
 // identity is written down.
@@ -258,13 +259,7 @@ DUNGEONS.push({
   requiredFlag: 'nepto_restored', entryHint: 'Help the Vikings first.', base: 6000, worldEntranceMap: 124,
   floors: 5, donorMap: 126, floorDonorMaps: [126, 128, 130, 132, 134],
   tileset: 0, bossSkinId: 'owen', ending: ENDING_BOSS, bossId: 0xcf,
-  tileReplacements: { 3: 0 }, tileArtwork: { 104: 100 },
-  layout: {
-    floors: ['snake', 'snake', 'snake', 'snake'],
-    corridor: { hMin: 4, hMax: 6, vMin: 6, vMax: 8 },
-    snake: { top: [4, 8], bot: [19, 25], roomW: [6, 10], left: [3, 7], right: [23, 27], gap: [3, 5], tilt: [2, 4] },
-    features: { skeletons: 0, secrets: 0, chests: [2, 3] },
-  },
+  design: OWEN_DESIGN,
   music: { floors: 'ANCIENT_TOWER', boss: 'ANCIENT_TOWER' },
   rosterPrefix: 'owen', bossRosterLoc: 'owen-engine',
   encounterZonePrefix: 'tower_owen', romFloorMaps: [126, 128, 130, 132, 134],
@@ -478,6 +473,7 @@ export function buildRegistry(rows) {
 // share a head (entrance room, elbow, junction, drop) and differ in what the
 // big room at the bottom is and how you leave it.
 export const LAYOUTS = new Set([
+  'authored-machinery',
   'authored-mine',    // explicit route, compiled by dungeons/compile.js
   'snake',            // two-room ceiling snake, stairs out. Both caves' floor 0.
   'trap-chamber',     // ends in a 7x7 room whose TRAP HOLES are the way down.
@@ -624,7 +620,7 @@ export function isEncounterFloor(dungeon, floorIndex) {
 /** Every non-boss floor mapId — the floors that carry loot pools and encounters. */
 export function normalFloorMapIds(dungeon) {
   const out = [];
-  for (let f = 0; f < dungeon.floors - (dungeon.design ? 0 : 1); f++) out.push(dungeon.base + f);
+  for (let f = 0; f < dungeon.floors - (dungeon.design ? 0 : 1); f++) if (!isBossFloor(dungeon, f)) out.push(dungeon.base + f);
   return out;
 }
 

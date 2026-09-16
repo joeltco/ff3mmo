@@ -112,8 +112,8 @@ export function describePlan(plan) {
   for (const c of plan.chambers) {
     out.push(c.kind === 'inline'
       ? `  chamber ${c.role.padEnd(10)} inline    ${c.note}`
-      : c.kind === 'excavation'
-      ? `  chamber ${c.role.padEnd(10)} excavation ${c.rect[0]},${c.rect[1]} -> ${c.rect[2]},${c.rect[3]}`
+      : Array.isArray(c.rect)
+      ? `  chamber ${c.role.padEnd(10)} ${c.kind} ${c.rect[0]},${c.rect[1]} -> ${c.rect[2]},${c.rect[3]}`
       : c.kind === 'organic'
       ? `  chamber ${c.role.padEnd(10)} organic cols ${c.left}..${c.right} rows ${c.top}..${c.bot}${c.keepEdge ? ' (edge held)' : ''}`
       : `  chamber ${c.role.padEnd(10)} ${String(c.kind).padEnd(6)} at ${c.x},${c.y}` +

@@ -25,6 +25,11 @@ try {
       assert.equal(_testValidateSaveData({name:[65],dungeonRun:value}).data.dungeonRun,null);
     }
     assert.equal(_testValidateSaveData({name:[65]}).data.dungeonRun,null);
+    const owen={dungeonId:'owen',version:1,seed:1754900087109,features:{'power-bank':1,'control-power':1,'old-face':1}};
+    const tower=_testValidateSaveData({name:[65],onWorldMap:true,worldX:63*16,worldY:32*16,dungeonRun:owen}).data;
+    assert.deepEqual(tower.dungeonRun.features,{'power-bank':1,'control-power':1});
+    assert.deepEqual(parseSaveSlots([tower])[0].dungeonRun,tower.dungeonRun);
+    assert.equal(tower.onWorldMap,true);assert.equal(tower.worldX,63*16);assert.equal(tower.worldY,32*16);
     console.log('PASS: actual server save validation and client codec preserve versioned dungeon progress.');
   `], { cwd: dir, encoding: 'utf8', timeout: 30000, env: {...process.env, JWT_SECRET: 'dungeon-save-fixture-only'} });
   process.stdout.write(result.stdout || '');

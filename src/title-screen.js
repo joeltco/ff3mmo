@@ -791,7 +791,10 @@ function _updateTitleMainOutCase() {
     const anchor = dungeonResumeAnchor(slot.currentMapId);
     if (anchor) {
       mapSt.mapStack.length = 0;
-      loadMapById(anchor.mapId, anchor.x, anchor.y);
+      if (anchor.world) {
+        transSt.pendingTrack = TRACKS.WORLD_MAP;
+        loadWorldMapAtPosition(anchor.world.x, anchor.world.y);
+      } else loadMapById(anchor.mapId, anchor.x, anchor.y);
     } else loadMapById(slot.currentMapId, tx, ty);
   } else {
     // Fresh slot — new players spawn upstairs in the elder's house

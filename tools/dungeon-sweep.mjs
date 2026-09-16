@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { walkDungeon } from '../src/dungeons/validate.js';
 // dungeon-sweep.mjs — asserts dungeon-generation invariants across many seeds.
 //
 // `floor-view.mjs` RENDERS one floor so you can look at it. This one CHECKS
@@ -139,7 +140,7 @@ export function applyRockSwitch(tm, rockSwitch) {
  *
  * Returns { onward, unreachable[], entranceWiredForward }.
  */
-export function exitAudit(r, seen) {
+export function exitAudit(r, seen, currentMapId = null) {
   const out = { onward: 0, unreachable: [], entranceWiredForward: null };
   if (!r.dungeonDestinations || !r.triggerMap) return out;
   const entKey = `${r.entranceX},${r.entranceY}`;
@@ -153,12 +154,13 @@ export function exitAudit(r, seen) {
       return !!seen[ny * 32 + nx];
     });
     if (!ok) out.unreachable.push(`${coord}->${dest.goBack ? 'goBack' : dest.mapId}`);
-    if (!dest.goBack) out.onward++;
+    const back = dest.goBack || (r.designVersion && currentMapId !== null && dest.mapId === currentMapId - 1);
+    if (!back) out.onward++;
     // ⛔ The staircase the player ARRIVES on must never lead further in.
     // `disabledTrigger` suppresses it only until they step off (movement.js
     // clears it on the first move), so a forward-wired entrance is a one-step
     // sequence break — on floor 3 it skipped the entire floor into the boss.
-    if (coord === entKey && !dest.goBack) out.entranceWiredForward = `${coord}->${dest.mapId}`;
+    if (coord === entKey && !back) out.entranceWiredForward = `${coord}->${dest.mapId}`;
   }
   return out;
 }
@@ -275,17 +277,20 @@ export function sweepFloors(rom, n = 150, base = 1754900000000) {
         applyFeature(r, feature, dg);
       }
       const tm = r.tilemap;
-      const seen = reachableFrom(tm, r.entranceX, r.entranceY);
+      const seen = dg.design
+        ? Uint8Array.from(walkDungeon(r).distance, d => d >= 0 ? 1 : 0)
+        : reachableFrom(tm, r.entranceX, r.entranceY);
       let reach = 0;
       for (let i = 0; i < 1024; i++) if (seen[i]) reach++;
-      if (reach < 20) { hard.push(`${label} seed ${seed}: only ${reach} reachable tiles`); continue; }
+      const minimum = dg.id === 'owen' && f === 4 ? 18 : 20; // ROM-paced engine is intentionally small.
+      if (reach < minimum) { hard.push(`${label} seed ${seed}: only ${reach} reachable tiles`); continue; }
 
       // Exits, from the engine's own wiring. On a rock-puzzle floor the way
       // onward is behind the switch by design, so audit the OPENED map.
       const exSeen = r.rockSwitch
         ? reachableFrom(applyRockSwitch(tm, r.rockSwitch), r.entranceX, r.entranceY)
         : seen;
-      const ex = exitAudit(r, exSeen);
+      const ex = exitAudit(r, exSeen, dg.base + f);
       if (!isFinalFloor(dg, f) && ex.onward === 0) hard.push(`${label} seed ${seed}: no way onward — nothing wired to map ${dg.base + f + 1}`);
       if (ex.unreachable.length) hard.push(`${label} seed ${seed}: unreachable exit ${ex.unreachable.join(' ')}`);
       if (ex.entranceWiredForward) hard.push(`${label} seed ${seed}: ENTRANCE wired as a forward exit (${ex.entranceWiredForward}) — step off and back on skips the floor`);

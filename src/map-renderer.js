@@ -15,10 +15,7 @@ export class MapRenderer {
     // Initialize z-level from start tile
     const sx = startX ?? mapData.entranceX;
     const sy = startY ?? mapData.entranceY;
-    const eTile = mapData.tilemap[sy * MAP_SIZE + sx];
-    const eColl = mapData.collision[eTile < 128 ? eTile : eTile & 0x7F];
-    const eZZ = eColl & 0x03;
-    if (eZZ > 0 && eZZ < 3) this._playerZ = eZZ;
+    this._playerZ = startingMapZ(mapData, sx, sy);
 
     this._triggerMap = mapData.triggerMap;       // Map<"x,y", {type, trigId}>
     this._collisionByte2 = mapData.collisionByte2; // Uint8Array(128)
@@ -1083,4 +1080,20 @@ export class MapRenderer {
 
     return null;
   }
+}
+
+// Collision-only view for generation validation. Reuses the renderer's exact
+// predicates and z transitions without allocating canvases or requiring a DOM.
+function startingMapZ(mapData, x, y) {
+  const tile = mapData.tilemap[y * MAP_SIZE + x];
+  const z = mapData.collision[tile < 128 ? tile : tile & 0x7f] & 3;
+  return z > 0 && z < 3 ? z : 0;
+}
+export function mapCollisionView(mapData, x = mapData.entranceX, y = mapData.entranceY) {
+  const view = Object.create(MapRenderer.prototype);
+  view.mapData = mapData;
+  view._triggerMap = mapData.triggerMap || new Map();
+  view._collisionByte2 = mapData.collisionByte2 || new Uint8Array(128);
+  view._playerZ = startingMapZ(mapData, x, y);
+  return view;
 }

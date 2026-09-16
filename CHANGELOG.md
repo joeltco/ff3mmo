@@ -1,3 +1,22 @@
+## 1.14.0 — 2026-09-15
+
+- Replace all five Owen cave-generator floors with authored machinery layouts:
+  gallery, distribution, shaft, control and Medusa's engine room. Each has a
+  14x10 building envelope; native donors remain 126/128/130/132/134. Seeded
+  banks, supply detours and opening-only service controls pace the ascent.
+- Keep the existing Medusa gate, encounter-free engine, Desch completion scene,
+  companion removal and outside return/Lake unlock. Returning stairs land at
+  the previous ascent; older indoor saves resume safely outside Owen.
+- Generalize the Mines/Owen compiler and persisted run codec. Completed Owen
+  climbs reset their layout for the next visit; interrupted runs retain opened
+  controls and claimed chests. A Mines run cannot become an Owen run.
+- Share final arrival/transition/objective/treasure/connectivity validation
+  between authored and legacy generation. Preserve the chest-adjacent scenery
+  exception. Only the five Owen snapshot rows change; Altar, Seals and every
+  other dungeon retain their shipped digests.
+- Extend the local ignored runner's A/C/D/E and shared-contract gates across
+  all five Owen floors. Retain .bak regression proofs and real-renderer PNGs.
+
 ## 1.13.1 — 2026-09-13
 
 - Fix all three Ur shops — weapon, armor and the inn item counter — being

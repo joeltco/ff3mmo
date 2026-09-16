@@ -34,6 +34,7 @@ const fails = [];
 // 1 in one cave and could be floor 2 in the next.
 const COMPLETE = new Map([
   ['authored-mine', true],
+  ['authored-machinery', true],
   ['snake',           false],   // a traced ceiling boundary, not a chamber list
   ['trap-chamber',    true],
   ['boulder-chamber', true],
@@ -44,7 +45,7 @@ const COMPLETE = new Map([
 ]);
 
 function footprint(c) {
-  if (c.kind === 'excavation') return { x0: c.rect[0], y0: c.rect[1], x1: c.rect[2], y1: c.rect[3] };
+  if (c.rect) return { x0: c.rect[0], y0: c.rect[1], x1: c.rect[2], y1: c.rect[3] };
   if (c.kind === 'room') {
     const dir = c.dir ?? 1, w = (c.w ?? 5) - 1, h = c.h ?? 7;
     const x1 = c.x, x2 = c.x + w * dir;

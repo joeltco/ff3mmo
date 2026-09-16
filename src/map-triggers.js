@@ -661,7 +661,10 @@ function _checkDynType1(trigger, tileX, tileY) {
       triggerWipe(() => {
         if (mapSt.mapStack.length > 0) {
           const prev = mapSt.mapStack.pop();
-          loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
+          // Authored world-entry dungeons use the same breadcrumb units as
+          // native exits: world positions are tiles, indoor positions pixels.
+          if (prev.mapId === 'world') loadWorldMapAtPosition(prev.x, prev.y);
+          else loadMapById(prev.mapId, prev.x / TILE_SIZE, prev.y / TILE_SIZE);
           const _pd = dungeonForMapId(prev.mapId);
           const _pf = floorIndexForMapId(prev.mapId);
           if (_pd && _pf !== null && !isBossFloor(_pd, _pf)) playTrack(TRACKS[_pd.music.floors]);

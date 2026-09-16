@@ -1,3 +1,4 @@
+import { validateDungeonFloor } from './dungeons/validate.js';
 import { applyFeature } from './dungeons/compile.js';
 import { sanitizeDungeonRun } from './dungeons/run-state.js';
 // ═══════════════════════════════════════════════════════════════════════════
@@ -219,7 +220,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
     mapSt.dungeonFloor = floorIndex;
     if (_dungeon.design) {
       const saved = sanitizeDungeonRun(ps.dungeonRun);
-      ps.dungeonRun = saved || { dungeonId: _dungeon.id, version: _dungeon.design.version,
+      ps.dungeonRun = (saved?.dungeonId === _dungeon.id ? saved : null) || { dungeonId: _dungeon.id, version: _dungeon.design.version,
         seed: Number.isSafeInteger(mapSt.dungeonSeed) && mapSt.dungeonSeed >= 0 ? mapSt.dungeonSeed : Date.now(), features: {} };
       mapSt.dungeonSeed = ps.dungeonRun.seed;
     }
@@ -239,6 +240,7 @@ function _loadDungeonFloor(mapId, returnX, returnY) {
   mapSt.dungeonDestinations = result.dungeonDestinations;
   mapSt.currentMapId = mapId;
   if (!_dungeon.design) _replayConsumedTiles(mapId, result);
+  validateDungeonFloor(result, _dungeon);
   const playerX = returnX !== undefined ? returnX : result.entranceX;
   const playerY = returnY !== undefined ? returnY : result.entranceY;
   mapSt.worldX = playerX * TILE_SIZE;

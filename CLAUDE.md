@@ -194,6 +194,8 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-static-exposure` | Private files, encoded traversal and symlink escapes must be refused; exposed in v1.12.0. |
 | `check-mithril-mines` | Authored Mines discovery, loot, endpoint and return routes survive 400 seeds per section, full bags, reloads and personal run resets. Unreleased refactor. |
 | `check-dungeon-run-save` | The actual server validator and client codec retain versioned dungeon progress and reject incompatible records using a disposable database. Unreleased Mines refactor. |
+| `check-owen-prototype` | All five real Owen floors: A/C/D/E, two independent lanes within banks, opening-only/idempotent controls, meaningful cache shortcut and renderer collision parity. Each design gate has a `.bak` regression proof in `prove-owen-gates`. |
+| `check-dungeon-contract` | The shared boundary is called from legacy and authored generation and rejects unsafe arrivals, invalid transitions, unreachable objectives/treasure and isolated land. |
 | `check-boss-mechanics` | Boss specials, Hein barrier turns and Scholar Study must execute and reset correctly. |
 | `check-companions` | Solo companion filling must preserve injuries, legal gear and Desch state without entering PvP. |
 | `check-continent-combat` | Continent encounters must finish through the shipped battle state machine without stalls. |
@@ -204,7 +206,7 @@ Two Node-only harnesses live in `tools/`. They import the real production module
 | `check-hein-route` | Hein victory must restore the woods and lead through Time Wheel to the Enterprise upgrade. |
 | `check-mountain-route` | The mountain climb must reach the summit escape, healing and return warp. |
 | `check-nepto-quest` | Nepto dialogue, entrance and victory hand-in must grant exactly one ship reward. |
-| `check-owen-route` | Owen ascents must reach Medusa and require victory before the completed exit; revert-proven by audit. |
+| `check-owen-route` | All five authored Owen floors, real ascent/descent, saved controls/chests, cross-dungeon run isolation, title-screen recovery of legacy saves, no engine encounters and victory-gated completion; revert-proven by audit. |
 | `check-quest-reconnect` | Reconnect claims must retry unpaid rewards without duplicate grants or crossing character slots. |
 | `check-save-recovery` | Slow/offline cloud saves must preserve ordered local checkpoints and account isolation. |
 | `check-side-excursions` | Mines, summon access and repeat rewards must coexist with chocobo and parked-ship travel. |

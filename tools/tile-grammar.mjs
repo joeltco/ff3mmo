@@ -131,6 +131,9 @@ let voidHoles = 0;
   let first = null;
   for (const dg of DUNGEONS) {
     for (let f = 0; f < dg.floors; f++) {
+      // Suspended tower catwalks intentionally border shaft void. Their
+      // enclosing building shell is checked by Owen gate A; this is cave masonry.
+      if (dg.design?.material === 'machinery') continue;
       if (layoutForFloor(dg, f) === null) continue;
       for (let k = 0; k < SEEDS; k++) {
         const seed = BASE + k * 7919;

@@ -73,6 +73,7 @@ console.log(`floor                    depth1  depth2  depth3+  limit`);
 for (const dg of DUNGEONS) {
   for (let f = 0; f < dg.floors; f++) {
     const lay = layoutForFloor(dg, f);
+    if (lay === 'authored-machinery') continue; // Machinery shell is checked by check-owen-prototype A; cave face depth does not apply.
     if (lay === null) continue;                 // boss chamber — authored
     const limit = DEEP_LIMIT.get(lay);
     if (limit === undefined) { fails.push(`layout '${lay}' has no depth limit — pin one from a measurement`); continue; }

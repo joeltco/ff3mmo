@@ -610,6 +610,8 @@ function _checkWarpTile() {
           ps.knownSpells = [...(ps.knownSpells || []), destination.spell];
         }
         if (destination?.flag) setFlag(destination.flag, { persist: false });
+        // Completed authored climbs start a fresh arrangement on the next visit.
+        if (dungeon?.design && ps.dungeonRun?.dungeonId === dungeon.id) ps.dungeonRun = null;
         if (destination?.world) {
           const entry = mapSt.mapStack.find(e => e.mapId === 'world');
           const reverse = destination.reverseWorld && entry

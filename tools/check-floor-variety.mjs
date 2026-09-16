@@ -94,7 +94,8 @@ for (const dg of DUNGEONS) {
   if (dg.design) {
     const variants = new Set();
     for (let k = 0; k < SEEDS; k++) variants.add(Buffer.from(generateFloor(rom, f, BASE + k * 7919, dg).tilemap).toString('hex'));
-    if (variants.size !== 3) fails.push(`${dg.id} f${f}: expected three authored branch variants, found ${variants.size}`);
+    const expected = dg.design.variants?.[f] ?? 3;
+    if (variants.size !== expected) fails.push(`${dg.id} f${f}: expected ${expected} authored branch variants, found ${variants.size}`);
     console.log(`${dg.id} f${f}: ${variants.size} authored branch variants; signature route stays fixed`);
     continue;
   }
